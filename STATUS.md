@@ -19,7 +19,11 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | Per-game recommendation | `gamescan.py`, `compat.py`, `injector.plan` | Graphics | native XeSS → OptiScaler → lsfg-vk, with reasons; anti-cheat blocked |
 | OptiScaler, OptiClick-style | `injector.py`, `updates.py` | Graphics | newest release, setup_linux.sh layout, OptiPatcher, REFramework, per-game INI fixes |
 | Lossless Scaling (lsfg-vk) | `injector.py`, `updates.py` | Graphics | lsfg-vk v2 installed/updated; Lossless Scaling ownership checked in Steam |
-| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check; games refreshed after they close |
+| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check, checksum-verified, one-tap rollback; games refreshed after they close |
+| Streaming | `streaming.py` | Display | Moonlight VRR (Nonary) installed/updated, added to Steam, one-tap stream to a Vibepollo PC |
+| System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
+| Upstream watch | `tools/upstream_watch.py`, workflow | GitHub issue | daily versions + live parser canaries; Dependabot for the build |
+| ClawTweaks extras | `power.py` | Power → Advanced | CPU energy mode (EPP) in profiles, TDP boost switch |
 | Per-game launch env | `launchenv.py`, `tools/clawdeck-launch.sh` | Graphics | injector, `DXVK_HDR`, `MESA=` choice; merges user DLL overrides |
 | XeSS driver | `xess.py`, `downloads.py` | Graphics | xess-xmx-linux state, install from fork release, probe, default Mesa |
 | Proton picker | `proton.py` + `SteamClient.Apps.SpecifyCompatTool` | Graphics | Steam stays owner of config.vdf |
@@ -56,6 +60,8 @@ Nothing yet.
 6. `sudo tools/suspend-cycle.sh 100` before saying anything about sleep.
 
 ## Needs the maintainer
+
+- After the first upstream-watch run: test the listed versions on the Claw, then `python3 tools/upstream_watch.py --update-lock`.
 
 - Pin tested versions in `assets/versions.json` (all are `pending-verification`, so installs ask "latest, untested?").
 - The fork publishes no releases, so the installer downloads HHHHanasak1's. To ship from the fork, publish a release

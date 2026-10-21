@@ -65,6 +65,17 @@ export const DropdownItem: FC<{ label: ReactNode; rgOptions: { data: any; label:
     );
   };
 
+export const TextField: FC<{ label?: ReactNode; value?: string; onChange?: (e: any) => void; disabled?: boolean }> =
+  ({ label, value, onChange, disabled }) => {
+    const id = useId();
+    return (
+      <div className={`qam-field${disabled ? " is-disabled" : ""}`}>
+        {label && <label className="qam-label" htmlFor={id}>{label}</label>}
+        <input id={id} className="qam-text" type="text" value={value ?? ""} disabled={disabled} onChange={onChange} />
+      </div>
+    );
+  };
+
 export const ButtonItem: FC<{ layout?: string; disabled?: boolean; onClick?: () => void; children?: ReactNode }> =
   ({ disabled, onClick, children }) => <button type="button" className="qam-button" disabled={disabled} onClick={onClick}>{children}</button>;
 

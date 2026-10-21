@@ -66,7 +66,7 @@ too.
 |---|---|---|
 | **Profiles** | **Battery** (best frames per watt), **Performance** (plugged in) and **Dock** (full power) in one tap. Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
 | **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. | The first few minutes in a new game can stutter while it learns. |
-| **TDP and clocks** | Pick the power limit (17 to 25 W is the sweet spot on battery). Under **Advanced**: CPU and GPU limits. | Turn off Steam's own TDP limit (Quick Access → Performance) so the two don't fight. |
+| **TDP and clocks** | Pick the power limit (17 to 25 W is the sweet spot on battery). Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Turn off Steam's own TDP limit (Quick Access → Performance) so the two don't fight. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
 
@@ -77,18 +77,20 @@ too.
 | **Best option per game** | ClawDeck checks what each game ships (DLSS, FSR, XeSS), looks it up in OptiScaler's community compatibility list, and recommends one thing, with the reasons. | Online games with anti-cheat are left alone: changed game files can get accounts banned. |
 | **OptiScaler, set up for you** | For DLSS or FSR games: one tap installs the newest OptiScaler, so the game uses XeSS on the XMX cores plus XeSS frame generation (2x to 4x). It also adds **OptiPatcher** when the game is supported, **REFramework** for Capcom RE Engine games, and the game's known fixes. | XeSS frame generation needs Borderless or Fullscreen Windowed mode. Adds a little input delay. |
 | **Lossless Scaling** | The last option, for games with no DLSS, FSR or XeSS: frame generation through lsfg-vk. ClawDeck installs lsfg-vk and checks that Lossless Scaling is in your Steam library. | You need your own copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (a paid Steam app). It runs on the GPU's regular shader cores, not the XMX cores. |
-| **Always up to date** | Checks once a day for new OptiScaler, OptiPatcher, REFramework and lsfg-vk versions, and updates your games right after you close them. | Can be turned off under Updates. |
+| **Always up to date** | Checks once a day for new OptiScaler, OptiPatcher, REFramework, lsfg-vk and Moonlight versions, checks each download against its published checksum, and updates your games right after you close them. | If an update causes trouble, go back to the previous version in one tap. Can be turned off under Updates. |
 | **Proton version** | Pick which Proton runs a game, such as GE-Proton. | Same as the game's Properties → Compatibility, just closer to hand. |
 | **Add to launch options** | One tap adds ClawDeck to a game's launch options, which Autotune, the injector and HDR need. | Keeps anything you already had there. |
 
-### Display
+### Display and streaming
 | Feature | What it does |
 |---|---|
 | **VRR** | The screen refreshes as each frame is ready, for smooth play between 40 and 120 fps without tearing. |
 | **Refresh range** | Sets which refresh rates Steam's own refresh slider offers. |
 | **HDR** | Turns on HDR for a TV or monitor on the dock. |
+| **Stream from your PC** | Installs [Moonlight with VRR](https://github.com/Nonary/moonlight-qt) and adds it to Steam. Save your PC's address to get a one-tap "Stream" shortcut. Works with [Vibepollo](https://github.com/Nonary/Vibepollo), Apollo or Sunshine on the PC. |
 
-These settings apply after Game Mode restarts. Docked 4K at 120 Hz needs no setup: the Claw uses your TV's best mode.
+Display settings apply after Game Mode restarts. Docked 4K at 120 Hz needs no setup: the Claw uses your TV's best
+mode. To leave a stream, hold View + Menu + LB + RB.
 
 ### Controller
 Gyro, button layout and stick lighting, from Handheld Daemon. On new Bazzite, InputPlumber runs the controller
@@ -128,6 +130,9 @@ games you added ClawDeck to keep starting normally. The charge limit resets at t
 remove the plugin. The only setting it keeps is the charge limit, because that's its job. It never
 overclocks: every value stays inside what the Claw's hardware allows.
 
+**What happens when Bazzite updates?** ClawDeck notices a new kernel, graphics driver or controller service the next
+time it starts, runs its health check again, and tells you either "all checks still pass" or what needs a look.
+
 **What about Steam's own Performance menu?** Steam's TDP slider and ClawDeck set the same limit, so turn Steam's
 TDP limit off while ClawDeck manages power. Steam's frame limit is fine to use: set Autotune's target to the same
 number.
@@ -164,8 +169,9 @@ fix button in Setup. It saves a hardware report you can post in an issue.
 ## Thanks
 
 ClawDeck stands on the work of Handheld Daemon, InputPlumber, PowerStation, PowerControl, SimpleDeckyTDP,
-xess-xmx-linux, OptiScaler, OptiPatcher, REFramework, lsfg-vk and Lossless Scaling, Decky Loader and Bazzite. The
-per-game OptiScaler setup follows OptiClick's approach on Windows. The full list is in [CREDITS.md](CREDITS.md).
+xess-xmx-linux, OptiScaler, OptiPatcher, REFramework, lsfg-vk and Lossless Scaling, Moonlight and Nonary's VRR fork,
+Vibepollo, Apollo and Sunshine, Decky Loader and Bazzite. The per-game OptiScaler setup follows OptiClick's approach,
+and the feature set takes after ClawTweaks on Windows. The full list is in [CREDITS.md](CREDITS.md).
 
 ## Support
 

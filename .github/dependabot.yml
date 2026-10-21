@@ -1,0 +1,12 @@
+# Keeps the build's own dependencies current (Decky's UI library, the bundler, GitHub Actions); CI tests every bump.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly }
+    groups:
+      decky: { patterns: ["@decky/*"] }
+      build: { patterns: ["rollup", "@rollup/*", "typescript", "esbuild", "@types/*"] }
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
