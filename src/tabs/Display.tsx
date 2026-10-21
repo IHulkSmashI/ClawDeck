@@ -5,6 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { getDisplay, resetDisplay, saveDisplay, DisplaySettings, DisplayState } from "../api";
 import { Advanced } from "../components/Advanced";
 import { Hint, Status } from "../components/Hint";
+import { StreamingSection } from "./Streaming";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
@@ -64,6 +65,7 @@ export const DisplayTab: FC = () => {
           </>
         )}
       </PanelSection>
+      <StreamingSection />
     </>
   );
 };

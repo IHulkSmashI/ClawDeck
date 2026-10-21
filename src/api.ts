@@ -3,7 +3,7 @@ import { callable } from "@decky/api";
 export type Health = { id: string; title: string; ok: boolean; detail: string; fix: string | null; optional?: boolean };
 export type PowerStatus = {
   gpu: { available: boolean; min_mhz: number | null; max_mhz: number | null; cur_mhz: number | null; hw_min_mhz: number | null; hw_max_mhz: number | null; efficient_mhz: number | null };
-  cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null };
+  cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null; epp?: string | null; epp_available?: boolean };
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
   hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
@@ -116,3 +116,14 @@ export const benchStatus = callable<[], { running: boolean; elapsed_s?: number; 
 export const benchStop = callable<[], BenchResult | null>("bench_stop");
 export const benchResults = callable<[], BenchResult[]>("bench_results");
 export const benchExport = callable<[], string>("bench_export");
+
+export const setEpp = callable<[value: string], boolean>("set_epp");
+export const setTdpBoost = callable<[on: boolean], boolean>("set_tdp_boost");
+export const rollback = callable<[comp: string], { ok: boolean; version?: string; error?: string }>("rollback");
+export type StreamingState = { installed: boolean; version: string | null; launcher: string; host: string | null; app: string;
+  shortcut: number | null; host_shortcut: number | null; flathub_moonlight: boolean; latest: string | null; update: boolean; previous: string | null };
+export const getStreaming = callable<[], StreamingState>("get_streaming");
+export const moonlightInstall = callable<[], { ok: boolean; version?: string; launcher?: string; error?: string; dry_run?: boolean; would?: string; updated?: boolean }>("moonlight_install");
+export const setStreamHost = callable<[host: string, app: string], { ok: boolean; launch_options?: string; launcher?: string; error?: string }>("set_stream_host");
+export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };
+export const getChanges = callable<[], Changes>("get_changes");

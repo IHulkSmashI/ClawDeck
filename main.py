@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, benchmark, compat, controller, display, downloads, fans, gamescan,  # noqa: E402
-                      health, hhd, hw, injector, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
+from clawdeck import (autotune, battery, benchmark, changes, compat, controller, display, downloads, fans,  # noqa: E402
+                      gamescan, health, hhd, hw, injector, streaming, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -56,6 +56,7 @@ class Plugin:
         sysfs.set_dry_run(env_dry or bool(self.settings.get("dry_run")))
         self.hw = hw.detect()
         self.power = power.Power(self.hw)
+        self.power.boost = bool(self.settings.get("tdp_boost", True))
         self.battery = battery.Battery(self.hw)
         self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
         self.injector = injector.Injector(os.path.join(RUNTIME_DIR, "assets"))
@@ -206,6 +207,19 @@ class Plugin:
     async def set_cpu_max_pct(self, pct: int) -> bool:
         self.autotune.pause("manual CPU ceiling")
         return self.power.set_cpu_max_pct(int(pct))
+
+    async def set_epp(self, value: str) -> bool:
+        self.autotune.pause("manual CPU energy mode")
+        try:
+            return self.power.set_epp(str(value))
+        except ValueError:
+            return False
+
+    async def set_tdp_boost(self, on: bool) -> bool:
+        self.power.boost = bool(on)
+        self.settings["tdp_boost"] = bool(on)
+        self._save_settings()
+        return True
 
     async def set_cpu_turbo(self, on: bool) -> bool:
         return self.power.set_cpu_turbo(bool(on))
@@ -551,6 +565,8 @@ class Plugin:
                     done[comp] = (await loop.run_in_executor(None, self.updates.ensure, comp))["version"]
                 except Exception as e:
                     done[comp] = f"failed: {e}"
+        if streaming.current(HOME):
+            done["moonlight"] = (await self.moonlight_install()).get("version")
         if self.settings.get("lsfg_version"):
             lsfg = await self.get_updates()
             if lsfg["lsfg"]["update"]:
@@ -591,10 +607,70 @@ class Plugin:
             for comp in ("optiscaler", "optipatcher", "reframework"):
                 if st[comp]["update"] and self.updates.installed(comp):
                     await asyncio.get_running_loop().run_in_executor(None, self.updates.ensure, comp)
+            if st["moonlight"]["update"] and streaming.current(HOME):
+                await self.moonlight_install()
             if self.running_appid is None:
                 await self._refresh_game(appid)
         except Exception as e:
             decky.logger.warning("auto update after %s failed: %s", appid, e)
+
+    async def rollback(self, comp: str) -> dict:
+        """Go back to the previous version of a tool after an update broke something. Games set up with it are
+        reinstalled with the previous version right away when no game runs."""
+        loop = asyncio.get_running_loop()
+        try:
+            if comp == "moonlight":
+                st = streaming.state(HOME, self.settings)
+                prev = self.updates.previous("moonlight")
+                r = await loop.run_in_executor(None, self.updates.rollback, "moonlight")
+                got = await loop.run_in_executor(None, streaming.install, HOME, self.updates.dir("moonlight"), r["version"])
+                return {"ok": True, "version": got["version"], "was": st["version"] or prev}
+            r = await loop.run_in_executor(None, self.updates.rollback, comp)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        if self.running_appid is None:
+            for appid in self.profiles.games():
+                await self._refresh_game(appid)
+        return {"ok": True, **r}
+
+    # ---- streaming: Moonlight (VRR) to Vibepollo / Apollo / Sunshine -------------------------------------------
+    async def get_streaming(self) -> dict:
+        st = streaming.state(HOME, self.settings)
+        up = (await self.get_updates()).get("moonlight") or {}
+        return {**st, "latest": up.get("latest"), "update": up.get("update", False), "previous": up.get("previous")}
+
+    async def moonlight_install(self) -> dict:
+        if sysfs.dry_run():
+            return {"ok": True, "dry_run": True, "would": "download and unpack the newest Moonlight VRR into ~/.local/share/clawdeck/moonlight"}
+        loop = asyncio.get_running_loop()
+        try:
+            got = await loop.run_in_executor(None, self.updates.ensure, "moonlight")
+            if got["version"] == streaming.current(HOME):
+                return {"ok": True, "version": got["version"], "launcher": streaming.launcher(HOME), "updated": False}
+            r = await loop.run_in_executor(None, streaming.install, HOME, got["dir"], got["version"])
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, **r, "updated": True}
+
+    async def set_stream_host(self, host: str, app: str = "Desktop") -> dict:
+        try:
+            args = streaming.stream_args(host.strip(), app.strip() or "Desktop")
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        self.settings["stream_host"], self.settings["stream_app"] = host.strip(), app.strip() or "Desktop"
+        self._save_settings()
+        return {"ok": True, "launch_options": args, "launcher": streaming.launcher(HOME)}
+
+    # ---- what changed since last start --------------------------------------------------------------------------
+    async def get_changes(self) -> dict:
+        """Compared with the last start: what the system update changed, and which checks fail now."""
+        loop = asyncio.get_running_loop()
+        snap = await loop.run_in_executor(None, changes.snapshot, HOME, stack.detect(), getattr(decky, "DECKY_VERSION", None))
+        r = changes.check(os.path.join(SETTINGS_DIR, "system-snapshot.json"), snap)
+        if r["changed"]:
+            checks = await loop.run_in_executor(None, health.checks, self.hw, HOME)
+            r["failing"] = [{"title": c["title"], "detail": c["detail"]} for c in checks if not c["ok"] and not c.get("optional")]
+        return r
 
     async def injector_launch_env(self, mode: str) -> dict:
         return injector.Injector.launch_env(mode)
