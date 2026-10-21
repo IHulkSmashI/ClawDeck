@@ -381,3 +381,23 @@ def test_every_callable_has_a_backend_method():
     methods = set(re.findall(r"async def ([a-z_]+)\(self", main))
     assert names, "no callables found"
     assert names <= methods, f"UI calls without a backend: {sorted(names - methods)}"
+
+
+# ---- tools -----------------------------------------------------------------------------------------------------------
+def test_soak_verdict():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("soak", os.path.join(ROOT, "tools", "soak.py"))
+    soak = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(soak)
+    assert soak.slope([0, 1, 2, 3], [20, 21, 22, 23]) == 1.0
+    v = soak.verdict(0.2, 25, 0.1, 4)
+    assert v[0].endswith("ok") and v[1].endswith("ok") and v[2].endswith("flat") and len(v) == 3
+    assert "OVER" in soak.verdict(0.9, 40, 2, 1)[0] and "leak" in soak.verdict(0.9, 40, 2, 1)[2]
+
+
+def test_power_profile_script_dry_run():
+    import subprocess
+    r = subprocess.run(["bash", os.path.join(ROOT, "tools", "power-profile.sh"), "battery", "--dry-run"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "== battery" in r.stdout
+    assert subprocess.run(["bash", os.path.join(ROOT, "tools", "power-profile.sh"), "turbo"], capture_output=True).returncode == 1
