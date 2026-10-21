@@ -47,7 +47,7 @@ export const BatteryTab: FC = () => {
               toaster.toast({ title: "ClawDeck", body: ok ? `Charge limit ${o.data}%` : "Charge limit not supported on this kernel" });
               refresh();
             }} />
-          <Hint does="Stops charging at the chosen percent; re-applied at every boot." why="80% roughly doubles battery lifespan; 50–60% for a unit that lives on the dock." cost="less runtime per charge." />
+          <Hint does="Stops charging at the chosen percent; re-applied at every boot." why="batteries wear slower when they don't sit at 100%. 80% for every day, 50–60% if it lives on the dock." cost="less runtime per charge." />
         </PanelSectionRow>
         {b && !b.charge_limit_supported && (
           <PanelSectionRow>

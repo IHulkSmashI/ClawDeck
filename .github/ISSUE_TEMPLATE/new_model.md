@@ -3,7 +3,9 @@ name: New device survey
 about: Add a handheld to the hardware table
 labels: hardware
 ---
-Run `tools/sysfs-survey.sh` on the device (Desktop Mode terminal) and paste the full output below. One row in `py_modules/clawdeck/hw.py` is all a new model needs.
+In ClawDeck → Setup, tap **Save a hardware survey for an issue**. It saves a `clawdeck-survey-….txt` file to your Desktop and changes nothing. Attach the file here, or paste what's in it below. (Without the plugin: run `tools/sysfs-survey.sh` in a terminal.)
+
+Which device is it? (model name from the box or sticker)
 
 ```
 (paste here)
