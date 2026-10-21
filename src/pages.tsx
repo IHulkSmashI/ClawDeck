@@ -14,7 +14,7 @@ import { ControllerTab } from "./tabs/Controller";
 export const ROUTE = "/clawdeck";
 
 /** Opens the full-screen ClawDeck page (optionally on one section) and closes the Quick Access menu. */
-const openPage = (page = "power") => {
+export const openPage = (page = "power") => {
   Navigation.Navigate(`${ROUTE}/${page}`);
   Navigation.CloseSideMenus();
 };

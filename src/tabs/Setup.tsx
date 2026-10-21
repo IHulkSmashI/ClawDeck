@@ -22,11 +22,11 @@ export const SetupTab: FC = () => {
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  const refresh = async () => {
+  const refresh = async (force = false) => {
     setBusy(true);
     try {
       setHw(await getHardware());
-      setHealth(await getHealth());
+      setHealth(await getHealth(force));
       setDry(!!(await getSetting("dry_run")));
       setSleep(await getSleep());
     } finally { setBusy(false); }
@@ -73,7 +73,7 @@ export const SetupTab: FC = () => {
           </PanelSectionRow>
         )}
         <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={refresh}>Re-check</ButtonItem>
+          <ButtonItem layout="below" disabled={busy} onClick={() => refresh(true)}>Re-check</ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" description={explain("Saves one file with your hardware and the checks above. Attach it to a GitHub issue.")} onClick={async () => {

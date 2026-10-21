@@ -37,9 +37,9 @@ it does:
 
 - **VRR fix 30–120 Hz.** The Claw's screen can run VRR from 30 Hz, but tells the system 48, so games below 48 fps
   judder. One tap applies ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
-- **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode, because
-  the system doesn't know the EX's button codes yet. One tap in Setup adds the entry systemd (the part of Linux that
-  reads the keys) already ships for newer versions.
+- **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode: the EX
+  sends different keys than the controller service (InputPlumber) expects. One tap in Setup gives InputPlumber the
+  right map for the EX.
 - **Real power control on the Claw 8 EX.** Steam's own TDP slider may do nothing on this model under current
   Bazzite; ClawDeck sets the Claw's power limit directly, inside the limits MSI's firmware allows.
 - **Four power profiles, per game:** Battery, Balanced, Performance and Dock, in one tap. Save one per game and it
@@ -89,7 +89,7 @@ A1M and A8 (see [the questions](#questions) for what differs).
 | **Health check** | Checks your Claw, graphics driver, controller, battery and more. Anything missing shows up first, with a button to fix it. |
 | **Bug report** | Saves one file to your Desktop with everything we need to help you. Attach it to a GitHub issue. |
 | **Dry run** | ClawDeck shows what it *would* change, without changing anything. Good for trying things safely. |
-| **MSI button fix** (Claw 8 EX) | If the two face buttons do nothing in Game Mode, the health check says so and one tap fixes it: right button = Steam menu, left = Quick Access. It adds systemd's own entry for the EX, which newer systemd versions already include. |
+| **MSI button fix** (Claw 8 EX) | If the two face buttons do nothing in Game Mode, the health check says so and one tap fixes it: left button = Steam menu, right = Quick Access. It gives InputPlumber the right button map for the EX, until InputPlumber ships it itself. |
 
 ### Power
 | Feature | What it does | Good to know |
