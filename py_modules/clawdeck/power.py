@@ -83,28 +83,48 @@ class Power:
             if self._hhd_orig is None:
                 self._hhd_orig = hhd.get_tdp() or {}
             return hhd.set_tdp(watts, self.boost)
-        # no HHD (current Bazzite): MSI's firmware attributes, exactly as HHD and steamos-manager write them - watts,
-        # PL3 (if the model has it; the EX has none) then PL2 then PL1, boost limit proportional to the model's
-        # ceiling, each clamped to the attribute's own min_value/max_value. On the Claw 8 EX, PowerStation reports
-        # no TDP range for this chip, so Steam's slider does nothing and ClawDeck is the only writer; on models
-        # where Steam's slider works it writes the same files and the last change wins. ClawDeck reverts its value
-        # when the game closes.
+        # no HHD (current Bazzite): RAPL's package domain, which is what the SoC actually enforces. Measured on a
+        # Claw 8 EX (BIOS E1T91IMS.10D, 2026-10-21) with an all-core load: the MSI firmware attributes
+        # (ppt_pl1_spl / ppt_pl2_sppt) accept any value in range and change nothing - package power stayed at 37 W
+        # with PL1 set to 10, 17 or 35 - while intel-rapl-mmio:0 writes cap it exactly (17/24 W -> 23 W measured,
+        # 10/12 W -> 11 W). The firmware attributes also refuse their own initial value 0, so they cannot be
+        # reverted; ClawDeck leaves them alone whenever RAPL is present. PL2 and PL1 are written in the order that
+        # keeps PL2 >= PL1 at every step; revert restores the values read at first write (25/37 W on the EX).
+        if self.p.rapl_pl1:
+            return self._set_rapl(watts, lim)
         if self.p.msi_pl1:
             return self._set_msi_firmware(watts, lim)
-        # last resort: RAPL directly (the firmware may re-assert its own value)
-        if self.p.rapl_pl1:
-            ok = sysfs.write(self.p.rapl_pl1, watts * 1_000_000)
-            if self.p.rapl_pl2:
-                ok = sysfs.write(self.p.rapl_pl2, min(watts + 10, lim["sppt_max"]) * 1_000_000) and ok
-            return ok
         log.error("no way to set TDP on this system (no Handheld Daemon, no RAPL package domain)")
         return False
 
+    def _sppt_for(self, watts: int, lim: dict) -> int:
+        ceiling = max(lim["plugged_max"], lim["battery_max"])
+        if self.boost:
+            return min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"])
+        return min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as ClawTweaks does from a single slider
+
+    def _set_rapl(self, watts: int, lim: dict) -> bool:
+        pl2 = self._sppt_for(watts, lim) if self.p.rapl_pl2 else None
+        cur_pl1 = sysfs.read_int(self.p.rapl_pl1, 0) // 1_000_000
+        raising = watts >= cur_pl1
+        writes = [(self.p.rapl_pl1, watts * 1_000_000)]
+        if pl2 is not None:
+            writes = ([(self.p.rapl_pl2, pl2 * 1_000_000)] + writes) if raising else (writes + [(self.p.rapl_pl2, pl2 * 1_000_000)])
+        ok = True
+        for path, val in writes:
+            ok = sysfs.write(path, val) and ok
+        # a second RAPL domain (the MSR one when MMIO is used) must not sit below the target or it becomes the cap
+        for path, val in ((self.p.rapl_alt_pl1, watts), (self.p.rapl_alt_pl2, pl2)):
+            if path and val is not None and sysfs.read_int(path, 0) < val * 1_000_000:
+                sysfs.write(path, val * 1_000_000)
+        if not ok:
+            for path, _ in writes:
+                sysfs.revert(path)
+        return ok
+
     def _set_msi_firmware(self, watts: int, lim: dict) -> bool:
         import time
-        ceiling = max(lim["plugged_max"], lim["battery_max"])
-        sppt = min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"]) if self.boost else \
-            min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as ClawTweaks does from a single slider
+        sppt = self._sppt_for(watts, lim)
         ok = True
         for path, val in ((self.p.msi_pl3, sppt), (self.p.msi_pl2, sppt), (self.p.msi_pl1, watts)):
             if not path:
@@ -122,10 +142,10 @@ class Power:
     def tdp_backend(self) -> str | None:
         if hhd.available():
             return "hhd"
-        if self.p.msi_pl1:
-            return "msi-firmware"
         if self.p.rapl_pl1:
             return "rapl"
+        if self.p.msi_pl1:
+            return "msi-firmware"
         return None
 
     def set_cpu_max_pct(self, pct: int) -> bool:

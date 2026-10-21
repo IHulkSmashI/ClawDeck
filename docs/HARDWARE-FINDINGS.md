@@ -66,3 +66,25 @@ KEY_LEFTMETA + KEY_G (Win+G) from "AT Translated Set 2 keyboard". InputPlumber's
 so both buttons are dropped. (A first attempt mapped scancode b9→F15 through hwdb; it was a red herring: F15 already
 arrives from the WMI device, the chord is what fails.) Fix: `/etc/inputplumber/devices.d` copy of the device config
 pointing at a `claw8ex` map (Guide = KeyG, QuickAccess = KeyF15, M1/M2 unchanged). Upstream: InputPlumber.
+
+## 12. MSI firmware TDP attributes are ignored on the Claw 8 EX; RAPL-MMIO is the real control (2026-10-21, fixed in `power.py`)
+
+Measured with an all-core busy loop and `intel-rapl:0/energy_uj` (BIOS E1T91IMS.10D, AC):
+
+| written to | PL1/PL2 | package power |
+|---|---|---|
+| `msi-wmi-platform` ppt_pl1_spl / ppt_pl2_sppt | 17/24 | 36 W |
+| same | 35/45 | 37 W |
+| same | 10/12 | 37 W |
+| `intel-rapl-mmio:0` constraint_0/1 | 17/24 | 23 W |
+| same | 10/12 | 11 W |
+| same | 25/37 (defaults) | 37 W |
+
+So the firmware attributes accept values but the EC does not apply them (on this BIOS, outside MSI Center's "user"
+mode, or at all); `intel-rapl-mmio:0` (defaults 25 W / 37 W, `max_power_uw` 25 W) is what the SoC enforces, and the
+MSR domain `intel-rapl:0` sits at 35/50 W above it. Writing 0 back to the firmware attributes (their initial value)
+is refused with EINVAL, so they cannot even be reverted. ClawDeck now writes RAPL (PL2 before PL1 when raising,
+PL1 first when lowering), raises the other RAPL domain only if it would otherwise cap lower, and never touches the
+MSI attributes while RAPL exists. Open question for the maintainer: does a RAPL PL1 above `max_power_uw` (25 W) take
+effect for the 35 W plugged profile? Measure with `tools/power-profile.sh` or the same busy loop.
+Also: the dry-run tour of every tab wrote only in-range values and the revert list was complete (good).
