@@ -166,16 +166,31 @@ class Autotune:
         self.sampler = Sampler(hardware, log_dir)
         self.csv_log = csv_log
         self.session: Session | None = None
+        self.plugged: bool | None = None
         self.task: asyncio.Task | None = None
         self.enabled = False
 
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
-    def start(self, appid: str, target_fps: int, learned: dict | None, floor_tdp: int, ceiling_tdp: int) -> None:
-        l = Learned(**learned) if learned else Learned(tdp=ceiling_tdp, cpu_max_pct=100, gpu_min_mhz=None)
+    def start(self, appid: str, target_fps: int, learned: dict | None, floor_tdp: int, ceiling_tdp: int,
+              plugged: bool | None = None) -> None:
+        self.plugged = plugged
+        known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
+        l = Learned(**known) if known.get("tdp") is not None else Learned(tdp=ceiling_tdp, cpu_max_pct=100, gpu_min_mhz=None)
+        l.tdp = max(floor_tdp, min(int(l.tdp), ceiling_tdp))
         self.session = Session(appid=appid, target_fps=target_fps, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l)
         self._apply(l)
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
+
+    def pause(self, reason: str = "manual change") -> None:
+        """Never fight the user: a manual power change stops learning for the rest of this session (values the user
+        set stay; what was learned so far is still saved at game exit)."""
+        if self.session and not self.session.paused:
+            self.session.paused = True
+            log.info("autotune paused: %s", reason)
+
+    def running(self) -> bool:
+        return self.session is not None
 
     def stop(self) -> dict | None:
         s = self.session
@@ -186,7 +201,7 @@ class Autotune:
         return None
 
     def _apply(self, l: Learned) -> None:
-        self.power.set_tdp(l.tdp)
+        self.power.set_tdp(l.tdp, self.plugged)
         self.power.set_cpu_max_pct(l.cpu_max_pct)
         if l.gpu_min_mhz:
             self.power.set_gpu_window(l.gpu_min_mhz, None)
@@ -221,7 +236,7 @@ class Autotune:
             s.good_run += 1; s.bad_run = 0
             if s.good_run >= s.settle and l.tdp > s.floor_tdp and l.confidence < 3:
                 l.tdp -= 1
-                self.power.set_tdp(l.tdp)
+                self.power.set_tdp(l.tdp, self.plugged)
                 s.good_run = 0
                 changed = True
         else:
@@ -240,7 +255,7 @@ class Autotune:
                     changed = True
                 if not changed and l.tdp < s.ceiling_tdp:
                     l.tdp = min(s.ceiling_tdp, l.tdp + 2)
-                    self.power.set_tdp(l.tdp)
+                    self.power.set_tdp(l.tdp, self.plugged)
                     changed = True
                 s.bad_run = 0
                 l.confidence = max(0, l.confidence - 1)

@@ -1,7 +1,8 @@
 {
-  "_comment": "Pinned upstream releases ClawDeck downloads on request (Setup tab). Update deliberately, test on a Claw, then bump.",
+  "_comment": "Pinned upstream releases ClawDeck downloads on request. 'pending-verification' = no version tested on a Claw yet: the UI then offers 'latest (untested)' behind a warning. Update deliberately, test on a Claw, then bump.",
   "optiscaler": { "repo": "optiscaler/OptiScaler", "tag": "pending-verification", "asset_glob": "OptiScaler_*.7z" },
-  "xess_sdk":   { "repo": "intel/xess", "tag": "pending-verification", "note": "libxess.dll, libxess_fg.dll, libxell.dll 2.x for the XMX shim" },
-  "lsfg_vk":    { "repo": "PancakeTAS/lsfg-vk", "tag": "pending-verification" },
-  "xess_xmx_linux": { "repo": "HHHHanasak1/xess-xmx-linux", "tag": "pending-verification", "fork": "IHulkSmashI/xess-xmx-linux" }
+  "xess_sdk":   { "repo": "intel/xess", "tag": "pending-verification", "asset_glob": "XeSS_SDK_*.zip", "note": "libxess.dll, libxess_fg.dll, libxell.dll 2.x for the XMX shim" },
+  "lsfg_vk":    { "repo": "PancakeTAS/lsfg-vk", "tag": "pending-verification", "note": "moved to lsfg-vk.dev; install it with Bazzite's ujust or the project's package, ClawDeck only configures it" },
+  "xess_xmx_linux": { "repo": "HHHHanasak1/xess-xmx-linux", "fork": "IHulkSmashI/xess-xmx-linux", "use_fork": true,
+                      "tag": "pending-verification", "asset_glob": "xess-xmx-linux-*.zip" }
 }

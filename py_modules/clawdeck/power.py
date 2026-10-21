@@ -22,6 +22,7 @@ class Power:
     def __init__(self, hardware: hw.Hardware):
         self.hw = hardware
         self.p = hardware.paths
+        self._hhd_orig: dict | None = None    # HHD's TDP state before ClawDeck's first change, for revert_all
 
     # ---- readouts --------------------------------------------------------------------------------------------------
     def status(self) -> dict:
@@ -58,6 +59,11 @@ class Power:
             if not hhd.tdp_ready():
                 log.warning("Handheld Daemon's TDP controls are not enabled yet (accept them once in HHD's settings)")
                 return False
+            if sysfs.dry_run():
+                log.info("dry-run: would set Handheld Daemon TDP to %d W", watts)
+                return True
+            if self._hhd_orig is None:
+                self._hhd_orig = hhd.get_tdp() or {}
             return hhd.set_tdp(watts)
         # no HHD: RAPL directly (the firmware may re-assert its own value; HHD handles that, this is a fallback)
         if self.p.rapl_pl1:
@@ -140,5 +146,15 @@ class Power:
         return result
 
     def revert_all(self) -> int:
-        """Back to firmware defaults for everything ClawDeck touched in sysfs (HHD keeps its own state)."""
-        return sysfs.revert_all()
+        """Back to what was there before ClawDeck: every sysfs value it touched, and HHD's TDP mode/value."""
+        n = sysfs.revert_all()
+        orig, self._hhd_orig = self._hhd_orig, None
+        if orig and orig.get("mode"):
+            vals = {hhd.KEY_TDP_MODE: orig["mode"]}
+            if orig.get("custom_tdp") is not None:
+                vals[hhd.KEY_TDP_CUSTOM] = orig["custom_tdp"]
+            if orig.get("boost") is not None:
+                vals[hhd.KEY_TDP_BOOST] = orig["boost"]
+            if hhd.set_values(vals) is not None:
+                n += 1
+        return n
