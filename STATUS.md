@@ -48,7 +48,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 
 ## Tested on real hardware
 
-2026-10-21, Claw 8 EX on Bazzite deck 44.20261012.1: plugin loads in Decky 3.3.0, hardware detected, health check and power/battery readouts run. Findings and the resulting task list: `docs/HARDWARE-FINDINGS.md` (the big one: this Bazzite image has no Handheld Daemon; InputPlumber + PowerStation instead).
+2026-10-21, Claw 8 EX on Bazzite deck 44.20261012.1: plugin loads in Decky 3.3.0, hardware detected, health check and power/battery readouts run. Evening: `tools/selftest.py` 12/12 PASS on the device (TDP via RAPL measured 15 W under load at a 12 W setting and 37 W after revert; CPU/GPU ceilings; charge limit 80 %; face buttons; full revert). Before that, three blockers were found and fixed the same day: backend not root (§13), MSI firmware TDP attributes ignored (§12), no CA store for downloads (§15). Findings and the resulting task list: `docs/HARDWARE-FINDINGS.md` (the big one: this Bazzite image has no Handheld Daemon; InputPlumber + PowerStation instead).
 
 ## Next (on the Claw 8 EX, in this order)
 
