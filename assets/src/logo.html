@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- Source of assets/logo.png (README header). Render: node tools/render-banner.mjs -->
+<html><head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: transparent; }
+  body { width: 600px; height: 600px; display: grid; place-items: center; }
+  .disc { width: 560px; height: 560px; border-radius: 50%; display: grid; place-items: center;
+          background: linear-gradient(180deg, #7fd8ff 0%, #3fa7ff 48%, #23406f 100%); }
+  /* a handheld: body with two grips, a screen, two sticks; three claw marks on the screen */
+  .device { position: relative; width: 420px; height: 210px; border-radius: 60px 60px 95px 95px; background: #15191f;
+            box-shadow: 0 22px 40px #0b0f1477; }
+  .screen { position: absolute; left: 105px; top: 32px; width: 210px; height: 146px; border-radius: 14px; overflow: hidden;
+            background: linear-gradient(160deg, #1f2a38, #0e1218); }
+  .stick { position: absolute; top: 58px; width: 46px; height: 46px; border-radius: 50%; background: #2a313c; box-shadow: inset 0 -4px 0 #0b0f14; }
+  .s1 { left: 34px; } .s2 { right: 34px; top: 112px; }
+  .mark { position: absolute; top: 14px; width: 24px; height: 124px; border-radius: 12px; transform: rotate(20deg);
+          background: linear-gradient(180deg, #a6e6ff, #3fa7ff 55%, #8a7bff); }
+  .m1 { left: 52px; } .m2 { left: 96px; top: 20px; } .m3 { left: 140px; }
+</style></head>
+<body><div class="disc"><div class="device">
+  <div class="stick s1"></div><div class="stick s2"></div>
+  <div class="screen"><div class="mark m1"></div><div class="mark m2"></div><div class="mark m3"></div></div>
+</div></div></body></html>
