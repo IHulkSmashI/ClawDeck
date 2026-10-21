@@ -27,6 +27,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | Sleep | `sleep.py`, `tools/suspend-cycle.sh` | Setup → Advanced | read-only checks; cycle soak tool |
 | Battery | `battery.py` | Battery & Fans | 50–100 % charge limit |
 | Budget meter | `tools/soak.py` | — | CPU %, peak RSS, RSS slope against the release budget |
+| Browser preview | `preview/` (`pnpm preview`) | all tabs | the real tab code with example data, no Claw needed |
 | Profiles without the plugin | `tools/power-profile.sh` | — | battery / performance / dock / reset / status, `--dry-run` |
 
 ## Checked against upstream sources (2026-10-21, no hardware needed)
@@ -59,5 +60,5 @@ Nothing yet.
   there (its `tools/make-release.py` builds the zip) and set `"use_fork": true`.
 - Decide how ClawDeck relates to Bazzite's own OptiScaler and Lossless Scaling Decky plugins (defer to them, or
   replace them).
-- Decide the release name on the Decky store (ClawDeck, per the 2026-10-21 decision) and the banner image
-  (`assets/banner.png` is referenced in plugin.json but not in the repo yet).
+- Look over the store banner (`assets/banner.png`, source `assets/src/banner.html`) and the first post draft
+  (`docs/posts/01-claw-8-ex-on-bazzite.md`); neither is published anywhere.
