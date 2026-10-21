@@ -24,6 +24,8 @@ import shutil
 import time
 import urllib.request
 
+from . import tls
+
 from . import downloads
 
 log = logging.getLogger("clawdeck.updates")
@@ -40,7 +42,7 @@ COMPONENTS = {
 
 def _get_text(url: str, timeout: float = 20.0) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "ClawDeck"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with tls.urlopen(req, timeout) as r:
         return r.read().decode("utf-8", errors="replace")
 
 
