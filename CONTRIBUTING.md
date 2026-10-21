@@ -5,7 +5,7 @@ ClawDeck is MIT-licensed and built in the open. Pull requests from anyone with a
 **Ground rules**
 - Battery first: no polling, no timers, unless a game is running and the user turned the feature on.
 - Every sysfs write goes through `clawdeck.sysfs.write` so it is revertible and dry-run aware.
-- Don't re-implement what an upstream project does: Handheld Daemon (buttons, TDP, fans, charge limit), PowerControl (clock paths), xess-xmx-linux (XeSS XMX). Fix it there and call it from here.
+- Don't re-implement what an upstream project does: InputPlumber / Handheld Daemon (buttons, gyro, RGB), PowerStation / steamos-manager / Handheld Daemon (TDP), PowerControl (clock paths), xess-xmx-linux (XeSS XMX). Fix it there and call it from here.
 - Every UI control gets a `Hint`: what it does, why you'd turn it on, what it costs. Two or three bullets, no paragraphs.
 - Tests: `python3 -m pytest -q tests` must pass; add a test for backend behaviour you change.
 - A new device is one row in `hw.py` plus the survey output in the PR.

@@ -6,7 +6,7 @@ export type PowerStatus = {
   cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null };
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
-  hhd: boolean; msi_firmware: boolean;
+  hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
 };
 export type BatteryStatus = {
@@ -14,7 +14,8 @@ export type BatteryStatus = {
   energy_full_wh?: number | null; health_pct?: number | null; plugged?: boolean | null;
   charge_limit_supported?: boolean; charge_limit?: number | null;
 };
-export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean } };
+export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
+export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack };
 export type GameProfile = { base?: string; tdp?: number; cpu_max_pct?: number; gpu_min_mhz?: number; gpu_max_mhz?: number; target_fps?: number; autotune?: boolean; learned?: any };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; target_fps?: number; learned?: any; paused?: boolean; last?: any };
 

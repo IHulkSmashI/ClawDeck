@@ -104,9 +104,9 @@ export const PowerTab: FC = () => {
       <PanelSection title="Manual">
         <PanelSectionRow>
           <SliderField label="TDP (W)" value={tdp} min={lim.min} max={lim.plugged_max} step={1} showValue
-            disabled={!st?.hhd && !st?.rapl.available}
-            onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast("TDP not applied: enable TDP controls in Handheld Daemon once"); }} />
-          <Hint does="Package power limit, shared by CPU and GPU (through Handheld Daemon)." why="17–25 W on battery is the sweet spot; 35 W docked." cost="more watts = more heat and fan noise; pauses autotune for this session." />
+            disabled={!st?.tdp_backend}
+            onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast(st?.hhd ? "TDP not applied: enable TDP controls in Handheld Daemon once" : "TDP not applied: see Setup → Power limit control"); }} />
+          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="17–25 W on battery is the sweet spot; 35 W docked." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise; Steam's own TDP slider sets the same limit, so the last change wins."} />
         </PanelSectionRow>
         <Advanced id="power">
           <PanelSectionRow>
@@ -135,7 +135,7 @@ export const PowerTab: FC = () => {
           {st && (
             <PanelSectionRow>
               <div style={{ fontSize: 11, opacity: 0.7 }}>
-                GPU now {st.gpu.cur_mhz ?? "?"} MHz (hw {st.gpu.hw_min_mhz}–{st.gpu.hw_max_mhz}) · HHD {st.hhd ? (st.tdp?.ready ? `ready, ${st.tdp?.mode}` : "TDP controls not enabled") : "not running"} · firmware {st.msi_firmware ? "msi-wmi" : "RAPL"}
+                GPU now {st.gpu.cur_mhz ?? "?"} MHz (hw {st.gpu.hw_min_mhz}–{st.gpu.hw_max_mhz}) · TDP via {st.tdp_backend === "hhd" ? `Handheld Daemon (${st.tdp?.ready ? st.tdp?.mode : "TDP controls not enabled"})` : st.tdp_backend === "msi-firmware" ? `MSI firmware (now ${st.firmware_tdp?.pl1_w ?? "?"} W / ${st.firmware_tdp?.pl2_w ?? "?"} W boost)` : st.tdp_backend ?? "nothing"}
               </div>
             </PanelSectionRow>
           )}

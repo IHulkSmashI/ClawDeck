@@ -1,6 +1,6 @@
 # ClawDeck status
 
-Updated 2026-10-21. **Nothing has been tested on real hardware yet.** Everything below passes the backend tests against
+Updated 2026-10-21 (second pass). **Nothing has been tested on real hardware yet.** Everything below passes the backend tests against
 fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds into the Decky zip.
 
 ## Done (code, tests)
@@ -10,7 +10,8 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | Hardware table + discovery | `hw.py` | Setup | one row per Claw; EX = MS-1T91 (matches HHD's table) |
 | Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | also covers HHD writes now (nothing sent in dry run) |
 | Health check + one-tap fixes | `health.py`, `main.run_fix` | Setup | fixes: turn on HHD, install XeSS driver, save a hardware survey |
-| Power + profiles | `power.py` | Power | HHD's TDP mode/value is now restored when the game closes |
+| Power + profiles | `power.py` | Power | TDP via HHD, else MSI firmware limits (current Bazzite), else RAPL (MMIO first) |
+| Which services run | `stack.py` | Setup | InputPlumber / PowerStation / HHD; never offers HHD next to InputPlumber |
 | Per-game profiles, AC follow | `profiles.py`, `main.power_source_changed` | Power | Steam's battery-state event switches battery ↔ plugged slot mid-game |
 | Profile import/export | `profiles.py` | Power → Advanced | JSON on Desktop; import from Desktop/Downloads, never overwrites |
 | Autotune | `autotune.py` | Power | pauses on any manual change; saved TDP clamped to the current ceiling |
@@ -21,12 +22,22 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | XeSS driver | `xess.py`, `downloads.py` | Graphics | xess-xmx-linux state, install from fork release, probe, default Mesa |
 | Proton picker | `proton.py` + `SteamClient.Apps.SpecifyCompatTool` | Graphics | Steam stays owner of config.vdf |
 | Display and dock | `display.py` | Display | VRR, refresh range, HDR, SDR nits → `~/.config/environment.d/60-clawdeck-display.conf` on Save |
-| Controller | `controller.py` | Controller | everything HHD offers under `controllers.claw.*` and `rgb.handheld.*`, from HHD's schema |
-| Fans | `fans.py` | Battery & Fans | Auto / Quiet / Balanced / Cool on HHD's MSI fan curve |
+| Controller | `controller.py` | Controller | with HHD: everything under `controllers.claw.*` / `rgb.handheld.*`; with InputPlumber: status only (next) |
+| Fans | `fans.py` | Battery & Fans | presets need HHD; without it the firmware curve runs (direct hwmon curve: next) |
 | Sleep | `sleep.py`, `tools/suspend-cycle.sh` | Setup → Advanced | read-only checks; cycle soak tool |
 | Battery | `battery.py` | Battery & Fans | 50–100 % charge limit |
 | Budget meter | `tools/soak.py` | — | CPU %, peak RSS, RSS slope against the release budget |
 | Profiles without the plugin | `tools/power-profile.sh` | — | battery / performance / dock / reset / status, `--dry-run` |
+
+## Checked against upstream sources (2026-10-21, no hardware needed)
+
+- Steam client calls against @decky/ui 4.16 typings; fixed: no install-dir field exists (now read from Steam's
+  appmanifest), `Router` imported from @decky/ui.
+- Current Bazzite: no Handheld Daemon; InputPlumber + PowerStation + Steam's TDP slider (steamos-manager → MSI
+  firmware attributes). ClawDeck now sets TDP the same way when HHD is absent and no longer suggests installing HHD.
+- gamescope-session variables (Bazzite uses ChimeraOS's via Terra); no Claw device quirk.
+- Release assets and OptiScaler 0.9.4 INI keys (fixed `FGType` → `FGInput`/`FGOutput=xefg`, DX11 → `xess_12`).
+- The IHulkSmashI xess-xmx-linux fork has no releases: the installer uses upstream's (`use_fork: false`).
 
 ## Tested on real hardware
 
@@ -44,7 +55,9 @@ Nothing yet.
 ## Needs the maintainer
 
 - Pin tested versions in `assets/versions.json` (all are `pending-verification`, so installs ask "latest, untested?").
-- Does IHulkSmashI/xess-xmx-linux publish release zips (`xess-xmx-linux-<v>.zip`)? The installer downloads from the
-  fork; if the fork has no releases, set `"use_fork": false` to use HHHHanasak1's.
+- The fork publishes no releases, so the installer downloads HHHHanasak1's. To ship from the fork, publish a release
+  there (its `tools/make-release.py` builds the zip) and set `"use_fork": true`.
+- Decide how ClawDeck relates to Bazzite's own OptiScaler and Lossless Scaling Decky plugins (defer to them, or
+  replace them).
 - Decide the release name on the Decky store (ClawDeck, per the 2026-10-21 decision) and the banner image
   (`assets/banner.png` is referenced in plugin.json but not in the repo yet).

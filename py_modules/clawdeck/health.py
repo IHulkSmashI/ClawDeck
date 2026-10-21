@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import hhd, hw, injector, sleep, sysfs, xess
+from . import hhd, hw, injector, sleep, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -50,17 +50,33 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out.append({"id": "mesa", "title": "Intel Vulkan driver", "ok": mesa is not None,
                 "detail": f"Mesa {mesa}, kernel {hardware.kernel}, {hardware.gpu_driver or 'no GPU driver'}" if mesa else
                           f"no libvulkan_intel.so found (kernel {hardware.kernel})", "fix": None})
+    st = stack.detect()
     hhd_ok = hhd.available()
-    hv = hhd_version() if hhd_ok else None
-    out.append({"id": "hhd", "title": "Handheld Daemon running", "ok": hhd_ok,
-                "detail": f"version {hv or '?'}; MSI buttons, TDP and fans come from here" if hhd_ok else
-                          "not running or not installed: the MSI buttons and the TDP slider need it",
-                "fix": None if hhd_ok else "enable_hhd"})
-    if hhd_ok:
+    if st["conflict"]:
+        out.append({"id": "controller", "title": "Controller service", "ok": False,
+                    "detail": "Handheld Daemon and InputPlumber are both running and will fight over the controller: "
+                              "keep one (Bazzite's default is InputPlumber)", "fix": None})
+    elif hhd_ok:
+        hv = hhd_version()
+        out.append({"id": "controller", "title": "Controller service: Handheld Daemon", "ok": True,
+                    "detail": f"version {hv or '?'}; MSI buttons, TDP, fans and RGB come from here", "fix": None})
         ready = hhd.tdp_ready()
         out.append({"id": "hhd_tdp", "title": "TDP controls enabled in Handheld Daemon", "ok": ready,
                     "detail": "accepted" if ready else "open the Handheld Daemon overlay once and enable TDP controls",
                     "fix": None})
+    elif st["inputplumber"]:
+        out.append({"id": "controller", "title": "Controller service: InputPlumber (Bazzite default)", "ok": True,
+                    "detail": "MSI buttons and gyro come from InputPlumber; ClawDeck's Controller and Fans tabs need "
+                              "Handheld Daemon and stay read-only", "fix": None})
+    else:
+        out.append({"id": "controller", "title": "Controller service", "ok": False,
+                    "detail": "neither InputPlumber nor Handheld Daemon is running: the MSI buttons will not work",
+                    "fix": "enable_hhd" if os.path.exists("/usr/bin/hhd") else None})
+    if not hhd_ok:
+        out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
+                    "detail": ("MSI firmware limits (the same ones Steam's performance slider sets; the last change wins)"
+                               if p.msi_pl1 else "RAPL only" if p.rapl_pl1 else "no way to set TDP on this system")
+                              + ("; PowerStation running" if st["powerstation"] else ""), "fix": None})
     out.append({"id": "msi_fw", "title": "MSI firmware controls (msi-wmi-platform)", "ok": p.msi_pl1 is not None,
                 "detail": "TDP and fan curve attributes present" if p.msi_pl1 else
                           "kernel driver not loaded: TDP falls back to RAPL, no fan curves", "fix": None})

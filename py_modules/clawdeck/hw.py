@@ -68,7 +68,7 @@ class Paths:
     cpu_boost: str | None = None         # cpufreq boost (AMD / acpi-cpufreq)
     cpu_governor: list[str] = field(default_factory=list)
     # package power
-    rapl_package: str | None = None      # intel-rapl:0 directory
+    rapl_package: str | None = None      # intel-rapl-mmio:0 or intel-rapl:0 directory
     rapl_pl1: str | None = None
     rapl_pl2: str | None = None
     rapl_energy: str | None = None       # energy_uj for power readings
@@ -135,8 +135,9 @@ def discover_paths() -> Paths:
     if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
         p.cpu_boost = "/sys/devices/system/cpu/cpufreq/boost"
     p.cpu_governor = sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor"))
-    # RAPL package domain
-    for d in sorted(glob.glob("/sys/class/powercap/intel-rapl:[0-9]")):
+    # RAPL package domain; the MMIO interface first, as PowerStation does (it is the one the SoC firmware honours on
+    # recent Intel; the MSR one can be overridden by the platform)
+    for d in sorted(glob.glob("/sys/class/powercap/intel-rapl-mmio:[0-9]")) + sorted(glob.glob("/sys/class/powercap/intel-rapl:[0-9]")):
         if (sysfs.read(f"{d}/name") or "").startswith("package"):
             p.rapl_package = d
             for c in sorted(glob.glob(f"{d}/constraint_[0-9]_name")):

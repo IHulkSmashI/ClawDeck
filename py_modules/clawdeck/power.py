@@ -47,8 +47,12 @@ class Power:
             "pl1_w": (sysfs.read_int(p.rapl_pl1) or 0) / 1e6 if p.rapl_pl1 else None,
             "pl2_w": (sysfs.read_int(p.rapl_pl2) or 0) / 1e6 if p.rapl_pl2 else None,
         }
+        fw = None
+        if p.msi_pl1:
+            fw = {"pl1_w": sysfs.read_int(p.msi_pl1), "pl2_w": sysfs.read_int(p.msi_pl2) if p.msi_pl2 else None}
         return {"gpu": gpu, "cpu": cpu, "rapl": rapl, "tdp": hhd.get_tdp(), "hhd": hhd.available(),
-                "msi_firmware": p.msi_pl1 is not None, "limits": self.hw.model["tdp"]}
+                "msi_firmware": p.msi_pl1 is not None, "firmware_tdp": fw, "tdp_backend": self.tdp_backend(),
+                "limits": self.hw.model["tdp"]}
 
     # ---- single levers ---------------------------------------------------------------------------------------------
     def set_tdp(self, watts: int, plugged: bool | None = None) -> bool:
@@ -65,7 +69,12 @@ class Power:
             if self._hhd_orig is None:
                 self._hhd_orig = hhd.get_tdp() or {}
             return hhd.set_tdp(watts)
-        # no HHD: RAPL directly (the firmware may re-assert its own value; HHD handles that, this is a fallback)
+        # no HHD (current Bazzite): MSI's firmware attributes, exactly as HHD and steamos-manager write them - watts,
+        # PL3 then PL2 then PL1, boost limit proportional to the model's ceiling. Steam's own performance slider
+        # writes the same files, so the last one to change it wins; ClawDeck reverts its value when the game closes.
+        if self.p.msi_pl1:
+            return self._set_msi_firmware(watts, lim)
+        # last resort: RAPL directly (the firmware may re-assert its own value)
         if self.p.rapl_pl1:
             ok = sysfs.write(self.p.rapl_pl1, watts * 1_000_000)
             if self.p.rapl_pl2:
@@ -73,6 +82,32 @@ class Power:
             return ok
         log.error("no way to set TDP on this system (no Handheld Daemon, no RAPL package domain)")
         return False
+
+    def _set_msi_firmware(self, watts: int, lim: dict) -> bool:
+        import time
+        ceiling = max(lim["plugged_max"], lim["battery_max"])
+        sppt = min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"])
+        ok = True
+        for path, val in ((self.p.msi_pl3, sppt), (self.p.msi_pl2, sppt), (self.p.msi_pl1, watts)):
+            if not path:
+                continue
+            ok = sysfs.write(path, val) and ok
+            if not sysfs.dry_run():
+                time.sleep(0.05)   # the EC applies one limit at a time (HHD waits between writes too)
+        if not ok:
+            for path in (self.p.msi_pl1, self.p.msi_pl2, self.p.msi_pl3):
+                if path:
+                    sysfs.revert(path)
+        return ok
+
+    def tdp_backend(self) -> str | None:
+        if hhd.available():
+            return "hhd"
+        if self.p.msi_pl1:
+            return "msi-firmware"
+        if self.p.rapl_pl1:
+            return "rapl"
+        return None
 
     def set_cpu_max_pct(self, pct: int) -> bool:
         if not self.p.cpu_max_perf_pct:
