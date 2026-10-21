@@ -181,4 +181,4 @@ def test_face_buttons_parse_and_dry_run(tmp_path, monkeypatch):
     r = buttons.apply()
     assert r["dry_run"] and "systemd-hwdb update" in r["would"] and "event4" in r["would"]
     sysfs.set_dry_run(False)
-    assert "rnMS-1T91" in buttons.HWDB_TEXT and "KEYBOARD_KEY_b9=f15" in buttons.HWDB_TEXT
+    assert "Ltd.:*:rnMS-1T91:*" in buttons.HWDB_TEXT and "KEYBOARD_KEY_b9=f15" in buttons.HWDB_TEXT
