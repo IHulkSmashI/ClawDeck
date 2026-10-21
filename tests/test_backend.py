@@ -154,6 +154,7 @@ def test_autotune_lowers_then_raises(fake_hw, monkeypatch):
 
 def _session(fake_hw, monkeypatch, settle=1, **learned):
     pw = power.Power(fake_hw)
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)    # a Claw whose TDP writes work
     at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
     at.session = autotune.Session(appid="1", target_fps=60, floor_tdp=8, ceiling_tdp=17,
                                   learned=autotune.Learned(**{"tdp": 17, "cpu_max_pct": 100, "gpu_min_mhz": None, **learned}),
@@ -311,3 +312,49 @@ def test_sampler_caches_the_dear_reads(fake_hw, tmp_path, monkeypatch):
         smp.frametime()
         smp.gpu_busy()
     assert len(globs) == 1 and len(busy) == 1        # one directory listing, one D-Bus call, not 20 of each
+
+
+def test_charge_limit_survives_closing_a_game(fake_hw):
+    pw = power.Power(fake_hw)
+    assert battery.Battery(fake_hw).set_charge_limit(80)
+    pw.set_cpu_max_pct(50)
+    pw.revert_all()                                   # what closing a game does
+    assert sysfs.read_int(fake_hw.paths.charge_limit) == 80
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
+
+
+def test_dry_run_keeps_the_revert_record(fake_hw):
+    pw = power.Power(fake_hw)
+    pw.set_cpu_max_pct(50)                            # a real write
+    sysfs.set_dry_run(True)
+    pw.revert_all()                                   # only logged
+    sysfs.set_dry_run(False)
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 50
+    pw.revert_all()                                   # still knows the original
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
+
+
+def test_autotune_ignores_a_tdp_the_system_refused(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, settle=1)
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)   # e.g. HHD's TDP controls not enabled
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(61))
+    at._step()
+    assert s.learned.tdp == 17                         # not "learned" as 16 W when nothing changed
+    at.session = None
+
+
+def test_half_written_mangohud_row_waits_for_the_rest(fake_hw, tmp_path):
+    log = tmp_path / "g.csv"
+    log.write_text("fps,frametime\n60.1,16.6\n60.1,1")          # MangoHud mid-way through a row
+    smp = autotune.Sampler(fake_hw, str(tmp_path))
+    assert smp.frametime() == (16.6, 60.1)                       # only the complete row
+    with open(log, "a") as f:
+        f.write("6.6\n")
+    assert smp.frametime() == (16.6, 60.1)                       # the finished row, not a fake 6.6 fps
+
+
+def test_gpu_window_without_hardware_max_never_pins_to_zero(fake_hw):
+    fake_hw.paths.gpu_rp0_freq = None
+    pw = power.Power(fake_hw)
+    assert pw.set_gpu_window(1200, None)
+    assert sysfs.read_int(fake_hw.paths.gpu_min_freq) == 1200 and sysfs.read_int(fake_hw.paths.gpu_max_freq) == 2400

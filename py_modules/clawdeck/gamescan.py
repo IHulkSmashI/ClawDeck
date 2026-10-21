@@ -42,7 +42,9 @@ def _ours(exe_dir: str) -> set[str]:
     try:
         with open(os.path.join(exe_dir, ".clawdeck-inject.json"), "r", encoding="utf-8") as f:
             info = json.load(f)
-        return {os.path.basename(p).lower() for p in info.get("copied", [])}
+        # files ClawDeck added; a file the game ships and ClawDeck replaced (backed up) still counts as the game's
+        own = {os.path.basename(p).lower() for p in info.get("backed_up", [])}
+        return {os.path.basename(p).lower() for p in info.get("copied", [])} - own
     except (OSError, ValueError):
         return set()
 

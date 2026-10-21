@@ -53,11 +53,15 @@ def read_int(path: str, default: int | None = None) -> int | None:
         return default
 
 
-def write(path: str, value: str | int) -> bool:
-    """Write value to path. Remembers the original value for revert. Returns True on success (or in dry-run)."""
+def write(path: str, value: str | int, persist: bool = False) -> bool:
+    """Write value to path. Remembers the original value for revert. Returns True on success (or in dry-run).
+    persist=True is for the one setting that must survive revert_all (the charge limit): it is not recorded, so
+    closing a game or reverting power never undoes it."""
     value = str(value)
     with _lock:
-        if path not in _originals:
+        if persist:
+            _originals.pop(path, None)
+        elif path not in _originals:
             _originals[path] = read(path)
     if _dry_run:
         log.info("dry-run: would write %r to %s (was %r)", value, path, _originals.get(path))
@@ -73,11 +77,13 @@ def write(path: str, value: str | int) -> bool:
 
 def revert(path: str) -> bool:
     with _lock:
-        orig = _originals.pop(path, None)
+        orig = _originals.get(path)
+        if _dry_run:
+            # keep the record: the real write it would undo may have happened before dry-run was switched on
+            log.info("dry-run: would revert %s to %r", path, orig)
+            return True
+        _originals.pop(path, None)
     if orig is None:
-        return True
-    if _dry_run:
-        log.info("dry-run: would revert %s to %r", path, orig)
         return True
     try:
         with open(path, "w", encoding="utf-8") as f:
