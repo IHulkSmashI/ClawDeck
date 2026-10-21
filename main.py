@@ -74,6 +74,7 @@ class Plugin:
         self.display = display.Display(self.hw, HOME)
         self.running_appid: str | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._health: tuple[float, list] | None = None
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s, dry-run %s", self.hw.model["name"], self.hw.product,
                           self.hw.kernel, sysfs.dry_run())
@@ -158,8 +159,15 @@ class Plugin:
     async def get_hardware(self) -> dict:
         return {**self.hw.to_dict(), "stack": stack.detect(), "other_plugins": stack.other_plugins(HOME)}
 
-    async def get_health(self) -> list:
-        return await self._bg(health.checks, self.hw, HOME)
+    async def get_health(self, force: bool = False) -> list:
+        """The checks run programs and read files, so a result is reused for two minutes (the Quick Access panel asks
+        every time it opens); Setup → Re-check and every fix ask for a fresh one."""
+        now = time.monotonic()
+        if not force and self._health and now - self._health[0] < 120:
+            return self._health[1]
+        result = await self._bg(health.checks, self.hw, HOME)
+        self._health = (now, result)
+        return result
 
     async def collect_logs(self) -> str:
         dest = os.path.join(DESKTOP, f"clawdeck-report-{time.strftime('%Y%m%d-%H%M%S')}.json")
@@ -169,6 +177,7 @@ class Plugin:
 
     async def run_fix(self, fix: str, allow_unpinned: bool = False) -> dict:
         """The one-tap fixes the health check offers (Health.fix)."""
+        self._health = None   # whatever the fix does, the next health check is fresh
         if fix == "enable_hhd":
             if stack.detect()["inputplumber"]:
                 return {"ok": False, "error": "InputPlumber is running; starting Handheld Daemon too would make them fight over the controller"}

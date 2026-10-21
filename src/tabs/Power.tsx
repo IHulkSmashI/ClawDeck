@@ -40,25 +40,35 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const app = runningApp();
   const appid = app?.appid ?? null;
 
+  // everything in parallel, so the panel is ready as soon as the slowest answer arrives, not the sum of them all;
+  // the service check behind getHardware runs programs, so the quick panel skips it
   const refresh = async () => {
-    const s = await getPower(); setSt(s);
+    const [s, auto, last, bst, other, tbl, a, gp] = await Promise.all([
+      getPower(), getSetting("autotune"), getSetting("last_profile"), getSetting("tdp_boost"),
+      quick ? Promise.resolve(null) : getHardware(), listProfiles(), getAutotune(),
+      appid ? getGameProfile(appid) : Promise.resolve(null),
+    ]);
+    setSt(s);
     const w = s.tdp_backend === "hhd" ? s.tdp?.custom_tdp : s.firmware_tdp?.pl1_w;
     if (w) setTdpV(w);
     if (s.cpu.max_perf_pct != null) setCpuPct(s.cpu.max_perf_pct);
     if (s.gpu.min_mhz != null) setGpuMin(s.gpu.min_mhz);
     if (s.gpu.max_mhz != null) setGpuMax(s.gpu.max_mhz);
-    setAutotune(!!(await getSetting("autotune")));
-    setProfile((await getSetting("last_profile")) || "battery");
-    setBoost((await getSetting("tdp_boost")) !== false);
-    setOtherPower((await getHardware()).other_plugins?.power ?? []);
-    setTable(await listProfiles());
-    setAt(await getAutotune());
-    if (appid) {
-      const gp = await getGameProfile(appid);
-      if (gp.battery.target_fps) setTargetFps(gp.battery.target_fps);
-    }
+    setAutotune(!!auto);
+    setProfile(last || "battery");
+    setBoost(bst !== false);
+    setOtherPower(other?.other_plugins?.power ?? []);
+    setTable(tbl);
+    setAt(a);
+    if (gp?.battery.target_fps) setTargetFps(gp.battery.target_fps);
   };
   useEffect(() => { refresh(); }, []);
+  // while the panel is open and Autotune runs, its line follows along (one cheap call every 3 s, only while visible)
+  useEffect(() => {
+    if (!at?.running) return;
+    const t = setInterval(() => { getAutotune().then(setAt).catch(() => undefined); }, 3000);
+    return () => clearInterval(t);
+  }, [at?.running]);
 
   const lim = st?.limits ?? { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 };
   const wattsOf = (p: { id: string; watts: number }) => Math.min(table[p.id]?.tdp ?? p.watts, lim.plugged_max);
@@ -118,7 +128,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <ToggleField label="Save power automatically" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
             description={explain(quick ? `Holds your target fps with the least power, up to ${limitW} W.` : `Holds your target fps with the least power, never more than your profile (${limitW} W), and gives CPU or graphics the power where the game needs it. Can't hold it? Pick a higher profile.`)} />
         </PanelSectionRow>
-        {autotune && (
+        {autotune && !appid && (
+          <PanelSectionRow>
+            <Note>Start a game to set its target fps.</Note>
+          </PanelSectionRow>
+        )}
+        {autotune && appid && (
           <PanelSectionRow>
             <SliderField label="Target fps (this game)" value={targetFps} min={30} max={120} step={5} showValue disabled={!appid}
               description={explain(appid ? "Use the same number as Steam's frame limit." : "Start a game to set its target.")}

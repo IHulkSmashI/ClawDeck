@@ -21,7 +21,7 @@ export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: strin
   avg_fps?: number | null; low_fps?: number | null; window_s?: number };
 
 export const getHardware = callable<[], Hardware>("get_hardware");
-export const getHealth = callable<[], Health[]>("get_health");
+export const getHealth = callable<[force?: boolean], Health[]>("get_health");
 export const collectLogs = callable<[], string>("collect_logs");
 export const getSetting = callable<[key: string], any>("get_setting");
 export const setSetting = callable<[key: string, value: any], boolean>("set_setting");

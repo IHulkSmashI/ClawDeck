@@ -1,9 +1,10 @@
-import { staticClasses } from "@decky/ui";
+import { DialogButton, Focusable, staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
 import { GiClawHammer } from "react-icons/gi";
+import { MdSettings } from "react-icons/md";
 
 import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } from "./api";
-import { FullPage, QuickPanel, ROUTE } from "./pages";
+import { FullPage, openPage, QuickPanel, ROUTE } from "./pages";
 
 declare const SteamClient: any;
 
@@ -61,7 +62,16 @@ export default definePlugin(() => {
 
   return {
     name: "ClawDeck",
-    titleView: <div className={staticClasses.Title}>ClawDeck</div>,
+    // the same title bar Decky plugins use, with a settings button that opens the full page (as "All settings" does)
+    titleView: (
+      <Focusable style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+        <div className={staticClasses.Title}>ClawDeck</div>
+        <DialogButton aria-label="All ClawDeck settings" onClick={() => openPage("power")}
+          style={{ width: "auto", minWidth: 0, height: 28, padding: "0 10px", display: "flex", alignItems: "center" }}>
+          <MdSettings />
+        </DialogButton>
+      </Focusable>
+    ),
     content: <QuickPanel />,
     icon: <GiClawHammer />,
     onDismount() {
