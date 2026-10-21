@@ -139,8 +139,50 @@ def test_autotune_lowers_then_raises(fake_hw, monkeypatch):
     bad = autotune.Sample(t=0, frametime_ms=25.0, fps=40, gpu_mhz=2390, gpu_max_mhz=2400, cpu_pct=40, pkg_w=20)
     monkeypatch.setattr(at.sampler, "sample", lambda: bad)
     at._step(); at._step()
-    # GPU-bound: raises the GPU floor first, not the TDP
+    # GPU-bound with an idle CPU: moves budget from the CPU to the GPU first, no extra watts
+    assert s.learned.cpu_max_pct == 90 and s.learned.gpu_min_mhz is None and s.learned.tdp == 29
+    for _ in range(6):                       # three more misses: CPU 80, 70, 60 (its floor)
+        at._step()
+    assert s.learned.cpu_max_pct == 60
+    at._step(); at._step()                   # CPU can't give more: then the GPU floor, still no extra watts
     assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 29
+    at.session = None
+
+
+def _session(fake_hw, monkeypatch, **learned):
+    pw = power.Power(fake_hw)
+    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
+    at.session = autotune.Session(appid="1", target_fps=60, floor_tdp=8, ceiling_tdp=17,
+                                  learned=autotune.Learned(**{"tdp": 17, "cpu_max_pct": 100, "gpu_min_mhz": None, **learned}),
+                                  settle=1)
+    return at, at.session
+
+
+def test_autotune_on_target_trims_the_side_that_isnt_the_bottleneck(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch)
+    gpu_bound = autotune.Sample(t=0, frametime_ms=16.0, fps=62, gpu_mhz=1500, gpu_max_mhz=2400, cpu_pct=35, pkg_w=16,
+                                gpu_busy=97)
+    monkeypatch.setattr(at.sampler, "sample", lambda: gpu_bound)
+    at._step()                                # rebalance turn: CPU gives up budget
+    assert s.learned.cpu_max_pct == 90 and s.learned.tdp == 17
+    at._step()                                # TDP turn
+    assert s.learned.tdp == 16
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
+    at.session = None
+
+
+def test_autotune_cpu_bound_gets_cpu_then_gives_back_gpu_floor(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, cpu_max_pct=70, gpu_min_mhz=1800)
+    cpu_bound = autotune.Sample(t=0, frametime_ms=22.0, fps=45, gpu_mhz=1200, gpu_max_mhz=2400, cpu_pct=95, pkg_w=16,
+                                gpu_busy=55)
+    monkeypatch.setattr(at.sampler, "sample", lambda: cpu_bound)
+    at._step(); at._step()
+    assert s.learned.cpu_max_pct == 80 and s.learned.tdp == 17     # more CPU, not more watts
+    for _ in range(4):
+        at._step()
+    assert s.learned.cpu_max_pct == 100
+    at._step(); at._step()
+    assert s.learned.gpu_min_mhz is None and s.learned.tdp == 17   # then the GPU floor goes, freeing budget
     at.session = None
 
 

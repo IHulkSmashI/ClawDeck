@@ -47,7 +47,8 @@ it does:
 - **Four power profiles, per game:** Battery, Balanced, Performance and Dock, in one tap. Save one per game and it
   switches by itself when you plug in or unplug.
 - **Autotune** saves power automatically: pick a profile and a target fps, and it finds the lowest power that holds
-  that fps, never more than the profile you picked.
+  that fps, never more than the profile you picked. It also balances that power between the CPU and the graphics:
+  when a game is held back by one side, the other side gives up power it doesn't need.
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.
@@ -84,7 +85,7 @@ A1M and A8 (see [the questions](#questions) for what differs).
 | Feature | What it does | Good to know |
 |---|---|---|
 | **Profiles** | Four levels of power in one tap (see the table below). Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
-| **Autotune** ("Save power automatically") | Set a target fps for a game. Autotune finds the lowest power that keeps it there, never more than your profile's watts, and remembers it for next time. | The first few minutes in a new game can stutter while it learns. Can't hold your target? Pick a higher profile. |
+| **Autotune** ("Save power automatically") | Set a target fps for a game. Autotune finds the lowest power that keeps it there, never more than your profile's watts, and remembers it for next time. CPU and graphics share that power, so it also finds the right split: a graphics-heavy game gets the CPU capped so the GPU gets more, a CPU-heavy game the other way round. | The first few minutes in a new game can stutter while it learns. Can't hold your target? Pick a higher profile. |
 | **Advanced** | Your own power limit instead of a profile, power boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |

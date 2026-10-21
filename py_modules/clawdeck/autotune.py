@@ -6,10 +6,14 @@ Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no b
      CPU utilisation (/proc/stat delta).
   2. classify: GPU-bound when the GPU is busy >= 90 % (PowerStation) or sits at its clock ceiling, while the CPU is < 60 %;
      CPU-bound when CPU > 85 % on the busiest cores and the GPU is < 70 %; else balanced.
-  3. control, one lever per step, with hysteresis:
-     - frame time inside target (<= 1000/target_fps * 1.03) for `settle` samples: lower TDP by 1 W;
-     - frame time above target for 2 samples: raise the bound side first (GPU floor +100 MHz when GPU-bound,
-       CPU ceiling +10 % when CPU-bound), then TDP +2 W; never above the profile's ceiling.
+  3. control, one lever per step, with hysteresis. CPU and GPU share one power budget (the TDP), so balancing them is
+     half the job: power the side that isn't holding the game back doesn't need goes to the side that is.
+     - on target (frame time <= 1000/target_fps * 1.03) for `settle` samples: alternately trim the side that isn't
+       the bottleneck (GPU-bound: CPU ceiling -10 %, down to 60 %; CPU-bound: GPU floor -100 MHz, or off) and lower
+       the TDP by 1 W, so the budget shrinks without starving the bound side;
+     - below target for 2 samples: first move budget to the bound side without more watts (GPU-bound: CPU ceiling
+       -10 % if the CPU is idle enough, else GPU floor +100 MHz; CPU-bound: CPU ceiling +10 %, else drop the GPU
+       floor), then TDP +2 W; never above the ceiling (the profile or power limit the user picked).
   4. after `stable` consecutive samples without a change, save the learned values with a confidence count and
      stop adjusting (the game is "learned"; a later miss re-opens learning).
 
@@ -30,6 +34,10 @@ from dataclasses import dataclass, field
 from . import hw, power, shadowblip, sysfs
 
 log = logging.getLogger("clawdeck.autotune")
+
+CPU_MIN_PCT = 60        # autotune never trims the CPU below this: below it, frame pacing suffers in most games
+CPU_IDLE_PCT = 50       # "the CPU has power to spare": its utilisation is under this while the GPU is the bottleneck
+GPU_STEP_MHZ = 100
 
 @dataclass
 class Sample:
@@ -171,6 +179,7 @@ class Session:
     bad_run: int = 0
     unchanged: int = 0
     paused: bool = False
+    trim_turn: bool = True   # on target: alternate between rebalancing CPU/GPU and lowering the TDP
     history: list[Sample] = field(default_factory=list)
 
 
@@ -260,25 +269,19 @@ class Autotune:
         changed = False
         if smp.frametime_ms <= target_ms * 1.03:
             s.good_run += 1; s.bad_run = 0
-            if s.good_run >= s.settle and l.tdp > s.floor_tdp and l.confidence < 3:
-                l.tdp -= 1
-                self.power.set_tdp(l.tdp, self.plugged)
+            if s.good_run >= s.settle and l.confidence < 3:
+                if s.trim_turn:
+                    changed = self._trim_unbound(l, smp)
+                if not changed and l.tdp > s.floor_tdp:
+                    l.tdp -= 1
+                    self.power.set_tdp(l.tdp, self.plugged)
+                    changed = True
+                s.trim_turn = not s.trim_turn
                 s.good_run = 0
-                changed = True
         else:
             s.bad_run += 1; s.good_run = 0
             if s.bad_run >= 2:
-                if l.bound == "gpu" and self.hw.paths.gpu_min_freq:
-                    cur = l.gpu_min_mhz or (sysfs.read_int(self.hw.paths.gpu_rpe_freq) or 0)
-                    hw_max = sysfs.read_int(self.hw.paths.gpu_rp0_freq) or cur
-                    if cur + 100 <= hw_max:
-                        l.gpu_min_mhz = cur + 100
-                        self.power.set_gpu_window(l.gpu_min_mhz, None)
-                        changed = True
-                elif l.bound == "cpu" and l.cpu_max_pct < 100:
-                    l.cpu_max_pct = min(100, l.cpu_max_pct + 10)
-                    self.power.set_cpu_max_pct(l.cpu_max_pct)
-                    changed = True
+                changed = self._feed_bound(l, smp)
                 if not changed and l.tdp < s.ceiling_tdp:
                     l.tdp = min(s.ceiling_tdp, l.tdp + 2)
                     self.power.set_tdp(l.tdp, self.plugged)
@@ -292,6 +295,50 @@ class Autotune:
             if s.unchanged >= s.stable:
                 l.confidence = min(5, l.confidence + 1)
                 s.unchanged = 0
+
+    # ---- balancing CPU and GPU inside one power budget ---------------------------------------------------------------
+    def _set_cpu(self, l: Learned, pct: int) -> bool:
+        pct = max(CPU_MIN_PCT, min(100, pct))
+        if pct == l.cpu_max_pct or not self.hw.paths.cpu_max_perf_pct:
+            return False
+        l.cpu_max_pct = pct
+        self.power.set_cpu_max_pct(pct)
+        return True
+
+    def _set_gpu_floor(self, l: Learned, mhz: int | None) -> bool:
+        if not self.hw.paths.gpu_min_freq or mhz == l.gpu_min_mhz:
+            return False
+        if mhz is None:
+            l.gpu_min_mhz = None
+            self.power.reset_gpu_window()
+            return True
+        hw_max = sysfs.read_int(self.hw.paths.gpu_rp0_freq) if self.hw.paths.gpu_rp0_freq else None
+        if hw_max and mhz > hw_max:
+            return False
+        l.gpu_min_mhz = mhz
+        self.power.set_gpu_window(mhz, None)
+        return True
+
+    def _trim_unbound(self, l: Learned, smp: Sample) -> bool:
+        """On target: take power from the side that isn't the bottleneck, so the TDP can drop further."""
+        if l.bound == "gpu" and (smp.cpu_pct is None or smp.cpu_pct < CPU_IDLE_PCT):
+            return self._set_cpu(l, l.cpu_max_pct - 10)
+        if l.bound == "cpu" and l.gpu_min_mhz:
+            floor = l.gpu_min_mhz - GPU_STEP_MHZ
+            rpe = sysfs.read_int(self.hw.paths.gpu_rpe_freq) if self.hw.paths.gpu_rpe_freq else None
+            return self._set_gpu_floor(l, None if rpe is None or floor <= rpe else floor)
+        return False
+
+    def _feed_bound(self, l: Learned, smp: Sample) -> bool:
+        """Below target: move budget to the bottleneck before asking for more watts."""
+        if l.bound == "gpu":
+            if smp.cpu_pct is not None and smp.cpu_pct < CPU_IDLE_PCT and self._set_cpu(l, l.cpu_max_pct - 10):
+                return True
+            rpe = sysfs.read_int(self.hw.paths.gpu_rpe_freq) if self.hw.paths.gpu_rpe_freq else None
+            return self._set_gpu_floor(l, (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ)
+        if l.bound == "cpu":
+            return self._set_cpu(l, l.cpu_max_pct + 10) or (l.gpu_min_mhz is not None and self._set_gpu_floor(l, None))
+        return False
 
     def _log(self, s: Session, smp: Sample) -> None:
         try:
