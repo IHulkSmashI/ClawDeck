@@ -5,7 +5,7 @@ import { FC, useEffect, useState } from "react";
 import {
   applyProfile, benchExport, benchResults, benchStart, benchStatus, benchStop, exportProfilesFile, getAutotune,
   getGameProfile, getHardware, getPower, getSetting, importProfilesFile, listProfileFiles, resetGpuWindow, resetLearned, revertPower,
-  saveGamePower, setCpuMaxPct, setCpuTurbo, setGameProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus,
+  saveGamePower, setCpuMaxPct, setCpuTurbo, setEpp, setGameProfile, setTdpBoost, setGpuWindow, setSetting, setTdp, AutotuneStatus,
   BenchResult, PowerStatus,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -26,6 +26,7 @@ export const PowerTab: FC = () => {
   const [gpuMax, setGpuMax] = useState(0);
   const [profile, setProfile] = useState("battery");
   const [otherPower, setOtherPower] = useState<string[]>([]);
+  const [boost, setBoost] = useState(true);
   const app = runningApp();
   const appid = app?.appid ?? null;
 
@@ -37,6 +38,7 @@ export const PowerTab: FC = () => {
     if (s.gpu.max_mhz != null) setGpuMax(s.gpu.max_mhz);
     setAutotune(!!(await getSetting("autotune")));
     setProfile((await getSetting("last_profile")) || "battery");
+    setBoost((await getSetting("tdp_boost")) !== false);
     setOtherPower((await getHardware()).other_plugins?.power ?? []);
     setAt(await getAutotune());
     if (appid) {
@@ -141,6 +143,17 @@ export const PowerTab: FC = () => {
             <SliderField label="CPU ceiling (%)" value={cpuPct} min={10} max={100} step={5} showValue disabled={!st?.cpu.available}
               onChange={async (v) => { setCpuPct(v); await setCpuMaxPct(v); }} />
             <Hint does="Caps CPU clocks so the GPU gets the power budget." why="GPU-bound games: same fps, less heat; try 70–80%." cost="CPU-heavy scenes (towns, crowds) get slower." />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <DropdownItem label="CPU energy mode" disabled={!st?.cpu.epp_available} rgOptions={[
+              { data: "power", label: "Most battery" }, { data: "balance_power", label: "Balanced, battery first" },
+              { data: "balance_performance", label: "Balanced, speed first" }, { data: "performance", label: "Fastest" },
+            ]} selectedOption={st?.cpu.epp ?? "balance_performance"} onChange={async (o) => { await setEpp(o.data); refresh(); }} />
+            <Hint does="How quickly the CPU speeds up when a game asks for more (like Windows' power mode)." why="profiles set it for you: battery first on Battery, fastest on Dock." cost="faster modes use more power for the same fps." />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField label="TDP boost" checked={boost} onChange={async (v) => { setBoost(v); await setTdpBoost(v); if (st?.tdp_backend) await setTdp(tdp); }} />
+            <Hint does="Lets the Claw go above the TDP for a few seconds when a game needs a burst." why="snappier loading and menus." cost="off keeps power exactly at the TDP, which is easier on battery and heat." />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label="CPU turbo" checked={st?.cpu.no_turbo === 0} disabled={st?.cpu.no_turbo == null}

@@ -37,14 +37,14 @@ MODELS: dict[str, dict] = {
 # Claw gets its best frames per watt; dock is the firmware ceiling.
 PROFILES: dict[str, dict[str, dict]] = {
     "default": {
-        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "note": "best frames per watt"},
-        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "note": "plugged in, handheld"},
-        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "note": "docked, fans audible"},
+        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "best frames per watt"},
+        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
+        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "docked, fans audible"},
     },
     "MS-1T91": {
-        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "note": "17-25 W is the EX sweet spot on battery"},
-        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "note": "plugged in, handheld"},
-        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "note": "35 W sustained / 45 W boost on the dock"},
+        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "17-25 W is the EX sweet spot on battery"},
+        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
+        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "35 W sustained / 45 W boost on the dock"},
     },
 }
 
@@ -67,6 +67,7 @@ class Paths:
     cpu_no_turbo: str | None = None
     cpu_boost: str | None = None         # cpufreq boost (AMD / acpi-cpufreq)
     cpu_governor: list[str] = field(default_factory=list)
+    cpu_epp: list[str] = field(default_factory=list)   # intel_pstate energy_performance_preference, one per CPU
     # package power
     rapl_package: str | None = None      # intel-rapl-mmio:0 or intel-rapl:0 directory
     rapl_pl1: str | None = None
@@ -135,6 +136,7 @@ def discover_paths() -> Paths:
     if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
         p.cpu_boost = "/sys/devices/system/cpu/cpufreq/boost"
     p.cpu_governor = sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor"))
+    p.cpu_epp = sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/energy_performance_preference"))
     # RAPL package domain; the MMIO interface first, as PowerStation does (it is the one the SoC firmware honours on
     # recent Intel; the MSR one can be overridden by the platform)
     for d in sorted(glob.glob("/sys/class/powercap/intel-rapl-mmio:[0-9]")) + sorted(glob.glob("/sys/class/powercap/intel-rapl:[0-9]")):

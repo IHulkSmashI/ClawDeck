@@ -23,6 +23,7 @@ class Power:
         self.hw = hardware
         self.p = hardware.paths
         self._hhd_orig: dict | None = None    # HHD's TDP state before ClawDeck's first change, for revert_all
+        self.boost = True                     # TDP boost (short bursts above the TDP); off = PL2 is TDP + 1 W
 
     # ---- readouts --------------------------------------------------------------------------------------------------
     def status(self) -> dict:
@@ -41,6 +42,7 @@ class Power:
             "max_perf_pct": sysfs.read_int(p.cpu_max_perf_pct) if p.cpu_max_perf_pct else None,
             "min_perf_pct": sysfs.read_int(p.cpu_min_perf_pct) if p.cpu_min_perf_pct else None,
             "no_turbo": sysfs.read_int(p.cpu_no_turbo) if p.cpu_no_turbo else None,
+            "epp": self.epp(), "epp_available": bool(p.cpu_epp),
         }
         rapl = {
             "available": p.rapl_package is not None,
@@ -68,7 +70,7 @@ class Power:
                 return True
             if self._hhd_orig is None:
                 self._hhd_orig = hhd.get_tdp() or {}
-            return hhd.set_tdp(watts)
+            return hhd.set_tdp(watts, self.boost)
         # no HHD (current Bazzite): MSI's firmware attributes, exactly as HHD and steamos-manager write them - watts,
         # PL3 then PL2 then PL1, boost limit proportional to the model's ceiling. Steam's own performance slider
         # writes the same files, so the last one to change it wins; ClawDeck reverts its value when the game closes.
@@ -86,7 +88,8 @@ class Power:
     def _set_msi_firmware(self, watts: int, lim: dict) -> bool:
         import time
         ceiling = max(lim["plugged_max"], lim["battery_max"])
-        sppt = min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"])
+        sppt = min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"]) if self.boost else \
+            min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as ClawTweaks does from a single slider
         ok = True
         for path, val in ((self.p.msi_pl3, sppt), (self.p.msi_pl2, sppt), (self.p.msi_pl1, watts)):
             if not path:
@@ -115,6 +118,23 @@ class Power:
         pct = clamp(int(pct), 10, 100)
         lo = sysfs.read_int(self.p.cpu_min_perf_pct, 0) if self.p.cpu_min_perf_pct else 0
         return sysfs.write(self.p.cpu_max_perf_pct, max(pct, lo or 0))
+
+    EPP_CHOICES = ("performance", "balance_performance", "balance_power", "power")
+
+    def set_epp(self, value: str) -> bool:
+        """CPU energy mode (intel_pstate energy_performance_preference): how eagerly the CPU clocks up. The same
+        lever as Windows' power mode slider. Written to every CPU, each one revertible."""
+        if value not in self.EPP_CHOICES:
+            raise ValueError(f"CPU energy mode must be one of {self.EPP_CHOICES}")
+        if not self.p.cpu_epp:
+            return False
+        ok = True
+        for path in self.p.cpu_epp:
+            ok = sysfs.write(path, value) and ok
+        return ok
+
+    def epp(self) -> str | None:
+        return sysfs.read(self.p.cpu_epp[0]) if self.p.cpu_epp else None
 
     def set_cpu_turbo(self, on: bool) -> bool:
         if self.p.cpu_no_turbo:
@@ -165,6 +185,11 @@ class Power:
                 result["applied"]["tdp"] = prof["tdp"]
             else:
                 result["failed"].append("tdp")
+        if prof.get("epp") and self.p.cpu_epp:
+            if self.set_epp(prof["epp"]):
+                result["applied"]["epp"] = prof["epp"]
+            else:
+                result["failed"].append("epp")
         if prof.get("cpu_max_pct") is not None:
             if self.set_cpu_max_pct(prof["cpu_max_pct"]):
                 result["applied"]["cpu_max_pct"] = prof["cpu_max_pct"]
