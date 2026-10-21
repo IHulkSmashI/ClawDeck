@@ -39,11 +39,15 @@ it does:
 
 - **VRR fix 30–120 Hz.** The Claw's screen can run VRR from 30 Hz, but tells the system 48, so games below 48 fps
   judder. One tap applies ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
+- **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode, because
+  the system doesn't know the EX's button codes yet. One tap in Setup adds the entry systemd (the part of Linux that
+  reads the keys) already ships for newer versions.
 - **Real power control on the Claw 8 EX.** Steam's own TDP slider may do nothing on this model under current
   Bazzite; ClawDeck sets the Claw's power limit directly, inside the limits MSI's firmware allows.
 - **Four power profiles, per game:** Battery, Balanced, Performance and Dock, in one tap. Save one per game and it
   switches by itself when you plug in or unplug.
-- **Autotune** finds the lowest power that holds your target fps in each game, using the GPU's real load.
+- **Autotune** finds the lowest power that holds your target fps in each game, using the GPU's real load. On
+  battery it stays at or below 17 W unless you raise that limit.
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.
@@ -74,12 +78,13 @@ A1M and A8 (see [the questions](#questions) for what differs).
 | **Health check** | Checks your Claw, graphics driver, controller, battery and more. Anything missing shows up first, with a button to fix it. |
 | **Bug report** | Saves one file to your Desktop with everything we need to help you. Attach it to a GitHub issue. |
 | **Dry run** | ClawDeck shows what it *would* change, without changing anything. Good for trying things safely. |
+| **MSI button fix** (Claw 8 EX) | If the two face buttons do nothing in Game Mode, the health check says so and one tap fixes it: right button = Steam menu, left = Quick Access. It adds systemd's own entry for the EX, which newer systemd versions already include. |
 
 ### Power
 | Feature | What it does | Good to know |
 |---|---|---|
 | **Profiles** | Four levels of power in one tap (see the table below). Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
-| **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. | The first few minutes in a new game can stutter while it learns. |
+| **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. On battery it never goes above **17 W** (the Balanced profile) unless you raise **Highest power on battery**. | The first few minutes in a new game can stutter while it learns. If a heavy game can't hold your target on battery, lower the target or raise the limit. |
 | **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
@@ -152,7 +157,7 @@ to Bazzite, with Windows staying on your Claw.
 
 To remove it: Decky → gear → ClawDeck → Uninstall. Power, display and fan settings go back to how they were, and
 games you added ClawDeck to keep starting normally. The charge limit and the VRR fix 30–120 Hz reset at the next
-reboot.
+reboot. The MSI button fix stays, so the buttons keep working.
 
 ---
 
@@ -162,8 +167,9 @@ reboot.
 you play, and they check once a second while their game runs.
 
 **Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
-changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin. The two
-things that stay on purpose are the charge limit and, if you turn it on, the VRR fix 30–120 Hz; it applies only to
+changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin. The
+things that stay on purpose are the charge limit and, if you turn them on, the MSI button fix and the VRR fix
+30–120 Hz; it applies only to
 screens ClawLab tested, and the previous entry in the boot menu always starts without it.
 
 **Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything, and on the Claw

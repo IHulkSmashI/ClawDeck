@@ -57,7 +57,7 @@ charge-limit write test (7), sleep soak (8), and 11 below.
 Open, needs the maintainer at the device: MSI buttons in Game Mode (left = Steam, right = Quick Access), each tab's first use
 with Dry run on, then TDP write-and-read-back, then the GPU window, then charge limit 80 %.
 
-## 11. Face buttons dead in Game Mode (found 2026-10-21, fixed in `buttons.py`)
+## 12. Face buttons dead in Game Mode (found 2026-10-21, fixed in `buttons.py`)
 
 Measured with evtest on every input device (InputPlumber stopped), BIOS E1T91IMS.10D:
 right face button → KEY_F15 from "MSI WMI hotkeys" (plus scancode b9 on the AT keyboard); left face button →
