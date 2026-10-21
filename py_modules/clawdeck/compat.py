@@ -17,6 +17,8 @@ import re
 import time
 import urllib.request
 
+from . import tls
+
 WIKI = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md"
 WIKI_PAGE = "https://github.com/optiscaler/OptiScaler/wiki/"
 OPTIPATCHER_SRC = "https://raw.githubusercontent.com/optiscaler/OptiPatcher/main/OptiPatcher/dllmain.cpp"
@@ -37,7 +39,7 @@ def _fetch(url: str, cache: str, max_age: float = DAY, timeout: float = 15.0) ->
         pass
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ClawDeck"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with tls.urlopen(req, timeout) as r:
             text = r.read().decode("utf-8", errors="replace")
         os.makedirs(os.path.dirname(cache), exist_ok=True)
         with open(cache + ".tmp", "w", encoding="utf-8") as f:
