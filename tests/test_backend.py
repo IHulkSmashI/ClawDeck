@@ -142,3 +142,16 @@ def test_autotune_lowers_then_raises(fake_hw, monkeypatch):
     # GPU-bound: raises the GPU floor first, not the TDP
     assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 29
     at.session = None
+
+
+def test_four_profiles_step_up_in_power():
+    for table in hw.PROFILES.values():
+        assert list(table) == ["battery", "balanced", "performance", "dock"]
+        tdps = [table[n]["tdp"] for n in table]
+        assert tdps == sorted(tdps) and len(set(tdps)) == 4
+
+
+def test_balanced_profile_applies(fake_hw):
+    r = power.Power(fake_hw).apply_profile("balanced")
+    assert r["applied"]["cpu_max_pct"] == 90
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
