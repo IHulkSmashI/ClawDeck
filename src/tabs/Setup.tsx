@@ -48,6 +48,14 @@ export const SetupTab: FC = () => {
           <Hint does="Writes one JSON file with hardware, paths and the checks above." why="attach it to a GitHub issue." cost="none; no personal data beyond your username in paths." />
         </PanelSectionRow>
       </PanelSection>
+      <PanelSection title="About">
+        <PanelSectionRow>
+          <div style={{ fontSize: 11, opacity: 0.75 }}>
+            ClawDeck is free and open source (MIT) — github.com/IHulkSmashI/ClawDeck. Built on Handheld Daemon, PowerControl and xess-xmx-linux.
+            If it saves you battery or time: <b>ko-fi.com/gamervault</b>. Never a paywall, never a nag.
+          </div>
+        </PanelSectionRow>
+      </PanelSection>
       <PanelSection title="Safety">
         <PanelSectionRow>
           <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }} />
