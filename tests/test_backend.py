@@ -184,3 +184,13 @@ def test_face_buttons_override(tmp_path, monkeypatch):
     assert buttons.status("MS-1T91")["upstream_fixed"]
     r = buttons.remove()
     assert r["ok"] and len(r["removed"]) == 2 and not buttons.status("MS-1T91")["installed"]
+
+
+def test_autotune_battery_ceiling():
+    lim = hw.MODELS["MS-1T91"]["tdp"]
+    assert autotune.ceiling(lim, False, None) == 17                # default: Balanced
+    assert autotune.ceiling(lim, False, 25) == 25                  # the user's choice
+    assert autotune.ceiling(lim, False, 99) == lim["battery_max"]  # never above the model's limit
+    assert autotune.ceiling(lim, False, 2) == lim["min"]
+    assert autotune.ceiling(lim, False, "x") == 17
+    assert autotune.ceiling(lim, True, 17) == lim["plugged_max"]    # plugged in: the full limit
