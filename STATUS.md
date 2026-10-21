@@ -48,7 +48,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 
 ## Tested on real hardware
 
-Nothing yet.
+2026-10-21, Claw 8 EX on Bazzite deck 44.20261012.1: plugin loads in Decky 3.3.0, hardware detected, health check and power/battery readouts run. Findings and the resulting task list: `docs/HARDWARE-FINDINGS.md` (the big one: this Bazzite image has no Handheld Daemon; InputPlumber + PowerStation instead).
 
 ## Next (on the Claw 8 EX, in this order)
 
