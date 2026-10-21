@@ -47,6 +47,9 @@ class Plugin:
         self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
         self.injector = injector.Injector(os.path.join(RUNTIME_DIR, "assets"))
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
+        # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
+        os.makedirs(mangohud_dir, exist_ok=True)
+        userexec.chown_tree(mangohud_dir, HOME)
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         self.autotune.enabled = bool(self.settings.get("autotune"))
         self.bench = benchmark.Benchmark(self.hw, mangohud_dir, os.path.join(SETTINGS_DIR, "benchmarks.json"))
