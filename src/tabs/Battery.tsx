@@ -2,15 +2,22 @@ import { DropdownItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { getBattery, setChargeLimit, BatteryStatus } from "../api";
+import { getBattery, getFans, setChargeLimit, setFanPreset, BatteryStatus, FanStatus } from "../api";
 import { Hint } from "../components/Hint";
 
 const CHOICES = [50, 60, 70, 80, 90, 100];
+const FAN_LABELS: Record<string, string> = {
+  auto: "Auto (firmware curve)", quiet: "Quiet", balanced: "Balanced (Handheld Daemon default)", cool: "Cool", custom: "Custom (set in Handheld Daemon)",
+};
 
 export const BatteryTab: FC = () => {
   const [b, setB] = useState<BatteryStatus | null>(null);
+  const [f, setF] = useState<FanStatus | null>(null);
   const [limit, setLimit] = useState(100);
-  const refresh = async () => { const s = await getBattery(); setB(s); if (s.charge_limit) setLimit(s.charge_limit); };
+  const refresh = async () => {
+    const s = await getBattery(); setB(s); if (s.charge_limit) setLimit(s.charge_limit);
+    setF(await getFans());
+  };
   useEffect(() => { refresh(); }, []);
   return (
     <>
@@ -47,6 +54,26 @@ export const BatteryTab: FC = () => {
             <div style={{ fontSize: 11, opacity: 0.7 }}>This kernel does not expose charge_control_end_threshold for the Claw yet. Handheld Daemon's own limit (70–95%) appears here once it does.</div>
           </PanelSectionRow>
         )}
+      </PanelSection>
+      <PanelSection title="Fans">
+        <PanelSectionRow>
+          <DropdownItem label="Fan curve" disabled={!f?.available}
+            rgOptions={(f?.presets ?? []).concat(f?.preset === "custom" ? ["custom"] : []).map((p) => ({ data: p, label: FAN_LABELS[p] ?? p }))}
+            selectedOption={f?.preset ?? "auto"}
+            onChange={async (o) => {
+              if (o.data === "custom") return;
+              const r = await setFanPreset(o.data);
+              toaster.toast({ title: "ClawDeck", body: r.ok ? `Fan curve: ${FAN_LABELS[o.data]}` : `Not applied: ${r.error ?? "Handheld Daemon refused"}` });
+              refresh();
+            }} />
+          <Hint does="How fast the fan spins at each temperature (through Handheld Daemon)." why="Quiet for battery play, Cool when docked at 35 W." cost="Quiet runs hotter and may lower boost clocks; Cool is louder." />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={{ fontSize: 11, opacity: 0.7 }}>
+            {f?.fan_rpm.length ? `Fan ${f.fan_rpm.join(" / ")} rpm` : "Fan speed not reported"}{f?.cpu_temp_c != null && <> · CPU {Math.round(f.cpu_temp_c)} °C</>}
+            {!f?.available && " · Handheld Daemon fan control not available"}
+          </div>
+        </PanelSectionRow>
       </PanelSection>
     </>
   );
