@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import tarfile
 import urllib.request
+
+from . import tls
 import zipfile
 
 log = logging.getLogger("clawdeck.downloads")
@@ -30,7 +32,7 @@ def is_pinned(entry: dict) -> bool:
 
 def _get(url: str, timeout: float = 20.0) -> bytes:
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "ClawDeck"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with tls.urlopen(req, timeout) as r:
         return r.read()
 
 
@@ -96,7 +98,7 @@ def download(url: str, dest: str, timeout: float = 60.0) -> str:
         os.unlink(tmp)
     req = urllib.request.Request(url, headers={"User-Agent": "ClawDeck", "Accept": "application/octet-stream"})
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
-    with urllib.request.urlopen(req, timeout=timeout) as r, os.fdopen(fd, "wb") as f:
+    with tls.urlopen(req, timeout) as r, os.fdopen(fd, "wb") as f:
         shutil.copyfileobj(r, f, 1 << 20)
     os.replace(tmp, dest)
     return dest

@@ -102,3 +102,15 @@ effect (package power under load, GPU ceiling, charge threshold), reverts, and p
 (Claude Code): every control must show the value **re-read from sysfs** after the write, and the toast must say
 "set 17 W → hardware reads 17 W" (or the error), never just "applied". A failed write must surface as red text in
 the tab, with the log line, not a silent no-op.
+
+## 15. Every download failed: Decky's Python has no CA store (2026-10-21, fixed in `tls.py`)
+
+`update check for optiscaler/optipatcher/reframework/lsfg/moonlight failed: CERTIFICATE_VERIFY_FAILED ... unable to
+get local issuer certificate`. Decky Loader's bundled Python does not find the system certificates. All HTTPS now
+goes through `tls.urlopen`, which loads `/etc/ssl/certs/ca-certificates.crt` (Bazzite) or the first bundle that
+exists; verification stays on. The VRR switch's exception was `Permission denied: '/etc/firmware'` (§13, root).
+
+## 16. UI: profile names truncated in the Power tab's picker (maintainer, 2026-10-21) — for Claude Code
+
+The dropdown shows a cut-off profile name. Use short labels in the control (e.g. "Battery 12 W") with the full
+description in the Hint below it, and verify at 1280×800 in Game Mode.
