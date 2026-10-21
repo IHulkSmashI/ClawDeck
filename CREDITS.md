@@ -41,6 +41,9 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   — the Windows tools whose feature list (single TDP slider with optional boost, per-game AC/DC profiles, energy
   mode, charge limiter, fan presets, Lossless Scaling integration) shaped what ClawDeck offers on Linux. No code is
   shared.
+- **[ClawLab Intel VRR Range Fix](https://github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory)** (MIT) — the
+  30–120 Hz VRR fix for the Claw's screens on Windows. ClawDeck's Linux version uses ClawLab's list of validated
+  panels, their factory EDID checksums and the exact bytes ClawLab changes, and the daily watch checks that list.
 - **[MangoHud](https://github.com/flightlessmango/MangoHud)** — frame-time logging for autotune and the benchmark.
 
 ClawDeck checks every project above for new releases every day (`.github/workflows/upstream-watch.yml`) and updates
