@@ -30,7 +30,8 @@ SCANCODES = {"b9": "f15", "ba": "f16"}  # right face button, left face button
 HWDB_TEXT = (
     "# MSI Claw 8 EX AI+ (MS-1T91): the face buttons use the same scancodes as the other Claws.\n"
     "# Written by ClawDeck (Setup tab); delete this file and run `systemd-hwdb update` to undo.\n"
-    "evdev:name:AT Translated Set 2 keyboard:dmi:*:svnMicro-StarInternationalCo.,Ltd.:rnMS-1T91:*\n"
+    # the DMI modalias has pn/pvr/rvn between the vendor and the board, hence the second *
+    "evdev:name:AT Translated Set 2 keyboard:dmi:*:svnMicro-StarInternationalCo.,Ltd.:*:rnMS-1T91:*\n"
     + "".join(f" KEYBOARD_KEY_{sc}={key}\n" for sc, key in SCANCODES.items())
 )
 

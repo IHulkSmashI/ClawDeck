@@ -67,7 +67,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 ## Needs the maintainer
 
 - Face buttons on the Claw 8 EX (`buttons.py`, Setup → "Map the face buttons"): the same hwdb entry was applied by
-  hand on the maintainer's Claw on 2026-10-21 (`/etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb`). Delete that hand-made
+  hand on the maintainer's Claw on 2026-10-21 (`/etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb`; udev confirmed `KEYBOARD_KEY_b9=f15`). Delete that hand-made
   file, run `sudo systemd-hwdb update`, confirm the health check goes red, tap the fix, confirm it goes green and
   both buttons work in Game Mode. Then send the one-board entry upstream to systemd's `60-keyboard.hwdb` (and
   InputPlumber/Bazzite can drop any workaround): with it shipped the check passes without ClawDeck's file.
