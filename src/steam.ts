@@ -1,18 +1,18 @@
-// Steam client globals the plugin reads, behind try/catch so a Steam update that renames one degrades a feature
-// instead of breaking the panel. Field names verified against SimpleDeckyTDP / PowerControl (2026); see DESIGN.md.
-declare const Router: any;
-declare const appStore: any;
+// Steam client calls the plugin makes, behind try/catch so a Steam update that renames one degrades a feature
+// instead of breaking the panel. Names checked against @decky/ui's Steam typings (Router = CSteamUIStore,
+// SteamClient.Apps.SpecifyCompatTool / GetAvailableCompatTools) and the PowerControl / SimpleDeckyTDP sources.
+// The running game's install folder is not exposed to the frontend; the backend reads Steam's appmanifest.
+import { Router } from "@decky/ui";
+
 declare const SteamClient: any;
 
-export type RunningApp = { appid: string; name: string; dir: string | null };
+export type RunningApp = { appid: string; name: string };
 
 export const runningApp = (): RunningApp | null => {
   try {
     const a = Router?.MainRunningApp;
     if (!a) return null;
-    let dir: string | null = null;
-    try { dir = appStore?.GetAppOverviewByAppID?.(a.appid)?.m_strInstallDir ?? null; } catch { /* not available */ }
-    return { appid: String(a.appid), name: a.display_name, dir };
+    return { appid: String(a.appid), name: a.display_name };
   } catch { return null; }
 };
 

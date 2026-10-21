@@ -370,14 +370,18 @@ class Plugin:
         return {**(await self.get_launch(appid)), "file": self._write_launch(appid)}
 
     # ---- XMX injector ------------------------------------------------------------------------------------------------
-    async def injector_state(self, game_dir: str) -> dict:
-        st = self.injector.state(game_dir)
+    async def injector_state(self, appid: str) -> dict:
+        game_dir = injector.steam_install_dir(HOME, appid)
+        st = self.injector.state(game_dir) if game_dir else {"dir": None, "mode": "none", "optiscaler_present": False,
+                                                               "native_xess": False, "info": None}
         st["assets"] = self.injector.assets_ready()
         st["lsfg"] = injector.lsfg_state(HOME)
         return st
 
-    async def injector_install(self, game_dir: str, mode: str, xess_fg: bool = True, appid: str | None = None,
-                               lsfg: dict | None = None) -> dict:
+    async def injector_install(self, appid: str, mode: str, xess_fg: bool = True, lsfg: dict | None = None) -> dict:
+        game_dir = injector.steam_install_dir(HOME, appid)
+        if not game_dir:
+            return {"error": "game folder not found in Steam's library (is it a Steam game, installed?)"}
         try:
             if mode == "optiscaler":
                 if sysfs.dry_run():
@@ -390,13 +394,12 @@ class Plugin:
                 r = self.injector.uninstall(game_dir)
             else:
                 return {"error": f"unknown mode {mode}"}
-        except (OSError, FileNotFoundError) as e:
+        except OSError as e:
             return {"error": str(e)}
-        if appid:
-            vals: dict = {"inject": mode}
-            if mode == "lsfg":
-                vals["lsfg"] = {**injector.LSFG_DEFAULTS, **(lsfg or {})}
-            await self.set_launch(appid, vals)
+        vals: dict = {"inject": mode}
+        if mode == "lsfg":
+            vals["lsfg"] = {**injector.LSFG_DEFAULTS, **(lsfg or {})}
+        await self.set_launch(appid, vals)
         return r
 
     async def injector_download(self, kind: str, allow_unpinned: bool = False) -> dict:

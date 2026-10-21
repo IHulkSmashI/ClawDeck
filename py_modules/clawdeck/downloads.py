@@ -40,8 +40,9 @@ def release(repo: str, tag: str | None) -> dict:
 
 
 def pick_asset(rel: dict, pattern: str) -> dict | None:
+    """First asset matching the glob, ignoring case (OptiScaler ships "Optiscaler_<v>.7z", lower-case s)."""
     for a in rel.get("assets", []):
-        if fnmatch.fnmatch(a.get("name", ""), pattern):
+        if fnmatch.fnmatch(a.get("name", "").lower(), pattern.lower()):
             return a
     return None
 
