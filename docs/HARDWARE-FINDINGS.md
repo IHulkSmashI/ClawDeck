@@ -4,6 +4,14 @@ First run of the backend on the real device (`docs/surveys/claw8ex-bazzite-44.20
 The plugin loads in Decky and the health check runs. These are the facts that differ from what the code assumed, in
 priority order. Each one is a task; tick it off in STATUS.md when done and tested on the device.
 
+**Done in code (2026-10-21), waiting for a test on the device:** 1 (TDP clamped to the firmware's own min/max, no
+PL3; Controller tab shows InputPlumber's device and profile over D-Bus), 2 (autotune reads PowerStation's
+`GpuBusyPercent`), 3 (gt0 picked explicitly), 4 (board_name first; the EX now gets its own profiles, before it got
+the defaults), 5 (Intel ICD json → library → `Mesa X.Y.Z`, rpm as fallback; the health check passes when the driver
+exists), 6 (Wh from µAh × µV, power from `charge_now` change, `current_now` only when plausible, health capped at
+100 %), 7 (threshold 0 shown as 100 %), 10 (quiet log; tools already run through `bash`). Still open: fans (1),
+charge-limit write test (7), sleep soak (8).
+
 1. **Handheld Daemon is not on this image.** Bazzite deck 44 ships InputPlumber (controller) + PowerStation (power)
    + steamos-manager. There is no `hhd` package and no ujust recipe. Every HHD code path is a fallback at best.
    - TDP: write MSI's firmware attributes directly (`ppt_pl1_spl` 8–35 W, `ppt_pl2_sppt` 9–45 W, no PL3 on the EX).
@@ -39,5 +47,5 @@ priority order. Each one is a task; tick it off in STATUS.md when done and teste
     start logs "Operation not permitted" — harmless, but make that log line quieter and use `bash tools/x.sh` instead
     of relying on the executable bit.
 
-Open, needs Mena at the device: MSI buttons in Game Mode (left = Steam, right = Quick Access), each tab's first use
+Open, needs the maintainer at the device: MSI buttons in Game Mode (left = Steam, right = Quick Access), each tab's first use
 with Dry run on, then TDP write-and-read-back, then the GPU window, then charge limit 80 %.

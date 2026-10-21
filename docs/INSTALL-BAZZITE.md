@@ -56,8 +56,8 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
    **Add to launch options** (Power or Graphics tab).
 5. **Power** tab: pick Battery, Performance or Dock, set a target fps, turn Autotune on, and play.
 
-Power: Steam's own TDP slider (Quick Access → Performance) and ClawDeck set the same limit, so whichever you changed
-last wins. Use one of the two.
+Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
+may do nothing at all; ClawDeck sets the limit directly.
 
 Bazzite's Portal also offers OptiScaler and Lossless Scaling plugins. They do the same job as ClawDeck's Graphics
 tab, so use one or the other for a given game, not both.
