@@ -16,8 +16,10 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | Profile import/export | `profiles.py` | Power → Advanced | JSON on Desktop; import from Desktop/Downloads, never overwrites |
 | Autotune | `autotune.py` | Power | pauses on any manual change; saved TDP clamped to the current ceiling |
 | Benchmark | `benchmark.py` | Power → Advanced | avg fps, 1 % low, watts, fps/W; CSV export |
-| XMX injector: OptiScaler | `injector.py` | Graphics | download from GitHub releases, backup/undo |
-| XMX injector: lsfg-vk | `injector.py`, `launchenv.py` | Graphics | `LSFGVK_ENV=1` + multiplier/flow/performance per game |
+| Per-game recommendation | `gamescan.py`, `compat.py`, `injector.plan` | Graphics | native XeSS → OptiScaler → lsfg-vk, with reasons; anti-cheat blocked |
+| OptiScaler, OptiClick-style | `injector.py`, `updates.py` | Graphics | newest release, setup_linux.sh layout, OptiPatcher, REFramework, per-game INI fixes |
+| Lossless Scaling (lsfg-vk) | `injector.py`, `updates.py` | Graphics | lsfg-vk v2 installed/updated; Lossless Scaling ownership checked in Steam |
+| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check; games refreshed after they close |
 | Per-game launch env | `launchenv.py`, `tools/clawdeck-launch.sh` | Graphics | injector, `DXVK_HDR`, `MESA=` choice; merges user DLL overrides |
 | XeSS driver | `xess.py`, `downloads.py` | Graphics | xess-xmx-linux state, install from fork release, probe, default Mesa |
 | Proton picker | `proton.py` + `SteamClient.Apps.SpecifyCompatTool` | Graphics | Steam stays owner of config.vdf |

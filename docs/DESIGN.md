@@ -14,7 +14,11 @@ py_modules/clawdeck/
    battery.py   status, plugged detection, charge limit 50–100 (HHD for 70–95, sysfs for the rest)
    profiles.py  per-game JSON, battery/plugged slots, import/export
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat), classifier, hysteresis controller, CSV log
-   injector.py  OptiScaler / lsfg-vk per game, backups, INI editing, asset staging, lsfg-vk detection
+   injector.py  per-game plan (native XeSS -> OptiScaler -> lsfg-vk), OptiScaler install like setup_linux.sh +
+                OptiPatcher / REFramework / INI fixes, exact undo, lsfg-vk layer install
+   gamescan.py  what a game ships: upscalers, frame generation, engine, anti-cheat (file names only)
+   compat.py    OptiScaler's compatibility list + OptiPatcher's supported exes, cached a day
+   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk, checked once a day
    launchenv.py per-game <runtime>/launch/<appid>.env: injector, DXVK_HDR, MESA= (read by clawdeck-launch.sh)
    health.py    checks + one-tap bug report (fixes run through main.run_fix)
    controller.py  HHD controllers.claw.* / rgb.handheld.*, discovered from HHD's settings schema
@@ -39,6 +43,19 @@ The backend never polls. The frontend registers Steam's own notifications and fo
 `GameSessions.RegisterForAppLifetimeNotifications` (game start/stop), `System.RegisterForBatteryStateChanges`
 (eACState 2 = AC, 1 = battery: the running game switches profile slot), `System.RegisterForOnResumeFromSuspend`
 (re-apply charge limit and the running game). Timers exist only while autotune runs for a game or a benchmark records.
+
+## Per-game upscaling (OptiClick for the Claw)
+For the running game the backend scans the install folder, looks the game up in OptiScaler's compatibility list
+and in OptiPatcher's source, and returns one plan with its reasons. Order: the game's own XeSS (nothing to install;
+XMX with the xess-xmx-linux driver) → OptiScaler when the game has DLSS or FSR and the list doesn't mark it broken
+(XeSS SR + XeFG; FG input = the game's own DLSS-FG / FSR-FG / XeFG, else the upscaler; Dxgi spoofing only for
+DLSS-only games without OptiPatcher; InterpolationCount 3x with the XeSS driver, 2x without; no XeFG in Vulkan
+games) → lsfg-vk for everything else. Anti-cheat folders block it. The install copies the whole release next to the
+main exe, takes the first free proxy name, writes WINEDLLOVERRIDES through the launch wrapper (plus dinput8 for
+REFramework), and lists every file in .clawdeck-inject.json for an exact undo. Updates: upstream is asked at most
+once a day; a newer release is downloaded after a game closes and that game is reinstalled with the same options.
+lsfg-vk needs Lossless Scaling (Steam 993090): the frontend checks ownership with appStore, installs it with
+Installs.OpenInstallWizard or opens its store page. lsfg-vk runs on shader cores; only XeSS uses XMX.
 
 ## Who owns what
 Handheld Daemon keeps its own state (TDP, fans, controller, RGB, its charge limit) and persists it; ClawDeck changes
@@ -88,7 +105,9 @@ ClawDeck never starts HHD while InputPlumber runs (two controller daemons fight)
   releases), OptiScaler `Optiscaler_0.9.4-final.20260718._MM.7z`, XeSS SDK `XeSS_SDK_3.0.2.zip`. OptiScaler.ini keys
   checked against 0.9.4 (`FGInput`/`FGOutput=xefg`, no `FGType`). Still open: whether the XeSS SDK 3.x DLLs work
   with the xess-xmx-linux shim (its kernel map is for 2.0.2.68) — pin 2.x if not.
-- Bazzite Portal now offers OptiScaler and Lossless Scaling Decky plugins: detect them and defer per game rather
-  than inject twice.
+- Bazzite Portal offers OptiScaler (Decky Framegen) and Lossless Scaling (decky-lsfg-vk) plugins: detected and
+  named; a game they set up is left alone.
+- On the Claw: the OptiScaler overlay (Insert) shows XeSS + XeFG in Dragon's Dogma 2 with REFramework; OptiPatcher
+  shows "(OP)" in a supported UE game; lsfg-vk in a game without an upscaler; 7z or bsdtar present on Bazzite.
 - Intel's official Proton path: the built-in `libxess.dll` location inside a Proton build that carries PR 10289.
 - `/sys/devices/system/cpu/cpuidle/low_power_idle_system_residency_us` present on Panther Lake.

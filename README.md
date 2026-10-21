@@ -39,7 +39,7 @@ there you can:
 
 - switch between **Battery, Performance and Dock** power with one tap,
 - let **Autotune** find the lowest power each game needs,
-- run **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR,
+- run **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR, set up automatically per game,
 - set a **battery charge limit** so your battery lasts for years,
 - see at a glance **what's working and what isn't**, with a one-tap fix.
 
@@ -74,7 +74,10 @@ too.
 | Feature | What it does | Good to know |
 |---|---|---|
 | **XeSS on XMX** | Installs the [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) driver in one tap, so games with XeSS get full-quality upscaling and frame generation, as on Windows. | The first launch of each game takes a minute or two to prepare, once. |
-| **XMX injector** | For games without XeSS. **OptiScaler** makes DLSS or FSR games use XeSS. **lsfg-vk** adds frame generation to any game. | Adds a little input delay. Online games with anti-cheat refuse it. |
+| **Best option per game** | ClawDeck checks what each game ships (DLSS, FSR, XeSS), looks it up in OptiScaler's community compatibility list, and recommends one thing, with the reasons. | Online games with anti-cheat are left alone: changed game files can get accounts banned. |
+| **OptiScaler, set up for you** | For DLSS or FSR games: one tap installs the newest OptiScaler, so the game uses XeSS on the XMX cores plus XeSS frame generation (2x to 4x). It also adds **OptiPatcher** when the game is supported, **REFramework** for Capcom RE Engine games, and the game's known fixes. | XeSS frame generation needs Borderless or Fullscreen Windowed mode. Adds a little input delay. |
+| **Lossless Scaling** | The last option, for games with no DLSS, FSR or XeSS: frame generation through lsfg-vk. ClawDeck installs lsfg-vk and checks that Lossless Scaling is in your Steam library. | You need your own copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (a paid Steam app). It runs on the GPU's regular shader cores, not the XMX cores. |
+| **Always up to date** | Checks once a day for new OptiScaler, OptiPatcher, REFramework and lsfg-vk versions, and updates your games right after you close them. | Can be turned off under Updates. |
 | **Proton version** | Pick which Proton runs a game, such as GE-Proton. | Same as the game's Properties → Compatibility, just closer to hand. |
 | **Add to launch options** | One tap adds ClawDeck to a game's launch options, which Autotune, the injector and HDR need. | Keeps anything you already had there. |
 
@@ -129,6 +132,14 @@ overclocks: every value stays inside what the Claw's hardware allows.
 TDP limit off while ClawDeck manages power. Steam's frame limit is fine to use: set Autotune's target to the same
 number.
 
+**What are the XMX cores, and what runs on them?** They are the Arc GPU's AI units. XeSS upscaling and XeSS frame
+generation run on them (with the XeSS driver from the Graphics tab). Lossless Scaling's frame generation is a regular
+GPU program and runs on the shader cores instead, which is why ClawDeck only suggests it when a game has nothing
+OptiScaler can use.
+
+**Do I have to buy Lossless Scaling?** Only for the Lossless Scaling option. lsfg-vk is free, but it uses the frame
+generation from your own copy of Lossless Scaling on Steam. OptiScaler and XeSS need nothing extra.
+
 **Bazzite also offers OptiScaler and Lossless Scaling plugins. Which should I use?** Either one, but only one per
 game. ClawDeck spots the others and won't overwrite a game they've set up.
 
@@ -153,7 +164,8 @@ fix button in Setup. It saves a hardware report you can post in an issue.
 ## Thanks
 
 ClawDeck stands on the work of Handheld Daemon, InputPlumber, PowerStation, PowerControl, SimpleDeckyTDP,
-xess-xmx-linux, OptiScaler, lsfg-vk, Decky Loader and Bazzite. The full list is in [CREDITS.md](CREDITS.md).
+xess-xmx-linux, OptiScaler, OptiPatcher, REFramework, lsfg-vk and Lossless Scaling, Decky Loader and Bazzite. The
+per-game OptiScaler setup follows OptiClick's approach on Windows. The full list is in [CREDITS.md](CREDITS.md).
 
 ## Support
 
