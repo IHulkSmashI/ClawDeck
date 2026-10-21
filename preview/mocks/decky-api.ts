@@ -13,3 +13,4 @@ const listeners: ((t: Toast) => void)[] = [];
 export const onToast = (fn: (t: Toast) => void) => { listeners.push(fn); };
 export const toaster = { toast: (t: Toast) => listeners.forEach((l) => l(t)) };
 export const definePlugin = (fn: any) => fn;
+export const routerHook = { addRoute: () => undefined, removeRoute: () => undefined };

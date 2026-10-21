@@ -1,7 +1,7 @@
 """Health check: what this machine has, what is missing, and the one-tap fix for each item.
 
 Each check returns {"id", "title", "ok", "detail", "fix"}; fix is None or the name of a backend action the UI can
-call (the Setup tab shows a button for it). Checks never change anything.
+call (the Setup page shows a button for it). Checks never change anything.
 """
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out.append({"id": "lsfg", "title": "Lossless Scaling frame generation (optional)", "ok": ls["ready"],
                 "detail": "lsfg-vk and Lossless Scaling are installed" if ls["ready"] else
                           ("needs your own copy of Lossless Scaling from Steam" if not ls["lossless_dll"] else
-                           "lsfg-vk is not installed yet: the Graphics tab installs it"),
+                           "lsfg-vk is not installed yet: All settings → Graphics installs it"),
                 "fix": None, "optional": True})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
@@ -122,7 +122,7 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     if others["power"]:
         out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,
                     "detail": f"{', '.join(others['power'])} also sets TDP and clocks; two power plugins undo each other. "
-                              "Uninstall it in Decky, or leave ClawDeck's Power tab alone", "fix": None})
+                              "Uninstall it in Decky, or leave ClawDeck's power settings alone", "fix": None})
     for c in sleep.checks():
         c.setdefault("fix", None)
         out.append(c)

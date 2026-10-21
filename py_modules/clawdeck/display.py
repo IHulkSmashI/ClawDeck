@@ -104,7 +104,7 @@ class Display:
         lo = max(lo_hw, min(int(s.get("vrr_min", lo_hw)), hi_hw))
         hi = max(lo, min(int(s.get("vrr_max", hi_hw)), hi_hw))
         nits = max(100, min(int(s.get("hdr_nits", 400)), 1000))
-        lines = ["# Written by ClawDeck (Display tab). Delete this file to go back to the image's defaults.",
+        lines = ["# Written by ClawDeck (Display page). Delete this file to go back to the image's defaults.",
                  "# Read by gamescope-session at the next Game Mode start."]
         if s.get("vrr"):
             lines.append("ADAPTIVE_SYNC=1")
