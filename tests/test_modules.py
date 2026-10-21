@@ -396,7 +396,7 @@ def test_autotune_start_clamps_saved_tdp(monkeypatch):
 # ---- wiring rule: every UI call has a backend method ----------------------------------------------------------------
 def test_every_callable_has_a_backend_method():
     api = open(os.path.join(ROOT, "src", "api.ts")).read()
-    names = set(re.findall(r'callable<[^>]*>\("([a-z_]+)"\)', api))
+    names = set(re.findall(r'callable<.*>\("([a-z_]+)"\)', api))   # one per line; types may nest <>
     main = open(os.path.join(ROOT, "main.py")).read()
     methods = set(re.findall(r"async def ([a-z_]+)\(self", main))
     assert names, "no callables found"
