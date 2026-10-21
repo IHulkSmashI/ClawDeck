@@ -76,13 +76,18 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                     "fix": "enable_hhd" if os.path.exists("/usr/bin/hhd") else None})
     bs = buttons.status(hardware.model_id)
     if bs["applies"]:
-        extra = "" if not bs["local_file"] else " (ClawDeck's hwdb file is in place" + \
-            ("" if not bs["ok"] else "; if a future image maps them on its own it can be removed") + ")"
-        out.append({"id": "face_buttons", "title": "MSI face buttons reach the controller service", "ok": bs["ok"],
-                    "detail": ("scancodes b9/ba map to F15/F16" + extra) if bs["ok"] else
-                              "this board (MS-1T91) is missing from systemd's keyboard table, so the two face buttons "
-                              "send nothing InputPlumber recognises: dead in Game Mode" + extra,
-                    "fix": None if bs["ok"] else "fix_face_buttons"})
+        if bs.get("upstream_fixed"):
+            detail = f"InputPlumber's own config maps them (map {bs['stock_map']})" + \
+                     ("; ClawDeck's override can be removed" if bs["installed"] else "")
+        elif bs["installed"]:
+            detail = "ClawDeck's InputPlumber override is in place: left = Steam menu, right = Quick Access"
+        else:
+            detail = ("InputPlumber's stock map for this board waits for F15+G and F16, but the EX sends Win+G and F15: "
+                      "both buttons are dropped in Game Mode")
+        if bs["legacy_hwdb"]:
+            detail += "; an old hwdb file from an earlier ClawDeck is still present (the fix removes it)"
+        out.append({"id": "face_buttons", "title": "MSI face buttons reach Steam", "ok": bs["ok"],
+                    "detail": detail, "fix": None if bs["ok"] else "fix_face_buttons"})
     if not hhd_ok:
         out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
                     "detail": ("MSI firmware limits, set directly (Steam's own TDP slider may do nothing on this chip: "

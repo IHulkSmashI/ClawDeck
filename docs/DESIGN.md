@@ -24,7 +24,7 @@ py_modules/clawdeck/
    changes.py   what changed since the last start (kernel, Mesa, OS, controller service, XeSS, Decky)
    launchenv.py per-game <runtime>/launch/<appid>.env: injector, DXVK_HDR, MESA= (read by clawdeck-launch.sh)
    health.py    checks + one-tap bug report (fixes run through main.run_fix)
-   buttons.py   Claw 8 EX face buttons: hwdb entry for MS-1T91 (apply / remove / status)
+   buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91 (apply / remove / status)
    controller.py  HHD controllers.claw.* / rgb.handheld.*, discovered from HHD's settings schema
    fans.py      fan curve presets on HHD's tdp.msi.fan.manual.st<N> points; RPM/temperature readout
    display.py   gamescope-session variables in ~/.config/environment.d/60-clawdeck-display.conf (on Save only)
