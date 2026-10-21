@@ -130,7 +130,7 @@ export const backend = {
   set_gpu_window: (lo: number | null, hi: number | null) => { if (lo != null) state.gpuMin = lo; if (hi != null) state.gpuMax = hi; return true; },
   reset_gpu_window: () => { state.gpuMin = 300; state.gpuMax = 2500; return true; },
   apply_profile: (name: string) => {
-    const p: any = { battery: [20, 80], performance: [30, 100], dock: [35, 100] }[name];
+    const p: any = { battery: [20, 80], balanced: [25, 90], performance: [30, 100], dock: [35, 100] }[name];
     state.tdp = p[0]; state.cpu = p[1];
     return { profile: name, applied: { tdp: p[0], cpu_max_pct: p[1] }, failed: [] };
   },
