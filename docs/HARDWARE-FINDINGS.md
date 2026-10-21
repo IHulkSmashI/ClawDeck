@@ -94,3 +94,11 @@ Also: the dry-run tour of every tab wrote only in-range values and the revert li
 `plugin.json` had the Decky template's `"flags": ["_root"]` (underscore = off), so the backend ran as the user and
 every sysfs write (RAPL 17 W, max_perf_pct, EPP, GPU window) and the VRR initramfs rebuild failed with
 `Permission denied`. Fixed to `["root"]`, with a test. Dry-run mode never showed this because it does not write.
+
+## 14. "I can't tell whether anything changed" (maintainer, first live run) → self-test + read-back
+
+`tools/selftest.py` (run as root) writes each control through the backend, reads it back from sysfs, measures the
+effect (package power under load, GPU ceiling, charge threshold), reverts, and prints PASS/FAIL. For the UI
+(Claude Code): every control must show the value **re-read from sysfs** after the write, and the toast must say
+"set 17 W → hardware reads 17 W" (or the error), never just "applied". A failed write must surface as red text in
+the tab, with the log line, not a silent no-op.
