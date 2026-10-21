@@ -84,8 +84,22 @@ export const setController = callable<[key: string, value: any], { ok: boolean; 
 export type Launch = { inject?: string; lsfg?: { multiplier: number; flow_scale: number; performance_mode: boolean }; hdr?: boolean; mesa?: string; proton?: string | null };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
-export const injectorDownload = callable<[kind: string, allowUnpinned: boolean], { ok: boolean; tag?: string; error?: string }>("injector_download");
-export const injectorInstall = callable<[appid: string, mode: string, xessFg: boolean, lsfg: Launch["lsfg"] | null], any>("injector_install");
+export type InjectorPlan = {
+  found: boolean;
+  plan?: { mode: "none" | "native" | "optiscaler" | "lsfg"; blocked: boolean; reasons: string[]; warnings: string[]; steps: string[];
+    alternative?: string | null; page?: string | null;
+    options: { fg?: boolean; fg_input?: string; multiplier?: number; spoof?: boolean; optipatcher?: boolean; reframework?: boolean } };
+  found_in_game?: string[];
+  compat?: { listed: boolean; optipatcher: boolean; needs_reframework: boolean; list_loaded: boolean };
+  state?: any;
+  updates?: Record<string, { installed: string | null; latest: string | null; update: boolean }>;
+};
+export type Updates = Record<string, { installed: string | null; latest: string | null; update: boolean }> & { auto?: boolean };
+export const injectorPlan = callable<[appid: string, name: string], InjectorPlan>("injector_plan");
+export const injectorInstall = callable<[appid: string, mode: string, options: { multiplier?: number; fg?: boolean } | null, lsfg: Launch["lsfg"] | null, name: string], any>("injector_install");
+export const lsfgInstall = callable<[], { ok: boolean; version?: string; error?: string; dry_run?: boolean }>("lsfg_install");
+export const getUpdates = callable<[force: boolean], Updates>("get_updates");
+export const updateNow = callable<[], Record<string, string>>("update_now");
 
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; drivers: string[]; default_driver: string | null; status: { state: string; line: string | null; mode?: string }; official_proton: string[] };
 export const xessState = callable<[], XessState>("xess_state");

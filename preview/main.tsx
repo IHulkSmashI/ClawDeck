@@ -13,8 +13,15 @@ import { ControllerTab } from "../src/tabs/Controller";
 import { BatteryTab } from "../src/tabs/Battery";
 
 let launchOptions = "";   // the example game starts without ClawDeck in its launch options
+let losslessInstalled = false;
+(window as any).appStore = {
+  // the example user owns Lossless Scaling but has not installed it yet
+  GetAppOverviewByAppID: (id: number) => (id === 993090 ? { BIsOwned: () => true, installed: losslessInstalled } : null),
+};
 (window as any).SteamClient = {
+  Installs: { OpenInstallWizard: () => { losslessInstalled = true; } },
   Apps: {
+    ShowStore: () => undefined,
     RegisterForAppDetails: (_id: number, cb: (d: any) => void) => { setTimeout(() => cb({ strLaunchOptions: launchOptions })); return { unregister() {} }; },
     SetAppLaunchOptions: (_id: number, opts: string) => { launchOptions = opts; },
     SpecifyCompatTool: () => undefined,
@@ -75,11 +82,20 @@ const Switch = ({ id, label, checked, onChange }: { id: string; label: string; c
 
 const Scenario = () => {
   const [, force] = useState(0);
-  const set = (k: "game" | "plugged" | "controller", v: any) => { scenario.set(k, v); force((n) => n + 1); };
+  const set = (k: "game" | "plugged" | "controller" | "which", v: any) => { scenario.set(k, v); force((n) => n + 1); };
   return (
     <fieldset className="scenario">
       <legend>Preview only: pretend that</legend>
-      <Switch id="scn-game" label="A game is running (Dragon's Dogma 2)" checked={scenario.game} onChange={(v) => set("game", v)} />
+      <Switch id="scn-game" label="A game is running" checked={scenario.game} onChange={(v) => set("game", v)} />
+      <div className="scn-choice" role="radiogroup" aria-label="Example game">
+        <span>The game</span>
+        {([["dd2", "Dragon's Dogma 2 (has DLSS and FSR)"], ["hk", "Hollow Knight (no upscaler at all)"]] as const).map(([k, label]) => (
+          <label key={k} htmlFor={`scn-${k}`}>
+            <input id={`scn-${k}`} type="radio" name="scn-which" checked={scenario.which === k} onChange={() => set("which", k)} />
+            {label}
+          </label>
+        ))}
+      </div>
       <Switch id="scn-plug" label="Plugged in, dock with a 4K TV" checked={scenario.plugged} onChange={(v) => set("plugged", v)} />
       <div className="scn-choice" role="radiogroup" aria-label="Controller service">
         <span>Your Claw runs (the real plugin detects this itself)</span>
