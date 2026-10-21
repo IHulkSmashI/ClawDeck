@@ -26,6 +26,10 @@ export const Status: FC<{ ok: boolean | null; label: ReactNode; detail?: ReactNo
   );
 };
 
+/** The last thing that didn't apply, in red under the control it belongs to, with the reason (HARDWARE-FINDINGS §14). */
+export const Problem: FC<{ error: string | null | undefined; what?: string }> = ({ error, what }) =>
+  error ? <Status ok={false} label={what ? `${what} didn't apply` : "Didn't apply"} detail={error} /> : null;
+
 /** A paragraph of plain information (no control), focusable so the D-pad scrolls through it. */
 export const Note: FC<{ children: ReactNode; label?: ReactNode }> = ({ children, label }) => (
   <Field focusable bottomSeparator="none" label={label} description={children} />

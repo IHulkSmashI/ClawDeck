@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getController, getHardware, setController, HhdSetting, InputPlumberDevice, Stack } from "../api";
 import { Advanced } from "../components/Advanced";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 
 const GROUPS: { id: string; title: string; does: string; why: string; cost: string }[] = [
   { id: "mode", title: "Controller mode", does: "What games see: a DualSense, an Xbox pad, or the raw controller.", why: "DualSense gives gyro and the touchpad to Steam Input.", cost: "some games show the wrong button icons." },
@@ -34,11 +34,13 @@ const Control: FC<{ s: HhdSetting; onSet: (key: string, v: any) => void }> = ({ 
 export const ControllerTab: FC = () => {
   const [st, setSt] = useState<{ available: boolean; settings: HhdSetting[]; inputplumber?: InputPlumberDevice[] } | null>(null);
   const [stack, setStack] = useState<Stack | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const load = async () => { setSt(await getController()); setStack((await getHardware()).stack); };
   useEffect(() => { load(); }, []);
   const onSet = async (key: string, v: any) => {
     const r = await setController(key, v);
-    if (!r.ok) toaster.toast({ title: "ClawDeck", body: r.error ?? "Handheld Daemon did not accept that" });
+    toaster.toast({ title: "ClawDeck", body: r.ok ? `${key.split(".").pop()} set → Handheld Daemon reads ${JSON.stringify(r.value)}` : `${key.split(".").pop()}: not set (${r.error ?? "Handheld Daemon did not accept that"})` });
+    setErr(r.ok ? null : (r.error ?? "Handheld Daemon did not accept that"));
     load();
   };
   if (st && !st.available) {
@@ -74,6 +76,7 @@ export const ControllerTab: FC = () => {
   const advanced = shown.filter((s) => s.advanced);
   return (
     <>
+      {err && <PanelSection><PanelSectionRow><Problem error={err} /></PanelSectionRow></PanelSection>}
       {basic}
       {advanced.length > 0 && (
         <PanelSection title="More">

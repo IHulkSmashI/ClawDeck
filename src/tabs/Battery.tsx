@@ -3,7 +3,7 @@ import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
 import { getBattery, getFans, setChargeLimit, setFanPreset, BatteryStatus, FanStatus } from "../api";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 
 const CHOICES = [50, 60, 70, 80, 90, 100];
 const FAN_LABELS: Record<string, string> = {
@@ -14,6 +14,8 @@ export const BatteryTab: FC = () => {
   const [b, setB] = useState<BatteryStatus | null>(null);
   const [f, setF] = useState<FanStatus | null>(null);
   const [limit, setLimit] = useState(100);
+  const [err, setErr] = useState<string | null>(null);
+  const [fanErr, setFanErr] = useState<string | null>(null);
   const refresh = async () => {
     const s = await getBattery(); setB(s); if (s.charge_limit) setLimit(s.charge_limit);
     setF(await getFans());
@@ -27,6 +29,7 @@ export const BatteryTab: FC = () => {
             <Status ok={null} label={`${b.capacity_pct}% · ${b.status}${b.power_w != null ? ` · ${b.power_w.toFixed(1)} W` : ""}`}
               detail={`${b.energy_wh != null && b.energy_full_wh != null ? `${b.energy_wh.toFixed(1)} / ${b.energy_full_wh.toFixed(1)} Wh · ` : ""}health ${b.health_pct ?? "?"}% · ${b.plugged ? "plugged in" : "on battery"}`} />
           ) : <Status ok={null} label={b ? "No battery found" : "…"} />}
+          {b?.charge_limit_supported && <Status ok={null} label={`Charge limit reads ${b.charge_limit ?? "?"}%`} />}
         </PanelSectionRow>
       </PanelSection>
       <PanelSection title="Charge limit">
@@ -37,10 +40,12 @@ export const BatteryTab: FC = () => {
             description={explain("Batteries wear slower when they don't sit at 100%. 80% for every day, 50–60% if your Claw lives on the dock.")}
             onChange={async (o) => {
               setLimit(o.data);
-              const ok = await setChargeLimit(o.data);
-              toaster.toast({ title: "ClawDeck", body: ok ? `Charge limit ${o.data}%` : "Charge limit not supported on this kernel" });
+              const r = await setChargeLimit(o.data);
+              toaster.toast({ title: "ClawDeck", body: r.summary });
+              setErr(r.ok ? null : r.error);
               refresh();
             }} />
+          <Problem error={err} what="Charge limit" />
         </PanelSectionRow>
         {b && !b.charge_limit_supported && (
           <PanelSectionRow>
@@ -57,9 +62,11 @@ export const BatteryTab: FC = () => {
             onChange={async (o) => {
               if (o.data === "custom") return;
               const r = await setFanPreset(o.data);
-              toaster.toast({ title: "ClawDeck", body: r.ok ? `Fan curve: ${FAN_LABELS[o.data]}` : `Not applied: ${r.error ?? "Handheld Daemon refused"}` });
+              toaster.toast({ title: "ClawDeck", body: r.ok ? `Fan curve set: ${FAN_LABELS[o.data]} → Handheld Daemon reads ${FAN_LABELS[o.data]}` : `Fan curve: not set (${r.error ?? "Handheld Daemon refused"})` });
+              setFanErr(r.ok ? null : (r.error ?? "Handheld Daemon refused the curve"));
               refresh();
             }} />
+          <Problem error={fanErr} what="Fan curve" />
         </PanelSectionRow>
         <PanelSectionRow>
           <Status ok={null} label={f?.fan_rpm.length ? `Fan ${f.fan_rpm.join(" / ")} rpm` : "Fan speed not reported"}

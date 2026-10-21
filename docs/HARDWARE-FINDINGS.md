@@ -103,6 +103,15 @@ effect (package power under load, GPU ceiling, charge threshold), reverts, and p
 "set 17 W → hardware reads 17 W" (or the error), never just "applied". A failed write must surface as red text in
 the tab, with the log line, not a silent no-op.
 
+Done in the UI (2026-10-21): every write endpoint (`set_tdp`, `set_cpu_max_pct`, `set_epp`, `set_cpu_turbo`,
+`set_gpu_window`, `reset_gpu_window`, `apply_profile`, `revert_power`, `set_charge_limit`) answers
+`{ok, wanted, read, summary, error}`; `read` is re-read from sysfs after the write (`power.read_tdp()` from the
+backend that enforces it: RAPL on the EX) and `ok` is false when it differs from `wanted`. `sysfs.last_error()` keeps
+the OSError text ("Permission denied") for `error`. The toast shows `summary`; each tab keeps the last `error` in a
+red `Problem` row under the control; sliders and the profile description show the value the hardware reads now.
+The same red row covers the fixes in Setup, fan presets, display save/reset, the VRR fix, Moonlight, streaming
+host, OptiScaler / lsfg-vk / XeSS installs and Handheld Daemon controller settings.
+
 ## 15. Every download failed: Decky's Python has no CA store (2026-10-21, fixed in `tls.py`)
 
 `update check for optiscaler/optipatcher/reframework/lsfg/moonlight failed: CERTIFICATE_VERIFY_FAILED ... unable to
@@ -114,3 +123,7 @@ exists; verification stays on. The VRR switch's exception was `Permission denied
 
 The dropdown shows a cut-off profile name. Use short labels in the control (e.g. "Battery 12 W") with the full
 description in the Hint below it, and verify at 1280×800 in Game Mode.
+
+Done (2026-10-21): the picker's options are "Battery 12 W", "Balanced 17 W", "Performance 25 W", "Dock 35 W",
+"Custom 17 W"; what each profile is for, and the watts the hardware reads now, are in the control's description.
+Still to verify at 1280×800 in Game Mode (STATUS → Needs the maintainer).

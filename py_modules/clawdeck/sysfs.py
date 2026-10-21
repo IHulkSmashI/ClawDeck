@@ -19,6 +19,16 @@ log = logging.getLogger("clawdeck.sysfs")
 _lock = threading.Lock()
 _originals: dict[str, str | None] = {}   # path -> value before our first write (None: could not read)
 _dry_run = os.environ.get("CLAWDECK_DRY_RUN", "0") not in ("", "0")
+_last_error: str | None = None   # the most recent failed write or revert, for the UI ("Permission denied: ...")
+
+
+def last_error() -> str | None:
+    return _last_error
+
+
+def clear_error() -> None:
+    global _last_error
+    _last_error = None
 
 
 def set_dry_run(on: bool) -> None:
@@ -71,6 +81,8 @@ def write(path: str, value: str | int, persist: bool = False) -> bool:
             f.write(value + "\n")
         return True
     except OSError as e:
+        global _last_error
+        _last_error = f"writing {value} to {path}: {e.strerror or e}"
         log.error("write %r to %s failed: %s", value, path, e)
         return False
 
@@ -90,6 +102,8 @@ def revert(path: str) -> bool:
             f.write(orig + "\n")
         return True
     except OSError as e:
+        global _last_error
+        _last_error = f"restoring {orig} to {path}: {e.strerror or e}"
         log.error("revert of %s to %r failed: %s", path, orig, e)
         return False
 

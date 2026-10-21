@@ -16,6 +16,11 @@ export const scenario = {
   set(k: "game" | "plugged" | "controller" | "which", v: any) { (this as any)[k] = v; this.listeners.forEach((l) => l()); },
 };
 
+// the shape every write answers with (src/api.ts WriteResult): asked, read back, summary, error
+const done = (what: string, wanted: any, read: any, unit = "") => {
+  const f = (v: any) => (typeof v === "boolean" ? (v ? "on" : "off") : `${v}${unit ? " " + unit : ""}`);
+  return { ok: true, what, wanted, read, unit, summary: `${what} set to ${f(wanted)} → hardware reads ${f(read)}`, error: null };
+};
 const hhd = () => scenario.controller === "hhd";
 const state = {
   wideVrr: false,
@@ -120,21 +125,26 @@ export const backend = {
     cpu: { available: true, max_perf_pct: state.cpu, min_perf_pct: 10, no_turbo: state.turbo ? 0 : 1, epp: state.epp, epp_available: true },
     rapl: { available: true, pl1_w: state.tdp, pl2_w: state.tdp + 6 },
     tdp: hhd() ? { mode: "custom", custom_tdp: state.tdp, boost: true, ready: true } : null,
-    hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "msi-firmware",
-    firmware_tdp: { pl1_w: state.tdp, pl2_w: Math.min(45, Math.round(state.tdp * 45 / 35)) },
+    hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "rapl", tdp_w: state.tdp,
+    firmware_tdp: { pl1_w: 0, pl2_w: 0 },
     limits: { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 },
   }),
-  set_tdp: (w: number) => { state.tdp = w; return true; },
-  set_cpu_max_pct: (p: number) => { state.cpu = p; return true; },
-  set_cpu_turbo: (v: boolean) => { state.turbo = v; return true; },
-  set_gpu_window: (lo: number | null, hi: number | null) => { if (lo != null) state.gpuMin = lo; if (hi != null) state.gpuMax = hi; return true; },
-  reset_gpu_window: () => { state.gpuMin = 300; state.gpuMax = 2500; return true; },
+  set_tdp: (w: number) => { state.tdp = w; return done("power limit", w, w, "W"); },
+  set_cpu_max_pct: (p: number) => { state.cpu = p; return done("CPU limit", p, p, "%"); },
+  set_cpu_turbo: (v: boolean) => { state.turbo = v; return done("CPU turbo", v, v); },
+  set_gpu_window: (lo: number | null, hi: number | null) => {
+    if (lo != null) state.gpuMin = lo; if (hi != null) state.gpuMax = hi;
+    return lo != null ? done("GPU minimum clock", lo, state.gpuMin, "MHz") : done("GPU maximum clock", hi, state.gpuMax, "MHz");
+  },
+  reset_gpu_window: () => { state.gpuMin = 300; state.gpuMax = 2500; return done("GPU clocks", "300–2500", "300–2500", "MHz"); },
   apply_profile: (name: string) => {
     const p: any = { battery: [12, 70], balanced: [17, 85], performance: [25, 100], dock: [35, 100] }[name];
     state.tdp = p[0]; state.cpu = p[1];
-    return { profile: name, applied: { tdp: p[0], cpu_max_pct: p[1] }, failed: [] };
+    return { ok: true, profile: name, applied: { tdp: p[0], cpu_max_pct: p[1] }, failed: [], read: { tdp_w: p[0], cpu_max_pct: p[1] },
+             summary: `${name} set → hardware reads ${p[0]} W, CPU ${p[1]}%`, error: null };
   },
-  revert_power: () => { state.tdp = 20; state.cpu = 100; state.gpuMin = 300; state.gpuMax = 2500; return 3; },
+  revert_power: () => { state.tdp = 25; state.cpu = 100; state.gpuMin = 300; state.gpuMax = 2500;
+    return { ok: true, reverted: 3, read: { tdp_w: 25, cpu_max_pct: 100 }, summary: "3 value(s) restored → hardware reads 25 W, CPU 100%", error: null }; },
   list_profiles: () => ({ battery: { tdp: 12 }, balanced: { tdp: 17 }, performance: { tdp: 25 }, dock: { tdp: 35 } }),
   save_game_power: (_a: string, v: any) => v,
   get_game_profile: () => ({ battery: { base: "battery", target_fps: state.targetFps }, plugged: { base: "performance", target_fps: state.targetFps }, launch: state.launch }),
@@ -167,7 +177,7 @@ export const backend = {
     present: true, status: scenario.plugged ? "Charging" : "Discharging", capacity_pct: 64, power_w: scenario.plugged ? 41.0 : 22.4,
     energy_wh: 51.2, energy_full_wh: 80.0, health_pct: 98.6, plugged: scenario.plugged, charge_limit_supported: true, charge_limit: state.chargeLimit,
   }),
-  set_charge_limit: (p: number) => { state.chargeLimit = p; return true; },
+  set_charge_limit: (p: number) => { state.chargeLimit = p; return done("charge limit", p, p, "%"); },
   get_fans: () => ({ available: hhd(), mode: hhd() ? (state.fan === "auto" ? "disabled" : "manual") : null, preset: hhd() ? state.fan : null,
                      presets: ["auto", "quiet", "balanced", "cool"], fan_rpm: [3150], cpu_temp_c: 71, curve: null }),
   set_fan_preset: (n: string) => { state.fan = n; return ok(); },
@@ -246,7 +256,7 @@ export const backend = {
   },
   lsfg_install: () => { state.lsfgInstalled = true; return ok({ version: "lsfg-vk-2.1.3" }); },
   get_updates: () => ({ ...updates(), auto: state.autoUpdate }),
-  set_epp: (v: string) => { state.epp = v; return true; },
+  set_epp: (v: string) => { state.epp = v; return done("CPU energy mode", v, v); },
   set_tdp_boost: (v: boolean) => { state.boost = v; return true; },
   rollback: () => ok({ version: "v6.2.0-daily.190" }),
   get_changes: () => ({ first_run: false, changed: [] }),

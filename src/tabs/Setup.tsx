@@ -5,7 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { collectLogs, getHardware, getHealth, getSetting, getSleep, runFix, setDryRun, setSetting, Hardware, Health, SleepState } from "../api";
 import { Advanced } from "../components/Advanced";
 import { confirmUntested } from "../components/confirm";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 
 const FIX_LABEL: Record<string, string> = {
   enable_hhd: "Turn on Handheld Daemon",
@@ -21,6 +21,7 @@ export const SetupTab: FC = () => {
   const [dry, setDry] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const refresh = async (force = false) => {
     setBusy(true);
@@ -41,7 +42,8 @@ export const SetupTab: FC = () => {
     try {
       const r = await runFix(id, allowUnpinned);
       if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("this component", () => fix(id, true)); return; }
-      toaster.toast({ title: "ClawDeck", body: r.ok ? (r.would ?? r.next ?? r.path ?? "Done") : `Failed: ${r.error ?? r.log ?? "see log"}` });
+      toaster.toast({ title: "ClawDeck", body: r.ok ? (r.would ?? r.next ?? r.path ?? "Done") : `${FIX_LABEL[id] ?? id}: failed (${r.error ?? r.log ?? "see log"})` });
+      setErr(r.ok ? null : (r.error ?? (r.log ? r.log.trim().split("\n").slice(-3).join(" · ") : "see the log")));
     } finally { setBusy(false); refresh(); }
   };
 
@@ -67,6 +69,7 @@ export const SetupTab: FC = () => {
             )}
           </PanelSectionRow>
         ))}
+        <PanelSectionRow><Problem error={err} what="The fix" /></PanelSectionRow>
         {passing.length > 0 && (
           <PanelSectionRow>
             <ToggleField label={`Show the ${passing.length} passing checks`} checked={showAll} onChange={setShowAll} />

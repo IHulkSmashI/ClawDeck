@@ -62,7 +62,18 @@ class Power:
             fw = {"pl1_w": sysfs.read_int(p.msi_pl1), "pl2_w": sysfs.read_int(p.msi_pl2) if p.msi_pl2 else None}
         return {"gpu": gpu, "cpu": cpu, "rapl": rapl, "tdp": hhd.get_tdp(), "hhd": hhd.available(),
                 "msi_firmware": p.msi_pl1 is not None, "firmware_tdp": fw, "tdp_backend": self.tdp_backend(),
-                "limits": self.hw.model["tdp"]}
+                "tdp_w": self.read_tdp(), "limits": self.hw.model["tdp"]}
+
+    def read_tdp(self) -> int | None:
+        """The sustained power limit as the hardware reports it now, from the backend that enforces it."""
+        if hhd.available():
+            return (hhd.get_tdp() or {}).get("custom_tdp")
+        if self.p.rapl_pl1:
+            v = sysfs.read_int(self.p.rapl_pl1)
+            return None if v is None else round(v / 1e6)
+        if self.p.msi_pl1:
+            return sysfs.read_int(self.p.msi_pl1)
+        return None
 
     # ---- single levers ---------------------------------------------------------------------------------------------
     def clamp_tdp(self, watts: int, plugged: bool | None = None) -> int:

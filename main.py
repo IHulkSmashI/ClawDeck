@@ -224,24 +224,52 @@ class Plugin:
         return {k: {**e, "pinned": downloads.is_pinned(e)} for k, e in v.items() if not k.startswith("_")}
 
     # ---- power -------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _done(ok: bool, what: str, wanted, read, unit: str = "") -> dict:
+        """What every write answers (HARDWARE-FINDINGS §14): the value asked for, the value read back from the
+        hardware afterwards, and on failure the reason. The UI shows `summary` in its toast and `error` in red."""
+        u = f" {unit}" if unit else ""
+        fmt = lambda v: "?" if v is None else (f"{v}{u}" if not isinstance(v, bool) else ("on" if v else "off"))
+        err = None
+        if sysfs.dry_run():
+            summary = f"dry run: would set {what} to {fmt(wanted)} (hardware still reads {fmt(read)})"
+        elif not ok:
+            err = sysfs.last_error() or f"{what} could not be set"
+            summary = f"{what}: not set ({err})"
+        elif read is not None and read != wanted:
+            err = f"asked for {fmt(wanted)}, hardware reads {fmt(read)}"
+            summary = f"{what}: {err}"
+            ok = False
+        else:
+            summary = f"{what} set to {fmt(wanted)} → hardware reads {fmt(read)}"
+        return {"ok": ok, "what": what, "wanted": wanted, "read": read, "unit": unit, "summary": summary, "error": err}
+
     async def get_power(self) -> dict:
         return self.power.status()
 
-    async def set_tdp(self, watts: int) -> bool:
-        ok = self.power.set_tdp(int(watts), self.battery.plugged())
-        self.autotune.set_ceiling(int(watts))   # the power limit the user picked is autotune's new ceiling
-        return ok
+    async def set_tdp(self, watts: int) -> dict:
+        sysfs.clear_error()
+        plugged = self.battery.plugged()
+        want = self.power.clamp_tdp(int(watts), plugged)
+        ok = self.power.set_tdp(want, plugged)
+        self.autotune.set_ceiling(want)   # the power limit the user picked is autotune's new ceiling
+        return self._done(ok, "power limit", want, self.power.read_tdp(), "W")
 
-    async def set_cpu_max_pct(self, pct: int) -> bool:
+    async def set_cpu_max_pct(self, pct: int) -> dict:
+        sysfs.clear_error()
         self.autotune.pause("manual CPU ceiling")
-        return self.power.set_cpu_max_pct(int(pct))
+        ok = self.power.set_cpu_max_pct(int(pct))
+        return self._done(ok, "CPU limit", int(pct), self.power.status()["cpu"]["max_perf_pct"], "%")
 
-    async def set_epp(self, value: str) -> bool:
+    async def set_epp(self, value: str) -> dict:
+        sysfs.clear_error()
         self.autotune.pause("manual CPU energy mode")
         try:
-            return self.power.set_epp(str(value))
-        except ValueError:
-            return False
+            ok = self.power.set_epp(str(value))
+        except ValueError as e:
+            return {"ok": False, "what": "CPU energy mode", "wanted": value, "read": self.power.epp(), "unit": "",
+                    "summary": f"CPU energy mode: {e}", "error": str(e)}
+        return self._done(ok, "CPU energy mode", str(value), self.power.epp())
 
     async def set_tdp_boost(self, on: bool) -> bool:
         self.power.boost = bool(on)
@@ -249,15 +277,30 @@ class Plugin:
         self._save_settings()
         return True
 
-    async def set_cpu_turbo(self, on: bool) -> bool:
-        return self.power.set_cpu_turbo(bool(on))
+    async def set_cpu_turbo(self, on: bool) -> dict:
+        sysfs.clear_error()
+        ok = self.power.set_cpu_turbo(bool(on))
+        nt = self.power.status()["cpu"]["no_turbo"]
+        return self._done(ok, "CPU turbo", bool(on), None if nt is None else nt == 0)
 
-    async def set_gpu_window(self, min_mhz, max_mhz) -> bool:
+    async def set_gpu_window(self, min_mhz, max_mhz) -> dict:
+        sysfs.clear_error()
         self.autotune.pause("manual GPU clocks")
-        return self.power.set_gpu_window(None if min_mhz is None else int(min_mhz), None if max_mhz is None else int(max_mhz))
+        lo = None if min_mhz is None else int(min_mhz)
+        hi = None if max_mhz is None else int(max_mhz)
+        ok = self.power.set_gpu_window(lo, hi)
+        g = self.power.status()["gpu"]
+        if lo is not None and hi is None:
+            return self._done(ok, "GPU minimum clock", lo, g["min_mhz"], "MHz")
+        if hi is not None and lo is None:
+            return self._done(ok, "GPU maximum clock", hi, g["max_mhz"], "MHz")
+        return self._done(ok, "GPU clocks", f"{lo}–{hi}", f"{g['min_mhz']}–{g['max_mhz']}", "MHz")
 
-    async def reset_gpu_window(self) -> bool:
-        return self.power.reset_gpu_window()
+    async def reset_gpu_window(self) -> dict:
+        sysfs.clear_error()
+        ok = self.power.reset_gpu_window()
+        g = self.power.status()["gpu"]
+        return self._done(ok, "GPU clocks", f"{g['min_mhz']}–{g['max_mhz']}", f"{g['min_mhz']}–{g['max_mhz']}", "MHz")
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
         plugged = self.battery.plugged()
@@ -266,14 +309,38 @@ class Plugin:
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
         self.settings["last_profile"] = name
         self._save_settings()
+        sysfs.clear_error()
         r = self.power.apply_profile(name, overrides, plugged)
         if "tdp" in r["applied"]:
             self.autotune.set_ceiling(r["applied"]["tdp"])   # autotune now works under this profile's power
+        st = self.power.status()
+        r["read"] = {"tdp_w": st["tdp_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"], "epp": st["cpu"]["epp"]}
+        r["ok"] = not r["failed"]
+        want = r["applied"].get("tdp")
+        if r["ok"] and want is not None and st["tdp_w"] is not None and st["tdp_w"] != want:
+            r["ok"] = False
+            r["error"] = f"asked for {want} W, hardware reads {st['tdp_w']} W"
+        elif not r["ok"]:
+            r["error"] = sysfs.last_error() or f"could not set: {', '.join(r['failed'])}"
+        else:
+            r["error"] = None
+        r["summary"] = (f"{name} set → hardware reads {st['tdp_w'] if st['tdp_w'] is not None else '?'} W"
+                        + (f", CPU {st['cpu']['max_perf_pct']}%" if st["cpu"]["max_perf_pct"] is not None else "")
+                        if r["ok"] else f"{name}: {r['error']}")
+        if sysfs.dry_run():
+            r["summary"] = f"dry run: would apply {name} (hardware unchanged, reads {st['tdp_w']} W)"
+            r["ok"], r["error"] = True, None
         return r
 
-    async def revert_power(self) -> int:
+    async def revert_power(self) -> dict:
+        sysfs.clear_error()
         self.autotune.pause("revert to defaults")
-        return self.power.revert_all()
+        n = self.power.revert_all()
+        st = self.power.status()
+        err = sysfs.last_error()
+        return {"ok": err is None, "reverted": n, "read": {"tdp_w": st["tdp_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"]},
+                "error": err, "summary": (f"{n} value(s) restored → hardware reads {st['tdp_w']} W, CPU {st['cpu']['max_perf_pct']}%"
+                                          if err is None else f"restore failed: {err}")}
 
     async def list_profiles(self) -> dict:
         return hw.profiles_for(self.hw.model_key)
@@ -408,12 +475,21 @@ class Plugin:
     async def get_battery(self) -> dict:
         return self.battery.status()
 
-    async def set_charge_limit(self, percent: int) -> bool:
-        ok = self.battery.set_charge_limit(int(percent))
+    async def set_charge_limit(self, percent: int) -> dict:
+        sysfs.clear_error()
+        try:
+            ok = self.battery.set_charge_limit(int(percent))
+        except ValueError as e:
+            return {"ok": False, "what": "charge limit", "wanted": percent, "read": self.battery.charge_limit(), "unit": "%",
+                    "summary": f"charge limit: {e}", "error": str(e)}
         if ok:
             self.settings["charge_limit"] = int(percent)
             self._save_settings()
-        return ok
+        if not ok and not self.battery.supported():
+            return {"ok": False, "what": "charge limit", "wanted": int(percent), "read": None, "unit": "%",
+                    "summary": "charge limit: this system offers no charge limit for the Claw",
+                    "error": "no charge_control_end_threshold on this kernel"}
+        return self._done(ok, "charge limit", int(percent), self.battery.charge_limit(), "%")
 
     async def get_fans(self) -> dict:
         return self.fans.status()
