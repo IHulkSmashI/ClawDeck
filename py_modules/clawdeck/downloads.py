@@ -83,13 +83,21 @@ def extract(archive: str, dest: str) -> str:
             t.extractall(dest)
     elif low.endswith(".7z"):
         tool = shutil.which("7z") or shutil.which("7za") or shutil.which("7zz")
-        if not tool:
-            raise FileNotFoundError("7z is needed to unpack this archive (Bazzite: it ships p7zip)")
-        listing = subprocess.run([tool, "l", "-slt", archive], capture_output=True, text=True, check=True).stdout
-        for line in listing.splitlines():
-            if line.startswith("Path = ") and not _safe(line[7:]):
-                raise ValueError(f"unsafe path in archive: {line[7:]}")
-        subprocess.run([tool, "x", "-y", f"-o{dest}", archive], capture_output=True, check=True)
+        bsdtar = shutil.which("bsdtar")
+        if tool:
+            listing = subprocess.run([tool, "l", "-slt", archive], capture_output=True, text=True, check=True).stdout
+            paths = [line[7:] for line in listing.splitlines() if line.startswith("Path = ")][1:]   # first is the archive
+        elif bsdtar:      # libarchive reads 7z too
+            paths = subprocess.run([bsdtar, "-tf", archive], capture_output=True, text=True, check=True).stdout.splitlines()
+        else:
+            raise FileNotFoundError("7z or bsdtar is needed to unpack OptiScaler (sudo rpm-ostree install p7zip)")
+        for pth in paths:
+            if not _safe(pth):
+                raise ValueError(f"unsafe path in archive: {pth}")
+        if tool:
+            subprocess.run([tool, "x", "-y", f"-o{dest}", archive], capture_output=True, check=True)
+        else:
+            subprocess.run([bsdtar, "-xf", archive, "-C", dest], capture_output=True, check=True)
     else:
         raise ValueError(f"unknown archive type: {archive}")
     return dest

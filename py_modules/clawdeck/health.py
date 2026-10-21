@@ -91,9 +91,10 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                 "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),
                 "fix": None if xs["installed"] else "install_xess"})
     ls = injector.lsfg_state(home)
-    out.append({"id": "lsfg", "title": "lsfg-vk frame generation (optional)", "ok": ls["ready"],
-                "detail": "layer and Lossless Scaling found" if ls["ready"] else
-                          ("Vulkan layer missing" if not ls["layer"] else "Lossless Scaling (Steam) not installed: lsfg-vk needs its DLL"),
+    out.append({"id": "lsfg", "title": "Lossless Scaling frame generation (optional)", "ok": ls["ready"],
+                "detail": "lsfg-vk and Lossless Scaling are installed" if ls["ready"] else
+                          ("needs your own copy of Lossless Scaling from Steam" if not ls["lossless_dll"] else
+                           "lsfg-vk is not installed yet: the Graphics tab installs it"),
                 "fix": None, "optional": True})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})

@@ -1,20 +1,13 @@
 {
-  "_comment": "Pinned upstream releases ClawDeck downloads on request. 'pending-verification' = no version tested on a Claw yet: the UI then offers 'latest (untested)' behind a warning. Update deliberately, test on a Claw, then bump. Latest seen 2026-10-21: OptiScaler v0.9.4 (Optiscaler_0.9.4-final.20260718._MM.7z), XeSS SDK v3.0.2 (XeSS_SDK_3.0.2.zip), xess-xmx-linux 20261018 (xess-xmx-linux-20261018.zip, upstream; the IHulkSmashI fork has no releases).",
+  "_comment": "xess_xmx_linux is pinned on purpose (a system driver: tested version first; 'pending-verification' asks before installing the latest). OptiScaler, OptiPatcher, REFramework and lsfg-vk always track their newest release (updates.py).",
   "optiscaler": {
     "repo": "optiscaler/OptiScaler",
-    "tag": "pending-verification",
-    "asset_glob": "OptiScaler_*.7z"
-  },
-  "xess_sdk": {
-    "repo": "intel/xess",
-    "tag": "pending-verification",
-    "asset_glob": "XeSS_SDK_*.zip",
-    "note": "libxess.dll, libxess_fg.dll, libxell.dll 2.x for the XMX shim"
+    "track": "latest",
+    "asset_glob": "Optiscaler_*.7z"
   },
   "lsfg_vk": {
-    "repo": "PancakeTAS/lsfg-vk",
-    "tag": "pending-verification",
-    "note": "moved to lsfg-vk.dev; install it with Bazzite's ujust or the project's package, ClawDeck only configures it"
+    "builds": "https://builds.lsfg-vk.dev/",
+    "track": "latest"
   },
   "xess_xmx_linux": {
     "repo": "HHHHanasak1/xess-xmx-linux",
@@ -23,5 +16,15 @@
     "tag": "pending-verification",
     "asset_glob": "xess-xmx-linux-*.zip",
     "note": "the fork carries PRs #23/#24 work but publishes no releases; set use_fork true once it does"
+  },
+  "optipatcher": {
+    "repo": "optiscaler/OptiPatcher",
+    "track": "rolling",
+    "asset_glob": "OptiPatcher.asi"
+  },
+  "reframework": {
+    "repo": "praydog/reframework-nightly",
+    "track": "latest",
+    "asset_glob": "REFramework.zip"
   }
 }

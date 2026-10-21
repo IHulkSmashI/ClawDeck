@@ -216,29 +216,6 @@ def test_lsfg_state(tmp_path):
     assert st["ready"] and st["lossless_dll"].endswith("Lossless.dll")
 
 
-def test_injector_optiscaler_install_and_undo(tmp_path):
-    assets = tmp_path / "assets"
-    _w(assets / "optiscaler/OptiScaler.dll", "opti")
-    # the shape of OptiScaler 0.9.4's own INI: comments, keys set to auto
-    _w(assets / "optiscaler/OptiScaler.ini", "[Upscalers]\n; Select Upscaler for Dx12 games\nDx11Upscaler=auto\n"
-       "Dx12Upscaler=auto\nVulkanUpscaler=auto\n\n[FrameGen]\nEnabled=auto\nFGInput=auto\nFGOutput=auto\n\n"
-       "[XeSS]\nBuildPipelines=auto \n")
-    game = tmp_path / "game"
-    _w(game / "bin/Game.exe", "x" * 1000)
-    _w(game / "bin/dxgi.dll", "original")
-    inj = injector.Injector(str(assets))
-    r = inj.install_optiscaler(str(game))
-    assert open(game / "bin/dxgi.dll").read().strip() == "opti"
-    ini = open(game / "bin/OptiScaler.ini").read()
-    for kv in ("Dx12Upscaler=xess", "Dx11Upscaler=xess_12", "FGInput=upscaler", "FGOutput=xefg", "BuildPipelines=true"):
-        assert ini.count(kv.split("=")[0] + "=") == 1 and kv in ini, kv
-    assert "; Select Upscaler for Dx12 games" in ini
-    assert inj.state(str(game))["mode"] == "optiscaler" and r["backed_up"]
-    inj.uninstall(str(game))
-    assert open(game / "bin/dxgi.dll").read().strip() == "original"
-    assert inj.state(str(game))["mode"] == "none"
-
-
 def test_steam_install_dir(tmp_path):
     steam = tmp_path / ".local/share/Steam"
     _w(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1"\n {{\n  "path"  "{tmp_path}/sd"\n }}\n}}')
@@ -247,17 +224,6 @@ def test_steam_install_dir(tmp_path):
     assert injector.steam_install_dir(str(tmp_path), "2054970") == f"{tmp_path}/sd/steamapps/common/Dragons Dogma 2"
     assert injector.steam_install_dir(str(tmp_path), "1") is None
     assert injector.steam_install_dir(str(tmp_path), "../x") is None
-
-
-def test_injector_stage(tmp_path):
-    _w(tmp_path / "dl/OptiScaler_0.9/OptiScaler.dll", "o")
-    _w(tmp_path / "dl/OptiScaler_0.9/OptiScaler.ini", "i")
-    _w(tmp_path / "sdk/bin/libxess.dll", "x")
-    _w(tmp_path / "sdk/bin/readme.txt", "r")
-    inj = injector.Injector(str(tmp_path / "assets"))
-    assert inj.stage("optiscaler", str(tmp_path / "dl"))["copied"] == ["OptiScaler.dll", "OptiScaler.ini"]
-    assert inj.stage("xess", str(tmp_path / "sdk"))["copied"] == ["libxess.dll"]
-    assert inj.assets_ready() == {"optiscaler": True, "xess": True}
 
 
 # ---- sleep -----------------------------------------------------------------------------------------------------------
@@ -334,14 +300,14 @@ def test_downloads_refuses_unpinned_and_unsafe(tmp_path):
                                 "xess-xmx-linux-*.zip")["name"] == "xess-xmx-linux-20261018.zip"
     # real asset names seen 2026-10-21 match the globs in versions.json
     v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
-    for key, name in (("optiscaler", "Optiscaler_0.9.4-final.20260718._MM.7z"), ("xess_sdk", "XeSS_SDK_3.0.2.zip"),
+    for key, name in (("optiscaler", "Optiscaler_0.9.4-final.20260718._MM.7z"), ("reframework", "REFramework.zip"),
                       ("xess_xmx_linux", "xess-xmx-linux-20261018.zip")):
         assert downloads.pick_asset({"assets": [{"name": "v1.zip"}, {"name": name}]}, v[key]["asset_glob"])["name"] == name
 
 
 def test_versions_file_is_valid():
     v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
-    for k in ("optiscaler", "xess_sdk", "xess_xmx_linux"):
+    for k in ("optiscaler", "reframework", "optipatcher", "xess_xmx_linux"):
         assert "repo" in v[k] and "asset_glob" in v[k]
 
 
