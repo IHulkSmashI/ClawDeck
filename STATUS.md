@@ -59,7 +59,17 @@ Nothing yet.
 5. `tools/soak.py --hours 2` with autotune on, then `--hours 4` for the leak soak.
 6. `sudo tools/suspend-cycle.sh 100` before saying anything about sleep.
 
+## Gaps the README now states honestly (to fix in code)
+
+- The Graphics tab offers the XMX features on the A1M and A8 too; `hw.py` already knows `xmx: False` for both, so
+  hide or explain them there.
+- Fan presets need Handheld Daemon, which current Bazzite doesn't run: a direct hwmon curve is the next step.
+- The README download button points at Releases, which stays empty until the first tested release.
+
 ## Needs the maintainer
+
+- Check the install guide's Claw steps on the 8 EX: the boot-menu buttons (the guide links MSI's FAQ instead of naming
+  them), the Bazzite image picker wording, and the Decky "Install plugin from ZIP file" path.
 
 - After the first upstream-watch run: test the listed versions on the Claw, then `python3 tools/upstream_watch.py --update-lock`.
 

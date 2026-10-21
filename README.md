@@ -7,7 +7,7 @@
 <p align="center"><b>Power, battery, graphics and controller settings for the MSI Claw on Linux,<br>right in Steam's Quick Access menu.</b></p>
 
 <p align="center">
-  <a href="https://github.com/IHulkSmashI/ClawDeck/releases/latest"><img src="assets/download-button.png" alt="Download" width="260"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="assets/download-button.png" alt="Download" width="260"></a>
 </p>
 
 <p align="center">
@@ -39,15 +39,18 @@ there you can:
 
 - switch between **Battery, Performance and Dock** power with one tap,
 - let **Autotune** find the lowest power each game needs,
-- run **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR, set up automatically per game,
-- set a **battery charge limit** so your battery lasts for years,
+- get **XeSS upscaling and frame generation on the Claw's XMX cores**, even in games that only ship DLSS or FSR,
+  set up for you per game,
+- **stream games from your PC** with Moonlight,
+- set a **battery charge limit** so your battery stays healthy longer,
 - see at a glance **what's working and what isn't**, with a one-tap fix.
 
-Made for the **MSI Claw 8 EX AI+** on [Bazzite](https://bazzite.gg). The Claw 8 AI+, 7 AI+ and A1M are supported
-too.
+Made for the **MSI Claw 8 EX AI+** on [Bazzite](https://bazzite.gg). It should also work on the Claw 8 AI+, 7 AI+,
+A1M and A8 (see [the questions](#questions) for what differs).
 
-> **Early test version.** ClawDeck is brand new and hasn't been tested on real hardware yet. Everything it changes is
-> undone when you close the game or remove the plugin, and **Dry run** (Setup tab) lets you try it without
+> **Not released yet.** ClawDeck is brand new and is being tested on a Claw right now. The first download appears
+> under [Releases](https://github.com/IHulkSmashI/ClawDeck/releases) once that testing is done. Everything it changes
+> is undone when you close the game or remove the plugin, and **Dry run** (Setup tab) lets you try it without
 > changing anything.
 
 ---
@@ -64,16 +67,16 @@ too.
 ### Power
 | Feature | What it does | Good to know |
 |---|---|---|
-| **Profiles** | **Battery** (best frames per watt), **Performance** (plugged in) and **Dock** (full power) in one tap. Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
+| **Profiles** | **Battery** (most frames per watt), **Performance** (plugged in) and **Dock** (full power) in one tap. Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
 | **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. | The first few minutes in a new game can stutter while it learns. |
-| **TDP and clocks** | Pick the power limit (17 to 25 W is the sweet spot on battery). Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Turn off Steam's own TDP limit (Quick Access → Performance) so the two don't fight. |
+| **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Steam's own TDP slider sets the same limit, so whichever you change last wins. Use one of the two. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
 
 ### Graphics
 | Feature | What it does | Good to know |
 |---|---|---|
-| **XeSS on XMX** | Installs the [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) driver in one tap, so games with XeSS get full-quality upscaling and frame generation, as on Windows. | The first launch of each game takes a minute or two to prepare, once. |
+| **XeSS on XMX** | Installs the [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) driver in one tap, so games with XeSS get the same full-quality upscaling and frame generation as on Windows. | The first launch of each game takes a minute or two to prepare, once. |
 | **Best option per game** | ClawDeck checks what each game ships (DLSS, FSR, XeSS), looks it up in OptiScaler's community compatibility list, and recommends one thing, with the reasons. | Online games with anti-cheat are left alone: changed game files can get accounts banned. |
 | **OptiScaler, set up for you** | For DLSS or FSR games: one tap installs the newest OptiScaler, so the game uses XeSS on the XMX cores plus XeSS frame generation (2x to 4x). It also adds **OptiPatcher** when the game is supported, **REFramework** for Capcom RE Engine games, and the game's known fixes. | XeSS frame generation needs Borderless or Fullscreen Windowed mode. Adds a little input delay. |
 | **Lossless Scaling** | The last option, for games with no DLSS, FSR or XeSS: frame generation through lsfg-vk. ClawDeck installs lsfg-vk and checks that Lossless Scaling is in your Steam library. | You need your own copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (a paid Steam app). It runs on the GPU's regular shader cores, not the XMX cores. |
@@ -89,18 +92,19 @@ too.
 | **HDR** | Turns on HDR for a TV or monitor on the dock. |
 | **Stream from your PC** | Installs [Moonlight with VRR](https://github.com/Nonary/moonlight-qt) and adds it to Steam. Save your PC's address to get a one-tap "Stream" shortcut. Works with [Vibepollo](https://github.com/Nonary/Vibepollo), Apollo or Sunshine on the PC. |
 
-Display settings apply after Game Mode restarts. Docked 4K at 120 Hz needs no setup: the Claw uses your TV's best
-mode. To leave a stream, hold View + Menu + LB + RB.
+Display settings apply after Game Mode restarts. On the dock, the Claw picks your TV's best mode by itself. To leave a
+stream, hold View + Menu + LB + RB.
 
 ### Controller
-Gyro, button layout and stick lighting, from Handheld Daemon. On new Bazzite, InputPlumber runs the controller
-instead, and this tab shows its status. ClawDeck works with whichever your Claw has and never runs both.
+Shows what runs the MSI buttons, gyro and lights. On current Bazzite that's InputPlumber, and you set buttons and
+gyro in Steam's own controller settings, as usual. On Claws running Handheld Daemon instead, this tab also offers gyro,
+button layout and stick lighting. ClawDeck works with whichever your Claw has and never runs both.
 
 ### Battery & Fans
 | Feature | What it does | Good to know |
 |---|---|---|
-| **Charge limit** | Stops charging at 50, 60, 70, 80, 90 or 100 %. | 80 % roughly doubles battery lifespan. Use 50 to 60 % if your Claw lives on the dock. |
-| **Fan curve** | Auto, Quiet, Balanced or Cool. | Needs Handheld Daemon. Without it, the Claw's own fan curve runs. |
+| **Charge limit** | Stops charging at 50, 60, 70, 80, 90 or 100 %. | Batteries wear slower when they don't sit at 100 %. 80 % is a good everyday choice, 50 to 60 % if your Claw lives on the dock. |
+| **Fans** | Shows fan speed and temperature. On Claws running Handheld Daemon: Auto, Quiet, Balanced or Cool presets. | On current Bazzite, the Claw's own fan curve runs. Fan presets without Handheld Daemon are planned. |
 
 ---
 
@@ -111,9 +115,9 @@ You need an MSI Claw running [Bazzite](https://bazzite.gg) (or another Linux wit
 to Bazzite, with Windows staying on your Claw.
 
 1. Install **Decky Loader**: on Bazzite, open the **Bazzite Portal** and tick Decky Loader.
-2. Download **ClawDeck.zip** with the button at the top of this page.
-3. Open **Quick Access → Decky (plug icon) → gear icon**, turn on **Developer mode**, then choose
-   **Install plugin from ZIP** and pick ClawDeck.zip.
+2. Download **ClawDeck.zip** from [Releases](https://github.com/IHulkSmashI/ClawDeck/releases).
+3. Open **Quick Access → Decky (plug icon) → gear icon** and turn on **Developer mode**. Then open the new
+   **Developer** section, choose **Install plugin from ZIP file** and pick ClawDeck.zip.
 4. Open **ClawDeck → Setup**. Fix anything the health check lists.
 5. Start a game, open **ClawDeck → Power**, pick a profile and a target fps, and tap **Add to launch options**.
 
@@ -124,38 +128,42 @@ games you added ClawDeck to keep starting normally. The charge limit resets at t
 
 ## Questions
 
-**Will it touch Windows?** No. ClawDeck only runs inside Bazzite. Your Windows install is never changed.
+**Does it drain my battery?** No. ClawDeck sleeps until you touch it. Only Autotune and Benchmark do anything while
+you play, and they check once a second while their game runs.
 
-**Is it safe?** Power changes are undone when the game closes, when you tap *Revert to defaults*, or when you
-remove the plugin. The only setting it keeps is the charge limit, because that's its job. It never
-overclocks: every value stays inside what the Claw's hardware allows.
+**Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
+changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin.
 
-**What happens when Bazzite updates?** ClawDeck notices a new kernel, graphics driver or controller service the next
-time it starts, runs its health check again, and tells you either "all checks still pass" or what needs a look.
+**Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything. ClawDeck adds
+profiles per game that switch when you plug in, Autotune, CPU and GPU limits, and a benchmark to compare them. Both
+set the same power limit, so pick one to manage TDP. Steam's frame limit is fine to keep: set Autotune's target to
+the same number.
 
-**What about Steam's own Performance menu?** Steam's TDP slider and ClawDeck set the same limit, so turn Steam's
-TDP limit off while ClawDeck manages power. Steam's frame limit is fine to use: set Autotune's target to the same
-number.
+**What are the XMX cores, and which games use them?** They are the AI units in the Claw's Arc graphics. XeSS
+upscaling and XeSS frame generation run on them, so games look sharper and run faster for the same battery. Games
+that ship XeSS use them once the XeSS driver is installed (Graphics tab). Games that only ship DLSS or FSR use them
+through OptiScaler, which ClawDeck sets up for you.
 
-**What are the XMX cores, and what runs on them?** They are the Arc GPU's AI units. XeSS upscaling and XeSS frame
-generation run on them (with the XeSS driver from the Graphics tab). Lossless Scaling's frame generation is a regular
-GPU program and runs on the shader cores instead, which is why ClawDeck only suggests it when a game has nothing
-OptiScaler can use.
+**Do I have to buy Lossless Scaling?** Only for the Lossless Scaling option, which is for games with no DLSS, FSR or
+XeSS at all. lsfg-vk is free, but it uses the frame generation from your own copy of Lossless Scaling on Steam. It
+runs on the regular shader cores rather than the XMX cores. OptiScaler and XeSS need nothing extra.
 
-**Do I have to buy Lossless Scaling?** Only for the Lossless Scaling option. lsfg-vk is free, but it uses the frame
-generation from your own copy of Lossless Scaling on Steam. OptiScaler and XeSS need nothing extra.
+**Can OptiScaler get me banned online?** It can in games with anti-cheat, because it changes game files. That's why
+ClawDeck won't set it up in those games. Many online games run fine on Linux; the ones with kernel-level anti-cheat
+don't run at all. [Are We Anti-Cheat Yet?](https://areweanticheatyet.com) lists which is which.
 
 **Bazzite also offers OptiScaler and Lossless Scaling plugins. Which should I use?** Either one, but only one per
 game. ClawDeck spots the others and won't overwrite a game they've set up.
 
-**Will online games work?** Games with kernel anti-cheat (most competitive shooters) don't run on Linux at all.
-That's not something a plugin can change.
+**What happens when Bazzite updates?** ClawDeck notices a new kernel, graphics driver or controller service the next
+time it starts, runs its health check again, and tells you either "all checks still pass" or what needs a look.
 
-**Does it work on SteamOS?** It's built for Linux in general and should work wherever Decky Loader runs. It's tested
-on Bazzite first.
+**I have a different Claw.** The Claw 8 AI+ and 7 AI+ get everything. The A1M and the AMD-based A8 have no XMX
+cores, so the XeSS-on-XMX features don't help there; power, battery and streaming work the same. If your Claw isn't
+recognised, tap the fix button in Setup: it saves a hardware report you can post in an issue.
 
-**I have a different Claw.** The Claw 8 AI+, 7 AI+, A1M and A8 are in the list. If yours isn't recognised, tap the
-fix button in Setup. It saves a hardware report you can post in an issue.
+**Does it work on SteamOS or other handhelds?** It should run wherever Decky Loader does, but it's built and tested
+for the MSI Claw on Bazzite.
 
 ---
 
@@ -170,8 +178,8 @@ fix button in Setup. It saves a hardware report you can post in an issue.
 
 ClawDeck stands on the work of Handheld Daemon, InputPlumber, PowerStation, PowerControl, SimpleDeckyTDP,
 xess-xmx-linux, OptiScaler, OptiPatcher, REFramework, lsfg-vk and Lossless Scaling, Moonlight and Nonary's VRR fork,
-Vibepollo, Apollo and Sunshine, Decky Loader and Bazzite. The per-game OptiScaler setup follows OptiClick's approach,
-and the feature set takes after ClawTweaks on Windows. The full list is in [CREDITS.md](CREDITS.md).
+Vibepollo, Apollo and Sunshine, MangoHud, Decky Loader and Bazzite. The per-game OptiScaler setup follows OptiClick's
+approach, and the feature set takes after ClawTweaks on Windows. The full list is in [CREDITS.md](CREDITS.md).
 
 ## Support
 

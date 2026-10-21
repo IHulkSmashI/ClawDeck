@@ -136,7 +136,7 @@ export const PowerTab: FC = () => {
           <SliderField label="TDP (W)" value={tdp} min={lim.min} max={lim.plugged_max} step={1} showValue
             disabled={!st?.tdp_backend}
             onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast(st?.hhd ? "TDP not applied: enable TDP controls in Handheld Daemon once" : "TDP not applied: see Setup → Power limit control"); }} />
-          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="17–25 W on battery is the sweet spot; 35 W docked." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise; Steam's own TDP slider sets the same limit, so the last change wins."} />
+          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="lower lasts longer on battery; higher is for the dock. Autotune can pick it for you." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise; Steam's own TDP slider sets the same limit, so the last change wins."} />
         </PanelSectionRow>
         <Advanced id="power">
           <PanelSectionRow>
