@@ -30,7 +30,7 @@ jobs:
           cp -r dist plugin.json package.json main.py py_modules tools assets LICENSE README.md out/ClawDeck/
           rm -rf out/ClawDeck/py_modules/clawdeck/__pycache__
           (cd out && zip -qr ../ClawDeck.zip ClawDeck)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: ClawDeck, path: ClawDeck.zip }
       - name: release on tag
         if: startsWith(github.ref, 'refs/tags/v')
