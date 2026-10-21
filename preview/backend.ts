@@ -26,7 +26,7 @@ const state = {
   wideVrr: false,
   dry: false,
   autotune: true,
-  tdp: 20,
+  tdp: 12,
   cpu: 80,
   gpuMin: 300,
   gpuMax: 2500,
