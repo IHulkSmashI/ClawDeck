@@ -316,7 +316,7 @@ class Plugin:
     # ---- game lifecycle (called by the frontend's Steam hooks) ------------------------------------------------------
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         prof = self.profiles.get(appid, plugged)
-        base = prof.get("base", "plugged" if plugged else "battery")
+        base = prof.get("base", "performance" if plugged else "battery")
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
         result = self.power.apply_profile(base, overrides, plugged)
         if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
