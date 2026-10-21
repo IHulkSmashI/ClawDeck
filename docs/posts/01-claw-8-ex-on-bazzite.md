@@ -42,7 +42,8 @@ Recorded with ClawDeck's Benchmark (Power → Advanced), 120 s per run.
   may stutter while it learns.
 - **XeSS on XMX:** installs and checks the xess-xmx-linux driver; OptiScaler or lsfg-vk per game for games without
   XeSS. Cost: a little input delay; anti-cheat games refuse injected DLLs.
-- **Battery:** charge limit 50–100 %. 80 % roughly doubles battery lifespan. Cost: less runtime per charge.
+- **Battery:** charge limit 50–100 %; batteries wear slower when they don't sit at 100 %. Cost: less runtime
+  per charge.
 
 ## Known broken
 
