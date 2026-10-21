@@ -15,7 +15,7 @@ export type BatteryStatus = {
   charge_limit_supported?: boolean; charge_limit?: number | null;
 };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
-export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack };
+export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
 export type GameProfile = { base?: string; tdp?: number; cpu_max_pct?: number; gpu_min_mhz?: number; gpu_max_mhz?: number; target_fps?: number; autotune?: boolean; learned?: any };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; target_fps?: number; learned?: any; paused?: boolean; last?: any };
 

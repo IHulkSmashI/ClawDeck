@@ -3,10 +3,11 @@ import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
 import {
-  getLaunch, injectorDownload, injectorInstall, injectorState, listProton, setLaunch, xessInstall, xessProbe,
+  getHardware, getLaunch, injectorDownload, injectorInstall, injectorState, listProton, setLaunch, xessInstall, xessProbe,
   xessState, xessSwitchDriver, Launch, ProtonTool, XessState,
 } from "../api";
 import { Advanced } from "../components/Advanced";
+import { LaunchWrapper } from "../components/LaunchWrapper";
 import { Hint, Status } from "../components/Hint";
 import { availableCompatTools, runningApp, specifyCompatTool } from "../steam";
 import { confirmUntested } from "../components/confirm";
@@ -85,7 +86,9 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
   const [lsfg, setLsfg] = useState<NonNullable<Launch["lsfg"]>>(LSFG_DEFAULT);
   const [state, setState] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [others, setOthers] = useState<string[]>([]);
   const load = async () => {
+    setOthers((await getHardware()).other_plugins?.injector ?? []);
     if (!app) return;
     const s = await injectorState(app.appid); setState(s); setMode(s.mode);
     const l = await getLaunch(app.appid);
@@ -104,11 +107,22 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
   };
   const needsAssets = mode === "optiscaler" && state && !state.assets?.optiscaler;
   const lsfgMissing = mode === "lsfg" && state && !state.lsfg?.ready;
+  const foreign = !!state?.foreign_optiscaler;
 
   return (
     <PanelSection title={app ? `XMX injector: ${app.name}` : "XMX injector"}>
+      {others.length > 0 && (
+        <PanelSectionRow>
+          <div style={{ fontSize: 11, color: "#f0b429" }}>{others.join(" and ")} is installed too. Use one tool per game: if a game is set up there, leave it Off here.</div>
+        </PanelSectionRow>
+      )}
+      {foreign && (
+        <PanelSectionRow>
+          <Hint does="OptiScaler is already in this game, put there by another tool." why="manage it where you set it up; ClawDeck won't overwrite it." />
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
-        <DropdownItem label="Mode for this game" disabled={!state?.dir} rgOptions={[
+        <DropdownItem label="Mode for this game" disabled={!state?.dir || foreign} rgOptions={[
           { data: "none", label: "Off (game as shipped)" },
           { data: "optiscaler", label: "OptiScaler → XeSS on XMX" },
           { data: "lsfg", label: "lsfg-vk frame generation (no upscaler needed)" },
@@ -143,7 +157,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
         </PanelSectionRow>
       )}
       <PanelSectionRow>
-        <ButtonItem layout="below" disabled={!state?.dir || busy || needsAssets} onClick={async () => {
+        <ButtonItem layout="below" disabled={!state?.dir || busy || needsAssets || foreign} onClick={async () => {
           setBusy(true);
           try {
             const r = await injectorInstall(app!.appid, mode, xessFg, mode === "lsfg" ? lsfg : null);
@@ -151,19 +165,21 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
           } finally { setBusy(false); load(); }
         }}>{mode === "none" ? "Remove injector" : "Apply to this game"}</ButtonItem>
         <Hint does={app ? (state?.native_xess ? "This game ships XeSS already: no injector needed, the XMX driver handles it." : (state?.dir ? `Writes into ${state.dir}; originals are backed up.` : "This game's folder was not found in Steam's library (non-Steam games are not supported yet).")) : "Start a game to configure it (the game folder is read from Steam)."}
-          why="needs the ClawDeck launch wrapper in the game's launch options (see below)." />
+          why="takes effect the next time the game starts." />
       </PanelSectionRow>
+      {app && mode !== "none" && <LaunchWrapper appid={app.appid} name={app.name} />}
     </PanelSection>
   );
 };
 
 const PerGameSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) => {
   const [launch, setL] = useState<Launch>({});
-  const [wrapper, setWrapper] = useState("");
   const [tools, setTools] = useState<ProtonTool[]>([]);
+  const [xess, setXess] = useState<XessState | null>(null);
   const load = async () => {
     if (!app) return;
-    const l = await getLaunch(app.appid); setL(l.launch); setWrapper(l.wrapper);
+    const l = await getLaunch(app.appid); setL(l.launch);
+    setXess(await xessState());
     const steamTools = await availableCompatTools(app.appid);
     setTools(steamTools?.length ? steamTools.map((t) => ({ ...t, kind: "steam" })) : await listProton());
   };
@@ -189,16 +205,15 @@ const PerGameSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) => 
           <ToggleField label="HDR output (Proton games)" checked={!!launch.hdr} onChange={(v) => save({ hdr: v })} />
           <Hint does="Lets DXVK games output HDR (DXVK_HDR=1)." why="docked on an HDR TV with HDR on in the Display tab." cost="washed-out colours if the screen is not in HDR." />
         </PanelSectionRow>
-        <PanelSectionRow>
-          <DropdownItem label="XeSS driver for this game" rgOptions={[
-            { data: "", label: "Package default" }, { data: "26.3", label: "Mesa 26.3 (faster)" }, { data: "26.1", label: "Mesa 26.1 (most tested)" },
-          ]} selectedOption={launch.mesa ?? ""} onChange={(o) => save({ mesa: o.data })} />
-          <Hint does="Picks xess-xmx-linux's patched Mesa for this game only." why="26.1 if a game misbehaves on 26.3." cost="none." />
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <div style={{ fontSize: 11, opacity: 0.75, wordBreak: "break-all" }}>Launch options (once per game): <b>{wrapper}</b></div>
-          <Hint does="The wrapper applies everything above and gives autotune its frame times." why="ClawDeck never edits Steam's launch options for you." />
-        </PanelSectionRow>
+        {xess?.installed && xess.drivers.length > 1 && (
+          <PanelSectionRow>
+            <DropdownItem label="XeSS driver for this game" rgOptions={[
+              { data: "", label: "Same as the default" }, { data: "26.3", label: "Mesa 26.3 (faster)" }, { data: "26.1", label: "Mesa 26.1 (most tested)" },
+            ]} selectedOption={launch.mesa ?? ""} onChange={(o) => save({ mesa: o.data })} />
+            <Hint does="Picks xess-xmx-linux's patched Mesa for this game only." why="26.1 if a game misbehaves on 26.3." cost="none." />
+          </PanelSectionRow>
+        )}
+        {(launch.hdr || launch.mesa) && <LaunchWrapper appid={app.appid} name={app.name} />}
       </Advanced>
     </PanelSection>
   );

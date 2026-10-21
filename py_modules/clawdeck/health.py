@@ -81,11 +81,11 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                 "detail": "TDP and fan curve attributes present" if p.msi_pl1 else
                           "kernel driver not loaded: TDP falls back to RAPL, no fan curves", "fix": None})
     out.append({"id": "gpu_clocks", "title": "GPU clock control", "ok": p.gpu_min_freq is not None,
-                "detail": f"{p.gpu_min_freq}" if p.gpu_min_freq else "no xe/i915 frequency files", "fix": None})
+                "detail": "floor and ceiling can be set" if p.gpu_min_freq else "no xe/i915 frequency files", "fix": None})
     out.append({"id": "cpu_pct", "title": "CPU ceiling control (intel_pstate)", "ok": p.cpu_max_perf_pct is not None,
-                "detail": p.cpu_max_perf_pct or "intel_pstate not active", "fix": None})
+                "detail": "available" if p.cpu_max_perf_pct else "intel_pstate not active", "fix": None})
     out.append({"id": "charge", "title": "Battery charge limit", "ok": p.charge_limit is not None,
-                "detail": p.charge_limit or "charge_control_end_threshold not exposed by this kernel", "fix": None})
+                "detail": "available" if p.charge_limit else "this kernel does not offer a charge limit for the battery yet", "fix": None})
     xs = xess_state(home)
     out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and xs["state"] == "ok",
                 "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),
@@ -100,6 +100,11 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out.append({"id": "protonup", "title": "ProtonUp-Qt / GE-Proton", "ok": _ge_proton_present(home),
                 "detail": "a GE-Proton is installed" if _ge_proton_present(home) else "no GE-Proton under compatibilitytools.d",
                 "fix": None})
+    others = stack.other_plugins(home)
+    if others["power"]:
+        out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,
+                    "detail": f"{', '.join(others['power'])} also sets TDP and clocks; two power plugins undo each other. "
+                              "Uninstall it in Decky, or leave ClawDeck's Power tab alone", "fix": None})
     for c in sleep.checks():
         c.setdefault("fix", None)
         out.append(c)

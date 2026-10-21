@@ -43,3 +43,28 @@ def detect() -> dict:
         "tdp_owner": "hhd" if hhd else ("steam" if a["powerstation.service"] else None),
         "conflict": hhd and a["inputplumber.service"],
     }
+
+
+# Decky plugins that do one of ClawDeck's jobs. Two power plugins, or two injectors in one game, fight each other,
+# so ClawDeck names them and steps aside instead of silently overwriting their work.
+OTHER_PLUGINS = {
+    "Decky-Framegen": ("injector", "OptiScaler (Bazzite's Decky Framegen)"),
+    "decky-lsfg-vk": ("injector", "Lossless Scaling (Bazzite's decky-lsfg-vk)"),
+    "PowerControl": ("power", "PowerControl"),
+    "SimpleDeckyTDP": ("power", "SimpleDeckyTDP"),
+    "PowerTools": ("power", "PowerTools"),
+}
+
+
+def other_plugins(home: str) -> dict:
+    found: dict[str, list[str]] = {"injector": [], "power": []}
+    base = os.path.join(home, "homebrew", "plugins")
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return found
+    lower = {n.lower(): n for n in names}
+    for folder, (kind, label) in OTHER_PLUGINS.items():
+        if folder.lower() in lower:
+            found[kind].append(label)
+    return found

@@ -130,7 +130,10 @@ class Injector:
                 info = json.load(f)
         except (OSError, ValueError):
             pass
+        # OptiScaler put there by something else (Decky Framegen, by hand): never overwrite it
+        foreign = info is None and os.path.exists(os.path.join(d, "OptiScaler.ini"))
         return {"dir": d, "mode": (info or {}).get("mode", "none"), "optiscaler_present": os.path.exists(proxy) and info is not None,
+                "foreign_optiscaler": foreign,
                 "native_xess": os.path.exists(os.path.join(d, "libxess.dll")) and info is None, "info": info}
 
     def install_optiscaler(self, game_dir: str, xess_fg: bool = True) -> dict:
@@ -139,6 +142,8 @@ class Injector:
         if not os.path.exists(os.path.join(src, "OptiScaler.dll")):
             raise FileNotFoundError("OptiScaler is not downloaded yet (Setup tab)")
         d = find_game_exe_dir(game_dir)
+        if not os.path.exists(os.path.join(d, ".clawdeck-inject.json")) and os.path.exists(os.path.join(d, "OptiScaler.ini")):
+            raise FileExistsError("OptiScaler is already in this game, set up by another tool; remove it there first")
         copied, backed = [], []
         for fn in OPTISCALER_FILES:
             s = os.path.join(xess_src if fn.startswith("libx") else src, fn)
