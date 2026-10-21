@@ -67,6 +67,10 @@ Open an issue with the output of `tools/sysfs-survey.sh` for a model that isn't 
 4. **0.4** — Autotune validated on Dragon's Dogma 2 and Wuthering Waves with published before/after numbers.
 5. **1.0** — Decky store submission.
 
+## Support
+
+If ClawDeck saves you time or battery: [ko-fi.com/gamervault](https://ko-fi.com/gamervault). It is and stays free; tips fund test hardware and coffee.
+
 ## License
 
-BSD-3-Clause. Upstream projects keep their own licenses; see each link above.
+MIT. Upstream projects keep their own licenses; see each link above.
