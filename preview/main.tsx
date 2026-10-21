@@ -12,8 +12,11 @@ import { DisplayTab } from "../src/tabs/Display";
 import { ControllerTab } from "../src/tabs/Controller";
 import { BatteryTab } from "../src/tabs/Battery";
 
+let launchOptions = "";   // the example game starts without ClawDeck in its launch options
 (window as any).SteamClient = {
   Apps: {
+    RegisterForAppDetails: (_id: number, cb: (d: any) => void) => { setTimeout(() => cb({ strLaunchOptions: launchOptions })); return { unregister() {} }; },
+    SetAppLaunchOptions: (_id: number, opts: string) => { launchOptions = opts; },
     SpecifyCompatTool: () => undefined,
     GetAvailableCompatTools: async () => [
       { strToolName: "GE-Proton11-6", strDisplayName: "GE-Proton11-6" },
@@ -75,19 +78,19 @@ const Scenario = () => {
   const set = (k: "game" | "plugged" | "controller", v: any) => { scenario.set(k, v); force((n) => n + 1); };
   return (
     <fieldset className="scenario">
-      <legend>Try it as</legend>
+      <legend>Preview only: pretend that</legend>
       <Switch id="scn-game" label="A game is running (Dragon's Dogma 2)" checked={scenario.game} onChange={(v) => set("game", v)} />
       <Switch id="scn-plug" label="Plugged in, dock with a 4K TV" checked={scenario.plugged} onChange={(v) => set("plugged", v)} />
       <div className="scn-choice" role="radiogroup" aria-label="Controller service">
-        <span>Controller service</span>
+        <span>Your Claw runs (the real plugin detects this itself)</span>
         {(["inputplumber", "hhd"] as const).map((c) => (
           <label key={c} htmlFor={`scn-${c}`}>
             <input id={`scn-${c}`} type="radio" name="scn-controller" checked={scenario.controller === c} onChange={() => set("controller", c)} />
             {c === "inputplumber" ? "InputPlumber (current Bazzite)" : "Handheld Daemon"}
           </label>
         ))}
-        <p className="scn-why">The program that runs the MSI buttons, gyro and lights. New Bazzite uses InputPlumber; older
-          installs use Handheld Daemon. Only one should run at a time, so ClawDeck works with whichever your Claw has.</p>
+        <p className="scn-why">The program behind the MSI buttons, gyro and lights. New Bazzite uses InputPlumber, older
+          installs Handheld Daemon. There is no setting for this in ClawDeck: it uses whichever your Claw has.</p>
       </div>
     </fieldset>
   );

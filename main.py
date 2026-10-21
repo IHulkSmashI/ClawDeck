@@ -108,7 +108,7 @@ class Plugin:
 
     # ---- setup / health ----------------------------------------------------------------------------------------------
     async def get_hardware(self) -> dict:
-        return {**self.hw.to_dict(), "stack": stack.detect()}
+        return {**self.hw.to_dict(), "stack": stack.detect(), "other_plugins": stack.other_plugins(HOME)}
 
     async def get_health(self) -> list:
         return health.checks(self.hw, HOME)
@@ -189,6 +189,8 @@ class Plugin:
         plugged = self.battery.plugged()
         prof = self.profiles.get(appid, bool(plugged)) if appid else {}
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
+        self.settings["last_profile"] = name
+        self._save_settings()
         return self.power.apply_profile(name, overrides, plugged)
 
     async def revert_power(self) -> int:
