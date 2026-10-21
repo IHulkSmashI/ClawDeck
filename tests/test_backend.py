@@ -287,3 +287,27 @@ def test_sampler_averages_every_new_mangohud_row(fake_hw, tmp_path):
     ft, fps = smp.frametime()
     assert fps == 60.0 and abs(ft - 17.1) < 0.01
     assert smp.frametime() == (None, None)            # nothing new
+
+
+def test_autotune_learns_again_when_graphics_are_lowered(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, settle=1, confidence=4)
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(61))
+    at._step()
+    assert s.learned.tdp == 17 and s.learned.confidence == 4      # learned and on target: left alone
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(80))  # player lowered the settings: 80 fps for 60
+    at._step()
+    assert s.learned.confidence == 0 and (s.learned.tdp < 17 or s.learned.cpu_max_pct < 100)   # saving power again
+    at.session = None
+
+
+def test_sampler_caches_the_dear_reads(fake_hw, tmp_path, monkeypatch):
+    (tmp_path / "a.csv").write_text("fps,frametime\n60,16.6\n")
+    smp = autotune.Sampler(fake_hw, str(tmp_path))
+    globs, busy = [], []
+    real_glob = autotune.glob.glob
+    monkeypatch.setattr(autotune.glob, "glob", lambda p: globs.append(p) or real_glob(p))
+    monkeypatch.setattr(autotune.shadowblip, "gpu_busy_percent", lambda: busy.append(1) or 80)
+    for _ in range(20):
+        smp.frametime()
+        smp.gpu_busy()
+    assert len(globs) == 1 and len(busy) == 1        # one directory listing, one D-Bus call, not 20 of each
