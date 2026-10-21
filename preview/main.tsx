@@ -86,6 +86,8 @@ const Scenario = () => {
             {c === "inputplumber" ? "InputPlumber (current Bazzite)" : "Handheld Daemon"}
           </label>
         ))}
+        <p className="scn-why">The program that runs the MSI buttons, gyro and lights. New Bazzite uses InputPlumber; older
+          installs use Handheld Daemon. Only one should run at a time, so ClawDeck works with whichever your Claw has.</p>
       </div>
     </fieldset>
   );
