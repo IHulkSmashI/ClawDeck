@@ -358,3 +358,10 @@ def test_gpu_window_without_hardware_max_never_pins_to_zero(fake_hw):
     pw = power.Power(fake_hw)
     assert pw.set_gpu_window(1200, None)
     assert sysfs.read_int(fake_hw.paths.gpu_min_freq) == 1200 and sysfs.read_int(fake_hw.paths.gpu_max_freq) == 2400
+
+
+def test_plugin_runs_as_root():
+    # Decky's template ships "_root" (= off). Every sysfs write in ClawDeck needs root; the first on-device run
+    # (2026-10-21) failed with Permission denied on all of them because of the underscore.
+    with open(os.path.join(os.path.dirname(__file__), "..", "plugin.json")) as f:
+        assert "root" in json.load(f)["flags"]

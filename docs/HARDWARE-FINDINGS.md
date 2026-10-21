@@ -88,3 +88,9 @@ PL1 first when lowering), raises the other RAPL domain only if it would otherwis
 MSI attributes while RAPL exists. Open question for the maintainer: does a RAPL PL1 above `max_power_uw` (25 W) take
 effect for the 35 W plugged profile? Measure with `tools/power-profile.sh` or the same busy loop.
 Also: the dry-run tour of every tab wrote only in-range values and the revert list was complete (good).
+
+## 13. First live run: every write refused — the plugin was not running as root (2026-10-21, fixed)
+
+`plugin.json` had the Decky template's `"flags": ["_root"]` (underscore = off), so the backend ran as the user and
+every sysfs write (RAPL 17 W, max_perf_pct, EPP, GPU window) and the VRR initramfs rebuild failed with
+`Permission denied`. Fixed to `["root"]`, with a test. Dry-run mode never showed this because it does not write.
