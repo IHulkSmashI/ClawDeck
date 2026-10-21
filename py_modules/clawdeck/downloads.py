@@ -39,6 +39,45 @@ def release(repo: str, tag: str | None) -> dict:
     return json.loads(_get(API.format(repo=repo, which=which)))
 
 
+def newest_with_asset(repo: str, pattern: str, prereleases: bool = True) -> dict | None:
+    """The newest release (prereleases included when asked) that has an asset matching pattern. For projects that
+    only publish prereleases, such as Moonlight VRR's daily builds, where releases/latest finds nothing."""
+    rels = json.loads(_get(f"https://api.github.com/repos/{repo}/releases?per_page=10"))
+    for rel in rels:
+        if rel.get("draft") or (rel.get("prerelease") and not prereleases):
+            continue
+        if pick_asset(rel, pattern):
+            return rel
+    return None
+
+
+def sha256_of(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def expected_sha256(rel: dict, asset_name: str) -> str | None:
+    """The checksum a release publishes for one of its assets (SHA256SUMS / *.sha256 / sha256sum.txt), if any."""
+    for a in rel.get("assets", []):
+        n = a.get("name", "").lower()
+        if n in ("sha256sums", "sha256sums.txt", "sha256sum.txt", "checksums.txt") or n == asset_name.lower() + ".sha256":
+            try:
+                text = _get(a["browser_download_url"]).decode("utf-8", errors="replace")
+            except OSError:
+                return None
+            for line in text.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[-1].lstrip("*") == asset_name:
+                    return parts[0].lower()
+                if len(parts) == 1 and n.endswith(".sha256"):
+                    return parts[0].lower()
+    return None
+
+
 def pick_asset(rel: dict, pattern: str) -> dict | None:
     """First asset matching the glob, ignoring case (OptiScaler ships "Optiscaler_<v>.7z", lower-case s)."""
     for a in rel.get("assets", []):

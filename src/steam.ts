@@ -82,3 +82,20 @@ export const installLossless = (): boolean => {
 export const showLosslessInStore = (): boolean => {
   try { SteamClient.Apps.ShowStore(LOSSLESS_APPID); return true; } catch { return false; }
 };
+
+// ---- non-Steam shortcuts (Moonlight) ---------------------------------------------------------------------------
+/** Adds a non-Steam shortcut and names it; returns its app id, or null when Steam refuses. */
+export const addShortcut = async (name: string, exe: string, dir: string, launchOptions: string): Promise<number | null> => {
+  try {
+    const id: number = await SteamClient.Apps.AddShortcut(name, exe, dir, launchOptions);
+    if (!id) return null;
+    try { SteamClient.Apps.SetShortcutName(id, name); } catch { /* the exe name stays */ }
+    try { SteamClient.Apps.SetShortcutLaunchOptions(id, launchOptions); } catch { /* AddShortcut set them */ }
+    return id;
+  } catch { return null; }
+};
+
+export const shortcutExists = (appid: number | null | undefined): boolean => {
+  if (!appid) return false;
+  try { return !!appStore?.GetAppOverviewByAppID?.(appid); } catch { return false; }
+};
