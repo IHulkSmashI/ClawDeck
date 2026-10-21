@@ -129,7 +129,7 @@ export const PowerTab: FC = () => {
         {at?.running && (
           <PanelSectionRow>
             <div style={{ fontSize: 11, opacity: 0.8 }}>
-              {at.paused ? "Paused: you changed CPU or GPU settings by hand" : `${at.learned?.tdp} W of ${limitW} W`}
+              {at.paused ? "Paused because you changed CPU or GPU settings by hand. Pick a profile to hand control back" : `${at.learned?.tdp} W of ${limitW} W`}
               {at.avg_fps != null ? <> · {Math.round(at.avg_fps)} fps average, {Math.round(at.low_fps ?? at.avg_fps)} at worst (last {at.window_s} s)</> : <> · measuring…</>}
               {at.learned?.bound && at.learned.bound !== "balanced" && <> · {at.learned.bound === "gpu" ? "graphics-heavy: more power to the GPU" : "CPU-heavy: more power to the CPU"}</>}
               {at.learned?.cpu_max_pct != null && at.learned.cpu_max_pct < 100 && <> · CPU capped at {at.learned.cpu_max_pct}%</>}
