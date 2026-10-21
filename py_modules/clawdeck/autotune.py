@@ -100,12 +100,18 @@ class Sampler:
         if not f:
             return None, None
         try:
-            with open(f, "r", encoding="utf-8", errors="replace") as fh:
-                fh.seek(self._log_pos.get(f, 0))
-                rows = fh.read()
-                self._log_pos[f] = fh.tell()
+            with open(f, "rb") as fh:
+                start = self._log_pos.get(f, 0)
+                fh.seek(start)
+                data = fh.read()
         except OSError:
             return None, None
+        # MangoHud may be half-way through writing a row: read only up to the last complete line, the rest next time
+        end = data.rfind(b"\n")
+        if end < 0:
+            return None, None
+        self._log_pos[f] = start + end + 1
+        rows = data[:end + 1].decode("utf-8", errors="replace")
         # every row written since the last read (MangoHud writes one per log_interval), averaged: nothing is skipped
         fps_rows, ft_rows = [], []
         for row in csv.reader(rows.splitlines()):
@@ -315,9 +321,7 @@ class Autotune:
         if s.avg_fps < t * MISS_AVG or s.low_fps < t * MISS_LOW:
             changed = self._feed_bound(l, smp)
             if not changed and l.tdp < s.ceiling_tdp:
-                l.tdp = min(s.ceiling_tdp, l.tdp + 2)
-                self.power.set_tdp(l.tdp, self.plugged)
-                changed = True
+                changed = self._tdp(l, min(s.ceiling_tdp, l.tdp + 2))
             l.confidence = max(0, l.confidence - 1)
         elif s.avg_fps >= t * ON_AVG and s.low_fps >= t * ON_LOW:
             if l.confidence >= 3 and s.avg_fps >= t * HEADROOM:
@@ -330,9 +334,7 @@ class Autotune:
                 if s.trim_turn:
                     changed = self._trim_unbound(l, smp)
                 if not changed and l.tdp > s.floor_tdp:
-                    l.tdp -= 1
-                    self.power.set_tdp(l.tdp, self.plugged)
-                    changed = True
+                    changed = self._tdp(l, l.tdp - 1)
                 s.trim_turn = not s.trim_turn
                 if recheck:
                     log.info("autotune recheck: trying one step lower after %d s on target", RECHECK_S)
@@ -345,6 +347,14 @@ class Autotune:
             if s.unchanged >= s.stable:
                 l.confidence = min(5, l.confidence + 1)
                 s.unchanged = 0
+
+    def _tdp(self, l: Learned, watts: int) -> bool:
+        """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from)."""
+        if not self.power.set_tdp(watts, self.plugged):
+            log.warning("autotune: TDP %d W was not applied", watts)
+            return False
+        l.tdp = watts
+        return True
 
     # ---- balancing CPU and GPU inside one power budget ---------------------------------------------------------------
     def _set_cpu(self, l: Learned, pct: int) -> bool:

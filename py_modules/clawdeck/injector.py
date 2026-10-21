@@ -288,6 +288,16 @@ class Injector:
         info = self.marker(d)
         if info is None:
             return {"mode": "none"}
+        # the marker lives in the game folder, which the user (and any program they run) can edit, while this runs as
+        # root: only ever touch paths inside this game's folder
+        root = os.path.realpath(game_dir)
+        inside = lambda p: isinstance(p, str) and os.path.commonpath([os.path.realpath(p), root]) == root \
+            and os.path.realpath(p) != root
+        for key in ("copied", "backed_up", "created_dirs"):
+            bad = [p for p in info.get(key, []) if not inside(p)]
+            if bad:
+                log.warning("ignoring %d path(s) outside %s in %s: %s", len(bad), root, MARKER, bad[:3])
+            info[key] = [p for p in info.get(key, []) if inside(p)]
         for p in info.get("copied", []):
             try:
                 os.remove(p)

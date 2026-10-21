@@ -50,8 +50,9 @@ Tools in `tools/`:
 ClawDeck depends on a lot of other people's projects, and each one can change under it. Three things keep it working:
 
 1. **For users, at runtime** (`py_modules/clawdeck/updates.py`): OptiScaler, OptiPatcher, REFramework, lsfg-vk and
-   Moonlight VRR always come from their newest release, checked at most once a day, verified against published
-   checksums, with the previous version kept for one-tap rollback. Games are refreshed only after they close.
+   Moonlight VRR always come from their newest release, checked at most once a day, downloaded over HTTPS from the
+   project's own releases and verified against its checksum file when it publishes one (Moonlight VRR does; a
+   checksum file that exists but can't be read stops the install), with the previous version kept for one-tap rollback. Games are refreshed only after they close.
    The xess-xmx-linux driver is the exception: it is pinned in `assets/versions.json` and bumped after testing.
 2. **Every day, on GitHub** (`.github/workflows/upstream-watch.yml` → `tools/upstream_watch.py`): the newest version
    of every upstream is compared with `assets/upstream.lock.json` (what was last tested), and ClawDeck's own parsers

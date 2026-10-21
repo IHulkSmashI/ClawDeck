@@ -159,3 +159,31 @@ def test_tdp_boost_off_keeps_pl2_one_watt_over(tmp_path, monkeypatch):
     pw.boost = True
     pw.set_tdp(20, plugged=False)
     assert sysfs.read_int(p.msi_pl2) == 26
+
+
+def test_tar_with_a_link_outside_is_refused(tmp_path):
+    import io, tarfile as tf
+    from clawdeck import downloads as dl
+    arc = tmp_path / "evil.tar.gz"
+    with tf.open(arc, "w:gz") as t:
+        info = tf.TarInfo("lib/shadow"); info.type = tf.LNKTYPE; info.linkname = "/etc/shadow"
+        t.addfile(info)
+    with pytest.raises(ValueError):
+        dl.extract(str(arc), str(tmp_path / "out"))
+    ok = tmp_path / "ok.tar.gz"
+    with tf.open(ok, "w:gz") as t:
+        data = b"layer"
+        f = tf.TarInfo("lib/liblsfg.so.1"); f.size = len(data); t.addfile(f, io.BytesIO(data))
+        l = tf.TarInfo("lib/liblsfg.so"); l.type = tf.SYMTYPE; l.linkname = "liblsfg.so.1"; t.addfile(l)
+    dl.extract(str(ok), str(tmp_path / "ok"))
+    assert (tmp_path / "ok/lib/liblsfg.so.1").read_bytes() == b"layer"
+
+
+def test_write_new_does_not_follow_a_planted_link(tmp_path):
+    from clawdeck import userexec
+    target = tmp_path / "precious"
+    target.write_text("keep")
+    link = tmp_path / "clawdeck-launch.sh"
+    link.symlink_to(target)
+    userexec.write_new(str(link), "#!/bin/bash\n", 0o755)
+    assert target.read_text() == "keep" and not link.is_symlink() and link.read_text() == "#!/bin/bash\n"

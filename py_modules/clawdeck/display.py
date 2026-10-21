@@ -130,7 +130,10 @@ class Display:
             log.error("writing %s failed: %s", self.conf, e)
             return {"ok": False, "error": str(e)}
 
-    def reset(self) -> dict:
+    def reset(self, dry_run: bool = False) -> dict:
+        if dry_run:
+            log.info("dry-run: would remove %s", self.conf)
+            return {"ok": True, "dry_run": True}
         try:
             os.remove(self.conf)
         except FileNotFoundError:

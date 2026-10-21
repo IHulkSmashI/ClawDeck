@@ -19,7 +19,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 | Per-game recommendation | `gamescan.py`, `compat.py`, `injector.plan` | Graphics | native XeSS → OptiScaler → lsfg-vk, with reasons; anti-cheat blocked |
 | OptiScaler, OptiClick-style | `injector.py`, `updates.py` | Graphics | newest release, setup_linux.sh layout, OptiPatcher, REFramework, per-game INI fixes |
 | Lossless Scaling (lsfg-vk) | `injector.py`, `updates.py` | Graphics | lsfg-vk v2 installed/updated; Lossless Scaling ownership checked in Steam |
-| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check, checksum-verified, one-tap rollback; games refreshed after they close |
+| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check, checksum-verified where upstream publishes sums, one-tap rollback; games refreshed after they close |
 | Streaming | `streaming.py` | Display | Moonlight VRR (Nonary) installed/updated, added to Steam, one-tap stream to a Vibepollo PC |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
 | Upstream watch | `tools/upstream_watch.py`, workflow | GitHub issue | daily versions + live parser canaries; Dependabot for the build |
@@ -65,6 +65,10 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 - The README download button points at Releases, which stays empty until the first tested release.
 
 ## Needs the maintainer
+
+- New UI (2026-10-21): check on the Claw that Quick Access shows ClawDeck's short panel, that **All settings** opens
+  the full-screen page, and that every page can be read and used with the D-pad alone (sidebar left/right, each
+  explanation scrolls into view with its control). Report anything you still have to touch.
 
 - Face buttons on the Claw 8 EX (`buttons.py`, Setup → "Map the face buttons"): the same InputPlumber override was
   applied by hand on the maintainer's Claw on 2026-10-21 and both buttons work in Game Mode. To test the plugin's

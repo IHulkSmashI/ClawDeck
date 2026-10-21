@@ -53,8 +53,9 @@ it does:
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.
-- **Always up to date:** OptiScaler, lsfg-vk and Moonlight update themselves, checked against their published
-  checksums, with one-tap rollback.
+- **Always up to date:** OptiScaler, lsfg-vk and Moonlight update themselves, straight from their official
+  releases over HTTPS (and checked against a published checksum where the project publishes one), with one-tap
+  rollback.
 - **Stream games from your PC** with Moonlight VRR, ready for Vibepollo, Apollo or Sunshine.
 - **Battery that reads right and lasts longer:** charge, watts and health shown correctly for the Claw, and a
   charge limit from 50 to 100 %.
@@ -124,7 +125,7 @@ limit) and set Autotune's target to the same number; ClawDeck doesn't add a seco
 | **Best option per game** | ClawDeck checks what each game ships (DLSS, FSR, XeSS), looks it up in OptiScaler's community compatibility list, and recommends one thing, with the reasons. | Online games with anti-cheat are left alone: changed game files can get accounts banned. |
 | **OptiScaler, set up for you** | For DLSS or FSR games: one tap installs the newest OptiScaler, so the game uses XeSS on the XMX cores plus XeSS frame generation (2x to 4x). It also adds **OptiPatcher** when the game is supported, **REFramework** for Capcom RE Engine games, and the game's known fixes. | XeSS frame generation needs Borderless or Fullscreen Windowed mode. Adds a little input delay. |
 | **Lossless Scaling** | The last option, for games with no DLSS, FSR or XeSS: frame generation through lsfg-vk. ClawDeck installs lsfg-vk and checks that Lossless Scaling is in your Steam library. | You need your own copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (a paid Steam app). It runs on the GPU's regular shader cores, not the XMX cores. |
-| **Always up to date** | Checks once a day for new OptiScaler, OptiPatcher, REFramework, lsfg-vk and Moonlight versions, checks each download against its published checksum, and updates your games right after you close them. | If an update causes trouble, go back to the previous version in one tap. Can be turned off under Updates. |
+| **Always up to date** | Checks once a day for new OptiScaler, OptiPatcher, REFramework, lsfg-vk and Moonlight versions, downloads them from their official releases (checked against a published checksum where there is one), and updates your games right after you close them. | If an update causes trouble, go back to the previous version in one tap. Can be turned off under Updates. |
 | **Proton version** | Pick which Proton runs a game, such as GE-Proton. | Same as the game's Properties → Compatibility, just closer to hand. |
 | **Add to launch options** | One tap adds ClawDeck to a game's launch options, which Autotune, the injector and HDR need. | Keeps anything you already had there. |
 

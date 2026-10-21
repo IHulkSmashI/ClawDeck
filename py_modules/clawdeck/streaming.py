@@ -61,6 +61,8 @@ def install(home: str, staged_dir: str, version: str) -> dict:
     target = os.path.join(base, version)
     os.makedirs(target, exist_ok=True)
     local = os.path.join(target, "Moonlight.AppImage")
+    if os.path.lexists(local):
+        os.unlink(local)          # never copy through a link left in the user's folder
     shutil.copy2(appimage, local)
     os.chmod(local, 0o755)
     userexec.chown_tree(base, home)
@@ -69,12 +71,9 @@ def install(home: str, staged_dir: str, version: str) -> dict:
         raise RuntimeError("Moonlight could not be unpacked: " + r["out"][-300:])
     os.remove(local)
     previous = current(home)
-    with open(os.path.join(base, "CURRENT"), "w", encoding="utf-8") as f:
-        f.write(version + "\n")
-    with open(launcher(home), "w", encoding="utf-8") as f:
-        f.write('#!/bin/bash\n# Starts the Moonlight (VRR) version ClawDeck installed last; written by ClawDeck.\n'
-                'D="$(dirname "$(readlink -f "$0")")"\nexec "$D/$(cat "$D/CURRENT")/squashfs-root/AppRun" "$@"\n')
-    os.chmod(launcher(home), 0o755)
+    userexec.write_new(os.path.join(base, "CURRENT"), version + "\n")
+    userexec.write_new(launcher(home), '#!/bin/bash\n# Starts the Moonlight (VRR) version ClawDeck installed last; written by ClawDeck.\n'
+                       'D="$(dirname "$(readlink -f "$0")")"\nexec "$D/$(cat "$D/CURRENT")/squashfs-root/AppRun" "$@"\n', 0o755)
     for d in os.listdir(base):
         p = os.path.join(base, d)
         if os.path.isdir(p) and d not in (version, previous):
