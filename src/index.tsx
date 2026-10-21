@@ -3,7 +3,7 @@ import { definePlugin, toaster } from "@decky/api";
 import { useEffect, useState } from "react";
 import { GiClawHammer } from "react-icons/gi";
 
-import { gameStarted, gameStopped } from "./api";
+import { gameStarted, gameStopped, powerSourceChanged, resumed } from "./api";
 import { SetupTab } from "./tabs/Setup";
 import { PowerTab } from "./tabs/Power";
 import { GraphicsTab } from "./tabs/Graphics";
@@ -30,7 +30,7 @@ function Content() {
           { id: "graphics", title: "Graphics", content: <GraphicsTab /> },
           { id: "display", title: "Display", content: <DisplayTab /> },
           { id: "controller", title: "Controller", content: <ControllerTab /> },
-          { id: "battery", title: "Battery", content: <BatteryTab /> },
+          { id: "battery", title: "Battery & Fans", content: <BatteryTab /> },
         ]}
       />
     </div>
@@ -39,7 +39,7 @@ function Content() {
 
 export default definePlugin(() => {
   // Game lifecycle: apply the per-game profile at start, revert and save what autotune learned at stop.
-  let unregister: (() => void) | null = null;
+  const unregisters: (() => void)[] = [];
   try {
     const hook = SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.((e: { unAppID: number; bRunning: boolean }) => {
       const appid = String(e.unAppID);
@@ -53,9 +53,32 @@ export default definePlugin(() => {
         }).catch(() => { /* backend logs it */ });
       }
     });
-    unregister = hook?.unregister ? () => hook.unregister() : null;
+    if (hook?.unregister) unregisters.push(() => hook.unregister());
   } catch (err) {
     console.warn("ClawDeck: app lifetime hook unavailable", err);
+  }
+
+  // Charger plugged / unplugged (eACState 2 = AC, 1 = battery; same API as PowerControl and SimpleDeckyTDP): the
+  // running game's profile follows the power source. Steam fires this often, so only real changes reach the backend.
+  try {
+    let ac: number | undefined;
+    const h = SteamClient?.System?.RegisterForBatteryStateChanges?.((e: { eACState: number }) => {
+      if (e.eACState === ac) return;
+      const first = ac === undefined;
+      ac = e.eACState;
+      if (!first) powerSourceChanged(ac === 2).catch(() => { /* backend logs it */ });
+    });
+    if (h?.unregister) unregisters.push(() => h.unregister());
+  } catch (err) {
+    console.warn("ClawDeck: battery state hook unavailable", err);
+  }
+
+  // Resume from sleep: firmware may reset limits; the backend re-applies the charge limit and the running game.
+  try {
+    const h = SteamClient?.System?.RegisterForOnResumeFromSuspend?.(() => { resumed().catch(() => { /* logged */ }); });
+    if (h?.unregister) unregisters.push(() => h.unregister());
+  } catch (err) {
+    console.warn("ClawDeck: resume hook unavailable", err);
   }
 
   return {
@@ -64,7 +87,7 @@ export default definePlugin(() => {
     content: <Content />,
     icon: <GiClawHammer />,
     onDismount() {
-      if (unregister) unregister();
+      unregisters.forEach((u) => { try { u(); } catch { /* already gone */ } });
     },
   };
 });
