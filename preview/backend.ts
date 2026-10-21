@@ -18,6 +18,7 @@ export const scenario = {
 
 const hhd = () => scenario.controller === "hhd";
 const state = {
+  wideVrr: false,
   dry: false,
   autotune: true,
   tdp: 20,
@@ -172,6 +173,9 @@ export const backend = {
   set_fan_preset: (n: string) => { state.fan = n; return ok(); },
 
   // ---- display ----
+  get_wide_vrr: () => ({ panel: "CSW0801", panel_name: "PN8007QB1-2", range: state.wideVrr ? [30, 120] : [48, 120],
+    wide: state.wideVrr, supported: true, reason: null, pending: null, rpm_ostree: true }),
+  set_wide_vrr: (on: boolean) => { state.wideVrr = on; return { ok: true, restart: true }; },
   get_display: () => ({
     settings: state.display, saved: state.displaySaved, conf: "/home/bazzite/.config/environment.d/60-clawdeck-display.conf",
     connectors: [

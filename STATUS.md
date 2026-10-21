@@ -66,6 +66,11 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 
 ## Needs the maintainer
 
+- 30–120 Hz VRR (Display tab, `edid.py`): run the new survey first and post its "panel EDID" line. Turn it on only
+  if the sha256 matches (the switch only appears then), restart, and check: the 120 Hz mode is still offered, the
+  Display tab shows 30–120 Hz, games at 35–45 fps no longer judder. If anything is wrong: previous boot entry, then
+  turn it off.
+
 - Test the hardware-findings fixes on the Claw (docs/HARDWARE-FINDINGS.md → "Done in code"): Setup shows "Claw 8 EX
   AI+ (MS-1T91)" and a Mesa version; Battery shows Wh and, after a minute on battery, watts; Controller shows
   InputPlumber's device; with Dry run off, set 20 W and read back `ppt_pl1_spl` and `intel-rapl-mmio:0`; then set

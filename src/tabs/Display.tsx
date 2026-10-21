@@ -2,12 +2,54 @@ import { ButtonItem, PanelSection, PanelSectionRow, SliderField, ToggleField } f
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { getDisplay, resetDisplay, saveDisplay, DisplaySettings, DisplayState } from "../api";
+import { getDisplay, getWideVrr, resetDisplay, saveDisplay, setWideVrr, DisplaySettings, DisplayState, WideVrr } from "../api";
 import { Advanced } from "../components/Advanced";
+import { confirmRestart } from "../components/confirm";
 import { Hint, Status } from "../components/Hint";
 import { StreamingSection } from "./Streaming";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+
+/** ClawLab's 30-120 Hz VRR fix for the Claw's own screen (py_modules/clawdeck/edid.py). */
+const WideVrrSection: FC = () => {
+  const [w, setW] = useState<WideVrr | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => setW(await getWideVrr());
+  useEffect(() => { load(); }, []);
+  if (!w || (!w.supported && !w.wide)) {
+    return w?.panel ? (
+      <PanelSection title="VRR range">
+        <PanelSectionRow>
+          <Status ok={null} label={w.range ? `${w.range[0]}–${w.range[1]} Hz` : "VRR range unknown"} detail={w.reason ?? undefined} />
+        </PanelSectionRow>
+      </PanelSection>
+    ) : null;
+  }
+  const want = w.pending ? w.pending === "on" : w.wide;
+  const run = async (on: boolean) => {
+    setBusy(true);
+    try {
+      const r = await setWideVrr(on);
+      toast(r.ok ? `${on ? "30–120 Hz" : "Factory range"} after the next restart` : `Not changed: ${r.error}`);
+    } finally { setBusy(false); load(); }
+  };
+  return (
+    <PanelSection title="VRR range">
+      <PanelSectionRow>
+        <Status ok={w.wide} label={w.range ? `Screen VRR: ${w.range[0]}–${w.range[1]} Hz` : "Screen VRR"}
+          detail={w.pending && (w.pending === "on") !== w.wide ? "restart to apply the change" : `${w.panel_name ?? w.panel} panel`} />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ToggleField label="Smooth down to 30 fps (30–120 Hz)" checked={want} disabled={busy}
+          onChange={(v) => confirmRestart(v ? "Widen the VRR range?" : "Back to the factory range?",
+            v ? "ClawDeck gives the GPU driver a corrected description of this screen (ClawLab's fix, only for the exact panel they validated), so VRR works from 30 Hz instead of 48. Takes a minute or two, then restart. To undo, turn this off and restart, or pick the previous entry in the boot menu."
+              : "ClawDeck removes its corrected screen description. Takes a minute or two, then restart.",
+            v ? "Widen" : "Undo", () => run(v))} />
+        <Hint does="Lets VRR follow the frame rate down to 30 fps instead of 48 (the screen can do it; its factory description says 48)." why="games running 30–48 fps stop juddering, e.g. heavy games on battery." cost="a restart; on an untested panel the screen could flicker below 48 Hz (turn it off again)." />
+      </PanelSectionRow>
+    </PanelSection>
+  );
+};
 
 export const DisplayTab: FC = () => {
   const [d, setD] = useState<DisplayState | null>(null);
@@ -65,6 +107,7 @@ export const DisplayTab: FC = () => {
           </>
         )}
       </PanelSection>
+      <WideVrrSection />
       <StreamingSection />
     </>
   );

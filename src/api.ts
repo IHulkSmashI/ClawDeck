@@ -71,6 +71,10 @@ export type DisplaySettings = { vrr: boolean; vrr_min: number; vrr_max: number; 
 export type Connector = { name: string; status: string | null; internal: boolean; modes: string[] };
 export type DisplayState = { settings: DisplaySettings; saved: boolean; conf: string; connectors: Connector[]; panel_hz: number[]; vrr_range: number[] | null; other_overrides: string[] };
 export const getDisplay = callable<[], DisplayState>("get_display");
+export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;
+  reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean };
+export const getWideVrr = callable<[], WideVrr>("get_wide_vrr");
+export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");
 export const saveDisplay = callable<[settings: DisplaySettings], { ok: boolean; error?: string; dry_run?: boolean }>("save_display");
 export const resetDisplay = callable<[], { ok: boolean; error?: string }>("reset_display");
 
