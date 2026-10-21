@@ -50,5 +50,3 @@ ClawDeck checks every project above for new releases every day (`.github/workflo
 the ones it installs for you; see CONTRIBUTING.md → Keeping up with upstream.
 
 ClawDeck is not affiliated with MSI, Valve, Intel or Microsoft. "Claw" is an MSI trademark.
-- **[systemd hwdb](https://github.com/systemd/systemd/blob/main/hwdb.d/60-keyboard.hwdb)** — the keyboard
-  scancode table whose MSI Claw entries (`b9`/`ba` → F15/F16) ClawDeck extends to the Claw 8 EX until it ships upstream.
