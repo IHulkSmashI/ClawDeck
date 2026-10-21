@@ -78,7 +78,8 @@ export type SleepState = { mem_sleep: string | null; mem_sleep_options: string[]
 export const getSleep = callable<[], SleepState>("get_sleep");
 
 export type HhdSetting = { key: string; type: string; title: string; hint?: string | null; options?: { value: any; label: string }[]; min?: number; max?: number; step?: number; unit?: string; value: any; group: string; advanced: boolean; mode_of?: { key: string; mode: string } };
-export const getController = callable<[], { available: boolean; settings: HhdSetting[] }>("get_controller");
+export type InputPlumberDevice = { path: string; name: string | null; profile: string | null };
+export const getController = callable<[], { available: boolean; settings: HhdSetting[]; inputplumber?: InputPlumberDevice[] }>("get_controller");
 export const setController = callable<[key: string, value: any], { ok: boolean; value?: any; error?: string }>("set_controller");
 
 export type Launch = { inject?: string; lsfg?: { multiplier: number; flow_scale: number; performance_mode: boolean }; hdr?: boolean; mesa?: string; proton?: string | null };

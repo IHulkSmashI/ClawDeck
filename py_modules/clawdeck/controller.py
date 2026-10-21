@@ -1,4 +1,5 @@
-"""Controller: gyro, RGB stick lighting, back buttons and controller mode, as Handheld Daemon offers them.
+"""Controller: gyro, RGB stick lighting, back buttons and controller mode, as Handheld Daemon offers them. Without
+Handheld Daemon, the tab shows InputPlumber's controller and profile instead (shadowblip.py), and changes nothing.
 
 ClawDeck does not drive the controller; HHD does (hhd/device/claw). This module reads HHD's settings schema
 (/api/v1/settings) and current state, keeps the Claw controller and RGB sections, and writes changes back through
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from . import hhd
+from . import hhd, shadowblip
 
 log = logging.getLogger("clawdeck.controller")
 
@@ -61,7 +62,8 @@ class Controller:
         desc = self._schema(refresh=True)
         state = hhd.get_state()
         if desc is None or state is None:
-            return {"available": False, "settings": []}
+            # no Handheld Daemon: say what InputPlumber (current Bazzite) has built for this Claw, read-only
+            return {"available": False, "settings": [], "inputplumber": shadowblip.composite_devices()}
         items = []
         for d in desc:
             item = dict(d)

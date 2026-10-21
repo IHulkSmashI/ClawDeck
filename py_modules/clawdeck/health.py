@@ -44,12 +44,14 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out: list[dict] = []
     p = hardware.paths
     out.append({"id": "model", "title": "Claw model recognised", "ok": hardware.known,
-                "detail": f"{hardware.model['name']} ({hardware.product or 'no DMI name'}), {hardware.model['soc']}",
+                "detail": f"{hardware.model['name']} ({hardware.model_id or hardware.product or 'no DMI name'}), {hardware.model['soc']}",
                 "fix": None if hardware.known else "report_unknown_model"})
-    mesa = hw.mesa_version()
-    out.append({"id": "mesa", "title": "Intel Vulkan driver", "ok": mesa is not None,
-                "detail": f"Mesa {mesa}, kernel {hardware.kernel}, {hardware.gpu_driver or 'no GPU driver'}" if mesa else
-                          f"no libvulkan_intel.so found (kernel {hardware.kernel})", "fix": None})
+    lib = hw.intel_vulkan_lib()
+    mesa = hw.mesa_version() if lib else None
+    out.append({"id": "mesa", "title": "Intel Vulkan driver", "ok": lib is not None,
+                "detail": (f"Mesa {mesa or '(version unknown)'}, kernel {hardware.kernel}, "
+                           f"{hardware.gpu_driver or 'no GPU driver'}") if lib else
+                          f"no Intel Vulkan driver found (kernel {hardware.kernel})", "fix": None})
     st = stack.detect()
     hhd_ok = hhd.available()
     if st["conflict"]:
@@ -66,15 +68,16 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                     "fix": None})
     elif st["inputplumber"]:
         out.append({"id": "controller", "title": "Controller service: InputPlumber (Bazzite default)", "ok": True,
-                    "detail": "MSI buttons and gyro come from InputPlumber; ClawDeck's Controller and Fans tabs need "
-                              "Handheld Daemon and stay read-only", "fix": None})
+                    "detail": "MSI buttons and gyro come from InputPlumber; set them in Steam's controller settings. "
+                              "ClawDeck's Controller tab shows InputPlumber's status; fan presets need Handheld Daemon", "fix": None})
     else:
         out.append({"id": "controller", "title": "Controller service", "ok": False,
                     "detail": "neither InputPlumber nor Handheld Daemon is running: the MSI buttons will not work",
                     "fix": "enable_hhd" if os.path.exists("/usr/bin/hhd") else None})
     if not hhd_ok:
         out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
-                    "detail": ("MSI firmware limits (the same ones Steam's performance slider sets; the last change wins)"
+                    "detail": ("MSI firmware limits, set directly (Steam's own TDP slider may do nothing on this chip: "
+                               "PowerStation reports no TDP range for it)"
                                if p.msi_pl1 else "RAPL only" if p.rapl_pl1 else "no way to set TDP on this system")
                               + ("; PowerStation running" if st["powerstation"] else ""), "fix": None})
     out.append({"id": "msi_fw", "title": "MSI firmware controls (msi-wmi-platform)", "ok": p.msi_pl1 is not None,

@@ -185,7 +185,8 @@ export const backend = {
 
   // ---- controller ----
   get_controller: () => {
-    if (!hhd()) return { available: false, settings: [] };
+    if (!hhd()) return { available: false, settings: [], inputplumber: [
+      { path: "/org/shadowblip/InputPlumber/CompositeDevice0", name: "MSI Claw 8 EX AI+ CG3EM", profile: "OpenGamepadUI Default" }] };
     const s = state.controller;
     return { available: true, settings: [
       { key: "controllers.claw.controller_mode.mode", type: "mode", title: "Emulation mode", group: "mode", advanced: false, value: s["controllers.claw.controller_mode.mode"],

@@ -1,4 +1,4 @@
-"""Power profiles: TDP (through Handheld Daemon), CPU ceiling and GPU clock window (sysfs, PowerControl's paths).
+"""Power profiles: TDP (Handheld Daemon, else MSI firmware attributes, else RAPL), CPU ceiling and GPU clock window (sysfs, PowerControl's paths).
 
 Why three levers: on the Claw the package TDP is shared by CPU and GPU and the firmware splits it dynamically.
 Capping the CPU hands the budget to the GPU in GPU-bound games; a GPU floor stops the GPU idling down between
@@ -16,6 +16,14 @@ log = logging.getLogger("clawdeck.power")
 
 def clamp(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, v))
+
+
+def firmware_range(current_value: str) -> tuple[int, int]:
+    """min_value / max_value next to a firmware attribute's current_value (watts); wide open when absent."""
+    d = current_value.rsplit("/", 1)[0]
+    lo = sysfs.read_int(f"{d}/min_value")
+    hi = sysfs.read_int(f"{d}/max_value")
+    return (lo if lo is not None else 0, hi if hi is not None else 1000)
 
 
 class Power:
@@ -72,8 +80,11 @@ class Power:
                 self._hhd_orig = hhd.get_tdp() or {}
             return hhd.set_tdp(watts, self.boost)
         # no HHD (current Bazzite): MSI's firmware attributes, exactly as HHD and steamos-manager write them - watts,
-        # PL3 then PL2 then PL1, boost limit proportional to the model's ceiling. Steam's own performance slider
-        # writes the same files, so the last one to change it wins; ClawDeck reverts its value when the game closes.
+        # PL3 (if the model has it; the EX has none) then PL2 then PL1, boost limit proportional to the model's
+        # ceiling, each clamped to the attribute's own min_value/max_value. On the Claw 8 EX, PowerStation reports
+        # no TDP range for this chip, so Steam's slider does nothing and ClawDeck is the only writer; on models
+        # where Steam's slider works it writes the same files and the last change wins. ClawDeck reverts its value
+        # when the game closes.
         if self.p.msi_pl1:
             return self._set_msi_firmware(watts, lim)
         # last resort: RAPL directly (the firmware may re-assert its own value)
@@ -94,7 +105,8 @@ class Power:
         for path, val in ((self.p.msi_pl3, sppt), (self.p.msi_pl2, sppt), (self.p.msi_pl1, watts)):
             if not path:
                 continue
-            ok = sysfs.write(path, val) and ok
+            lo, hi = firmware_range(path)
+            ok = sysfs.write(path, clamp(val, lo, hi)) and ok
             if not sysfs.dry_run():
                 time.sleep(0.05)   # the EC applies one limit at a time (HHD waits between writes too)
         if not ok:
@@ -177,7 +189,7 @@ class Power:
     def apply_profile(self, name: str, overrides: dict | None = None, plugged: bool | None = None) -> dict:
         """Apply a named profile (battery / performance / dock) with optional per-game overrides. Returns what was
         applied and what failed; a failed lever reverts itself."""
-        prof = dict(hw.profiles_for(self.hw.product).get(name, {}))
+        prof = dict(hw.profiles_for(self.hw.model_key).get(name, {}))
         prof.update(overrides or {})
         result = {"profile": name, "applied": {}, "failed": []}
         if prof.get("tdp") is not None:

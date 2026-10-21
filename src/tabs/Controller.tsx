@@ -2,9 +2,9 @@ import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField }
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { getController, getHardware, setController, HhdSetting, Stack } from "../api";
+import { getController, getHardware, setController, HhdSetting, InputPlumberDevice, Stack } from "../api";
 import { Advanced } from "../components/Advanced";
-import { Hint } from "../components/Hint";
+import { Hint, Status } from "../components/Hint";
 
 const GROUPS: { id: string; title: string; does: string; why: string; cost: string }[] = [
   { id: "mode", title: "Controller mode", does: "What games see: a DualSense, an Xbox pad, or the raw controller.", why: "DualSense gives gyro and the touchpad to Steam Input.", cost: "some games show the wrong button icons." },
@@ -36,7 +36,7 @@ const Control: FC<{ s: HhdSetting; onSet: (key: string, v: any) => void }> = ({ 
 };
 
 export const ControllerTab: FC = () => {
-  const [st, setSt] = useState<{ available: boolean; settings: HhdSetting[] } | null>(null);
+  const [st, setSt] = useState<{ available: boolean; settings: HhdSetting[]; inputplumber?: InputPlumberDevice[] } | null>(null);
   const [stack, setStack] = useState<Stack | null>(null);
   const load = async () => { setSt(await getController()); setStack((await getHardware()).stack); };
   useEffect(() => { load(); }, []);
@@ -52,9 +52,14 @@ export const ControllerTab: FC = () => {
           {stack?.inputplumber ? (
             <Hint does="On this install InputPlumber (Bazzite's default) runs the controller: MSI buttons, gyro and back buttons." why="set gyro and back buttons per game in Steam → Controller settings; ClawDeck's own controls for InputPlumber come in a later version." cost="none." />
           ) : (
-            <Hint does="Neither InputPlumber nor Handheld Daemon is running, so the MSI buttons and gyro have no driver." why="Desktop Mode → terminal → sudo rpm-ostree upgrade → reboot; then Setup → Re-check." cost="none." />
+            <Hint does="Neither InputPlumber nor Handheld Daemon is running, so the MSI buttons and gyro have no driver." why="Desktop Mode → Konsole → ujust update → restart; then Setup → Re-check." cost="none." />
           )}
         </PanelSectionRow>
+        {(st.inputplumber ?? []).map((d) => (
+          <PanelSectionRow key={d.path}>
+            <Status ok={true} label={d.name ?? "Controller"} detail={d.profile ? `InputPlumber profile: ${d.profile}` : "InputPlumber"} />
+          </PanelSectionRow>
+        ))}
       </PanelSection>
     );
   }

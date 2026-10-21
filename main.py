@@ -82,12 +82,17 @@ class Plugin:
         self._install_wrapper()
 
     def _make_tools_executable(self) -> None:
-        """Decky unpacks plugin zips without permission bits; the launch wrapper must be executable for Steam."""
+        """Best effort for people running the tools by hand. ClawDeck itself never relies on the bit: it runs them
+        with `bash tools/x.sh`, and the launch wrapper Steam uses is a copy in the user's home (_install_wrapper).
+        Decky marks the plugin folder read-only on some installs, so "not permitted" is expected and only logged
+        at debug level."""
         tools = os.path.join(PLUGIN_DIR, "tools")
         try:
             for fn in os.listdir(tools):
                 if fn.endswith((".sh", ".py")):
                     os.chmod(os.path.join(tools, fn), 0o755)
+        except PermissionError as e:
+            decky.logger.debug("tools stay as unpacked (plugin folder is read-only): %s", e)
         except OSError as e:
             decky.logger.warning("could not mark tools executable: %s", e)
 
@@ -245,7 +250,7 @@ class Plugin:
         return self.power.revert_all()
 
     async def list_profiles(self) -> dict:
-        return hw.profiles_for(self.hw.product)
+        return hw.profiles_for(self.hw.model_key)
 
     async def save_game_power(self, appid: str, values: dict) -> dict:
         """Save the current manual values as this game's profile for the current power source."""
