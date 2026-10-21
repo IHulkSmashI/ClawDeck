@@ -42,8 +42,7 @@ def _write_user_file(path: str, text: str) -> str:
         missing.append(d)
         d = os.path.dirname(d)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+    userexec.write_new(path, text, 0o755 if path.endswith(".sh") else 0o644)
     for n in [path, *missing]:
         userexec.chown_tree(n, HOME)
     return path
@@ -74,6 +73,7 @@ class Plugin:
         self.fans = fans.Fans(self.hw)
         self.display = display.Display(self.hw, HOME)
         self.running_appid: str | None = None
+        self._tasks: set[asyncio.Task] = set()
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s, dry-run %s", self.hw.model["name"], self.hw.product,
                           self.hw.kernel, sysfs.dry_run())
@@ -110,7 +110,7 @@ class Plugin:
         if self.settings.get("fan_preset_set"):
             self.fans.apply_preset("auto")
         if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
-            decky.logger.info("removing the wider VRR range: %s", edid.disable())
+            decky.logger.info("removing the wider VRR range: %s", edid.disable(sysfs.dry_run()))
         try:
             _write_user_file(WRAPPER, PASSTHROUGH)
             os.chmod(WRAPPER, 0o755)
@@ -148,16 +148,22 @@ class Plugin:
     def _versions(self) -> dict:
         return downloads.load_versions(VERSIONS)
 
+    @staticmethod
+    async def _bg(fn, *args):
+        """Anything that touches the network, runs a program or walks a game folder runs off Decky's event loop, so
+        the rest of ClawDeck (and the autotune loop) keeps answering while it works."""
+        return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
+
     # ---- setup / health ----------------------------------------------------------------------------------------------
     async def get_hardware(self) -> dict:
         return {**self.hw.to_dict(), "stack": stack.detect(), "other_plugins": stack.other_plugins(HOME)}
 
     async def get_health(self) -> list:
-        return health.checks(self.hw, HOME)
+        return await self._bg(health.checks, self.hw, HOME)
 
     async def collect_logs(self) -> str:
         dest = os.path.join(DESKTOP, f"clawdeck-report-{time.strftime('%Y%m%d-%H%M%S')}.json")
-        path = health.collect_logs(self.hw, HOME, dest)
+        path = await self._bg(health.collect_logs, self.hw, HOME, dest)
         userexec.chown_tree(path, HOME)
         return path
 
@@ -171,8 +177,8 @@ class Plugin:
                 return {"ok": False, "error": "cannot tell which user to enable Handheld Daemon for"}
             if sysfs.dry_run():
                 return {"ok": True, "dry_run": True, "would": f"systemctl enable --now hhd@{u.pw_name}"}
-            r = subprocess.run(["systemctl", "enable", "--now", f"hhd@{u.pw_name}"], capture_output=True, text=True,
-                               timeout=60, check=False)
+            r = await self._bg(lambda: subprocess.run(["systemctl", "enable", "--now", f"hhd@{u.pw_name}"],
+                                                      capture_output=True, text=True, timeout=60, check=False))
             return {"ok": r.returncode == 0, "log": (r.stdout + r.stderr)[-2000:]}
         if fix == "install_xess":
             return await self.xess_install(allow_unpinned)
@@ -181,8 +187,8 @@ class Plugin:
         if fix == "undo_face_buttons":
             return await asyncio.get_running_loop().run_in_executor(None, buttons.remove)
         if fix == "report_unknown_model":
-            r = subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")], capture_output=True,
-                               text=True, timeout=60, check=False)
+            r = await self._bg(lambda: subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")],
+                                                      capture_output=True, text=True, timeout=60, check=False))
             path = _write_user_file(os.path.join(DESKTOP, f"clawdeck-survey-{time.strftime('%Y%m%d-%H%M%S')}.txt"),
                                     r.stdout + r.stderr)
             return {"ok": True, "path": path, "next": "open a GitHub issue 'Survey: <model>' and attach this file"}
@@ -342,16 +348,26 @@ class Plugin:
         return learned
 
     async def game_started(self, appid: str) -> dict:
+        appid = str(appid)
+        if self.running_appid and self.running_appid != appid:
+            # a second game (or a launcher) started while one runs: save what the first one learned before switching
+            self._save_learned(self.running_appid, bool(self.running_plugged))
         plugged = bool(self.battery.plugged())
-        self.running_appid, self.running_plugged = str(appid), plugged
-        return self._start_game_power(str(appid), plugged)
+        self.running_appid, self.running_plugged = appid, plugged
+        return self._start_game_power(appid, plugged)
 
     async def game_stopped(self, appid: str) -> dict:
+        appid = str(appid)
+        if self.running_appid is not None and appid != self.running_appid:
+            # Steam reports every app that stops (launchers, the Moonlight shortcut): only the game ClawDeck set up counts
+            return {"ignored": True}
         plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
-        learned = self._save_learned(str(appid), plugged)
+        learned = self._save_learned(appid, plugged)
         self.running_appid, self.running_plugged = None, None
         n = self.power.revert_all()
-        asyncio.get_running_loop().create_task(self._after_game(str(appid)))
+        task = asyncio.get_running_loop().create_task(self._after_game(appid))
+        self._tasks.add(task)                      # keep a reference so it isn't garbage-collected mid-way
+        task.add_done_callback(self._tasks.discard)
         return {"reverted": n, "learned": learned}
 
     async def power_source_changed(self, plugged: bool) -> dict:
@@ -408,7 +424,7 @@ class Plugin:
         return self.display.save(settings, sysfs.dry_run())
 
     async def reset_display(self) -> dict:
-        return self.display.reset()
+        return self.display.reset(sysfs.dry_run())
 
     async def get_wide_vrr(self) -> dict:
         return await asyncio.get_event_loop().run_in_executor(None, edid.status)
@@ -443,12 +459,19 @@ class Plugin:
 
     async def get_launch(self, appid: str) -> dict:
         launch = self.profiles.get_launch(appid)
-        return {"launch": launch, "env": launchenv.compose(launch),
-                "wrapper": WRAPPER + " %command%"}
+        try:
+            env, error = launchenv.compose(launch), None
+        except ValueError as e:      # e.g. an imported profile with a value this version doesn't know
+            env, error = {}, str(e)
+        return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
         allowed = {"lsfg", "hdr", "mesa", "proton"}   # inject / proxy / reframework are set by injector_install
         clean = {k: v for k, v in values.items() if k in allowed}
+        try:   # a value the launch wrapper can't use must be refused here, not break get_launch later
+            launchenv.compose({**self.profiles.get_launch(appid), **clean})
+        except ValueError as e:
+            return {"ok": False, "error": str(e), **(await self.get_launch(appid))}
         self.profiles.set_launch(appid, clean)
         return {**(await self.get_launch(appid)), "file": self._write_launch(appid)}
 
@@ -464,6 +487,9 @@ class Plugin:
         return game_dir, gamescan.scan(game_dir, exe_dir)
 
     async def injector_state(self, appid: str) -> dict:
+        return await self._bg(self._injector_state, appid)
+
+    def _injector_state(self, appid: str) -> dict:
         game_dir = injector.steam_install_dir(HOME, appid)
         st = self.injector.state(game_dir) if game_dir else {"dir": None, "mode": "none", "optiscaler_present": False,
                                                                "native_xess": False, "info": None, "foreign_optiscaler": False}
@@ -522,13 +548,13 @@ class Plugin:
                     got = await self.lsfg_install()
                     if not got.get("ok"):
                         return {"error": got.get("error", "lsfg-vk could not be installed")}
-                if self.injector.state(game_dir)["optiscaler_present"]:
-                    self.injector.uninstall(game_dir)
+                if (await self._bg(self.injector.state, game_dir))["optiscaler_present"]:
+                    await self._bg(self.injector.uninstall, game_dir)
                 self.profiles.set_launch(appid, {"inject": "lsfg", "proxy": None, "reframework": None,
                                                  "lsfg": {**injector.LSFG_DEFAULTS, **(lsfg or {})}})
                 r = {"mode": "lsfg"}
             elif mode == "none":
-                r = self.injector.uninstall(game_dir)
+                r = await self._bg(self.injector.uninstall, game_dir)
                 self.profiles.set_launch(appid, {"inject": "none", "proxy": None, "reframework": None, "lsfg": None})
             else:
                 return {"error": f"unknown mode {mode}"}
@@ -598,10 +624,18 @@ class Plugin:
             lsfg = await self.get_updates()
             if lsfg["lsfg"]["update"]:
                 done["lsfg"] = (await self.lsfg_install()).get("version")
-        if self.running_appid is None:
-            for appid in self.profiles.games():
-                await self._refresh_game(appid)
+        await self._refresh_all()
         return done
+
+    async def _refresh_all(self) -> None:
+        """Refresh every set-up game; one game that fails (moved, read-only) never stops the others."""
+        for appid in self.profiles.games():
+            if self.running_appid is not None:
+                return
+            try:
+                await self._refresh_game(appid)
+            except Exception as e:
+                decky.logger.warning("refreshing game %s failed: %s", appid, e)
 
     async def _refresh_game(self, appid: str) -> dict | None:
         """A game set up with an older OptiScaler / REFramework / OptiPatcher than the one downloaded: reinstall it
@@ -609,15 +643,17 @@ class Plugin:
         game_dir = injector.steam_install_dir(HOME, appid)
         if not game_dir:
             return None
-        info = self.injector.marker(injector.find_game_exe_dir(game_dir))
+        info = await self._bg(lambda: self.injector.marker(injector.find_game_exe_dir(game_dir)))
         if not info or info.get("mode") != "optiscaler":
             return None
         have = {"optiscaler": self.updates.installed("optiscaler"), "reframework": self.updates.installed("reframework"),
                 "optipatcher": self.updates.installed("optipatcher")}
+        if not have["optiscaler"]:          # nothing downloaded to refresh with (cleared cache, failed download)
+            return None
         stale = info.get("version") != have["optiscaler"] or \
             (info.get("reframework_version") and info["reframework_version"] != have["reframework"]) or \
             (info.get("optipatcher_version") and info["optipatcher_version"] != have["optipatcher"])
-        if not stale or sysfs.dry_run():
+        if not stale or sysfs.dry_run() or self.running_appid is not None:   # never while a game runs
             return None
         loop = asyncio.get_running_loop()
         r = await loop.run_in_executor(None, self.injector.install_optiscaler, game_dir, info.get("options") or {}, have)
@@ -655,9 +691,7 @@ class Plugin:
             r = await loop.run_in_executor(None, self.updates.rollback, comp)
         except Exception as e:
             return {"ok": False, "error": str(e)}
-        if self.running_appid is None:
-            for appid in self.profiles.games():
-                await self._refresh_game(appid)
+        await self._refresh_all()
         return {"ok": True, **r}
 
     # ---- streaming: Moonlight (VRR) to Vibepollo / Apollo / Sunshine -------------------------------------------
@@ -708,21 +742,21 @@ class Plugin:
 
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
         try:
-            return xess.install(HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned), sysfs.dry_run())
+            return await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned), sysfs.dry_run())
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     async def xess_probe(self) -> dict:
-        return xess.probe(HOME)
+        return await self._bg(xess.probe, HOME)
 
     async def xess_switch_driver(self, version: str) -> dict:
         try:
-            return xess.switch_driver(HOME, version)
+            return await self._bg(xess.switch_driver, HOME, version)
         except ValueError as e:
             return {"ok": False, "error": str(e)}
 
     async def xess_uninstall(self) -> dict:
-        return xess.uninstall(HOME)
+        return await self._bg(xess.uninstall, HOME)
 
     # ---- Proton ------------------------------------------------------------------------------------------------------
     async def list_proton(self) -> list:

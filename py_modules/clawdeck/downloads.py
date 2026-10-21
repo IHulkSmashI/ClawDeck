@@ -60,6 +60,9 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
+UNREACHABLE = "!unreachable"
+
+
 def expected_sha256(rel: dict, asset_name: str) -> str | None:
     """The checksum a release publishes for one of its assets (SHA256SUMS / *.sha256 / sha256sum.txt), if any."""
     for a in rel.get("assets", []):
@@ -68,7 +71,7 @@ def expected_sha256(rel: dict, asset_name: str) -> str | None:
             try:
                 text = _get(a["browser_download_url"]).decode("utf-8", errors="replace")
             except OSError:
-                return None
+                return UNREACHABLE      # the release publishes sums but they can't be read: don't install unchecked
             for line in text.splitlines():
                 parts = line.split()
                 if len(parts) >= 2 and parts[-1].lstrip("*") == asset_name:
@@ -89,8 +92,11 @@ def pick_asset(rel: dict, pattern: str) -> dict | None:
 def download(url: str, dest: str, timeout: float = 60.0) -> str:
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = dest + ".part"
+    if os.path.lexists(tmp):
+        os.unlink(tmp)
     req = urllib.request.Request(url, headers={"User-Agent": "ClawDeck", "Accept": "application/octet-stream"})
-    with urllib.request.urlopen(req, timeout=timeout) as r, open(tmp, "wb") as f:
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    with urllib.request.urlopen(req, timeout=timeout) as r, os.fdopen(fd, "wb") as f:
         shutil.copyfileobj(r, f, 1 << 20)
     os.replace(tmp, dest)
     return dest
@@ -102,6 +108,8 @@ def _safe(name: str) -> bool:
 
 
 def extract(archive: str, dest: str) -> str:
+    if os.path.islink(dest):
+        raise ValueError(f"refusing to extract into a symlink: {dest}")
     os.makedirs(dest, exist_ok=True)
     low = archive.lower()
     if low.endswith(".zip"):
@@ -117,9 +125,13 @@ def extract(archive: str, dest: str) -> str:
     elif low.endswith((".tar.gz", ".tgz", ".tar.xz", ".tar.zst", ".tar")):
         with tarfile.open(archive) as t:
             for m in t.getmembers():
-                if not _safe(m.name) or m.issym() and not _safe(m.linkname) or m.isdev():
+                # links (symbolic or hard) may only point inside the archive; no device nodes
+                if not _safe(m.name) or (m.issym() or m.islnk()) and not _safe(m.linkname) or m.isdev():
                     raise ValueError(f"unsafe member in archive: {m.name}")
-            t.extractall(dest)
+            if hasattr(tarfile, "data_filter"):
+                t.extractall(dest, filter="data")
+            else:
+                t.extractall(dest)
     elif low.endswith(".7z"):
         tool = shutil.which("7z") or shutil.which("7za") or shutil.which("7zz")
         bsdtar = shutil.which("bsdtar")

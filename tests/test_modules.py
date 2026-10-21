@@ -1,7 +1,6 @@
 """Tests for the modules added after 0.1's core: HHD schema walking, controller, fans, display, launch environment,
 injector lsfg mode, sleep parsing, xess state, Proton listing, benchmark summary, downloads safety, power revert of
 HHD TDP, autotune pause, and the UI <-> backend wiring rule (every callable in src/api.ts exists in main.py)."""
-import json
 import os
 import re
 import sys

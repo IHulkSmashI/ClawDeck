@@ -123,4 +123,4 @@ class Battery:
         if via_hhd:
             return True
         # 100 = no limit; the kernel default is 100
-        return sysfs.write(self.p.charge_limit, percent)
+        return sysfs.write(self.p.charge_limit, percent, persist=True)   # survives revert_all: it's the point

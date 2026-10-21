@@ -293,3 +293,32 @@ def test_updates_download_newer_and_cache_the_check(tmp_path, monkeypatch):
     assert not up.ensure("optiscaler")["updated"]                     # nothing newer: no download
     up.check()
     assert calls["latest"] == n                                       # asked at most once a day
+
+
+def test_uninstall_never_touches_paths_outside_the_game(tmp_path):
+    import json as _json
+    from clawdeck import injector as inj
+    game = tmp_path / "game"
+    exe = game / "Binaries/Win64"
+    exe.mkdir(parents=True)
+    (exe / "Game.exe").write_bytes(b"MZ")
+    outside = tmp_path / "etc"
+    outside.mkdir()
+    (outside / "passwd").write_text("keep")
+    (exe / "dxgi.dll").write_text("ours")
+    (exe / inj.MARKER).write_text(_json.dumps({"mode": "optiscaler", "copied": [str(exe / "dxgi.dll"), str(outside / "passwd")],
+                                                "backed_up": [], "created_dirs": [str(outside)]}))
+    inj.Injector(str(tmp_path / "assets")).uninstall(str(game))
+    assert (outside / "passwd").read_text() == "keep"
+    assert not (exe / "dxgi.dll").exists()
+
+
+def test_scan_still_sees_the_games_own_dll_after_optiscaler(tmp_path):
+    import json as _json
+    from clawdeck import gamescan
+    exe = tmp_path / "bin"
+    exe.mkdir()
+    (exe / ".clawdeck-inject.json").write_text(_json.dumps({"copied": [str(exe / "amd_fidelityfx_dx12.dll"), str(exe / "dxgi.dll")],
+                                                              "backed_up": [str(exe / "amd_fidelityfx_dx12.dll")]}))
+    ours = gamescan._ours(str(exe))
+    assert "dxgi.dll" in ours and "amd_fidelityfx_dx12.dll" not in ours

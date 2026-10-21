@@ -18,7 +18,7 @@ py_modules/clawdeck/
                 OptiPatcher / REFramework / INI fixes, exact undo, lsfg-vk layer install
    gamescan.py  what a game ships: upscalers, frame generation, engine, anti-cheat (file names only)
    compat.py    OptiScaler's compatibility list + OptiPatcher's supported exes, cached a day
-   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk / Moonlight VRR, daily, checksum-verified,
+   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk / Moonlight VRR, daily, checksum-verified where upstream publishes sums,
                 previous version kept for rollback
    streaming.py Moonlight VRR (Nonary/moonlight-qt) unpacked once, one launcher, stream shortcut args
    changes.py   what changed since the last start (kernel, Mesa, OS, controller service, XeSS, Decky)

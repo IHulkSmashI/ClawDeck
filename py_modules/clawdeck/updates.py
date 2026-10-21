@@ -145,6 +145,9 @@ class Updates:
             return {"version": have, "dir": self.dir(comp), "updated": False}
         work = os.path.join(self.assets, ".downloads")
         archive = downloads.download(info["url"], os.path.join(work, info["name"]), timeout=300)
+        if info.get("sha256") == downloads.UNREACHABLE:
+            os.remove(archive)
+            raise ConnectionError(f"{comp} {info['version']}: its checksum file could not be read; not installed")
         if info.get("sha256"):
             got = downloads.sha256_of(archive)
             if got != info["sha256"]:

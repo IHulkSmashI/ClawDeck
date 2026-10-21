@@ -65,10 +65,14 @@ class Power:
                 "limits": self.hw.model["tdp"]}
 
     # ---- single levers ---------------------------------------------------------------------------------------------
+    def clamp_tdp(self, watts: int, plugged: bool | None = None) -> int:
+        """The watts set_tdp would really apply: inside the model's limits for this power source."""
+        lim = self.hw.model["tdp"]
+        return clamp(int(watts), lim["min"], lim["plugged_max"] if plugged else lim["battery_max"])
+
     def set_tdp(self, watts: int, plugged: bool | None = None) -> bool:
         lim = self.hw.model["tdp"]
-        hi = lim["plugged_max"] if plugged else lim["battery_max"]
-        watts = clamp(int(watts), lim["min"], hi)
+        watts = self.clamp_tdp(watts, plugged)
         if hhd.available():
             if not hhd.tdp_ready():
                 log.warning("Handheld Daemon's TDP controls are not enabled yet (accept them once in HHD's settings)")
@@ -160,10 +164,13 @@ class Power:
         min <= max holds at every step (the kernel rejects a floor above the ceiling)."""
         if not (self.p.gpu_min_freq and self.p.gpu_max_freq):
             return False
-        hw_min = sysfs.read_int(self.p.gpu_rpn_freq, 0) if self.p.gpu_rpn_freq else 0
-        hw_max = sysfs.read_int(self.p.gpu_rp0_freq, 0) if self.p.gpu_rp0_freq else 0
-        cur_min = sysfs.read_int(self.p.gpu_min_freq, hw_min) or 0
-        cur_max = sysfs.read_int(self.p.gpu_max_freq, hw_max) or 0
+        cur_min = sysfs.read_int(self.p.gpu_min_freq) or 0
+        cur_max = sysfs.read_int(self.p.gpu_max_freq) or 0
+        hw_min = (sysfs.read_int(self.p.gpu_rpn_freq) if self.p.gpu_rpn_freq else None) or 0
+        # without the hardware maximum (rp0), the current ceiling is the safe upper bound, never 0
+        hw_max = (sysfs.read_int(self.p.gpu_rp0_freq) if self.p.gpu_rp0_freq else None) or max(cur_max, cur_min)
+        if not hw_max:
+            return False
         new_min = clamp(int(min_mhz), hw_min, hw_max) if min_mhz is not None else cur_min
         new_max = clamp(int(max_mhz), hw_min, hw_max) if max_mhz is not None else cur_max
         if new_min > new_max:
@@ -194,7 +201,7 @@ class Power:
         result = {"profile": name, "applied": {}, "failed": []}
         if prof.get("tdp") is not None:
             if self.set_tdp(prof["tdp"], plugged):
-                result["applied"]["tdp"] = prof["tdp"]
+                result["applied"]["tdp"] = self.clamp_tdp(prof["tdp"], plugged)   # what was really set
             else:
                 result["failed"].append("tdp")
         if prof.get("epp") and self.p.cpu_epp:
