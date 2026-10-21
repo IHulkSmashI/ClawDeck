@@ -158,27 +158,29 @@ def test_balanced_profile_applies(fake_hw):
     assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 85
 
 
-def test_face_buttons_parse_and_dry_run(tmp_path, monkeypatch):
+def test_face_buttons_override(tmp_path, monkeypatch):
     from clawdeck import buttons
-    devices = tmp_path / "devices"
-    devices.write_text('I: Bus=0011 Vendor=0001 Product=0001 Version=ab83\nN: Name="AT Translated Set 2 keyboard"\n'
-                       'P: Phys=isa0060/serio0/input0\nH: Handlers=sysrq kbd event4 leds\nB: KEY=1\n\n'
-                       'N: Name="MSI WMI hotkeys"\nH: Handlers=kbd event12\n\n')
-    assert buttons.keyboard_event(str(devices)) == "/dev/input/event4"
-    monkeypatch.setattr(buttons, "keyboard_event", lambda *a: "/dev/input/event4")
-
-    class R:
-        returncode = 0
-        stderr = ""
-        stdout = "E: KEYBOARD_KEY_b9=f15\nE: KEYBOARD_KEY_ba=f16\nE: KEYBOARD_KEY_a0=mute\n"
-    monkeypatch.setattr(buttons, "_run", lambda cmd, timeout=30: R())
-    assert buttons.mapped() == {"b9": "f15", "ba": "f16"}
-    assert buttons.status("MS-1T91")["ok"] and buttons.status("MS-1T91")["applies"]
+    stock = tmp_path / "50-msi_claw8_ex_ai_cg3em.yaml"
+    stock.write_text("name: MSI Claw 8 EX AI+ CG3EM\nsource_devices: []\ncapability_map_id: claw2\n")
+    monkeypatch.setattr(buttons, "STOCK_DEVICE", str(stock))
+    monkeypatch.setattr(buttons, "DEVICE_OVERRIDE", str(tmp_path / "devices.d/50-msi_claw8_ex_ai_cg3em.yaml"))
+    monkeypatch.setattr(buttons, "MAP_OVERRIDE", str(tmp_path / "capability_maps.d/msiclaw_claw8ex.yaml"))
+    monkeypatch.setattr(buttons, "LEGACY_HWDB", (str(tmp_path / "old.hwdb"),))
+    assert buttons.stock_map_id() == "claw2"
     assert not buttons.status("MS-1T41")["applies"]
-    R.stdout = "E: KEYBOARD_KEY_a0=mute\n"
-    assert not buttons.status("MS-1T91")["ok"]
+    st = buttons.status("MS-1T91")
+    assert st["applies"] and not st["ok"] and not st["installed"]
+    assert "capability_map_id: claw8ex" in buttons.device_override_text()
     sysfs.set_dry_run(True)
-    r = buttons.apply()
-    assert r["dry_run"] and "systemd-hwdb update" in r["would"] and "event4" in r["would"]
+    assert buttons.apply()["dry_run"]
     sysfs.set_dry_run(False)
-    assert "Ltd.:*:rnMS-1T91:*" in buttons.HWDB_TEXT and "KEYBOARD_KEY_b9=f15" in buttons.HWDB_TEXT
+    calls = []
+    monkeypatch.setattr(buttons, "_run", lambda cmd, timeout=30: calls.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    r = buttons.apply()
+    assert r["ok"] and calls == [["systemctl", "restart", "inputplumber"]]
+    assert buttons.status("MS-1T91")["ok"]
+    assert "- keyboard: KeyG" in (tmp_path / "capability_maps.d/msiclaw_claw8ex.yaml").read_text()
+    stock.write_text("capability_map_id: claw8ex_upstream\n")
+    assert buttons.status("MS-1T91")["upstream_fixed"]
+    r = buttons.remove()
+    assert r["ok"] and len(r["removed"]) == 2 and not buttons.status("MS-1T91")["installed"]

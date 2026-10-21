@@ -59,8 +59,10 @@ with Dry run on, then TDP write-and-read-back, then the GPU window, then charge 
 
 ## 11. Face buttons dead in Game Mode (found 2026-10-21, fixed in `buttons.py`)
 
-Root cause: systemd's `60-keyboard.hwdb` maps the Claw face-button scancodes `b9`/`ba` → F15/F16 for MS-1T41/1T42/
-1T52/1T8K only; MS-1T91 (Claw 8 EX) is missing, so InputPlumber's EX profile (which waits for KeyF15/KeyF16 from the
-"AT Translated Set 2 keyboard") never sees them. `hid-msi` is bound (mode xinput) and InputPlumber's composite
-device is fine. Fix: a one-board hwdb file + `systemd-hwdb update` + `udevadm trigger` + restart InputPlumber.
-Upstream: systemd (hwdb), then nothing else is needed.
+Measured with evtest on every input device (InputPlumber stopped), BIOS E1T91IMS.10D:
+right face button → KEY_F15 from "MSI WMI hotkeys" (plus scancode b9 on the AT keyboard); left face button →
+KEY_LEFTMETA + KEY_G (Win+G) from "AT Translated Set 2 keyboard". InputPlumber's config for MS-1T91 uses map
+`claw2`: Guide = chord F15+G, Guide(long) = F15+Tab, QuickAccess = F16. None of those ever occur on this firmware,
+so both buttons are dropped. (A first attempt mapped scancode b9→F15 through hwdb; it was a red herring: F15 already
+arrives from the WMI device, the chord is what fails.) Fix: `/etc/inputplumber/devices.d` copy of the device config
+pointing at a `claw8ex` map (Guide = KeyG, QuickAccess = KeyF15, M1/M2 unchanged). Upstream: InputPlumber.
