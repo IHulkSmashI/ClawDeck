@@ -1,0 +1,93 @@
+"""Per-game profiles, stored as one JSON file in Decky's settings directory and shareable as JSON.
+
+A profile is a dict of overrides on top of a base profile name:
+  {"base": "battery", "tdp": 22, "cpu_max_pct": 80, "gpu_min_mhz": 1200, "gpu_max_mhz": null,
+   "target_fps": 60, "autotune": true, "learned": {...}}
+Keys are Steam app ids as strings; "default" is the fallback. Two slots per game: "battery" and "plugged", so the
+right one follows the power source automatically.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import tempfile
+import time
+
+log = logging.getLogger("clawdeck.profiles")
+
+FORMAT_VERSION = 1
+
+
+class Profiles:
+    def __init__(self, path: str):
+        self.path = path
+        self.data: dict = {"version": FORMAT_VERSION, "games": {}, "default": {"battery": {"base": "battery"},
+                                                                                 "plugged": {"base": "performance"}}}
+        self.load()
+
+    def load(self) -> None:
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and d.get("version") == FORMAT_VERSION:
+                self.data = d
+        except (OSError, ValueError):
+            pass
+
+    def save(self) -> bool:
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(self.path), prefix=".profiles.")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2, sort_keys=True)
+            os.replace(tmp, self.path)   # atomic: a crash never leaves a half-written file
+            return True
+        except OSError as e:
+            log.error("saving profiles failed: %s", e)
+            return False
+
+    def get(self, appid: str | int, plugged: bool) -> dict:
+        slot = "plugged" if plugged else "battery"
+        game = self.data["games"].get(str(appid), {})
+        base = dict(self.data["default"].get(slot, {}))
+        base.update(game.get(slot, {}))
+        return base
+
+    def set(self, appid: str | int, plugged: bool, values: dict) -> dict:
+        slot = "plugged" if plugged else "battery"
+        g = self.data["games"].setdefault(str(appid), {})
+        s = g.setdefault(slot, {})
+        for k, v in values.items():
+            if v is None:
+                s.pop(k, None)
+            else:
+                s[k] = v
+        g["updated"] = int(time.time())
+        self.save()
+        return self.get(appid, plugged)
+
+    def remove(self, appid: str | int) -> None:
+        self.data["games"].pop(str(appid), None)
+        self.save()
+
+    def export_json(self, appid: str | int | None = None) -> str:
+        if appid is None:
+            return json.dumps(self.data, indent=2, sort_keys=True)
+        return json.dumps({"version": FORMAT_VERSION, "games": {str(appid): self.data["games"].get(str(appid), {})}},
+                          indent=2, sort_keys=True)
+
+    def import_json(self, text: str, overwrite: bool = False) -> int:
+        d = json.loads(text)
+        if not isinstance(d, dict) or d.get("version") != FORMAT_VERSION:
+            raise ValueError("not a ClawDeck profile file")
+        n = 0
+        for appid, g in d.get("games", {}).items():
+            if not isinstance(g, dict):
+                continue
+            if overwrite or appid not in self.data["games"]:
+                self.data["games"][appid] = g
+                n += 1
+        if n:
+            self.save()
+        return n
