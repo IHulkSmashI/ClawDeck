@@ -421,3 +421,56 @@ def test_power_profile_script_dry_run():
                        capture_output=True, text=True)
     assert r.returncode == 0 and "== battery" in r.stdout
     assert subprocess.run(["bash", os.path.join(ROOT, "tools", "power-profile.sh"), "turbo"], capture_output=True).returncode == 1
+
+
+# ---- current Bazzite: no HHD, MSI firmware limits, InputPlumber ------------------------------------------------------
+def _msi_fw(tmp_path):
+    base = tmp_path / "fw"
+    for a, v in (("ppt_pl1_spl", 20), ("ppt_pl2_sppt", 30), ("ppt_pl3_fppt", 40)):
+        _w(base / a / "current_value", v)
+    return hw.Paths(msi_pl1=str(base / "ppt_pl1_spl/current_value"), msi_pl2=str(base / "ppt_pl2_sppt/current_value"),
+                    msi_pl3=str(base / "ppt_pl3_fppt/current_value"))
+
+
+def test_tdp_through_msi_firmware_when_no_hhd(tmp_path, monkeypatch):
+    monkeypatch.setattr(hhd, "available", lambda: False)
+    p = _msi_fw(tmp_path)
+    pw = power.Power(_hardware(p))
+    assert pw.tdp_backend() == "msi-firmware"
+    assert pw.set_tdp(15, plugged=False)
+    # EX: 35 W ceiling, 45 W boost -> boost scales 15 * 45/35 = 19 W; PL3 never above the boost limit
+    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [15, 19, 19]
+    assert pw.set_tdp(99, plugged=True)                         # clamped to the plugged ceiling
+    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 45, 45]
+    pw.revert_all()
+    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 30, 40]
+
+
+def test_msi_firmware_dry_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(hhd, "available", lambda: False)
+    p = _msi_fw(tmp_path)
+    sysfs.set_dry_run(True)
+    assert power.Power(_hardware(p)).set_tdp(25, plugged=True)
+    assert sysfs.read_int(p.msi_pl1) == 20
+
+
+def test_stack_detection(monkeypatch):
+    from clawdeck import stack
+    monkeypatch.setattr(stack, "_active", lambda units: {"inputplumber.service": True, "powerstation.service": True})
+    monkeypatch.setattr(stack, "_hhd_unit_active", lambda: False)
+    monkeypatch.setattr(stack.os.path, "exists", lambda p: False)
+    s = stack.detect()
+    assert s["controller"] == "inputplumber" and s["tdp_owner"] == "steam" and not s["conflict"]
+    monkeypatch.setattr(stack, "_hhd_unit_active", lambda: True)
+    assert stack.detect()["conflict"]
+
+
+def test_health_never_offers_hhd_next_to_inputplumber(monkeypatch, tmp_path):
+    from clawdeck import health, stack
+    monkeypatch.setattr(stack, "detect", lambda: {"hhd": False, "inputplumber": True, "powerstation": True,
+                                                  "controller": "inputplumber", "tdp_owner": "steam", "conflict": False})
+    monkeypatch.setattr(hhd, "available", lambda: False)
+    checks = {c["id"]: c for c in health.checks(_hardware(_msi_fw(tmp_path)), str(tmp_path))}
+    assert checks["controller"]["ok"] and checks["controller"]["fix"] is None
+    assert checks["tdp_owner"]["ok"] and "Steam" in checks["tdp_owner"]["detail"]
+    assert not any(c.get("fix") == "enable_hhd" for c in checks.values())

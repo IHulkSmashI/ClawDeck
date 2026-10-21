@@ -2,7 +2,7 @@ import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField }
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { getController, setController, HhdSetting } from "../api";
+import { getController, getHardware, setController, HhdSetting, Stack } from "../api";
 import { Advanced } from "../components/Advanced";
 import { Hint } from "../components/Hint";
 
@@ -37,7 +37,8 @@ const Control: FC<{ s: HhdSetting; onSet: (key: string, v: any) => void }> = ({ 
 
 export const ControllerTab: FC = () => {
   const [st, setSt] = useState<{ available: boolean; settings: HhdSetting[] } | null>(null);
-  const load = async () => setSt(await getController());
+  const [stack, setStack] = useState<Stack | null>(null);
+  const load = async () => { setSt(await getController()); setStack((await getHardware()).stack); };
   useEffect(() => { load(); }, []);
   const onSet = async (key: string, v: any) => {
     const r = await setController(key, v);
@@ -48,7 +49,11 @@ export const ControllerTab: FC = () => {
     return (
       <PanelSection title="Controller">
         <PanelSectionRow>
-          <Hint does="The MSI buttons, gyro, RGB and back buttons are handled by Handheld Daemon, which is not running." why="Setup → 'Turn on Handheld Daemon'; if the buttons still do nothing: Desktop Mode → terminal → sudo rpm-ostree upgrade → reboot." cost="none." />
+          {stack?.inputplumber ? (
+            <Hint does="On this install InputPlumber (Bazzite's default) runs the controller: MSI buttons, gyro and back buttons." why="set gyro and back buttons per game in Steam → Controller settings; ClawDeck's own controls for InputPlumber come in a later version." cost="none." />
+          ) : (
+            <Hint does="Neither InputPlumber nor Handheld Daemon is running, so the MSI buttons and gyro have no driver." why="Desktop Mode → terminal → sudo rpm-ostree upgrade → reboot; then Setup → Re-check." cost="none." />
+          )}
         </PanelSectionRow>
       </PanelSection>
     );

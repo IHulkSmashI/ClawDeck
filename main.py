@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, benchmark, controller, display, downloads, fans, health, hhd, hw,  # noqa: E402
-                      injector, launchenv, power, profiles, proton, sleep, sysfs, userexec, xess)
+                      injector, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -108,7 +108,7 @@ class Plugin:
 
     # ---- setup / health ----------------------------------------------------------------------------------------------
     async def get_hardware(self) -> dict:
-        return self.hw.to_dict()
+        return {**self.hw.to_dict(), "stack": stack.detect()}
 
     async def get_health(self) -> list:
         return health.checks(self.hw, HOME)
@@ -122,6 +122,8 @@ class Plugin:
     async def run_fix(self, fix: str, allow_unpinned: bool = False) -> dict:
         """The one-tap fixes the health check offers (Health.fix)."""
         if fix == "enable_hhd":
+            if stack.detect()["inputplumber"]:
+                return {"ok": False, "error": "InputPlumber is running; starting Handheld Daemon too would make them fight over the controller"}
             u = userexec.user_of(HOME)
             if u is None:
                 return {"ok": False, "error": "cannot tell which user to enable Handheld Daemon for"}
