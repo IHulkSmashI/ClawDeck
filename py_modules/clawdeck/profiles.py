@@ -4,7 +4,8 @@ A profile is a dict of overrides on top of a base profile name:
   {"base": "battery", "tdp": 22, "cpu_max_pct": 80, "gpu_min_mhz": 1200, "gpu_max_mhz": null,
    "target_fps": 60, "autotune": true, "learned": {...}}
 Keys are Steam app ids as strings; "default" is the fallback. Two slots per game: "battery" and "plugged", so the
-right one follows the power source automatically.
+right one follows the power source automatically. A third, game-wide key "launch" holds what goes into the game's
+environment (launchenv.py): injector mode, lsfg-vk options, HDR, Mesa driver choice.
 """
 from __future__ import annotations
 
@@ -66,6 +67,25 @@ class Profiles:
         g["updated"] = int(time.time())
         self.save()
         return self.get(appid, plugged)
+
+    def get_launch(self, appid: str | int) -> dict:
+        """Game-wide launch settings (injector mode, HDR, Mesa choice): the same plugged in or on battery."""
+        return dict(self.data["games"].get(str(appid), {}).get("launch", {}))
+
+    def set_launch(self, appid: str | int, values: dict) -> dict:
+        g = self.data["games"].setdefault(str(appid), {})
+        s = g.setdefault("launch", {})
+        for k, v in values.items():
+            if v is None:
+                s.pop(k, None)
+            else:
+                s[k] = v
+        g["updated"] = int(time.time())
+        self.save()
+        return dict(s)
+
+    def games(self) -> list[str]:
+        return sorted(self.data["games"].keys())
 
     def remove(self, appid: str | int) -> None:
         self.data["games"].pop(str(appid), None)

@@ -90,6 +90,31 @@ class Injector:
     def __init__(self, assets_dir: str):
         self.assets = assets_dir   # where downloaded OptiScaler / XeSS / lsfg-vk releases live
 
+    def assets_ready(self) -> dict:
+        return {"optiscaler": os.path.exists(os.path.join(self.assets, "optiscaler", "OptiScaler.dll")),
+                "xess": os.path.exists(os.path.join(self.assets, "xess", "libxess.dll"))}
+
+    def stage(self, kind: str, extracted: str) -> dict:
+        """Copy what a downloaded release contains into assets/<kind>: OptiScaler's folder (the one holding
+        OptiScaler.dll) or the XeSS SDK's runtime DLLs (libxess*.dll, libxell.dll)."""
+        dest = os.path.join(self.assets, kind)
+        os.makedirs(dest, exist_ok=True)
+        copied = []
+        for root, _dirs, files in os.walk(extracted):
+            if kind == "optiscaler" and "OptiScaler.dll" in files:
+                for fn in files:
+                    shutil.copy2(os.path.join(root, fn), os.path.join(dest, fn))
+                    copied.append(fn)
+                break
+            if kind == "xess":
+                for fn in files:
+                    if fn.lower() in ("libxess.dll", "libxess_dx11.dll", "libxess_fg.dll", "libxell.dll"):
+                        shutil.copy2(os.path.join(root, fn), os.path.join(dest, fn))
+                        copied.append(fn)
+        if not copied:
+            raise FileNotFoundError(f"nothing usable for {kind} in the downloaded release")
+        return {"kind": kind, "copied": sorted(set(copied))}
+
     def state(self, game_dir: str) -> dict:
         d = find_game_exe_dir(game_dir)
         proxy = os.path.join(d, PROXY_NAME)
@@ -155,10 +180,62 @@ class Injector:
         return {"mode": "none", "restored": info.get("backed_up", [])}
 
     @staticmethod
-    def launch_env(mode: str) -> dict[str, str]:
-        """Environment the launch wrapper exports for the chosen mode."""
+    def launch_env(mode: str, lsfg: dict | None = None) -> dict[str, str]:
+        """Environment the launch wrapper exports for the chosen mode.
+        lsfg-vk (lsfg-vk.dev, docs/configuration/environment-variables): LSFGVK_ENV=1 makes it read its options from
+        the environment instead of its config file, so a per-game choice needs no edit of the user's conf.toml."""
         if mode == "optiscaler":
             return {"WINEDLLOVERRIDES": "dxgi=n,b"}
         if mode == "lsfg":
-            return {"LSFG_LEGACY": "1"}   # lsfg-vk reads its per-game config; this key is a placeholder until verified on the Claw
+            o = {**LSFG_DEFAULTS, **(lsfg or {})}
+            mult = max(2, min(int(o["multiplier"]), 4))
+            flow = max(0.25, min(float(o["flow_scale"]), 1.0))
+            return {"LSFGVK_ENV": "1", "LSFGVK_MULTIPLIER": str(mult), "LSFGVK_FLOW_SCALE": f"{flow:.2f}",
+                    "LSFGVK_PERFORMANCE_MODE": "1" if o["performance_mode"] else "0"}
         return {}
+
+
+LSFG_DEFAULTS = {"multiplier": 2, "flow_scale": 0.8, "performance_mode": True}
+LSFG_LAYER_DIRS = ("/usr/share/vulkan/implicit_layer.d", "/etc/vulkan/implicit_layer.d",
+                   "~/.local/share/vulkan/implicit_layer.d")
+
+
+def lsfg_state(home: str) -> dict:
+    """Is the lsfg-vk Vulkan layer installed, and is Lossless Scaling (the paid Steam app whose DLL it loads) present?
+    ClawDeck never ships Lossless.dll; the user owns it."""
+    layer = None
+    for d in LSFG_LAYER_DIRS:
+        d = d.replace("~", home, 1)
+        try:
+            for fn in os.listdir(d):
+                if "lsfg" in fn.lower() and fn.endswith(".json"):
+                    layer = os.path.join(d, fn)
+                    break
+        except OSError:
+            continue
+        if layer:
+            break
+    dll = None
+    for lib in _steam_libraries(home):
+        cand = os.path.join(lib, "steamapps", "common", "Lossless Scaling", "Lossless.dll")
+        if os.path.exists(cand):
+            dll = cand
+            break
+    return {"layer": layer, "lossless_dll": dll, "ready": bool(layer and dll)}
+
+
+def _steam_libraries(home: str) -> list[str]:
+    root = os.path.join(home, ".local", "share", "Steam")
+    libs = [root]
+    vdf = os.path.join(root, "steamapps", "libraryfolders.vdf")
+    try:
+        with open(vdf, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('"path"'):
+                    p = line.split('"')[3]
+                    if p not in libs:
+                        libs.append(p)
+    except (OSError, IndexError):
+        pass
+    return libs
