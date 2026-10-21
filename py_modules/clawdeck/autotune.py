@@ -19,8 +19,14 @@ Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no b
        -10 % if the CPU is idle enough, else GPU floor +100 MHz; CPU-bound: CPU ceiling +10 %, else drop the GPU
        floor), then TDP +2 W; never above the ceiling (the profile or power limit the user picked).
   5. after `stable` decisions without a change, confidence goes up; at 3 the game is "learned" and autotune stops
-     lowering, but keeps checking: a miss raises power again at once, and every RECHECK_S of steady play on target
-     it tries one step lower again, in case the game (or a driver update) now needs less.
+     lowering, but keeps checking for as long as the game runs, because the player can change graphics settings or
+     reach a heavier area at any time: a miss raises power again at once (settings raised), fps far above the target
+     (HEADROOM) starts learning again (settings lowered), and every RECHECK_S of steady play on target it tries one
+     step lower again, in case the game or a driver update now needs less.
+
+Cost, per second while a game runs: one read of the new lines of the MangoHud log, /proc/stat, two GPU clock files
+and the RAPL energy counter, plus a few comparisons. The two dearer reads are cached: the log directory listing
+(every LOG_RESCAN_S) and PowerStation's GPU load over D-Bus (every BUSY_EVERY_S). No game running = no loop at all.
 
 Rules: dry-run prints every would-be write; a manual change by the user (TDP differs from what we set) pauses
 learning for the session; everything applied is reverted on game exit. The maths is a few comparisons per second:
@@ -43,6 +49,9 @@ log = logging.getLogger("clawdeck.autotune")
 CPU_MIN_PCT = 60        # autotune never trims the CPU below this: below it, frame pacing suffers in most games
 CPU_IDLE_PCT = 50       # "the CPU has power to spare": its utilisation is under this while the GPU is the bottleneck
 GPU_STEP_MHZ = 100
+LOG_RESCAN_S = 30       # look for a new MangoHud log file this often (a new file appears only when a game starts)
+BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (one D-Bus call per decision window)
+HEADROOM = 1.15         # a learned game running this far above its target (graphics lowered?) is learned again
 RECHECK_S = 300         # a learned game is re-probed one step lower after this long on target without a change
 ON_AVG, ON_LOW = 0.97, 0.85     # on target: window average and worst second, as a share of the target
 MISS_AVG, MISS_LOW = 0.95, 0.75  # missing: average or worst second below these
@@ -70,13 +79,21 @@ class Sampler:
         self._last_energy: tuple[float, int] | None = None
         self._last_stat: tuple[int, int] | None = None
         self._log_pos: dict[str, int] = {}
-        self._busy_source = True        # stops asking PowerStation after the first miss (no D-Bus call per second)
+        # the two reads that cost more than a file read are cached: the log directory listing (MangoHud starts a new
+        # file per launch, not per second) and PowerStation's GPU load (a D-Bus call, needed once per decision)
+        self._log: str | None = None
+        self._log_checked = 0.0
+        self._busy: tuple[float, int | None] = (-1e9, None)
+        self._busy_retry = 0.0
 
     def _newest_log(self) -> str | None:
+        now = time.monotonic()
+        if self._log and now - self._log_checked < LOG_RESCAN_S and os.path.exists(self._log):
+            return self._log
+        self._log_checked = now
         files = glob.glob(os.path.join(self.log_dir, "*.csv"))
-        if not files:
-            return None
-        return max(files, key=os.path.getmtime)
+        self._log = max(files, key=os.path.getmtime) if files else None
+        return self._log
 
     def frametime(self) -> tuple[float | None, float | None]:
         f = self._newest_log()
@@ -134,11 +151,15 @@ class Sampler:
         return 100.0 * (1.0 - (idle - prev[1]) / (total - prev[0]))
 
     def gpu_busy(self) -> int | None:
-        if not self._busy_source:
-            return None
+        """PowerStation's GPU load, at most once every BUSY_EVERY_S; after a miss, retried once a minute only."""
+        now = time.monotonic()
+        t, v = self._busy
+        if now - t < BUSY_EVERY_S or now < self._busy_retry:
+            return v
         v = shadowblip.gpu_busy_percent()
+        self._busy = (now, v)
         if v is None:
-            self._busy_source = False
+            self._busy_retry = now + 60
         return v
 
     def sample(self) -> Sample:
@@ -299,6 +320,11 @@ class Autotune:
                 changed = True
             l.confidence = max(0, l.confidence - 1)
         elif s.avg_fps >= t * ON_AVG and s.low_fps >= t * ON_LOW:
+            if l.confidence >= 3 and s.avg_fps >= t * HEADROOM:
+                # far above target on a learned game: the player lowered the graphics (or a scene got lighter for
+                # good), so there is power to save now, not in RECHECK_S
+                log.info("autotune: %.0f fps for a %d target, learning again", s.avg_fps, t)
+                l.confidence = 0
             recheck = l.confidence >= 3 and smp.t - s.last_change_t >= RECHECK_S
             if l.confidence < 3 or recheck:
                 if s.trim_turn:

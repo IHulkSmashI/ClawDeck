@@ -50,7 +50,8 @@ it does:
   that fps, never more than the profile you picked. It also balances that power between the CPU and the graphics:
   when a game is held back by one side, the other side gives up power it doesn't need. It decides on the average
   fps over 10 seconds (and the worst second, so stutter counts), waits for fresh numbers after every change, and
-  keeps rechecking every few minutes even after it has learned a game.
+  keeps watching for the whole session: raise the graphics and it adds power within seconds, lower them and it
+  starts saving again.
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.
@@ -167,8 +168,10 @@ reboot. The MSI button fix stays, so the buttons keep working.
 
 ## Questions
 
-**Does it drain my battery?** No. ClawDeck sleeps until you touch it. Only Autotune and Benchmark do anything while
-you play, and they check once a second while their game runs.
+**Does it drain my battery?** No. ClawDeck sleeps until you touch it. While a game runs, Autotune checks once a
+second for as long as you play, so it notices when you change graphics settings or reach a heavier area. Each check
+reads a few small files and takes well under a thousandth of a second of CPU time (measured: about 0.01 % of one
+core). With no game running, nothing runs at all.
 
 **Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
 changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin. The
