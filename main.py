@@ -25,13 +25,24 @@ HOME = decky.DECKY_USER_HOME
 DESKTOP = os.path.join(HOME, "Desktop")
 VERSIONS = os.path.join(PLUGIN_DIR, "assets", "versions.json")
 POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz")
+# The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
+# deletes the plugin, so it must stay there (as a pass-through) or those games would no longer start.
+WRAPPER = os.path.join(HOME, ".local", "share", "clawdeck", "clawdeck-launch.sh")
+PASSTHROUGH = "#!/bin/bash\n# ClawDeck was removed; this only starts the game. Delete it from the game's launch options when you like.\nexec \"$@\"\n"
 
 
 def _write_user_file(path: str, text: str) -> str:
+    """Write a file in the user's home as the user would: missing folders and the file end up owned by them."""
+    d = os.path.dirname(path)
+    missing = []
+    while d and not os.path.isdir(d):
+        missing.append(d)
+        d = os.path.dirname(d)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
-    userexec.chown_tree(path, HOME)
+    for n in [path, *missing]:
+        userexec.chown_tree(n, HOME)
     return path
 
 
@@ -63,6 +74,7 @@ class Plugin:
         # the one setting applied at every start on purpose: the charge limit (sysfs resets at boot)
         self._apply_charge_limit()
         self._make_tools_executable()
+        self._install_wrapper()
 
     def _make_tools_executable(self) -> None:
         """Decky unpacks plugin zips without permission bits; the launch wrapper must be executable for Steam."""
@@ -81,7 +93,24 @@ class Plugin:
         decky.logger.info("ClawDeck unloaded, %d value(s) reverted", n)
 
     async def _uninstall(self):
-        pass
+        """Leave nothing behind that changes how the Claw or a game behaves."""
+        self.power.revert_all()
+        self.display.reset()
+        if self.settings.get("fan_preset_set"):
+            self.fans.apply_preset("auto")
+        try:
+            _write_user_file(WRAPPER, PASSTHROUGH)
+            os.chmod(WRAPPER, 0o755)
+        except OSError as e:
+            decky.logger.warning("could not leave the pass-through wrapper: %s", e)
+
+    def _install_wrapper(self) -> None:
+        try:
+            with open(os.path.join(PLUGIN_DIR, "tools", "clawdeck-launch.sh"), "r", encoding="utf-8") as f:
+                _write_user_file(WRAPPER, f.read())
+            os.chmod(WRAPPER, 0o755)
+        except OSError as e:
+            decky.logger.warning("could not install the launch wrapper: %s", e)
 
     def _apply_charge_limit(self) -> None:
         lim = self.settings.get("charge_limit")
@@ -329,7 +358,11 @@ class Plugin:
         return self.fans.status()
 
     async def set_fan_preset(self, name: str) -> dict:
-        return self.fans.apply_preset(name)
+        r = self.fans.apply_preset(name)
+        if r.get("ok"):
+            self.settings["fan_preset_set"] = name != "auto"
+            self._save_settings()
+        return r
 
     # ---- display -----------------------------------------------------------------------------------------------------
     async def get_display(self) -> dict:
@@ -365,7 +398,7 @@ class Plugin:
     async def get_launch(self, appid: str) -> dict:
         launch = self.profiles.get_launch(appid)
         return {"launch": launch, "env": launchenv.compose(launch),
-                "wrapper": os.path.join(PLUGIN_DIR, "tools", "clawdeck-launch.sh") + " %command%"}
+                "wrapper": WRAPPER + " %command%"}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
         allowed = {"inject", "lsfg", "hdr", "mesa", "proton"}

@@ -51,7 +51,7 @@ const XessSection: FC = () => {
       ) : null}
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={busy} onClick={() => install(false)}>{x?.installed ? "Update driver" : "Install driver"}</ButtonItem>
-        <Hint does="Downloads the release from IHulkSmashI/xess-xmx-linux and runs its installer as you." why="one tap instead of a terminal." cost="about 230 MB download; log out of Game Mode and back in after." />
+        <Hint does="Downloads xess-xmx-linux from its GitHub releases and runs its installer for you." why="one tap instead of a terminal." cost="about 230 MB download; log out of Game Mode and back in after." />
       </PanelSectionRow>
       {x?.installed && (
         <PanelSectionRow>
@@ -156,6 +156,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
           <Hint does="Fetches the releases from their own GitHub pages." why="ClawDeck never bundles upstream DLLs." cost="a few hundred MB once." />
         </PanelSectionRow>
       )}
+      {(mode !== "none" || state?.mode !== "none") && (
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={!state?.dir || busy || needsAssets || foreign} onClick={async () => {
           setBusy(true);
@@ -164,9 +165,13 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
             toast(r.error ?? (r.dry_run ? `Dry run: ${r.would}` : mode === "none" ? "Injector removed, originals restored" : `${mode} set up; restart the game`));
           } finally { setBusy(false); load(); }
         }}>{mode === "none" ? "Remove injector" : "Apply to this game"}</ButtonItem>
-        <Hint does={app ? (state?.native_xess ? "This game ships XeSS already: no injector needed, the XMX driver handles it." : (state?.dir ? `Writes into ${state.dir}; originals are backed up.` : "This game's folder was not found in Steam's library (non-Steam games are not supported yet).")) : "Start a game to configure it (the game folder is read from Steam)."}
+        <Hint does={mode === "none" ? "Takes ClawDeck's injector out of this game and puts its original files back." : mode === "lsfg" ? "Turns lsfg-vk on for this game; nothing is copied into the game folder." : "Copies OptiScaler into the game folder; the game's own files are backed up."}
           why="takes effect the next time the game starts." />
       </PanelSectionRow>
+      )}
+      {app && !state?.dir && <PanelSectionRow><Hint does="This game's folder was not found in Steam's library (non-Steam games are not supported yet)." /></PanelSectionRow>}
+      {app && state?.native_xess && <PanelSectionRow><Hint does="This game ships XeSS already: no injector needed, the XeSS driver above handles it." /></PanelSectionRow>}
+      {!app && <PanelSectionRow><Hint does="Start a game to set it up (ClawDeck reads the game folder from Steam)." /></PanelSectionRow>}
       {app && mode !== "none" && <LaunchWrapper appid={app.appid} name={app.name} />}
     </PanelSection>
   );

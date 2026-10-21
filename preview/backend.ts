@@ -188,8 +188,8 @@ export const backend = {
   set_controller: (k: string, v: any) => { state.controller[k] = v; return ok({ value: v }); },
 
   // ---- graphics ----
-  get_launch: () => ({ launch: state.launch, env: {}, wrapper: "/home/bazzite/homebrew/plugins/ClawDeck/tools/clawdeck-launch.sh %command%" }),
-  set_launch: (_a: string, v: any) => { Object.assign(state.launch, v); return { launch: state.launch, env: {}, wrapper: "/home/bazzite/homebrew/plugins/ClawDeck/tools/clawdeck-launch.sh %command%" }; },
+  get_launch: () => ({ launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }),
+  set_launch: (_a: string, v: any) => { Object.assign(state.launch, v); return { launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }; },
   injector_state: () => ({ dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", mode: state.launch.inject, optiscaler_present: state.launch.inject === "optiscaler",
                            native_xess: false, info: null, assets: { optiscaler: true, xess: true }, lsfg: { layer: "/usr/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json", lossless_dll: null, ready: false } }),
   injector_install: (_a: string, mode: string) => { state.launch.inject = mode; return { mode }; },

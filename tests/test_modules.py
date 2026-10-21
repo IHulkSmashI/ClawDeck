@@ -474,3 +474,19 @@ def test_health_never_offers_hhd_next_to_inputplumber(monkeypatch, tmp_path):
     assert checks["controller"]["ok"] and checks["controller"]["fix"] is None
     assert checks["tdp_owner"]["ok"] and "Steam" in checks["tdp_owner"]["detail"]
     assert not any(c.get("fix") == "enable_hhd" for c in checks.values())
+
+
+def test_chown_tree_handles_a_single_file(tmp_path, monkeypatch):
+    from clawdeck import userexec
+    f = tmp_path / "report.json"
+    f.write_text("{}")
+    calls = []
+    monkeypatch.setattr(userexec, "user_of", lambda home: type("U", (), {"pw_uid": 1000, "pw_gid": 1000})())
+    monkeypatch.setattr(userexec.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(userexec.os, "lchown", lambda p, u, g: calls.append(p))
+    userexec.chown_tree(str(f), str(tmp_path))
+    assert calls == [str(f)]
+    calls.clear()
+    (tmp_path / "d").mkdir(); (tmp_path / "d" / "x").write_text("1")
+    userexec.chown_tree(str(tmp_path / "d"), str(tmp_path))
+    assert sorted(calls) == sorted([str(tmp_path / "d"), str(tmp_path / "d" / "x")])
