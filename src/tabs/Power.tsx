@@ -6,11 +6,11 @@ import {
   applyProfile, benchExport, benchResults, benchStart, benchStatus, benchStop, exportProfilesFile, getAutotune,
   getGameProfile, getHardware, getPower, getSetting, importProfilesFile, listProfileFiles, listProfiles, resetGpuWindow, resetLearned, revertPower,
   saveGamePower, setCpuMaxPct, setCpuTurbo, setEpp, setGameProfile, setTdpBoost, setGpuWindow, setSetting, setTdp, AutotuneStatus,
-  BenchResult, PowerStatus,
+  BenchResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -37,6 +37,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [otherPower, setOtherPower] = useState<string[]>([]);
   const [boost, setBoost] = useState(true);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
+  const [err, setErr] = useState<string | null>(null);   // the last write that didn't take, shown in red
   const app = runningApp();
   const appid = app?.appid ?? null;
 
@@ -49,7 +50,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       appid ? getGameProfile(appid) : Promise.resolve(null),
     ]);
     setSt(s);
-    const w = s.tdp_backend === "hhd" ? s.tdp?.custom_tdp : s.firmware_tdp?.pl1_w;
+    const w = s.tdp_w ?? (s.tdp_backend === "hhd" ? s.tdp?.custom_tdp : null);   // what the hardware reads now
     if (w) setTdpV(w);
     if (s.cpu.max_perf_pct != null) setCpuPct(s.cpu.max_perf_pct);
     if (s.gpu.min_mhz != null) setGpuMin(s.gpu.min_mhz);
@@ -63,6 +64,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     if (gp?.battery.target_fps) setTargetFps(gp.battery.target_fps);
   };
   useEffect(() => { refresh(); }, []);
+  // one path for every write: say what the hardware reads back, keep the reason in red if it didn't take, re-read
+  const apply = async (r: WriteResult) => { toast(r.summary); setErr(r.ok ? null : r.error); await refresh(); };
   // while the panel is open and Autotune runs, its line follows along (one cheap call every 3 s, only while visible)
   useEffect(() => {
     if (!at?.running) return;
@@ -73,7 +76,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const lim = st?.limits ?? { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 };
   const wattsOf = (p: { id: string; watts: number }) => Math.min(table[p.id]?.tdp ?? p.watts, lim.plugged_max);
   const gpuHwMin = st?.gpu.hw_min_mhz ?? 300, gpuHwMax = st?.gpu.hw_max_mhz ?? 2400;
-  const steamSlider = st?.tdp_backend === "msi-firmware";
+  const steamSlider = !!st && !st.hhd;
   const picked = PROFILES.find((p) => p.id === profile) ?? PROFILES[0];
   const custom = profile === "custom";
   const limitW = custom ? tdp : wattsOf(picked);
@@ -84,10 +87,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const pick = async (id: string) => {
     setProfile(id);
-    const r = await applyProfile(id, appid);
-    const p = PROFILES.find((x) => x.id === id);
-    toast(r.failed?.length ? `Applied with failures: ${r.failed.join(", ")}` : `${p?.name} · ${r.applied?.tdp ?? p?.watts} W`);
-    refresh();
+    await apply(await applyProfile(id, appid));
   };
 
   return (
@@ -95,6 +95,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       <PanelSection title="Power">
         <PanelSectionRow>
           <Status ok={null} label={now} detail={app ? app.name : "No game running"} />
+          <Problem error={err} />
         </PanelSectionRow>
         {otherPower.length > 0 && (
           <PanelSectionRow>
@@ -103,10 +104,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         )}
         <PanelSectionRow>
           <DropdownItem label="Profile" rgOptions={[
-            ...PROFILES.map((p) => ({ data: p.id, label: `${p.name} · ${wattsOf(p)} W` })),
-            ...(custom ? [{ data: "custom", label: `Custom · ${tdp} W` }] : []),
+            ...PROFILES.map((p) => ({ data: p.id, label: `${p.name} ${wattsOf(p)} W` })),
+            ...(custom ? [{ data: "custom", label: `Custom ${tdp} W` }] : []),
           ]} selectedOption={profile} onChange={(o) => { if (o.data !== "custom") pick(o.data); }}
-            description={explain(custom ? "Your own power limit (Advanced)." : `${picked.name}: ${picked.use}. More watts = more fps, fewer = longer play time.`)} />
+            description={explain(custom ? `Your own limit (Fine-tuning): hardware reads ${st?.tdp_w ?? "?"} W.`
+              : `${picked.name}: ${picked.use}. Hardware reads ${st?.tdp_w ?? "?"} W now. More watts = more fps, fewer = longer play time.`)} />
         </PanelSectionRow>
         {appid && (
           <PanelSectionRow>
@@ -158,44 +160,41 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Advanced id="power">
           <PanelSectionRow>
             <SliderField label="Custom power limit (W)" value={tdp} min={lim.min} max={lim.plugged_max} step={1} showValue
-              disabled={!st?.tdp_backend} description={explain("Your own limit instead of a profile's, shared by CPU and graphics. Autotune stays under it.")}
-              onChange={async (v) => {
-                setTdpV(v); setProfile("custom");
-                if (!(await setTdp(v))) toast(st?.hhd ? "Not applied: enable TDP controls in Handheld Daemon once" : "Not applied: see Setup → Power limit control");
-              }} />
+              disabled={!st?.tdp_backend} description={explain(`Your own limit instead of a profile's, shared by CPU and graphics. Hardware reads ${st?.tdp_w ?? "?"} W. Autotune stays under it.`)}
+              onChange={async (v) => { setTdpV(v); setProfile("custom"); await apply(await setTdp(v)); }} />
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField label="CPU limit (%)" value={cpuPct} min={10} max={100} step={5} showValue disabled={!st?.cpu.available}
-              description={explain("Gives graphics-heavy games more of the power budget; try 70–80%. CPU-heavy scenes get slower.")}
-              onChange={async (v) => { setCpuPct(v); await setCpuMaxPct(v); }} />
+              description={explain(`Gives graphics-heavy games more of the power budget; try 70–80%. Hardware reads ${st?.cpu.max_perf_pct ?? "?"}%. CPU-heavy scenes get slower.`)}
+              onChange={async (v) => { setCpuPct(v); await apply(await setCpuMaxPct(v)); }} />
           </PanelSectionRow>
           <PanelSectionRow>
             <DropdownItem label="CPU energy mode" disabled={!st?.cpu.epp_available} rgOptions={[
               { data: "power", label: "Most battery" }, { data: "balance_power", label: "Balanced, battery first" },
               { data: "balance_performance", label: "Balanced, speed first" }, { data: "performance", label: "Fastest" },
-            ]} selectedOption={st?.cpu.epp ?? "balance_performance"} onChange={async (o) => { await setEpp(o.data); refresh(); }}
+            ]} selectedOption={st?.cpu.epp ?? "balance_performance"} onChange={async (o) => { await apply(await setEpp(o.data)); }}
               description={explain("How fast the CPU speeds up, like Windows' power mode. Profiles set it for you.")} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <ToggleField label="Power boost" checked={boost} onChange={async (v) => { setBoost(v); await setTdpBoost(v); if (st?.tdp_backend) await setTdp(limitW); }}
+            <ToggleField label="Power boost" checked={boost} onChange={async (v) => { setBoost(v); await setTdpBoost(v); if (st?.tdp_backend) await apply(await setTdp(limitW)); }}
               description={explain("Short bursts above the limit for snappier loading. Off keeps power exactly at the limit.")} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label="CPU turbo" checked={st?.cpu.no_turbo === 0} disabled={st?.cpu.no_turbo == null}
-              onChange={async (v) => { await setCpuTurbo(v); refresh(); }} description={explain("Off is quieter and cooler, and costs fps in CPU-heavy games.")} />
+              onChange={async (v) => { await apply(await setCpuTurbo(v)); }} description={explain("Off is quieter and cooler, and costs fps in CPU-heavy games.")} />
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField label="GPU minimum clock (MHz)" value={gpuMin} min={gpuHwMin} max={gpuHwMax} step={50} showValue disabled={!st?.gpu.available}
-              description={explain("Stops stutter from clock dips; the GPU never idles while a game runs.")}
-              onChange={async (v) => { setGpuMin(v); await setGpuWindow(v, null); }} />
+              description={explain(`Stops stutter from clock dips; the GPU never idles while a game runs. Hardware reads ${st?.gpu.min_mhz ?? "?"} MHz.`)}
+              onChange={async (v) => { setGpuMin(v); await apply(await setGpuWindow(v, null)); }} />
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField label="GPU maximum clock (MHz)" value={gpuMax} min={gpuHwMin} max={gpuHwMax} step={50} showValue disabled={!st?.gpu.available}
-              description={explain("Hands power back to the CPU in CPU-heavy games; lowers peak fps.")}
-              onChange={async (v) => { setGpuMax(v); await setGpuWindow(null, v); }} />
+              description={explain(`Hands power back to the CPU in CPU-heavy games; lowers peak fps. Hardware reads ${st?.gpu.max_mhz ?? "?"} MHz.`)}
+              onChange={async (v) => { setGpuMax(v); await apply(await setGpuWindow(null, v)); }} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <ButtonItem layout="below" onClick={async () => { await resetGpuWindow(); refresh(); }}>Reset GPU clocks</ButtonItem>
+            <ButtonItem layout="below" onClick={async () => { await apply(await resetGpuWindow()); }}>Reset GPU clocks</ButtonItem>
           </PanelSectionRow>
           {appid && (
             <PanelSectionRow>
@@ -203,12 +202,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
             </PanelSectionRow>
           )}
           <PanelSectionRow>
-            <ButtonItem layout="below" onClick={async () => { await revertPower(); toast("Claw defaults restored"); refresh(); }}>Back to the Claw's defaults</ButtonItem>
+            <ButtonItem layout="below" onClick={async () => { await apply(await revertPower()); }}>Back to the Claw's defaults</ButtonItem>
           </PanelSectionRow>
           {st && (
             <PanelSectionRow>
-              <Status ok={null} label={`GPU now ${st.gpu.cur_mhz ?? "?"} MHz`}
-                detail={`Range ${st.gpu.hw_min_mhz}–${st.gpu.hw_max_mhz} MHz · power via ${st.tdp_backend === "hhd" ? `Handheld Daemon (${st.tdp?.ready ? st.tdp?.mode : "TDP controls not enabled"})` : st.tdp_backend === "msi-firmware" ? `MSI firmware (now ${st.firmware_tdp?.pl1_w ?? "?"} W, ${st.firmware_tdp?.pl2_w ?? "?"} W boost)` : st.tdp_backend ?? "nothing"}`} />
+              <Status ok={null} label={`Hardware reads: ${st.tdp_w ?? "?"} W limit · CPU ${st.cpu.max_perf_pct ?? "?"}% · GPU ${st.gpu.min_mhz ?? "?"}–${st.gpu.max_mhz ?? "?"} MHz (now ${st.gpu.cur_mhz ?? "?"})`}
+                detail={`Power limit via ${st.tdp_backend === "hhd" ? `Handheld Daemon (${st.tdp?.ready ? st.tdp?.mode : "TDP controls not enabled"})` : st.tdp_backend === "rapl" ? `the CPU's own limit (RAPL: ${st.rapl.pl1_w ?? "?"} W sustained, ${st.rapl.pl2_w ?? "?"} W boost)` : st.tdp_backend === "msi-firmware" ? `MSI firmware (${st.firmware_tdp?.pl1_w ?? "?"} W, ${st.firmware_tdp?.pl2_w ?? "?"} W boost)` : "nothing: no way to set it on this system"} · GPU range ${st.gpu.hw_min_mhz}–${st.gpu.hw_max_mhz} MHz`} />
             </PanelSectionRow>
           )}
           <BenchmarkSection appid={appid} name={app?.name ?? ""} profile={profile} />

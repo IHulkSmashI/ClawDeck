@@ -7,6 +7,7 @@ export type PowerStatus = {
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
   hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
+  tdp_w?: number | null;
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
 };
 export type BatteryStatus = {
@@ -27,14 +28,16 @@ export const getSetting = callable<[key: string], any>("get_setting");
 export const setSetting = callable<[key: string, value: any], boolean>("set_setting");
 export const setDryRun = callable<[on: boolean], boolean>("set_dry_run");
 
+/** What every write answers: what was asked, what the hardware reads back, and why it failed (shown in red). */
+export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any; unit?: string; summary: string; error: string | null };
 export const getPower = callable<[], PowerStatus>("get_power");
-export const setTdp = callable<[watts: number], boolean>("set_tdp");
-export const setCpuMaxPct = callable<[pct: number], boolean>("set_cpu_max_pct");
-export const setCpuTurbo = callable<[on: boolean], boolean>("set_cpu_turbo");
-export const setGpuWindow = callable<[min: number | null, max: number | null], boolean>("set_gpu_window");
-export const resetGpuWindow = callable<[], boolean>("reset_gpu_window");
-export const applyProfile = callable<[name: string, appid: string | null], any>("apply_profile");
-export const revertPower = callable<[], number>("revert_power");
+export const setTdp = callable<[watts: number], WriteResult>("set_tdp");
+export const setCpuMaxPct = callable<[pct: number], WriteResult>("set_cpu_max_pct");
+export const setCpuTurbo = callable<[on: boolean], WriteResult>("set_cpu_turbo");
+export const setGpuWindow = callable<[min: number | null, max: number | null], WriteResult>("set_gpu_window");
+export const resetGpuWindow = callable<[], WriteResult>("reset_gpu_window");
+export const applyProfile = callable<[name: string, appid: string | null], WriteResult & { profile: string; applied: any; failed: string[]; read?: any }>("apply_profile");
+export const revertPower = callable<[], WriteResult & { reverted: number; read?: any }>("revert_power");
 export const listProfiles = callable<[], Record<string, any>>("list_profiles");
 
 export const getGameProfile = callable<[appid: string], { battery: GameProfile; plugged: GameProfile }>("get_game_profile");
@@ -47,7 +50,7 @@ export const gameStopped = callable<[appid: string], any>("game_stopped");
 export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 
 export const getBattery = callable<[], BatteryStatus>("get_battery");
-export const setChargeLimit = callable<[percent: number], boolean>("set_charge_limit");
+export const setChargeLimit = callable<[percent: number], WriteResult>("set_charge_limit");
 
 export const injectorState = callable<[appid: string], any>("injector_state");
 
@@ -123,7 +126,7 @@ export const benchStop = callable<[], BenchResult | null>("bench_stop");
 export const benchResults = callable<[], BenchResult[]>("bench_results");
 export const benchExport = callable<[], string>("bench_export");
 
-export const setEpp = callable<[value: string], boolean>("set_epp");
+export const setEpp = callable<[value: string], WriteResult>("set_epp");
 export const setTdpBoost = callable<[on: boolean], boolean>("set_tdp_boost");
 export const rollback = callable<[comp: string], { ok: boolean; version?: string; error?: string }>("rollback");
 export type StreamingState = { installed: boolean; version: string | null; launcher: string; host: string | null; app: string;
