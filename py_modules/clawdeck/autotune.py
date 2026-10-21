@@ -6,16 +6,21 @@ Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no b
      CPU utilisation (/proc/stat delta).
   2. classify: GPU-bound when the GPU is busy >= 90 % (PowerStation) or sits at its clock ceiling, while the CPU is < 60 %;
      CPU-bound when CPU > 85 % on the busiest cores and the GPU is < 70 %; else balanced.
-  3. control, one lever per step, with hysteresis. CPU and GPU share one power budget (the TDP), so balancing them is
-     half the job: power the side that isn't holding the game back doesn't need goes to the side that is.
-     - on target (frame time <= 1000/target_fps * 1.03) for `settle` samples: alternately trim the side that isn't
+  3. judge over time, never one second: every decision looks at the last `settle` seconds (10 by default): the
+     average fps and the worst second in that window. After every change the window starts empty, so the next
+     decision is based only on what the new setting did. "On target" = average >= 97 % of the target and no second
+     below 85 %; "missing" = average below 95 % or a second below 75 % (stutter); in between, hold.
+  4. control, one lever per decision. CPU and GPU share one power budget (the TDP), so balancing them is half the
+     job: power the side that isn't holding the game back doesn't need goes to the side that is.
+     - on target: alternately trim the side that isn't
        the bottleneck (GPU-bound: CPU ceiling -10 %, down to 60 %; CPU-bound: GPU floor -100 MHz, or off) and lower
        the TDP by 1 W, so the budget shrinks without starving the bound side;
-     - below target for 2 samples: first move budget to the bound side without more watts (GPU-bound: CPU ceiling
+     - missing: first move budget to the bound side without more watts (GPU-bound: CPU ceiling
        -10 % if the CPU is idle enough, else GPU floor +100 MHz; CPU-bound: CPU ceiling +10 %, else drop the GPU
        floor), then TDP +2 W; never above the ceiling (the profile or power limit the user picked).
-  4. after `stable` consecutive samples without a change, save the learned values with a confidence count and
-     stop adjusting (the game is "learned"; a later miss re-opens learning).
+  5. after `stable` decisions without a change, confidence goes up; at 3 the game is "learned" and autotune stops
+     lowering, but keeps checking: a miss raises power again at once, and every RECHECK_S of steady play on target
+     it tries one step lower again, in case the game (or a driver update) now needs less.
 
 Rules: dry-run prints every would-be write; a manual change by the user (TDP differs from what we set) pauses
 learning for the session; everything applied is reverted on game exit. The maths is a few comparisons per second:
@@ -38,6 +43,9 @@ log = logging.getLogger("clawdeck.autotune")
 CPU_MIN_PCT = 60        # autotune never trims the CPU below this: below it, frame pacing suffers in most games
 CPU_IDLE_PCT = 50       # "the CPU has power to spare": its utilisation is under this while the GPU is the bottleneck
 GPU_STEP_MHZ = 100
+RECHECK_S = 300         # a learned game is re-probed one step lower after this long on target without a change
+ON_AVG, ON_LOW = 0.97, 0.85     # on target: window average and worst second, as a share of the target
+MISS_AVG, MISS_LOW = 0.95, 0.75  # missing: average or worst second below these
 
 @dataclass
 class Sample:
@@ -81,18 +89,18 @@ class Sampler:
                 self._log_pos[f] = fh.tell()
         except OSError:
             return None, None
-        last = None
+        # every row written since the last read (MangoHud writes one per log_interval), averaged: nothing is skipped
+        fps_rows, ft_rows = [], []
         for row in csv.reader(rows.splitlines()):
             if len(row) >= 2 and row[0].replace(".", "", 1).isdigit():
-                last = row
-        if not last:
+                try:
+                    fps_rows.append(float(row[0]))
+                    ft_rows.append(float(row[1]))
+                except ValueError:
+                    continue
+        if not fps_rows:
             return None, None
-        try:
-            fps = float(last[0])
-            ft = float(last[1]) if len(last) > 1 else (1000.0 / fps if fps else None)
-            return ft, fps
-        except ValueError:
-            return None, None
+        return sum(ft_rows) / len(ft_rows), sum(fps_rows) / len(fps_rows)
 
     def package_power(self) -> float | None:
         if not self.p.rapl_energy:
@@ -173,13 +181,17 @@ class Session:
     floor_tdp: int
     ceiling_tdp: int
     learned: Learned
-    settle: int = 8          # good samples before lowering power one step
-    stable: int = 60         # unchanged samples before "learned"
+    settle: int = 10         # seconds of fps averaged before each decision (the window)
+    stable: int = 60         # decisions without a change before confidence goes up
     good_run: int = 0
     bad_run: int = 0
     unchanged: int = 0
     paused: bool = False
     trim_turn: bool = True   # on target: alternate between rebalancing CPU/GPU and lowering the TDP
+    window: list[float] = field(default_factory=list)   # per-second fps since the last change
+    last_change_t: float | None = None
+    avg_fps: float | None = None
+    low_fps: float | None = None
     history: list[Sample] = field(default_factory=list)
 
 
@@ -215,6 +227,7 @@ class Autotune:
         s.ceiling_tdp = max(s.floor_tdp, int(watts))
         s.learned.tdp = s.ceiling_tdp
         s.paused, s.good_run, s.bad_run, s.unchanged = False, 0, 0, 0
+        s.window.clear()
         log.info("autotune ceiling now %d W", s.ceiling_tdp)
 
     def pause(self, reason: str = "manual change") -> None:
@@ -264,12 +277,30 @@ class Autotune:
             return
         l = s.learned
         l.samples += 1
+        fps = smp.fps if smp.fps else 1000.0 / smp.frametime_ms if smp.frametime_ms else None
+        if not fps:
+            return
+        s.window.append(fps)
+        del s.window[:-s.settle]
+        if s.last_change_t is None:
+            s.last_change_t = smp.t
+        if len(s.window) < s.settle:
+            return                                   # not enough seconds since the last change to judge it
+        s.avg_fps = sum(s.window) / len(s.window)
+        s.low_fps = min(s.window)
         l.bound = classify(smp)
-        target_ms = 1000.0 / s.target_fps
+        t = s.target_fps
         changed = False
-        if smp.frametime_ms <= target_ms * 1.03:
-            s.good_run += 1; s.bad_run = 0
-            if s.good_run >= s.settle and l.confidence < 3:
+        if s.avg_fps < t * MISS_AVG or s.low_fps < t * MISS_LOW:
+            changed = self._feed_bound(l, smp)
+            if not changed and l.tdp < s.ceiling_tdp:
+                l.tdp = min(s.ceiling_tdp, l.tdp + 2)
+                self.power.set_tdp(l.tdp, self.plugged)
+                changed = True
+            l.confidence = max(0, l.confidence - 1)
+        elif s.avg_fps >= t * ON_AVG and s.low_fps >= t * ON_LOW:
+            recheck = l.confidence >= 3 and smp.t - s.last_change_t >= RECHECK_S
+            if l.confidence < 3 or recheck:
                 if s.trim_turn:
                     changed = self._trim_unbound(l, smp)
                 if not changed and l.tdp > s.floor_tdp:
@@ -277,19 +308,12 @@ class Autotune:
                     self.power.set_tdp(l.tdp, self.plugged)
                     changed = True
                 s.trim_turn = not s.trim_turn
-                s.good_run = 0
-        else:
-            s.bad_run += 1; s.good_run = 0
-            if s.bad_run >= 2:
-                changed = self._feed_bound(l, smp)
-                if not changed and l.tdp < s.ceiling_tdp:
-                    l.tdp = min(s.ceiling_tdp, l.tdp + 2)
-                    self.power.set_tdp(l.tdp, self.plugged)
-                    changed = True
-                s.bad_run = 0
-                l.confidence = max(0, l.confidence - 1)
+                if recheck:
+                    log.info("autotune recheck: trying one step lower after %d s on target", RECHECK_S)
         if changed:
             s.unchanged = 0
+            s.window.clear()                         # judge the new setting on its own numbers only
+            s.last_change_t = smp.t
         else:
             s.unchanged += 1
             if s.unchanged >= s.stable:
@@ -362,4 +386,6 @@ class Autotune:
         last = s.history[-1] if s.history else None
         return {"running": True, "enabled": self.enabled, "appid": s.appid, "target_fps": s.target_fps,
                 "learned": s.learned.__dict__, "paused": s.paused,
+                "avg_fps": None if s.avg_fps is None else round(s.avg_fps, 1),
+                "low_fps": None if s.low_fps is None else round(s.low_fps, 1), "window_s": s.settle,
                 "last": None if last is None else last.__dict__}
