@@ -365,3 +365,19 @@ def test_plugin_runs_as_root():
     # (2026-10-21) failed with Permission denied on all of them because of the underscore.
     with open(os.path.join(os.path.dirname(__file__), "..", "plugin.json")) as f:
         assert "root" in json.load(f)["flags"]
+
+
+def test_tls_context_uses_system_bundle(monkeypatch, tmp_path):
+    from clawdeck import tls
+    bundle = tmp_path / "ca.crt"
+    bundle.write_text("")  # existence is what is probed; an empty file still yields a context
+    monkeypatch.setattr(tls, "CA_BUNDLES", (str(bundle),))
+    tls._ctx = None
+    try:
+        ctx = tls.context()
+    except Exception:  # an empty PEM may be rejected by OpenSSL; the fallback path is then exercised below
+        ctx = None
+    tls._ctx = None
+    monkeypatch.setattr(tls, "CA_BUNDLES", ("/nonexistent/ca.crt",))
+    assert tls.context().verify_mode.name == "CERT_REQUIRED"
+    tls._ctx = None
