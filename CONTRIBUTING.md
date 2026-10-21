@@ -11,8 +11,8 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
 - **Fail safe.** Every sysfs write goes through `clawdeck.sysfs.write`, so it is recorded, revertible and dry-run
   aware. A failed write reverts. Everything reverts when the game closes. Nothing persists across reboot except the
   charge limit and, when the user turns them on, the 30–120 Hz VRR range (an EDID override with its own Undo) and
-  the Claw 8 EX face-button hwdb entry (systemd's upstream entry, kept on uninstall because it only adds what newer
-  systemd ships).
+  the Claw 8 EX face-button override for InputPlumber (kept on uninstall, so the buttons keep working; the health
+  check says when InputPlumber's own config makes it unnecessary).
 - **Dry run.** `CLAWDECK_DRY_RUN=1` or the Setup toggle logs what would be written (sysfs and Handheld Daemon).
 - **No duplication, no fights.** Buttons and gyro: InputPlumber or Handheld Daemon, whichever the system runs, never
   both. TDP: Handheld Daemon when present, else the MSI firmware limits Steam's slider also uses. Clock paths:
