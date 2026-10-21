@@ -61,12 +61,20 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 
 ## Gaps the README now states honestly (to fix in code)
 
-- The Graphics tab offers the XMX features on the A1M and A8 too; `hw.py` already knows `xmx: False` for both, so
-  hide or explain them there.
 - Fan presets need Handheld Daemon, which current Bazzite doesn't run: a direct hwmon curve is the next step.
 - The README download button points at Releases, which stays empty until the first tested release.
 
 ## Needs the maintainer
+
+- Test the hardware-findings fixes on the Claw (docs/HARDWARE-FINDINGS.md → "Done in code"): Setup shows "Claw 8 EX
+  AI+ (MS-1T91)" and a Mesa version; Battery shows Wh and, after a minute on battery, watts; Controller shows
+  InputPlumber's device; with Dry run off, set 20 W and read back `ppt_pl1_spl` and `intel-rapl-mmio:0`; then set
+  the charge limit to 80 % and read back `charge_control_end_threshold`.
+- TDP revert: the firmware attributes start at 0 (unset) and their min is 8, so check what reverting to 0 does when a
+  game closes (stays at the last value, or goes back to the firmware default). If writing 0 is refused, revert must
+  write the boot value read from `intel-rapl-mmio:0` instead.
+- Does Steam's own TDP slider change anything on the EX? PowerStation reports no TDP range for this chip, so it
+  probably does nothing; the README and the Power tab now say "may do nothing".
 
 - Check the install guide's Claw steps on the 8 EX: the boot-menu buttons (the guide links MSI's FAQ instead of naming
   them), the Bazzite image picker wording, and the Decky "Install plugin from ZIP file" path.

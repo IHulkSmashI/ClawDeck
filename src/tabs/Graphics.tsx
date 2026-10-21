@@ -29,8 +29,12 @@ export const GraphicsTab: FC = () => {
 const XessSection: FC = () => {
   const [x, setX] = useState<XessState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [noXmx, setNoXmx] = useState<string | null>(null);   // model name when this Claw has no XMX cores
   const load = async () => setX(await xessState());
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    getHardware().then((h) => setNoXmx(h.known && !h.model.xmx ? h.model.name : null));
+  }, []);
   const install = async (allow = false) => {
     setBusy(true);
     try {
@@ -39,6 +43,16 @@ const XessSection: FC = () => {
       toast(r.ok ? (r.would ?? r.next ?? "Installed") : `Install failed: ${r.error ?? r.log}`);
     } finally { setBusy(false); load(); }
   };
+  if (noXmx) {
+    return (
+      <PanelSection title="XeSS on XMX">
+        <PanelSectionRow>
+          <Status ok={null} label={`No XMX cores on the ${noXmx}`} />
+          <Hint does="The XMX driver needs Intel Arc graphics with XMX cores (Claw 7 AI+, 8 AI+, 8 EX)." why="games can still use XeSS, FSR or Lossless Scaling below; they just run on the regular GPU cores." cost="none." />
+        </PanelSectionRow>
+      </PanelSection>
+    );
+  }
   return (
     <PanelSection title="XeSS on XMX">
       <PanelSectionRow>
@@ -51,7 +65,7 @@ const XessSection: FC = () => {
       ) : null}
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={busy} onClick={() => install(false)}>{x?.installed ? "Update driver" : "Install driver"}</ButtonItem>
-        <Hint does="Downloads xess-xmx-linux from its GitHub releases and runs its installer for you." why="one tap instead of a terminal." cost="about 230 MB download; log out of Game Mode and back in after." />
+        <Hint does="Downloads xess-xmx-linux from its GitHub releases and runs its installer for you." why="one tap instead of a terminal." cost="about 230 MB download; restart the Claw once after." />
       </PanelSectionRow>
       {x?.installed && (
         <PanelSectionRow>

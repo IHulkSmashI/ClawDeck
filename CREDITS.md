@@ -6,11 +6,11 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   fan curves, charge limit, controller and RGB. ClawDeck talks to its local API and reads its settings schema; the
   Claw model ids (MS-1T41/42/52/91/8K), the EX's 35/45 W limits and the fan curve points come from its source.
 - **[InputPlumber](https://github.com/ShadowBlip/InputPlumber)** and **[PowerStation](https://github.com/ShadowBlip/PowerStation)**
-  by ShadowBlip — the controller and power services on current Bazzite. ClawDeck detects them and works alongside
-  them instead of replacing them.
+  by ShadowBlip — the controller and power services on current Bazzite. ClawDeck detects them, works alongside them
+  instead of replacing them, and reads PowerStation's GPU load and InputPlumber's controller status over D-Bus.
 - **[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)** — the plugin system ClawDeck runs in.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)** — Intel xe/i915 GPU clock paths, RAPL package domain,
-  intel_pstate levers, the AC-state listener pattern. Not forked.
+  intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
   suspend/resume) and Decky patterns.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.

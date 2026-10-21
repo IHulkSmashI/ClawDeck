@@ -1,4 +1,4 @@
-# tools/sysfs-survey.sh on Mena's MSI Claw 8 EX AI+ (CG3EM), Bazzite deck 44.20261012.1, 2026-10-21 (read-only)
+# tools/sysfs-survey.sh on the maintainer's MSI Claw 8 EX AI+ (CG3EM), Bazzite deck 44.20261012.1, 2026-10-21 (read-only)
 == dmi
 sys_vendor     Micro-Star International Co., Ltd.
 product_name   Claw 8 EX AI+ CG3EM Launch Pack      <- NOT "MS-1T91": match on board_name

@@ -69,7 +69,7 @@ A1M and A8 (see [the questions](#questions) for what differs).
 |---|---|---|
 | **Profiles** | **Battery** (most frames per watt), **Performance** (plugged in) and **Dock** (full power) in one tap. Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
 | **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. | The first few minutes in a new game can stutter while it learns. |
-| **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Steam's own TDP slider sets the same limit, so whichever you change last wins. Use one of the two. |
+| **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
 
@@ -96,8 +96,8 @@ Display settings apply after Game Mode restarts. On the dock, the Claw picks you
 stream, hold View + Menu + LB + RB.
 
 ### Controller
-Shows what runs the MSI buttons, gyro and lights. On current Bazzite that's InputPlumber, and you set buttons and
-gyro in Steam's own controller settings, as usual. On Claws running Handheld Daemon instead, this tab also offers gyro,
+Shows what runs the MSI buttons, gyro and lights. On current Bazzite that's InputPlumber: the tab shows your
+controller and its profile, and you set buttons and gyro in Steam's own controller settings, as usual. On Claws running Handheld Daemon instead, this tab also offers gyro,
 button layout and stick lighting. ClawDeck works with whichever your Claw has and never runs both.
 
 ### Battery & Fans
@@ -134,10 +134,11 @@ you play, and they check once a second while their game runs.
 **Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
 changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin.
 
-**Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything. ClawDeck adds
-profiles per game that switch when you plug in, Autotune, CPU and GPU limits, and a benchmark to compare them. Both
-set the same power limit, so pick one to manage TDP. Steam's frame limit is fine to keep: set Autotune's target to
-the same number.
+**Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything, and on the Claw
+8 EX it may not change anything on current Bazzite. ClawDeck sets the Claw's power limit directly, and adds profiles
+per game that switch when you plug in, Autotune, CPU and GPU limits, and a benchmark to compare them. Leave Steam's
+TDP slider off so the two don't fight. Steam's frame limit is fine to keep: set Autotune's target to the same
+number.
 
 **What are the XMX cores, and which games use them?** They are the AI units in the Claw's Arc graphics. XeSS
 upscaling and XeSS frame generation run on them, so games look sharper and run faster for the same battery. Games
