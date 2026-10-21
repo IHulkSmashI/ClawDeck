@@ -14,13 +14,18 @@ import { BatteryTab } from "../src/tabs/Battery";
 
 let launchOptions = "";   // the example game starts without ClawDeck in its launch options
 let losslessInstalled = false;
+const shortcutIds: number[] = [];
 (window as any).appStore = {
   // the example user owns Lossless Scaling but has not installed it yet
-  GetAppOverviewByAppID: (id: number) => (id === 993090 ? { BIsOwned: () => true, installed: losslessInstalled } : null),
+  GetAppOverviewByAppID: (id: number) => (id === 993090 ? { BIsOwned: () => true, installed: losslessInstalled }
+    : shortcutIds.includes(id) ? { appid: id, installed: true } : null),
 };
 (window as any).SteamClient = {
   Installs: { OpenInstallWizard: () => { losslessInstalled = true; } },
   Apps: {
+    AddShortcut: async () => { shortcutIds.push(1000 + shortcutIds.length); return shortcutIds[shortcutIds.length - 1]; },
+    SetShortcutName: () => undefined,
+    SetShortcutLaunchOptions: () => undefined,
     ShowStore: () => undefined,
     RegisterForAppDetails: (_id: number, cb: (d: any) => void) => { setTimeout(() => cb({ strLaunchOptions: launchOptions })); return { unregister() {} }; },
     SetAppLaunchOptions: (_id: number, opts: string) => { launchOptions = opts; },

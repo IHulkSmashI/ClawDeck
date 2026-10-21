@@ -25,6 +25,20 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[gamescope-session](https://github.com/ChimeraOS/gamescope-session)** — the environment variables the Display
   tab writes (`ADAPTIVE_SYNC`, `CUSTOM_REFRESH_RATES`, `ENABLE_GAMESCOPE_HDR`, `GAMESCOPE_HDR_NITS`).
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
-- **Decky Framerate**, **MangoHud** — frame-time logging that autotune and the benchmark read.
+- **Decky Framerate** — an early reference for reading frame times in Game Mode.
+
+- **[Moonlight](https://github.com/moonlight-stream/moonlight-qt)** (GPL-3.0) — the game streaming client.
+- **[Moonlight with VRR](https://github.com/Nonary/moonlight-qt)** by Nonary — the Moonlight fork ClawDeck installs
+  and keeps updated: VRR-aware frame pacing on Linux.
+- **[Vibepollo](https://github.com/Nonary/Vibepollo)** by Nonary, built on **[Apollo](https://github.com/ClassicOldSong/Apollo)**
+  and **[Sunshine](https://github.com/LizardByte/Sunshine)** — the streaming host on the PC.
+- **[ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks)** and **[GoTweaks](https://github.com/corando98/GoTweaks)**
+  — the Windows tools whose feature list (single TDP slider with optional boost, per-game AC/DC profiles, energy
+  mode, charge limiter, fan presets, Lossless Scaling integration) shaped what ClawDeck offers on Linux. No code is
+  shared.
+- **[MangoHud](https://github.com/flightlessmango/MangoHud)** — frame-time logging for autotune and the benchmark.
+
+ClawDeck checks every project above for new releases every day (`.github/workflows/upstream-watch.yml`) and updates
+the ones it installs for you; see CONTRIBUTING.md → Keeping up with upstream.
 
 ClawDeck is not affiliated with MSI, Valve, Intel or Microsoft. "Claw" is an MSI trademark.

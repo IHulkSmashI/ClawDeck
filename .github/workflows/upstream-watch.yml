@@ -1,0 +1,22 @@
+name: upstream watch
+# Daily: newest versions of every project ClawDeck builds on, and ClawDeck's parsers run against their live data.
+# Opens / updates the "Upstream watch" issue when something is new or a canary fails, so it is tested before it
+# breaks a Claw. See tools/upstream_watch.py.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: check upstreams and canaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/upstream_watch.py --issue | tee -a "$GITHUB_STEP_SUMMARY"

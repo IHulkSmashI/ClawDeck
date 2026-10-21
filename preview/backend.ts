@@ -35,6 +35,12 @@ const state = {
   injected: {} as Record<string, string>,
   lsfgInstalled: false,
   autoUpdate: true,
+  epp: "balance_power",
+  boost: true,
+  moonlight: null as null | string,
+  streamHost: null as null | string,
+  streamApp: "Desktop",
+  shortcuts: { moonlight: null as null | number, host: null as null | number },
   benchRunning: false,
   benchStart: 0,
   results: [
@@ -90,8 +96,12 @@ export const backend = {
     if (fix === "install_xess") { state.xessInstalled = true; return ok({ next: "log out of Game Mode and back in (or reboot) so the session picks up the driver" }); }
     return ok();
   },
-  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "dry_run" ? state.dry : null),
-  set_setting: (k: string, v: any) => { if (k === "autotune") state.autotune = v; if (k === "dry_run") state.dry = v; if (k === "auto_update") state.autoUpdate = v; return true; },
+  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "dry_run" ? state.dry : k === "tdp_boost" ? state.boost : null),
+  set_setting: (k: string, v: any) => {
+    if (k === "autotune") state.autotune = v; if (k === "dry_run") state.dry = v; if (k === "auto_update") state.autoUpdate = v;
+    if (k === "moonlight_shortcut") state.shortcuts.moonlight = v; if (k === "moonlight_host_shortcut") state.shortcuts.host = v;
+    return true;
+  },
   set_dry_run: (v: boolean) => { state.dry = v; return v; },
   get_versions: () => ({}),
   get_sleep: () => ({
@@ -106,7 +116,7 @@ export const backend = {
   // ---- power ----
   get_power: () => ({
     gpu: { available: true, min_mhz: state.gpuMin, max_mhz: state.gpuMax, cur_mhz: scenario.game ? 1950 : 450, hw_min_mhz: 300, hw_max_mhz: 2500, efficient_mhz: 1300 },
-    cpu: { available: true, max_perf_pct: state.cpu, min_perf_pct: 10, no_turbo: state.turbo ? 0 : 1 },
+    cpu: { available: true, max_perf_pct: state.cpu, min_perf_pct: 10, no_turbo: state.turbo ? 0 : 1, epp: state.epp, epp_available: true },
     rapl: { available: true, pl1_w: state.tdp, pl2_w: state.tdp + 6 },
     tdp: hhd() ? { mode: "custom", custom_tdp: state.tdp, boost: true, ready: true } : null,
     hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "msi-firmware",
@@ -231,6 +241,15 @@ export const backend = {
   },
   lsfg_install: () => { state.lsfgInstalled = true; return ok({ version: "lsfg-vk-2.1.3" }); },
   get_updates: () => ({ ...updates(), auto: state.autoUpdate }),
+  set_epp: (v: string) => { state.epp = v; return true; },
+  set_tdp_boost: (v: boolean) => { state.boost = v; return true; },
+  rollback: () => ok({ version: "v6.2.0-daily.190" }),
+  get_changes: () => ({ first_run: false, changed: [] }),
+  get_streaming: () => ({ installed: !!state.moonlight, version: state.moonlight, launcher: "/home/bazzite/.local/share/clawdeck/moonlight/moonlight-vrr",
+    host: state.streamHost, app: state.streamApp, shortcut: state.shortcuts.moonlight, host_shortcut: state.shortcuts.host,
+    flathub_moonlight: false, latest: "v6.2.0-daily.191", update: false, previous: state.moonlight ? "v6.2.0-daily.190" : null }),
+  moonlight_install: () => { state.moonlight = "v6.2.0-daily.191"; return ok({ version: state.moonlight, launcher: "/home/bazzite/.local/share/clawdeck/moonlight/moonlight-vrr", updated: true }); },
+  set_stream_host: (h: string, a: string) => { state.streamHost = h; state.streamApp = a || "Desktop"; return ok({ launch_options: `stream ${h} "${a || "Desktop"}"`, launcher: "/home/bazzite/.local/share/clawdeck/moonlight/moonlight-vrr" }); },
   update_now: () => ({ optiscaler: "v0.9.4" }),
   xess_state: () => (state.xessInstalled
     ? { installed: true, package_dir: "/home/bazzite/.local/share/clawdeck/xess-xmx-linux-20261018", version: "20261018", drivers: ["26.1.2", "26.3.0-rc1"],

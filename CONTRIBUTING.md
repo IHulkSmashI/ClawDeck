@@ -41,6 +41,26 @@ Tools in `tools/`:
 | `soak.py` | CPU %, peak memory and memory growth of the backend against the budget above. |
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |
+| `upstream_watch.py` | Newest upstream versions + live canaries for ClawDeck's parsers (see below). |
+
+## Keeping up with upstream
+
+ClawDeck depends on a lot of other people's projects, and each one can change under it. Three things keep it working:
+
+1. **For users, at runtime** (`py_modules/clawdeck/updates.py`): OptiScaler, OptiPatcher, REFramework, lsfg-vk and
+   Moonlight VRR always come from their newest release, checked at most once a day, verified against published
+   checksums, with the previous version kept for one-tap rollback. Games are refreshed only after they close.
+   The xess-xmx-linux driver is the exception: it is pinned in `assets/versions.json` and bumped after testing.
+2. **Every day, on GitHub** (`.github/workflows/upstream-watch.yml` → `tools/upstream_watch.py`): the newest version
+   of every upstream is compared with `assets/upstream.lock.json` (what was last tested), and ClawDeck's own parsers
+   run against live upstream data (OptiScaler's compatibility list, OptiPatcher's list, the lsfg-vk builds page,
+   Handheld Daemon's keys, Bazzite's Claw handling, gamescope-session's variables, release assets and checksums).
+   Anything new or broken opens the "Upstream watch" issue; a broken canary also turns the run red.
+3. **On every system update, on the Claw** (`py_modules/clawdeck/changes.py`): a new kernel, Mesa, controller
+   service, XeSS driver state or Decky version re-runs the health check and tells the user what changed.
+
+After testing new upstream versions on a Claw: `python3 tools/upstream_watch.py --update-lock`, commit the lock.
+Dependabot keeps the build's own dependencies current.
 
 ## Workflow
 

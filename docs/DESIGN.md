@@ -18,7 +18,10 @@ py_modules/clawdeck/
                 OptiPatcher / REFramework / INI fixes, exact undo, lsfg-vk layer install
    gamescan.py  what a game ships: upscalers, frame generation, engine, anti-cheat (file names only)
    compat.py    OptiScaler's compatibility list + OptiPatcher's supported exes, cached a day
-   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk, checked once a day
+   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk / Moonlight VRR, daily, checksum-verified,
+                previous version kept for rollback
+   streaming.py Moonlight VRR (Nonary/moonlight-qt) unpacked once, one launcher, stream shortcut args
+   changes.py   what changed since the last start (kernel, Mesa, OS, controller service, XeSS, Decky)
    launchenv.py per-game <runtime>/launch/<appid>.env: injector, DXVK_HDR, MESA= (read by clawdeck-launch.sh)
    health.py    checks + one-tap bug report (fixes run through main.run_fix)
    controller.py  HHD controllers.claw.* / rgb.handheld.*, discovered from HHD's settings schema
@@ -56,6 +59,12 @@ REFramework), and lists every file in .clawdeck-inject.json for an exact undo. U
 once a day; a newer release is downloaded after a game closes and that game is reinstalled with the same options.
 lsfg-vk needs Lossless Scaling (Steam 993090): the frontend checks ownership with appStore, installs it with
 Installs.OpenInstallWizard or opens its store page. lsfg-vk runs on shader cores; only XeSS uses XMX.
+
+## Streaming
+Moonlight VRR's AppImage is verified against the release's SHA256SUMS, unpacked as the user with --appimage-extract
+(no FUSE needed) into ~/.local/share/clawdeck/moonlight/<version>/, and started through one launcher script that
+reads CURRENT, so Steam shortcuts (SteamClient.Apps.AddShortcut) survive updates. Two versions are kept. A saved
+host adds a shortcut with launch options `stream <host> "<app>"` (moonlight-qt's CLI). Pairing stays in Moonlight.
 
 ## Who owns what
 Handheld Daemon keeps its own state (TDP, fans, controller, RGB, its charge limit) and persists it; ClawDeck changes
