@@ -3,6 +3,7 @@
 Every per-game choice that has to be in the game's environment lands here, composed from the game's launch settings
 (profiles.py, key "launch"):
   inject   none | optiscaler | lsfg      -> injector.Injector.launch_env (WINEDLLOVERRIDES / LSFGVK_*)
+  proxy, reframework                     -> the DLL name OptiScaler got and REFramework's dinput8, loaded native-first
   lsfg     {multiplier, flow_scale, performance_mode}
   hdr      bool                          -> DXVK_HDR=1 (Proton games output HDR when Game Mode HDR is on)
   mesa     "" | "26.1" | "26.3"          -> MESA=<v>, xess-xmx-linux's per-game driver choice
@@ -22,7 +23,8 @@ MESA_CHOICES = ("", "26.1", "26.3")
 
 def compose(launch: dict) -> dict[str, str]:
     env: dict[str, str] = {}
-    env.update(Injector.launch_env(launch.get("inject", "none"), launch.get("lsfg")))
+    env.update(Injector.launch_env(launch.get("inject", "none"), launch.get("lsfg"), launch.get("proxy"),
+                                   bool(launch.get("reframework"))))
     if launch.get("hdr"):
         env["DXVK_HDR"] = "1"
     mesa = launch.get("mesa") or ""

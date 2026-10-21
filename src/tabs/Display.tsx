@@ -5,6 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { getDisplay, resetDisplay, saveDisplay, DisplaySettings, DisplayState } from "../api";
 import { Advanced } from "../components/Advanced";
 import { Hint, Status } from "../components/Hint";
+import { StreamingSection } from "./Streaming";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
@@ -33,9 +34,9 @@ export const DisplayTab: FC = () => {
               <Hint does="The screen refreshes when a frame is ready instead of on a fixed clock." why="smooth at 45–90 fps without tearing or vsync lag." cost="rare flicker in menus at very low fps." />
             </PanelSectionRow>
             <PanelSectionRow>
-              <SliderField label="Lowest refresh (Hz)" value={s.vrr_min} min={range[0]} max={range[1]} step={1} showValue onChange={(v) => upd({ vrr_min: Math.min(v, s.vrr_max) })} />
-              <SliderField label="Highest refresh (Hz)" value={s.vrr_max} min={range[0]} max={range[1]} step={1} showValue onChange={(v) => upd({ vrr_max: Math.max(v, s.vrr_min) })} />
-              <Hint does="The refresh rates Steam's frame-limit slider offers." why="lock 40 Hz for long battery, 120 Hz for fast games." cost="a high floor costs battery." />
+              <SliderField label="Slowest refresh Steam offers (Hz)" value={s.vrr_min} min={range[0]} max={range[1]} step={1} showValue onChange={(v) => upd({ vrr_min: Math.min(v, s.vrr_max) })} />
+              <SliderField label="Fastest refresh Steam offers (Hz)" value={s.vrr_max} min={range[0]} max={range[1]} step={1} showValue onChange={(v) => upd({ vrr_max: Math.max(v, s.vrr_min) })} />
+              <Hint does="Sets the range of Steam's own refresh-rate slider (Quick Access → Performance); you still pick the rate there, per game." why="40 Hz for long battery, 120 Hz for fast games." cost="none by itself." />
             </PanelSectionRow>
             <PanelSectionRow>
               <ToggleField label="HDR in Game Mode" checked={s.hdr} onChange={(v) => upd({ hdr: v })} />
@@ -64,6 +65,7 @@ export const DisplayTab: FC = () => {
           </>
         )}
       </PanelSection>
+      <StreamingSection />
     </>
   );
 };

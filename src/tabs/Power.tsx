@@ -4,11 +4,12 @@ import { FC, useEffect, useState } from "react";
 
 import {
   applyProfile, benchExport, benchResults, benchStart, benchStatus, benchStop, exportProfilesFile, getAutotune,
-  getGameProfile, getPower, getSetting, importProfilesFile, listProfileFiles, resetGpuWindow, resetLearned, revertPower,
-  saveGamePower, setCpuMaxPct, setCpuTurbo, setGameProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus,
+  getGameProfile, getHardware, getPower, getSetting, importProfilesFile, listProfileFiles, resetGpuWindow, resetLearned, revertPower,
+  saveGamePower, setCpuMaxPct, setCpuTurbo, setEpp, setGameProfile, setTdpBoost, setGpuWindow, setSetting, setTdp, AutotuneStatus,
   BenchResult, PowerStatus,
 } from "../api";
 import { Advanced } from "../components/Advanced";
+import { LaunchWrapper } from "../components/LaunchWrapper";
 import { Hint } from "../components/Hint";
 import { runningApp } from "../steam";
 
@@ -24,6 +25,8 @@ export const PowerTab: FC = () => {
   const [gpuMin, setGpuMin] = useState(0);
   const [gpuMax, setGpuMax] = useState(0);
   const [profile, setProfile] = useState("battery");
+  const [otherPower, setOtherPower] = useState<string[]>([]);
+  const [boost, setBoost] = useState(true);
   const app = runningApp();
   const appid = app?.appid ?? null;
 
@@ -34,6 +37,9 @@ export const PowerTab: FC = () => {
     if (s.gpu.min_mhz != null) setGpuMin(s.gpu.min_mhz);
     if (s.gpu.max_mhz != null) setGpuMax(s.gpu.max_mhz);
     setAutotune(!!(await getSetting("autotune")));
+    setProfile((await getSetting("last_profile")) || "battery");
+    setBoost((await getSetting("tdp_boost")) !== false);
+    setOtherPower((await getHardware()).other_plugins?.power ?? []);
     setAt(await getAutotune());
     if (appid) {
       const gp = await getGameProfile(appid);
@@ -45,8 +51,31 @@ export const PowerTab: FC = () => {
   const lim = st?.limits ?? { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 };
   const gpuHwMin = st?.gpu.hw_min_mhz ?? 300, gpuHwMax = st?.gpu.hw_max_mhz ?? 2400;
 
+  const steamSlider = st?.tdp_backend === "msi-firmware";
+  const watts = st?.tdp_backend === "hhd" ? st?.tdp?.custom_tdp : st?.firmware_tdp?.pl1_w;
+  const now = [
+    `${profile[0].toUpperCase()}${profile.slice(1)} profile`,
+    watts != null ? `${watts} W` : null,
+    at?.running ? (at.paused ? "autotune paused" : "autotune learning") : autotune ? "autotune on" : null,
+  ].filter(Boolean).join(" · ");
+
   return (
     <>
+      <PanelSection>
+        <PanelSectionRow>
+          <div style={{ fontSize: 13 }}><b>Now:</b> {now}{app && <span style={{ opacity: 0.7 }}> · {app.name}</span>}</div>
+        </PanelSectionRow>
+        {otherPower.length > 0 && (
+          <PanelSectionRow>
+            <div style={{ fontSize: 11, color: "#f0b429" }}>{otherPower.join(", ")} is also installed and sets power too. Two power plugins undo each other: keep one.</div>
+          </PanelSectionRow>
+        )}
+        {steamSlider && (
+          <PanelSectionRow>
+            <Hint does="Turn off Steam's own TDP limit (Quick Access → Performance) while ClawDeck manages power." why="both set the same limit; with Steam's off, profiles and autotune hold." cost="none; turn it back on if you uninstall ClawDeck." />
+          </PanelSectionRow>
+        )}
+      </PanelSection>
       <PanelSection title="Autotune">
         <PanelSectionRow>
           <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); }} />
@@ -55,8 +84,9 @@ export const PowerTab: FC = () => {
         <PanelSectionRow>
           <SliderField label="Target fps (this game)" value={targetFps} min={30} max={120} step={5} showValue disabled={!appid}
             onChange={async (v) => { setTargetFps(v); if (appid) { await setGameProfile(appid, false, { target_fps: v }); await setGameProfile(appid, true, { target_fps: v }); } }} />
-          <Hint does={appid ? `Saved for ${app?.name}; starts learning at its next launch.` : "Start a game to set its target."} why="match your screen: 60, 90 or 120 on the Claw's panel." />
+          <Hint does={appid ? `Saved for ${app?.name}; starts learning at its next launch.` : "Start a game to set its target."} why="use the same number as Steam's frame limit (Performance menu), or none." cost="a target above Steam's frame limit can never be reached, so autotune would only add power." />
         </PanelSectionRow>
+        {app && autotune && <LaunchWrapper appid={app.appid} name={app.name} />}
         {at?.running && (
           <PanelSectionRow>
             <div style={{ fontSize: 11, opacity: 0.8 }}>
@@ -104,15 +134,26 @@ export const PowerTab: FC = () => {
       <PanelSection title="Manual">
         <PanelSectionRow>
           <SliderField label="TDP (W)" value={tdp} min={lim.min} max={lim.plugged_max} step={1} showValue
-            disabled={!st?.hhd && !st?.rapl.available}
-            onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast("TDP not applied: enable TDP controls in Handheld Daemon once"); }} />
-          <Hint does="Package power limit, shared by CPU and GPU (through Handheld Daemon)." why="17–25 W on battery is the sweet spot; 35 W docked." cost="more watts = more heat and fan noise; pauses autotune for this session." />
+            disabled={!st?.tdp_backend}
+            onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast(st?.hhd ? "TDP not applied: enable TDP controls in Handheld Daemon once" : "TDP not applied: see Setup → Power limit control"); }} />
+          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="17–25 W on battery is the sweet spot; 35 W docked." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise; Steam's own TDP slider sets the same limit, so the last change wins."} />
         </PanelSectionRow>
         <Advanced id="power">
           <PanelSectionRow>
             <SliderField label="CPU ceiling (%)" value={cpuPct} min={10} max={100} step={5} showValue disabled={!st?.cpu.available}
               onChange={async (v) => { setCpuPct(v); await setCpuMaxPct(v); }} />
             <Hint does="Caps CPU clocks so the GPU gets the power budget." why="GPU-bound games: same fps, less heat; try 70–80%." cost="CPU-heavy scenes (towns, crowds) get slower." />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <DropdownItem label="CPU energy mode" disabled={!st?.cpu.epp_available} rgOptions={[
+              { data: "power", label: "Most battery" }, { data: "balance_power", label: "Balanced, battery first" },
+              { data: "balance_performance", label: "Balanced, speed first" }, { data: "performance", label: "Fastest" },
+            ]} selectedOption={st?.cpu.epp ?? "balance_performance"} onChange={async (o) => { await setEpp(o.data); refresh(); }} />
+            <Hint does="How quickly the CPU speeds up when a game asks for more (like Windows' power mode)." why="profiles set it for you: battery first on Battery, fastest on Dock." cost="faster modes use more power for the same fps." />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField label="TDP boost" checked={boost} onChange={async (v) => { setBoost(v); await setTdpBoost(v); if (st?.tdp_backend) await setTdp(tdp); }} />
+            <Hint does="Lets the Claw go above the TDP for a few seconds when a game needs a burst." why="snappier loading and menus." cost="off keeps power exactly at the TDP, which is easier on battery and heat." />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label="CPU turbo" checked={st?.cpu.no_turbo === 0} disabled={st?.cpu.no_turbo == null}
@@ -135,7 +176,7 @@ export const PowerTab: FC = () => {
           {st && (
             <PanelSectionRow>
               <div style={{ fontSize: 11, opacity: 0.7 }}>
-                GPU now {st.gpu.cur_mhz ?? "?"} MHz (hw {st.gpu.hw_min_mhz}–{st.gpu.hw_max_mhz}) · HHD {st.hhd ? (st.tdp?.ready ? `ready, ${st.tdp?.mode}` : "TDP controls not enabled") : "not running"} · firmware {st.msi_firmware ? "msi-wmi" : "RAPL"}
+                GPU now {st.gpu.cur_mhz ?? "?"} MHz (hw {st.gpu.hw_min_mhz}–{st.gpu.hw_max_mhz}) · TDP via {st.tdp_backend === "hhd" ? `Handheld Daemon (${st.tdp?.ready ? st.tdp?.mode : "TDP controls not enabled"})` : st.tdp_backend === "msi-firmware" ? `MSI firmware (now ${st.firmware_tdp?.pl1_w ?? "?"} W / ${st.firmware_tdp?.pl2_w ?? "?"} W boost)` : st.tdp_backend ?? "nothing"}
               </div>
             </PanelSectionRow>
           )}

@@ -3,10 +3,10 @@ import { callable } from "@decky/api";
 export type Health = { id: string; title: string; ok: boolean; detail: string; fix: string | null; optional?: boolean };
 export type PowerStatus = {
   gpu: { available: boolean; min_mhz: number | null; max_mhz: number | null; cur_mhz: number | null; hw_min_mhz: number | null; hw_max_mhz: number | null; efficient_mhz: number | null };
-  cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null };
+  cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null; epp?: string | null; epp_available?: boolean };
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
-  hhd: boolean; msi_firmware: boolean;
+  hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
 };
 export type BatteryStatus = {
@@ -14,7 +14,8 @@ export type BatteryStatus = {
   energy_full_wh?: number | null; health_pct?: number | null; plugged?: boolean | null;
   charge_limit_supported?: boolean; charge_limit?: number | null;
 };
-export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean } };
+export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
+export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
 export type GameProfile = { base?: string; tdp?: number; cpu_max_pct?: number; gpu_min_mhz?: number; gpu_max_mhz?: number; target_fps?: number; autotune?: boolean; learned?: any };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; target_fps?: number; learned?: any; paused?: boolean; last?: any };
 
@@ -47,7 +48,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 export const getBattery = callable<[], BatteryStatus>("get_battery");
 export const setChargeLimit = callable<[percent: number], boolean>("set_charge_limit");
 
-export const injectorState = callable<[gameDir: string], any>("injector_state");
+export const injectorState = callable<[appid: string], any>("injector_state");
 
 // ---- added modules ---------------------------------------------------------------------------------------------------
 export type Fix = { ok: boolean; error?: string; log?: string; path?: string; next?: string; dry_run?: boolean; would?: string };
@@ -83,8 +84,22 @@ export const setController = callable<[key: string, value: any], { ok: boolean; 
 export type Launch = { inject?: string; lsfg?: { multiplier: number; flow_scale: number; performance_mode: boolean }; hdr?: boolean; mesa?: string; proton?: string | null };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
-export const injectorDownload = callable<[kind: string, allowUnpinned: boolean], { ok: boolean; tag?: string; error?: string }>("injector_download");
-export const injectorInstallFor = callable<[gameDir: string, mode: string, xessFg: boolean, appid: string | null, lsfg: Launch["lsfg"] | null], any>("injector_install");
+export type InjectorPlan = {
+  found: boolean;
+  plan?: { mode: "none" | "native" | "optiscaler" | "lsfg"; blocked: boolean; reasons: string[]; warnings: string[]; steps: string[];
+    alternative?: string | null; page?: string | null;
+    options: { fg?: boolean; fg_input?: string; multiplier?: number; spoof?: boolean; optipatcher?: boolean; reframework?: boolean } };
+  found_in_game?: string[];
+  compat?: { listed: boolean; optipatcher: boolean; needs_reframework: boolean; list_loaded: boolean };
+  state?: any;
+  updates?: Record<string, { installed: string | null; latest: string | null; update: boolean }>;
+};
+export type Updates = Record<string, { installed: string | null; latest: string | null; update: boolean }> & { auto?: boolean };
+export const injectorPlan = callable<[appid: string, name: string], InjectorPlan>("injector_plan");
+export const injectorInstall = callable<[appid: string, mode: string, options: { multiplier?: number; fg?: boolean } | null, lsfg: Launch["lsfg"] | null, name: string], any>("injector_install");
+export const lsfgInstall = callable<[], { ok: boolean; version?: string; error?: string; dry_run?: boolean }>("lsfg_install");
+export const getUpdates = callable<[force: boolean], Updates>("get_updates");
+export const updateNow = callable<[], Record<string, string>>("update_now");
 
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; drivers: string[]; default_driver: string | null; status: { state: string; line: string | null; mode?: string }; official_proton: string[] };
 export const xessState = callable<[], XessState>("xess_state");
@@ -101,3 +116,14 @@ export const benchStatus = callable<[], { running: boolean; elapsed_s?: number; 
 export const benchStop = callable<[], BenchResult | null>("bench_stop");
 export const benchResults = callable<[], BenchResult[]>("bench_results");
 export const benchExport = callable<[], string>("bench_export");
+
+export const setEpp = callable<[value: string], boolean>("set_epp");
+export const setTdpBoost = callable<[on: boolean], boolean>("set_tdp_boost");
+export const rollback = callable<[comp: string], { ok: boolean; version?: string; error?: string }>("rollback");
+export type StreamingState = { installed: boolean; version: string | null; launcher: string; host: string | null; app: string;
+  shortcut: number | null; host_shortcut: number | null; flathub_moonlight: boolean; latest: string | null; update: boolean; previous: string | null };
+export const getStreaming = callable<[], StreamingState>("get_streaming");
+export const moonlightInstall = callable<[], { ok: boolean; version?: string; launcher?: string; error?: string; dry_run?: boolean; would?: string; updated?: boolean }>("moonlight_install");
+export const setStreamHost = callable<[host: string, app: string], { ok: boolean; launch_options?: string; launcher?: string; error?: string }>("set_stream_host");
+export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };
+export const getChanges = callable<[], Changes>("get_changes");
