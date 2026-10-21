@@ -47,7 +47,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 export const getBattery = callable<[], BatteryStatus>("get_battery");
 export const setChargeLimit = callable<[percent: number], boolean>("set_charge_limit");
 
-export const injectorState = callable<[gameDir: string], any>("injector_state");
+export const injectorState = callable<[appid: string], any>("injector_state");
 
 // ---- added modules ---------------------------------------------------------------------------------------------------
 export type Fix = { ok: boolean; error?: string; log?: string; path?: string; next?: string; dry_run?: boolean; would?: string };
@@ -84,7 +84,7 @@ export type Launch = { inject?: string; lsfg?: { multiplier: number; flow_scale:
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export const injectorDownload = callable<[kind: string, allowUnpinned: boolean], { ok: boolean; tag?: string; error?: string }>("injector_download");
-export const injectorInstallFor = callable<[gameDir: string, mode: string, xessFg: boolean, appid: string | null, lsfg: Launch["lsfg"] | null], any>("injector_install");
+export const injectorInstall = callable<[appid: string, mode: string, xessFg: boolean, lsfg: Launch["lsfg"] | null], any>("injector_install");
 
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; drivers: string[]; default_driver: string | null; status: { state: string; line: string | null; mode?: string }; official_proton: string[] };
 export const xessState = callable<[], XessState>("xess_state");

@@ -28,11 +28,16 @@ OPTISCALER_FILES = ("OptiScaler.dll", "OptiScaler.ini", "amd_fidelityfx_dx12.dll
 PROXY_NAME = "dxgi.dll"
 BACKUP_SUFFIX = ".clawdeck.bak"
 
-# OptiScaler INI keys ClawDeck sets (the rest stays default); names from OptiScaler.ini of the release in use
+# OptiScaler INI keys ClawDeck sets (the rest stays default). Checked against OptiScaler.ini of v0.9.4 (2026-07):
+#   [Upscalers] Dx12Upscaler xess | Dx11Upscaler xess_12 (DX11 through D3D12; native DX11 XeSS needs Intel's
+#   Windows driver, which Proton does not have) | VulkanUpscaler xess
+#   [FrameGen] FGInput upscaler (works in any game the upscaler hooks; HUD may ghost without Hudfix) and
+#   FGOutput xefg (XeSS frame generation, needs libxess_fg.dll + libxell.dll next to it)
+#   [XeSS] BuildPipelines true
 INI_XMX = {
-    "Upscalers": {"Dx12Upscaler": "xess", "Dx11Upscaler": "xess", "VulkanUpscaler": "xess"},
-    "XeSS": {"BuildPipelines": "true", "NetworkModel": "0"},
-    "FrameGen": {"FGType": "xess"},       # XeSS frame generation instead of the game's / OptiFG
+    "Upscalers": {"Dx12Upscaler": "xess", "Dx11Upscaler": "xess_12", "VulkanUpscaler": "xess"},
+    "XeSS": {"BuildPipelines": "true"},
+    "FrameGen": {"Enabled": "true", "FGInput": "upscaler", "FGOutput": "xefg"},
 }
 
 
@@ -222,6 +227,25 @@ def lsfg_state(home: str) -> dict:
             dll = cand
             break
     return {"layer": layer, "lossless_dll": dll, "ready": bool(layer and dll)}
+
+
+def steam_install_dir(home: str, appid: str | int) -> str | None:
+    """A Steam game's install folder, from steamapps/appmanifest_<appid>.acf ("installdir") in whichever library holds
+    it. Steam's frontend exposes no install path for the running app, so the backend reads Steam's own manifest."""
+    if not str(appid).isdigit():
+        return None
+    for lib in _steam_libraries(home):
+        acf = os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf")
+        try:
+            with open(acf, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    parts = line.strip().split('"')
+                    if len(parts) >= 4 and parts[1] == "installdir":
+                        d = os.path.join(lib, "steamapps", "common", parts[3])
+                        return d if os.path.isdir(d) else None
+        except OSError:
+            continue
+    return None
 
 
 def _steam_libraries(home: str) -> list[str]:

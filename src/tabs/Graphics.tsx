@@ -3,7 +3,7 @@ import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
 import {
-  getLaunch, injectorDownload, injectorInstallFor, injectorState, listProton, setLaunch, xessInstall, xessProbe,
+  getLaunch, injectorDownload, injectorInstall, injectorState, listProton, setLaunch, xessInstall, xessProbe,
   xessState, xessSwitchDriver, Launch, ProtonTool, XessState,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -86,8 +86,8 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
   const [state, setState] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const load = async () => {
-    if (!app?.dir) return;
-    const s = await injectorState(app.dir); setState(s); setMode(s.mode);
+    if (!app) return;
+    const s = await injectorState(app.appid); setState(s); setMode(s.mode);
     const l = await getLaunch(app.appid);
     if (l.launch.inject) setMode(l.launch.inject);
     if (l.launch.lsfg) setLsfg(l.launch.lsfg);
@@ -108,7 +108,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
   return (
     <PanelSection title={app ? `XMX injector: ${app.name}` : "XMX injector"}>
       <PanelSectionRow>
-        <DropdownItem label="Mode for this game" disabled={!app?.dir} rgOptions={[
+        <DropdownItem label="Mode for this game" disabled={!state?.dir} rgOptions={[
           { data: "none", label: "Off (game as shipped)" },
           { data: "optiscaler", label: "OptiScaler → XeSS on XMX" },
           { data: "lsfg", label: "lsfg-vk frame generation (no upscaler needed)" },
@@ -143,14 +143,14 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
         </PanelSectionRow>
       )}
       <PanelSectionRow>
-        <ButtonItem layout="below" disabled={!app?.dir || busy || needsAssets} onClick={async () => {
+        <ButtonItem layout="below" disabled={!state?.dir || busy || needsAssets} onClick={async () => {
           setBusy(true);
           try {
-            const r = await injectorInstallFor(app!.dir!, mode, xessFg, app!.appid, mode === "lsfg" ? lsfg : null);
+            const r = await injectorInstall(app!.appid, mode, xessFg, mode === "lsfg" ? lsfg : null);
             toast(r.error ?? (r.dry_run ? `Dry run: ${r.would}` : mode === "none" ? "Injector removed, originals restored" : `${mode} set up; restart the game`));
           } finally { setBusy(false); load(); }
         }}>{mode === "none" ? "Remove injector" : "Apply to this game"}</ButtonItem>
-        <Hint does={app ? (state?.native_xess ? "This game ships XeSS already: no injector needed, the XMX driver handles it." : `Writes into ${state?.dir ?? "the game folder"}; originals are backed up.`) : "Start a game to configure it (the game folder is read from Steam)."}
+        <Hint does={app ? (state?.native_xess ? "This game ships XeSS already: no injector needed, the XMX driver handles it." : (state?.dir ? `Writes into ${state.dir}; originals are backed up.` : "This game's folder was not found in Steam's library (non-Steam games are not supported yet).")) : "Start a game to configure it (the game folder is read from Steam)."}
           why="needs the ClawDeck launch wrapper in the game's launch options (see below)." />
       </PanelSectionRow>
     </PanelSection>
