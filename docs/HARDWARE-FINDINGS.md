@@ -48,7 +48,7 @@ charge-limit write test (7), sleep soak (8), and 11 below.
     start logs "Operation not permitted" — harmless, but make that log line quieter and use `bash tools/x.sh` instead
     of relying on the executable bit.
 11. **VRR range** (added 2026-10-21): the screen's EDID says 48–120 Hz although the panel does 30–120 Hz; ClawLab's
-    Windows fix overrides the EDID. Display → "Smooth down to 30 fps" does the same on Bazzite (`edid.py`: only
+    Windows fix overrides the EDID. Display → "VRR fix 30–120 Hz" does the same on Bazzite (`edid.py`: only
     ClawLab's validated factory EDIDs, only their range bytes, plus the DisplayID checksum Linux checks), through
     `drm.edid_firmware` and `rpm-ostree initramfs-etc`, as Bazzite does for the AOKZOE A1. Needs the device: the
     survey's "panel EDID" line (does its sha256 match ClawLab's `e49bc570…`, does Linux show 48–120?), then turn it on,
