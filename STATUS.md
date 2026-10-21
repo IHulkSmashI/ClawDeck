@@ -85,8 +85,8 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
   AI+ (MS-1T91)" and a Mesa version; Battery shows Wh and, after a minute on battery, watts; Controller shows
   InputPlumber's device; with Dry run off, set 20 W and read back `ppt_pl1_spl` and `intel-rapl-mmio:0`; then set
   the charge limit to 80 % and read back `charge_control_end_threshold`.
-- TDP revert: the firmware attributes start at 0 (unset) and their min is 8, so check what reverting to 0 does when a
-  game closes (stays at the last value, or goes back to the firmware default). If writing 0 is refused, revert must
+- TDP now goes through RAPL-MMIO (docs/HARDWARE-FINDINGS.md §12: the MSI attributes are ignored on the EX and refuse
+  a revert to 0). Still to measure: PL1 above 25 W (`max_power_uw`) for the 35 W plugged profile. Old note: revert must
   write the boot value read from `intel-rapl-mmio:0` instead.
 - Does Steam's own TDP slider change anything on the EX? PowerStation reports no TDP range for this chip, so it
   probably does nothing; the README and the Power tab now say "may do nothing".

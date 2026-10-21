@@ -79,6 +79,8 @@ class Paths:
     rapl_pl1: str | None = None
     rapl_pl2: str | None = None
     rapl_energy: str | None = None       # energy_uj for power readings
+    rapl_alt_pl1: str | None = None      # the other RAPL interface's limits (MSR when MMIO is primary): raised so it never caps
+    rapl_alt_pl2: str | None = None
     # MSI firmware (what Handheld Daemon drives)
     msi_pl1: str | None = None
     msi_pl2: str | None = None
@@ -167,6 +169,19 @@ def discover_paths() -> Paths:
             if os.path.exists(f"{d}/energy_uj"):
                 p.rapl_energy = f"{d}/energy_uj"
             break
+    if p.rapl_package:
+        for d in sorted(glob.glob("/sys/class/powercap/intel-rapl:[0-9]")) + sorted(glob.glob("/sys/class/powercap/intel-rapl-mmio:[0-9]")):
+            if d != p.rapl_package and (sysfs.read(f"{d}/name") or "").startswith("package"):
+                for c in sorted(glob.glob(f"{d}/constraint_[0-9]_name")):
+                    n = sysfs.read(c) or ""
+                    idx = c.rsplit("_", 2)[-2]
+                    if n == "long_term":
+                        p.rapl_alt_pl1 = f"{d}/constraint_{idx}_power_limit_uw"
+                    elif n == "short_term":
+                        p.rapl_alt_pl2 = f"{d}/constraint_{idx}_power_limit_uw"
+                if not os.path.exists(p.rapl_energy or "") and os.path.exists(f"{d}/energy_uj"):
+                    p.rapl_energy = f"{d}/energy_uj"
+                break
     # MSI firmware attributes (msi-wmi-platform), the paths Handheld Daemon writes
     base = "/sys/class/firmware-attributes/msi-wmi-platform/attributes"
     for attr, key in (("ppt_pl1_spl", "msi_pl1"), ("ppt_pl2_sppt", "msi_pl2"), ("ppt_pl3_fppt", "msi_pl3")):

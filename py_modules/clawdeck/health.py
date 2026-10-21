@@ -90,9 +90,9 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                     "detail": detail, "fix": None if bs["ok"] else "fix_face_buttons"})
     if not hhd_ok:
         out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
-                    "detail": ("MSI firmware limits, set directly (Steam's own TDP slider may do nothing on this chip: "
-                               "PowerStation reports no TDP range for it)"
-                               if p.msi_pl1 else "RAPL only" if p.rapl_pl1 else "no way to set TDP on this system")
+                    "detail": ("RAPL package limits (what the SoC enforces; the MSI firmware attributes are ignored on the "
+                               "Claw 8 EX). Steam's own TDP slider may do nothing on this chip"
+                               if p.rapl_pl1 else "MSI firmware attributes only (no RAPL package domain); Steam's slider may do nothing" if p.msi_pl1 else "no way to set TDP on this system")
                               + ("; PowerStation running" if st["powerstation"] else ""), "fix": None})
     out.append({"id": "msi_fw", "title": "MSI firmware controls (msi-wmi-platform)", "ok": p.msi_pl1 is not None,
                 "detail": "TDP and fan curve attributes present" if p.msi_pl1 else
