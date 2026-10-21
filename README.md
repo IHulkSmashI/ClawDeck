@@ -48,7 +48,9 @@ it does:
   switches by itself when you plug in or unplug.
 - **Autotune** saves power automatically: pick a profile and a target fps, and it finds the lowest power that holds
   that fps, never more than the profile you picked. It also balances that power between the CPU and the graphics:
-  when a game is held back by one side, the other side gives up power it doesn't need.
+  when a game is held back by one side, the other side gives up power it doesn't need. It decides on the average
+  fps over 10 seconds (and the worst second, so stutter counts), waits for fresh numbers after every change, and
+  keeps rechecking every few minutes even after it has learned a game.
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.

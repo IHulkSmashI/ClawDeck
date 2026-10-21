@@ -143,7 +143,7 @@ export const backend = {
   get_autotune: () => (scenario.game && state.autotune
     ? { running: true, enabled: true, appid: "2054970", target_fps: state.targetFps, paused: false,
         learned: { tdp: 10, cpu_max_pct: 70, gpu_min_mhz: null, bound: "gpu", confidence: 2, samples: 412 },
-        last: { fps: 60.2, pkg_w: 10.4 } }
+        last: { fps: 60.2, pkg_w: 10.4 }, avg_fps: 60.1, low_fps: 57.0, window_s: 10 }
     : { running: false, enabled: state.autotune }),
   export_profiles: () => "{}",
   import_profiles: () => 1,

@@ -116,7 +116,7 @@ export const PowerTab: FC = () => {
       <PanelSection title="Autotune">
         <PanelSectionRow>
           <ToggleField label="Save power automatically" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }} />
-          <Hint does={`Holds your target fps with the least power, never more than your profile (${limitW} W), and splits that power between CPU and graphics where the game needs it. Can't hold it? Pick a higher profile.`} />
+          <Hint does={`Holds your target fps with the least power, never more than your profile (${limitW} W), and splits that power between CPU and graphics where the game needs it. It judges the average over 10 seconds, waits after every change, and keeps rechecking. Can't hold it? Pick a higher profile.`} />
         </PanelSectionRow>
         {autotune && (
           <PanelSectionRow>
@@ -130,7 +130,7 @@ export const PowerTab: FC = () => {
           <PanelSectionRow>
             <div style={{ fontSize: 11, opacity: 0.8 }}>
               {at.paused ? "Paused: you changed CPU or GPU settings by hand" : `${at.learned?.tdp} W of ${limitW} W`}
-              {at.last?.fps != null && <> · {Math.round(at.last.fps)} fps</>}
+              {at.avg_fps != null ? <> · {Math.round(at.avg_fps)} fps average, {Math.round(at.low_fps ?? at.avg_fps)} at worst (last {at.window_s} s)</> : <> · measuring…</>}
               {at.learned?.bound && at.learned.bound !== "balanced" && <> · {at.learned.bound === "gpu" ? "graphics-heavy: more power to the GPU" : "CPU-heavy: more power to the CPU"}</>}
               {at.learned?.cpu_max_pct != null && at.learned.cpu_max_pct < 100 && <> · CPU capped at {at.learned.cpu_max_pct}%</>}
             </div>

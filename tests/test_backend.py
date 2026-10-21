@@ -133,36 +133,43 @@ def test_autotune_lowers_then_raises(fake_hw, monkeypatch):
     at.session = s
     good = autotune.Sample(t=0, frametime_ms=15.0, fps=66, gpu_mhz=1500, gpu_max_mhz=2400, cpu_pct=50, pkg_w=20)
     monkeypatch.setattr(at.sampler, "sample", lambda: good)
-    for _ in range(3):
-        at._step()
-    assert s.learned.tdp == 29 and applied[-1] == 29
+    at._step(); at._step()
+    assert s.learned.tdp == 30                     # two seconds are not enough to judge
+    at._step()
+    assert s.learned.tdp == 29 and applied[-1] == 29 and s.window == []   # the window restarts after a change
     bad = autotune.Sample(t=0, frametime_ms=25.0, fps=40, gpu_mhz=2390, gpu_max_mhz=2400, cpu_pct=40, pkg_w=20)
     monkeypatch.setattr(at.sampler, "sample", lambda: bad)
-    at._step(); at._step()
+    for _ in range(3):
+        at._step()
     # GPU-bound with an idle CPU: moves budget from the CPU to the GPU first, no extra watts
     assert s.learned.cpu_max_pct == 90 and s.learned.gpu_min_mhz is None and s.learned.tdp == 29
-    for _ in range(6):                       # three more misses: CPU 80, 70, 60 (its floor)
+    for _ in range(9):                             # three more decisions: CPU 80, 70, 60 (its floor)
         at._step()
     assert s.learned.cpu_max_pct == 60
-    at._step(); at._step()                   # CPU can't give more: then the GPU floor, still no extra watts
+    for _ in range(3):                             # CPU can't give more: then the GPU floor, still no extra watts
+        at._step()
     assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 29
     at.session = None
 
 
-def _session(fake_hw, monkeypatch, **learned):
+def _session(fake_hw, monkeypatch, settle=1, **learned):
     pw = power.Power(fake_hw)
     at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
     at.session = autotune.Session(appid="1", target_fps=60, floor_tdp=8, ceiling_tdp=17,
                                   learned=autotune.Learned(**{"tdp": 17, "cpu_max_pct": 100, "gpu_min_mhz": None, **learned}),
-                                  settle=1)
+                                  settle=settle)
     return at, at.session
+
+
+def _sample(fps, t=0.0, **kw):
+    base = dict(gpu_mhz=1500, gpu_max_mhz=2400, cpu_pct=40, pkg_w=12, gpu_busy=70)
+    base.update(kw)
+    return autotune.Sample(t=t, frametime_ms=1000.0 / fps, fps=fps, **base)
 
 
 def test_autotune_on_target_trims_the_side_that_isnt_the_bottleneck(fake_hw, monkeypatch):
     at, s = _session(fake_hw, monkeypatch)
-    gpu_bound = autotune.Sample(t=0, frametime_ms=16.0, fps=62, gpu_mhz=1500, gpu_max_mhz=2400, cpu_pct=35, pkg_w=16,
-                                gpu_busy=97)
-    monkeypatch.setattr(at.sampler, "sample", lambda: gpu_bound)
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(62, cpu_pct=35, gpu_busy=97))
     at._step()                                # rebalance turn: CPU gives up budget
     assert s.learned.cpu_max_pct == 90 and s.learned.tdp == 17
     at._step()                                # TDP turn
@@ -173,16 +180,44 @@ def test_autotune_on_target_trims_the_side_that_isnt_the_bottleneck(fake_hw, mon
 
 def test_autotune_cpu_bound_gets_cpu_then_gives_back_gpu_floor(fake_hw, monkeypatch):
     at, s = _session(fake_hw, monkeypatch, cpu_max_pct=70, gpu_min_mhz=1800)
-    cpu_bound = autotune.Sample(t=0, frametime_ms=22.0, fps=45, gpu_mhz=1200, gpu_max_mhz=2400, cpu_pct=95, pkg_w=16,
-                                gpu_busy=55)
-    monkeypatch.setattr(at.sampler, "sample", lambda: cpu_bound)
-    at._step(); at._step()
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(45, gpu_mhz=1200, cpu_pct=95, gpu_busy=55))
+    at._step()
     assert s.learned.cpu_max_pct == 80 and s.learned.tdp == 17     # more CPU, not more watts
-    for _ in range(4):
-        at._step()
-    assert s.learned.cpu_max_pct == 100
     at._step(); at._step()
+    assert s.learned.cpu_max_pct == 100
+    at._step()
     assert s.learned.gpu_min_mhz is None and s.learned.tdp == 17   # then the GPU floor goes, freeing budget
+    at.session = None
+
+
+def test_autotune_judges_the_average_not_one_second(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, settle=10)
+    seq = iter([_sample(f) for f in (61, 60, 62, 58, 61, 60, 63, 59, 60, 61)])   # one dip to 58 among 60s
+    monkeypatch.setattr(at.sampler, "sample", lambda: next(seq))
+    for _ in range(10):
+        at._step()
+    assert s.learned.tdp == 16                     # average 60.5, worst 58: on target, so power goes down
+    assert at.status()["avg_fps"] == 60.5 and at.status()["low_fps"] == 58
+    seq2 = iter([_sample(f) for f in (60, 60, 60, 60, 40, 60, 60, 60, 60, 60)])  # average fine, one big stutter
+    monkeypatch.setattr(at.sampler, "sample", lambda: next(seq2))
+    for _ in range(10):
+        at._step()
+    assert s.learned.tdp == 17                     # one 40 fps second is a stutter: missing, power back up
+    at.session = None
+
+
+def test_autotune_rechecks_a_learned_game(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, settle=1, confidence=3)
+    t = [0.0]
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(61, t=t[0]))
+    at._step()
+    assert s.learned.tdp == 17                     # learned: no lowering right away
+    t[0] = autotune.RECHECK_S + 1
+    at._step()
+    assert s.learned.tdp == 16                     # after RECHECK_S on target it probes one step lower
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(50, t=t[0] + 1))
+    at._step()
+    assert s.learned.tdp == 17                     # too low: back up at once
     at.session = None
 
 
@@ -240,3 +275,15 @@ def test_picked_power_is_autotunes_ceiling(fake_hw, monkeypatch):
     assert s.ceiling_tdp == 12 and s.learned.tdp == 12 and not s.paused
     at.set_ceiling(3)
     assert s.ceiling_tdp == 8               # never below the model's minimum
+
+
+def test_sampler_averages_every_new_mangohud_row(fake_hw, tmp_path):
+    log = tmp_path / "game_2026.csv"
+    log.write_text("os,cpu,gpu\nLinux,x,y\nfps,frametime,cpu_load\n60,16.6,30\n")
+    smp = autotune.Sampler(fake_hw, str(tmp_path))
+    assert smp.frametime() == (16.6, 60.0)
+    with open(log, "a") as f:
+        f.write("50,20.0,30\n70,14.2,30\n")          # two rows since the last read: both count
+    ft, fps = smp.frametime()
+    assert fps == 60.0 and abs(ft - 17.1) < 0.01
+    assert smp.frametime() == (None, None)            # nothing new
