@@ -7,7 +7,7 @@ import { FC } from "react";
 export const Hint: FC<{ does: string; why?: string; cost?: string }> = ({ does, why, cost }) => (
   <ul style={{ margin: "2px 0 6px 0", paddingLeft: 16, fontSize: 11, opacity: 0.75, lineHeight: 1.35 }}>
     <li>{does}</li>
-    {why && <li>On: {why}</li>}
+    {why && <li>Why: {why}</li>}
     {cost && <li>Cost: {cost}</li>}
   </ul>
 );

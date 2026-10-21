@@ -198,12 +198,6 @@ class Plugin:
             self.autotune.enabled = bool(value)
             if not value:
                 self.autotune.pause("autotune switched off")
-        if key == "autotune_battery_max" and self.autotune.session and not self.running_plugged:
-            s = self.autotune.session
-            s.ceiling_tdp = autotune.ceiling(self.hw.model["tdp"], False, value)
-            if s.learned.tdp > s.ceiling_tdp:   # lowered mid-game: drop to the new limit now, not step by step
-                s.learned.tdp = s.ceiling_tdp
-                self.power.set_tdp(s.ceiling_tdp, False)
         return True
 
     async def set_dry_run(self, on: bool) -> bool:
@@ -219,8 +213,9 @@ class Plugin:
         return self.power.status()
 
     async def set_tdp(self, watts: int) -> bool:
-        self.autotune.pause("manual TDP")
-        return self.power.set_tdp(int(watts), self.battery.plugged())
+        ok = self.power.set_tdp(int(watts), self.battery.plugged())
+        self.autotune.set_ceiling(int(watts))   # the power limit the user picked is autotune's new ceiling
+        return ok
 
     async def set_cpu_max_pct(self, pct: int) -> bool:
         self.autotune.pause("manual CPU ceiling")
@@ -250,13 +245,16 @@ class Plugin:
         return self.power.reset_gpu_window()
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
-        self.autotune.pause(f"profile {name} applied by hand")
         plugged = self.battery.plugged()
         prof = self.profiles.get(appid, bool(plugged)) if appid else {}
-        overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
+        # a profile picked by hand wins over the game's saved TDP: its watts are what the user just chose
+        overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
         self.settings["last_profile"] = name
         self._save_settings()
-        return self.power.apply_profile(name, overrides, plugged)
+        r = self.power.apply_profile(name, overrides, plugged)
+        if "tdp" in r["applied"]:
+            self.autotune.set_ceiling(r["applied"]["tdp"])   # autotune now works under this profile's power
+        return r
 
     async def revert_power(self) -> int:
         self.autotune.pause("revert to defaults")
@@ -330,9 +328,10 @@ class Plugin:
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
         result = self.power.apply_profile(base, overrides, plugged)
         if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
+            # the profile's power limit is autotune's ceiling: it only ever lowers power below what the user picked
             lim = self.hw.model["tdp"]
-            self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), lim["min"],
-                                autotune.ceiling(lim, plugged, self.settings.get("autotune_battery_max")), plugged)
+            ceiling = result["applied"].get("tdp") or (lim["plugged_max"] if plugged else lim["battery_max"])
+            self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), lim["min"], int(ceiling), plugged)
             result["autotune"] = "started"
         return result
 
