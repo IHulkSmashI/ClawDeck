@@ -19,6 +19,7 @@ export const SetupTab: FC = () => {
   const [sleep, setSleep] = useState<SleepState | null>(null);
   const [dry, setDry] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const refresh = async () => {
     setBusy(true);
@@ -30,6 +31,9 @@ export const SetupTab: FC = () => {
     } finally { setBusy(false); }
   };
   useEffect(() => { refresh(); }, []);
+  const problems = health.filter((h) => !h.ok && !h.optional);
+  const optional = health.filter((h) => !h.ok && h.optional);
+  const passing = health.filter((h) => h.ok);
 
   const fix = async (id: string, allowUnpinned = false) => {
     setBusy(true);
@@ -51,7 +55,13 @@ export const SetupTab: FC = () => {
         </PanelSectionRow>
       </PanelSection>
       <PanelSection title="Health check">
-        {health.map((h) => (
+        <PanelSectionRow>
+          <div style={{ fontSize: 13 }}>
+            {health.length === 0 ? "Checking…" : problems.length === 0 ? <b>Everything ClawDeck needs is ready.</b>
+              : <><b>{problems.length} to fix</b> · {passing.length} of {health.length} ready</>}
+          </div>
+        </PanelSectionRow>
+        {[...problems, ...optional, ...(showAll ? passing : [])].map((h) => (
           <PanelSectionRow key={h.id}>
             <Status ok={h.ok ? true : h.optional ? null : false} label={h.title} detail={h.detail} />
             {h.fix && !h.ok && (
@@ -59,6 +69,11 @@ export const SetupTab: FC = () => {
             )}
           </PanelSectionRow>
         ))}
+        {passing.length > 0 && (
+          <PanelSectionRow>
+            <ToggleField label={`Show the ${passing.length} passing checks`} checked={showAll} onChange={setShowAll} />
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={busy} onClick={refresh}>Re-check</ButtonItem>
         </PanelSectionRow>
@@ -75,7 +90,7 @@ export const SetupTab: FC = () => {
           <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }} />
           <Hint does="Logs every value ClawDeck would write instead of writing it." why="test a profile or autotune without touching the hardware." cost="nothing changes until you turn it off." />
         </PanelSectionRow>
-        <Advanced id="setup">
+        <Advanced id="setup" label="Show sleep details">
           {sleep && (
             <PanelSectionRow>
               <div style={{ fontSize: 11, opacity: 0.8 }}>

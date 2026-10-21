@@ -32,12 +32,16 @@ def run(cmd: list[str], home: str, timeout: float = 600, cwd: str | None = None,
 
 
 def chown_tree(path: str, home: str) -> None:
+    """Give a file, or a folder and everything in it, to the desktop user (the backend runs as root)."""
     u = user_of(home)
     if u is None or os.geteuid() != 0:
         return
-    for root, dirs, files in os.walk(path):
-        for n in [root] + [os.path.join(root, x) for x in dirs + files]:
-            try:
-                os.lchown(n, u.pw_uid, u.pw_gid)
-            except OSError:
-                pass
+    targets = [path]
+    if os.path.isdir(path) and not os.path.islink(path):
+        for root, dirs, files in os.walk(path):
+            targets += [os.path.join(root, x) for x in dirs + files]
+    for n in targets:
+        try:
+            os.lchown(n, u.pw_uid, u.pw_gid)
+        except OSError:
+            pass

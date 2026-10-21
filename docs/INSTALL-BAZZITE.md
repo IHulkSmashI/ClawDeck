@@ -22,19 +22,25 @@ Nothing on your Windows drive changes. Bazzite goes on a second drive and you pi
    boots as before.
 
 ## First boot
-1. Bazzite Portal: tick **Decky Loader**, **ProtonUp-Qt**, **Handheld Daemon**, **MangoHud**. Skip the rest for now.
+1. Bazzite Portal: install **Decky Loader** (and **Proton Plus** if you want GE-Proton). MangoHud is already built
+   in. Do **not** add Handheld Daemon: current Bazzite runs the Claw's controller with InputPlumber, and two
+   controller services fight each other.
 2. Desktop Mode (power menu → Switch to Desktop) → Konsole: `sudo rpm-ostree upgrade` → reboot.
-3. Press the two MSI buttons: left opens Steam, right opens the quick menu. If they do nothing, the Handheld Daemon
-   on your ISO predates the Claw 8 EX — the upgrade in step 2 fixes it; if not, Desktop Mode → Handheld Daemon app →
-   check "Device" says Claw 8 EX, and post `tools/sysfs-survey.sh` output in an issue.
-4. Quick menu → Handheld Daemon → enable **TDP controls** once (it asks you to accept).
+3. Press the two MSI buttons: left opens Steam, right opens the quick menu. If they do nothing, post
+   `tools/sysfs-survey.sh` output in an issue (it shows which controller service is running).
+4. Power: Steam's own quick-menu performance slider (TDP) works on the Claw. ClawDeck sets the same MSI firmware
+   limits, so whichever you change last wins.
+
+Bazzite's Portal also offers OptiScaler and Lossless Scaling Decky plugins. They do the same job as ClawDeck's
+injector; use one or the other for a given game, not both.
 
 ## ClawDeck
 1. Decky (the plug icon in the quick menu) → settings gear → **Install plugin from zip** → `ClawDeck.zip` from
    Releases.
 2. ClawDeck → Setup: every line should be green. Red lines say what's missing and how to fix it.
-3. For each game you want autotune or the XMX injector on: Steam → game → Properties → Launch options:
-   `~/homebrew/plugins/ClawDeck/tools/clawdeck-launch.sh %command%`.
+3. For each game you want autotune or the XMX injector on: start the game, open ClawDeck and tap
+   **Add to launch options** (Power or Graphics tab). By hand it is
+   `~/.local/share/clawdeck/clawdeck-launch.sh %command%` in the game's Properties → Launch options.
 4. Power tab: pick Battery / Performance / Dock, set a target fps, turn Autotune on, play.
 
 ## Power profiles without the plugin (optional)

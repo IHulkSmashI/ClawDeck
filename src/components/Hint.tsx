@@ -12,10 +12,11 @@ export const Hint: FC<{ does: string; why?: string; cost?: string }> = ({ does, 
   </ul>
 );
 
+// Detail goes on its own line: the Quick Access menu is about 300 px wide, too narrow for label and detail side by side.
 export const Status: FC<{ ok: boolean | null; label: string; detail?: string }> = ({ ok, label, detail }) => (
-  <div style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12, padding: "2px 0" }}>
-    <span style={{ color: ok === null ? "#999" : ok ? "#4caf50" : "#f44336", minWidth: 14 }}>{ok === null ? "·" : ok ? "✓" : "✗"}</span>
+  <div style={{ display: "grid", gridTemplateColumns: "14px 1fr", columnGap: 8, fontSize: 12, padding: "2px 0" }}>
+    <span style={{ color: ok === null ? "#999" : ok ? "#4caf50" : "#f44336" }}>{ok === null ? "·" : ok ? "✓" : "✗"}</span>
     <span>{label}</span>
-    {detail && <span style={{ opacity: 0.6, fontSize: 11 }}>{detail}</span>}
+    {detail && <span style={{ gridColumn: 2, opacity: 0.6, fontSize: 11, overflowWrap: "anywhere" }}>{detail}</span>}
   </div>
 );

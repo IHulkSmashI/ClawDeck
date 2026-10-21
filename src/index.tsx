@@ -3,7 +3,7 @@ import { definePlugin, toaster } from "@decky/api";
 import { useEffect, useState } from "react";
 import { GiClawHammer } from "react-icons/gi";
 
-import { gameStarted, gameStopped, powerSourceChanged, resumed } from "./api";
+import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } from "./api";
 import { SetupTab } from "./tabs/Setup";
 import { PowerTab } from "./tabs/Power";
 import { GraphicsTab } from "./tabs/Graphics";
@@ -80,6 +80,13 @@ export default definePlugin(() => {
   } catch (err) {
     console.warn("ClawDeck: resume hook unavailable", err);
   }
+
+  // After a system update: say what changed, and whether everything still works (health checks run on the backend).
+  getChanges().then((c) => {
+    if (!c?.changed?.length) return;
+    const what = c.changed.map((x) => `${x.what} ${x.to ?? "removed"}`).join(", ");
+    toaster.toast({ title: "ClawDeck: system updated", body: c.failing?.length ? `${what}. Needs a look: ${c.failing.map((f) => f.title).join(", ")} (Setup tab)` : `${what}. All checks still pass.` });
+  }).catch(() => { /* backend logs it */ });
 
   return {
     name: "ClawDeck",

@@ -71,7 +71,7 @@ export const BatteryTab: FC = () => {
         <PanelSectionRow>
           <div style={{ fontSize: 11, opacity: 0.7 }}>
             {f?.fan_rpm.length ? `Fan ${f.fan_rpm.join(" / ")} rpm` : "Fan speed not reported"}{f?.cpu_temp_c != null && <> · CPU {Math.round(f.cpu_temp_c)} °C</>}
-            {!f?.available && " · Handheld Daemon fan control not available"}
+            {!f?.available && " · fan curves need Handheld Daemon; without it the firmware curve runs"}
           </div>
         </PanelSectionRow>
       </PanelSection>
