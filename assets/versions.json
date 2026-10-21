@@ -1,0 +1,7 @@
+{
+  "_comment": "Pinned upstream releases ClawDeck downloads on request (Setup tab). Update deliberately, test on a Claw, then bump.",
+  "optiscaler": { "repo": "optiscaler/OptiScaler", "tag": "pending-verification", "asset_glob": "OptiScaler_*.7z" },
+  "xess_sdk":   { "repo": "intel/xess", "tag": "pending-verification", "note": "libxess.dll, libxess_fg.dll, libxell.dll 2.x for the XMX shim" },
+  "lsfg_vk":    { "repo": "PancakeTAS/lsfg-vk", "tag": "pending-verification" },
+  "xess_xmx_linux": { "repo": "HHHHanasak1/xess-xmx-linux", "tag": "pending-verification", "fork": "IHulkSmashI/xess-xmx-linux" }
+}
