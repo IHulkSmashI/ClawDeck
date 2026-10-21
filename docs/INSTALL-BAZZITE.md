@@ -37,15 +37,22 @@ Nothing on your Windows drive changes. Bazzite goes on a second drive and you pi
    `~/homebrew/plugins/ClawDeck/tools/clawdeck-launch.sh %command%`.
 4. Power tab: pick Battery / Performance / Dock, set a target fps, turn Autotune on, play.
 
+## Power profiles without the plugin (optional)
+Desktop Mode → Konsole, from the unpacked plugin folder:
+`sudo tools/power-profile.sh battery` (or `performance`, `dock`, `reset`; `status` shows what is set; add
+`--dry-run` to see what it would change). Nothing survives a reboot.
+
 ## XeSS XMX and XeLL (optional, native XeSS games)
-Follow [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux): unpack the release, `./install.sh`, re-login.
-ClawDeck's Graphics tab shows whether the driver is active. Run `tools/xell-probe.sh %command%` once on a game with
+ClawDeck → Graphics → **Install driver** downloads [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)
+and runs its installer for you; log out of Game Mode and back in afterwards. Or by hand: unpack the release,
+`./install.sh`, re-login. The Graphics tab shows whether the driver is active and has a **Probe driver** button. Run `tools/xell-probe.sh %command%` once on a game with
 frame generation to confirm XeLL is in driver mode.
 
 ## Going back / getting help
 - Windows: hold Vol− at power-on and pick it. Nothing was removed.
 - An update broke something: Desktop Mode → `rpm-ostree rollback` → reboot.
 - Bugs: ClawDeck → Setup → "Save a bug report to Desktop", attach the JSON to a GitHub issue.
+- Sleep problems: `sudo ~/homebrew/plugins/ClawDeck/tools/suspend-cycle.sh 20` and attach `~/clawdeck-suspend.csv`.
 
 ## What you give up
 Games with kernel anti-cheat (most competitive shooters) will not run. Peak frame rate on the open Mesa driver is a
