@@ -1,43 +1,14 @@
-import { staticClasses, Tabs } from "@decky/ui";
-import { definePlugin, toaster } from "@decky/api";
-import { useEffect, useState } from "react";
+import { staticClasses } from "@decky/ui";
+import { definePlugin, routerHook, toaster } from "@decky/api";
 import { GiClawHammer } from "react-icons/gi";
 
 import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } from "./api";
-import { SetupTab } from "./tabs/Setup";
-import { PowerTab } from "./tabs/Power";
-import { GraphicsTab } from "./tabs/Graphics";
-import { BatteryTab } from "./tabs/Battery";
-import { DisplayTab } from "./tabs/Display";
-import { ControllerTab } from "./tabs/Controller";
+import { FullPage, QuickPanel, ROUTE } from "./pages";
 
 declare const SteamClient: any;
 
-function Content() {
-  const [tab, setTab] = useState<string>(() => {
-    try { return localStorage.getItem("clawdeck.tab") || "setup"; } catch { return "setup"; }
-  });
-  useEffect(() => { try { localStorage.setItem("clawdeck.tab", tab); } catch { /* ignore */ } }, [tab]);
-  return (
-    <div style={{ height: "95%", width: "calc(100vw - 50px)", maxWidth: "100%", marginTop: -12, position: "absolute" }}>
-      <Tabs
-        activeTab={tab}
-        onShowTab={(id: string) => setTab(id)}
-        autoFocusContents={true}
-        tabs={[
-          { id: "setup", title: "Setup", content: <SetupTab /> },
-          { id: "power", title: "Power", content: <PowerTab /> },
-          { id: "graphics", title: "Graphics", content: <GraphicsTab /> },
-          { id: "display", title: "Display", content: <DisplayTab /> },
-          { id: "controller", title: "Controller", content: <ControllerTab /> },
-          { id: "battery", title: "Battery & Fans", content: <BatteryTab /> },
-        ]}
-      />
-    </div>
-  );
-}
-
 export default definePlugin(() => {
+  routerHook.addRoute(ROUTE, FullPage, { exact: false });
   // Game lifecycle: apply the per-game profile at start, revert and save what autotune learned at stop.
   const unregisters: (() => void)[] = [];
   try {
@@ -85,16 +56,17 @@ export default definePlugin(() => {
   getChanges().then((c) => {
     if (!c?.changed?.length) return;
     const what = c.changed.map((x) => `${x.what} ${x.to ?? "removed"}`).join(", ");
-    toaster.toast({ title: "ClawDeck: system updated", body: c.failing?.length ? `${what}. Needs a look: ${c.failing.map((f) => f.title).join(", ")} (Setup tab)` : `${what}. All checks still pass.` });
+    toaster.toast({ title: "ClawDeck: system updated", body: c.failing?.length ? `${what}. Needs a look: ${c.failing.map((f) => f.title).join(", ")} (All settings → Setup)` : `${what}. All checks still pass.` });
   }).catch(() => { /* backend logs it */ });
 
   return {
     name: "ClawDeck",
     titleView: <div className={staticClasses.Title}>ClawDeck</div>,
-    content: <Content />,
+    content: <QuickPanel />,
     icon: <GiClawHammer />,
     onDismount() {
       unregisters.forEach((u) => { try { u(); } catch { /* already gone */ } });
+      routerHook.removeRoute(ROUTE);
     },
   };
 });

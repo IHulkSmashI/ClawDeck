@@ -5,7 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { collectLogs, getHardware, getHealth, getSetting, getSleep, runFix, setDryRun, setSetting, Hardware, Health, SleepState } from "../api";
 import { Advanced } from "../components/Advanced";
 import { confirmUntested } from "../components/confirm";
-import { Hint, Status } from "../components/Hint";
+import { explain, Note, Status } from "../components/Hint";
 
 const FIX_LABEL: Record<string, string> = {
   enable_hhd: "Turn on Handheld Daemon",
@@ -49,18 +49,15 @@ export const SetupTab: FC = () => {
     <>
       <PanelSection title="This device">
         <PanelSectionRow>
-          <div style={{ fontSize: 12 }}>
-            <b>{hw?.model.name ?? "…"}</b> {hw && !hw.known && <span style={{ color: "#f44336" }}>(not in the table yet)</span>}
-            <div style={{ opacity: 0.7 }}>{hw?.model.soc} · {hw?.model.gpu} · kernel {hw?.kernel}</div>
-          </div>
+          <Status ok={hw ? hw.known : null} label={hw?.model.name ?? "…"}
+            detail={hw ? `${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel}` : undefined} />
         </PanelSectionRow>
       </PanelSection>
       <PanelSection title="Health check">
         <PanelSectionRow>
-          <div style={{ fontSize: 13 }}>
-            {health.length === 0 ? "Checking…" : problems.length === 0 ? <b>Everything ClawDeck needs is ready.</b>
-              : <><b>{problems.length} to fix</b> · {passing.length} of {health.length} ready</>}
-          </div>
+          <Status ok={health.length === 0 ? null : problems.length === 0}
+            label={health.length === 0 ? "Checking…" : problems.length === 0 ? "Everything ClawDeck needs is ready" : `${problems.length} to fix`}
+            detail={health.length ? `${passing.length} of ${health.length} checks pass` : undefined} />
         </PanelSectionRow>
         {[...problems, ...optional, ...(showAll ? passing : [])].map((h) => (
           <PanelSectionRow key={h.id}>
@@ -79,39 +76,37 @@ export const SetupTab: FC = () => {
           <ButtonItem layout="below" disabled={busy} onClick={refresh}>Re-check</ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>
-          <ButtonItem layout="below" onClick={async () => {
+          <ButtonItem layout="below" description={explain("Saves one file with your hardware and the checks above. Attach it to a GitHub issue.")} onClick={async () => {
             const p = await collectLogs();
             toaster.toast({ title: "ClawDeck", body: `Report saved: ${p}` });
           }}>Save a bug report to Desktop</ButtonItem>
-          <Hint does="Writes one JSON file with hardware, paths and the checks above." why="attach it to a GitHub issue." cost="none; no personal data beyond your username in paths." />
         </PanelSectionRow>
       </PanelSection>
       <PanelSection title="Safety">
         <PanelSectionRow>
-          <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }} />
-          <Hint does="Logs every value ClawDeck would write instead of writing it." why="test a profile or autotune without touching the hardware." cost="nothing changes until you turn it off." />
+          <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }}
+            description={explain("ClawDeck only logs what it would change, and changes nothing. For trying things safely.")} />
         </PanelSectionRow>
         <Advanced id="setup" label="Show sleep details">
           {sleep && (
             <PanelSectionRow>
-              <div style={{ fontSize: 11, opacity: 0.8 }}>
-                <b>Sleep</b>: {sleep.mem_sleep ?? "?"} · {sleep.stats.success ?? 0} ok / {sleep.stats.fail ?? 0} failed since boot
-                {sleep.s0ix_supported && <> · S0ix {Math.round((sleep.s0ix_residency_us ?? 0) / 1e6)} s</>}
-                {sleep.wake_enabled.length > 0 && <div>Can wake the Claw: {sleep.wake_enabled.join(", ")}</div>}
-                {sleep.kernel_params.length > 0 && <div>Sleep parameters: {sleep.kernel_params.join(" ")}</div>}
-                {sleep.fixes.map((f) => <div key={f.id} style={{ marginTop: 4 }}>• {f.symptom}: {f.fix}</div>)}
-              </div>
-              <Hint does="What the kernel says about suspend: mode, failures, time in deep idle." why="if the Claw is warm after sleeping, S0ix is not being reached." cost="none; read-only. Full test: tools/suspend-cycle.sh." />
+              <Note label={`Sleep: ${sleep.mem_sleep ?? "?"} · ${sleep.stats.success ?? 0} ok / ${sleep.stats.fail ?? 0} failed since boot`}>
+                {sleep.s0ix_supported && <>Deep idle (S0ix): {Math.round((sleep.s0ix_residency_us ?? 0) / 1e6)} s. </>}
+                {sleep.wake_enabled.length > 0 && <>Can wake the Claw: {sleep.wake_enabled.join(", ")}. </>}
+                {sleep.kernel_params.length > 0 && <>Sleep parameters: {sleep.kernel_params.join(" ")}. </>}
+                {sleep.fixes.map((f) => <div key={f.id}>• {f.symptom}: {f.fix}</div>)}
+                If the Claw is warm after sleeping, deep idle is not being reached.
+              </Note>
             </PanelSectionRow>
           )}
         </Advanced>
       </PanelSection>
       <PanelSection title="About">
         <PanelSectionRow>
-          <div style={{ fontSize: 11, opacity: 0.75 }}>
-            ClawDeck is free and open source (MIT) — github.com/IHulkSmashI/ClawDeck. Built on Handheld Daemon, PowerControl, xess-xmx-linux, OptiScaler and lsfg-vk.
-            Not affiliated with MSI, Valve or Intel. If it saves you battery or time: <b>ko-fi.com/gamervault</b>. Never a paywall, never a nag.
-          </div>
+          <Note label="Free and open source (MIT)">
+            github.com/IHulkSmashI/ClawDeck. Built on the work of many projects; the full list is in CREDITS.md. Not affiliated
+            with MSI, Valve or Intel. If it saves you battery or time: ko-fi.com/gamervault. Never a paywall, never a nag.
+          </Note>
         </PanelSectionRow>
       </PanelSection>
     </>

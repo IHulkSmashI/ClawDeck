@@ -53,7 +53,7 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
    choose **Install plugin from ZIP file** and pick ClawDeck.zip.
 3. Open **ClawDeck → Setup**. Every line should be green; a red line says what's missing and has a button to fix it.
 4. For each game you want Autotune, OptiScaler or HDR on: start the game, open ClawDeck and tap
-   **Add to launch options** (Power or Graphics tab).
+   **Add to launch options** (All settings → Power or Graphics).
 5. **Power** tab: pick Battery, Balanced, Performance or Dock, set a target fps, turn Autotune on, and play.
 
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
@@ -65,7 +65,7 @@ tab, so use one or the other for a given game, not both.
 ## XeSS on the XMX cores (optional)
 
 ClawDeck → **Graphics** → **Install driver** sets up [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux).
-Afterwards, restart the Claw once. The Graphics tab then shows whether the driver is active.
+Afterwards, restart the Claw once. The Graphics page (All settings) then shows whether the driver is active.
 
 ## Going back and getting help
 

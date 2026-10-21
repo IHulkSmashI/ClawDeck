@@ -14,14 +14,17 @@ writeFileSync(page, '<!doctype html><html><head><meta charset="utf-8"><meta name
 const out = join(root, "docs/screenshots");
 mkdirSync(out, { recursive: true });
 const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 1280, height: 1000 }, deviceScaleFactor: 2 });
+const p = await b.newPage({ viewport: { width: 1440, height: 1100 }, deviceScaleFactor: 2 });
 await p.goto("file://" + page, { waitUntil: "networkidle" });
 await p.evaluate(() => document.fonts.ready);
-const tabs = ["setup", "power", "graphics", "display", "controller", "battery"];
-for (const [i, name] of tabs.entries()) {
-  await p.click(`.qam-tab >> nth=${i}`);
+// the Quick Access panel, then each page of the full-screen view (its sidebar entries, in order)
+await p.locator(".qam").screenshot({ path: join(out, "quick.png") });
+console.log("docs/screenshots/quick.png");
+const pages = ["power", "graphics", "display", "controller", "battery", "setup"];
+for (const [i, name] of pages.entries()) {
+  await p.click(`.sb-item >> nth=${i}`);
   await p.waitForTimeout(700);
-  await p.locator(".qam").screenshot({ path: join(out, `${name}.png`) });
+  await p.locator(".full").screenshot({ path: join(out, `${name}.png`) });
   console.log(`docs/screenshots/${name}.png`);
 }
 await b.close();

@@ -174,7 +174,7 @@ def _arg(cmdline: str, name: str) -> str | None:
 
 
 def status() -> dict:
-    """What the Display tab shows: panel, the range the driver sees now, whether the wide range is on / pending."""
+    """What the Display page shows: panel, the range the driver sees now, whether the wide range is on / pending."""
     raw = _read_bytes(panel_edid_path())
     key = panel_id(raw)
     p = PANELS.get(key)

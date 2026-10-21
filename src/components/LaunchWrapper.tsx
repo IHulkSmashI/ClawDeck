@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getLaunch } from "../api";
 import { getLaunchOptions, hasWrapper, setLaunchOptions, withWrapper, withoutWrapper } from "../steam";
-import { Hint, Status } from "./Hint";
+import { explain, Note, Status } from "./Hint";
 
 /**
  * Autotune, the benchmark, the injector and per-game HDR only reach a game through ClawDeck's launch wrapper. This
@@ -21,15 +21,14 @@ export const LaunchWrapper: FC<{ appid: string; name: string }> = ({ appid, name
     <PanelSectionRow>
       <Status ok={readable ? on : null} label={on ? "ClawDeck is in this game's launch options" : "ClawDeck is not in this game's launch options yet"} />
       {readable && wrapper && (
-        <ButtonItem layout="below" onClick={() => {
+        <ButtonItem layout="below" description={explain("Needed once per game for Autotune, Benchmark, OptiScaler and HDR. Your own launch options are kept; works from the next launch.")} onClick={() => {
           const next = on ? withoutWrapper(opts!) : withWrapper(opts!, wrapper);
           const ok = setLaunchOptions(appid, next);
           toaster.toast({ title: "ClawDeck", body: ok ? (on ? `Removed from ${name}` : `Added to ${name}: restart the game to use it`) : "Steam refused; add it in the game's Properties → Launch options" });
           load();
         }}>{on ? "Remove from launch options" : "Add to launch options"}</ButtonItem>
       )}
-      <Hint does="Needed once per game for Autotune, Benchmark, OptiScaler and HDR. Your own launch options are kept; works from the next launch." />
-      {!readable && <div style={{ fontSize: 11, opacity: 0.7, wordBreak: "break-all" }}>Add by hand: Properties → Launch options → <b>{wrapper} %command%</b></div>}
+      {!readable && <Note label="Add by hand: Properties → Launch options"><span style={{ wordBreak: "break-all" }}>{wrapper} %command%</span></Note>}
     </PanelSectionRow>
   );
 };
