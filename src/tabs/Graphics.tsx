@@ -3,13 +3,13 @@ import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
 import {
-  getHardware, getLaunch, injectorDownload, injectorInstall, injectorState, listProton, setLaunch, xessInstall, xessProbe,
-  xessState, xessSwitchDriver, Launch, ProtonTool, XessState,
+  getHardware, getLaunch, getUpdates, injectorInstall, injectorPlan, lsfgInstall, setSetting, updateNow, listProton, setLaunch, xessInstall, xessProbe,
+  xessState, xessSwitchDriver, InjectorPlan, Launch, ProtonTool, Updates, XessState,
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { Hint, Status } from "../components/Hint";
-import { availableCompatTools, runningApp, specifyCompatTool } from "../steam";
+import { availableCompatTools, installLossless, losslessOwnership, runningApp, showLosslessInStore, specifyCompatTool, Ownership } from "../steam";
 import { confirmUntested } from "../components/confirm";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -80,100 +80,164 @@ const XessSection: FC = () => {
   );
 };
 
+const MODE_LABEL: Record<string, string> = {
+  native: "Native XeSS (nothing to install)",
+  optiscaler: "OptiScaler: XeSS + XeSS frame generation",
+  lsfg: "Lossless Scaling frame generation (lsfg-vk)",
+  none: "Off (game as shipped)",
+};
+
+const Bullets: FC<{ items: string[]; tone?: "warn" }> = ({ items, tone }) => (
+  <ul style={{ margin: "2px 0 6px 0", paddingLeft: 16, fontSize: 11, lineHeight: 1.4, opacity: tone ? 1 : 0.8, color: tone ? "#f0b429" : undefined }}>
+    {items.map((t, i) => <li key={i}>{t}</li>)}
+  </ul>
+);
+
 const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) => {
-  const [mode, setMode] = useState("none");
-  const [xessFg, setXessFg] = useState(true);
+  const [p, setP] = useState<InjectorPlan | null>(null);
+  const [mode, setMode] = useState<string>("none");
+  const [mult, setMult] = useState(3);
   const [lsfg, setLsfg] = useState<NonNullable<Launch["lsfg"]>>(LSFG_DEFAULT);
-  const [state, setState] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [others, setOthers] = useState<string[]>([]);
+  const [own, setOwn] = useState<Ownership>({ owned: null, installed: null });
   const load = async () => {
     setOthers((await getHardware()).other_plugins?.injector ?? []);
+    setOwn(losslessOwnership());
     if (!app) return;
-    const s = await injectorState(app.appid); setState(s); setMode(s.mode);
+    const r = await injectorPlan(app.appid, app.name);
+    setP(r);
+    if (r.plan) {
+      const installed = r.state?.mode && r.state.mode !== "none" ? r.state.mode : null;
+      setMode(installed ?? (r.plan.mode === "native" ? "none" : r.plan.mode));
+      setMult(r.plan.options.multiplier ?? 2);
+    }
     const l = await getLaunch(app.appid);
-    if (l.launch.inject) setMode(l.launch.inject);
     if (l.launch.lsfg) setLsfg(l.launch.lsfg);
   };
   useEffect(() => { load(); }, []);
 
-  const download = async (kind: string, allow = false) => {
+  if (!app) return <PanelSection title="Upscaling and frame generation"><PanelSectionRow><Hint does="Start a game: ClawDeck checks what it supports and recommends the best option." /></PanelSectionRow></PanelSection>;
+  if (p && !p.found) return <PanelSection title="Upscaling and frame generation"><PanelSectionRow><Hint does="This game's folder was not found in Steam's library (non-Steam games are not supported yet)." /></PanelSectionRow></PanelSection>;
+
+  const plan = p?.plan;
+  const st = p?.state;
+  const installed: string = st?.mode ?? "none";
+  const foreign = !!st?.foreign_optiscaler;
+  const lsfgReady = !!st?.lsfg?.ready;
+  const upd = p?.updates;
+  const stale = installed === "optiscaler" && upd?.optiscaler?.latest && st?.version !== upd.optiscaler.latest;
+
+  const apply = async (m: string) => {
     setBusy(true);
     try {
-      const r = await injectorDownload(kind, allow);
-      if (!r.ok && r.error?.includes("no tested version")) { confirmUntested(kind === "xess" ? "Intel's XeSS DLLs" : "OptiScaler", () => download(kind, true)); return; }
-      toast(r.ok ? `${kind} ${r.tag} downloaded` : `Download failed: ${r.error}`);
+      const r = await injectorInstall(app.appid, m, m === "optiscaler" ? { multiplier: mult } : null, m === "lsfg" ? lsfg : null, app.name);
+      toast(r.error ?? (r.dry_run ? `Dry run: ${r.would}` : m === "none" ? "Removed; the game's own files are back"
+        : m === "optiscaler" ? `OptiScaler ${r.version ?? ""} set up${r.reframework_version ? " with REFramework" : ""}${r.optipatcher_version ? " and OptiPatcher" : ""}. Restart the game.`
+        : "Lossless Scaling frame generation on for this game. Restart it."));
     } finally { setBusy(false); load(); }
   };
-  const needsAssets = mode === "optiscaler" && state && !state.assets?.optiscaler;
-  const lsfgMissing = mode === "lsfg" && state && !state.lsfg?.ready;
-  const foreign = !!state?.foreign_optiscaler;
 
   return (
-    <PanelSection title={app ? `XMX injector: ${app.name}` : "XMX injector"}>
-      {others.length > 0 && (
-        <PanelSectionRow>
-          <div style={{ fontSize: 11, color: "#f0b429" }}>{others.join(" and ")} is installed too. Use one tool per game: if a game is set up there, leave it Off here.</div>
-        </PanelSectionRow>
-      )}
-      {foreign && (
-        <PanelSectionRow>
-          <Hint does="OptiScaler is already in this game, put there by another tool." why="manage it where you set it up; ClawDeck won't overwrite it." />
-        </PanelSectionRow>
-      )}
-      <PanelSectionRow>
-        <DropdownItem label="Mode for this game" disabled={!state?.dir || foreign} rgOptions={[
-          { data: "none", label: "Off (game as shipped)" },
-          { data: "optiscaler", label: "OptiScaler → XeSS on XMX" },
-          { data: "lsfg", label: "lsfg-vk frame generation (no upscaler needed)" },
-        ]} selectedOption={mode} onChange={(o) => setMode(o.data)} />
-        <Hint does="OptiScaler makes DLSS/FSR games feed the Claw's XMX cores and can swap their frame generation for XeSS FG; lsfg-vk adds frame generation to anything." why="higher fps in games without native XeSS." cost="a little input delay; anti-cheat games refuse injected DLLs." />
-      </PanelSectionRow>
-      {mode === "optiscaler" && (
-        <PanelSectionRow>
-          <ToggleField label="Swap frame generation for XeSS FG" checked={xessFg} onChange={setXessFg} />
-          <Hint does="Replaces the game's DLSS-FG / FSR-FG with XeSS frame generation." why="runs on XMX; up to 4x with the XeSS XMX driver." cost="off if the game's own FG looks better to you." />
-        </PanelSectionRow>
-      )}
-      {mode === "lsfg" && (
+    <PanelSection title="Upscaling and frame generation">
+      {others.length > 0 && <PanelSectionRow><Bullets tone="warn" items={[`${others.join(" and ")} is installed too. Use one tool per game: if a game is set up there, leave it Off here.`]} /></PanelSectionRow>}
+      {!plan && <PanelSectionRow><div style={{ fontSize: 12, opacity: 0.7 }}>Checking {app.name}…</div></PanelSectionRow>}
+      {plan && (
         <>
           <PanelSectionRow>
-            <SliderField label="Frame multiplier" value={lsfg.multiplier} min={2} max={4} step={1} showValue onChange={(v) => setLsfg({ ...lsfg, multiplier: v })} />
-            <Hint does="Generated frames per real frame (2x, 3x, 4x)." why="2x from a steady 40–60 fps feels smoothest." cost="higher = more artifacts and input delay." />
+            <div style={{ fontSize: 13 }}><b>Best for {app.name}:</b> {MODE_LABEL[plan.mode] ?? plan.mode}</div>
+            <Bullets items={[...(p?.found_in_game ?? []), ...plan.reasons]} />
+            {plan.steps.length > 0 && <Bullets items={plan.steps.map((x: string) => `Sets up: ${x}`)} />}
+            {plan.warnings.length > 0 && <Bullets tone="warn" items={plan.warnings} />}
+            {plan.page && <div style={{ fontSize: 10, opacity: 0.6, wordBreak: "break-all" }}>Community notes: {plan.page}</div>}
           </PanelSectionRow>
-          <PanelSectionRow>
-            <SliderField label="Flow scale" value={lsfg.flow_scale} min={0.25} max={1} step={0.05} showValue onChange={(v) => setLsfg({ ...lsfg, flow_scale: v })} />
-            <ToggleField label="Performance mode" checked={lsfg.performance_mode} onChange={(v) => setLsfg({ ...lsfg, performance_mode: v })} />
-            <Hint does="Lower flow scale and performance mode make frame generation cheaper." why="leaves more of the power budget for the game on battery." cost="slightly softer generated frames." />
-          </PanelSectionRow>
-          {lsfgMissing && <PanelSectionRow><div style={{ fontSize: 11, color: "#f0a000" }}>{!state.lsfg.layer ? "lsfg-vk is not installed (lsfg-vk.dev)." : "lsfg-vk needs Lossless Scaling from Steam (its DLL)."}</div></PanelSectionRow>}
+          {foreign && <PanelSectionRow><Hint does="OptiScaler is already in this game, set up by another tool." why="manage it where you set it up; ClawDeck won't overwrite it." /></PanelSectionRow>}
+          {installed !== "none" && (
+            <PanelSectionRow>
+              <Status ok={!stale} label={`Installed: ${MODE_LABEL[installed] ?? installed}`}
+                detail={installed === "optiscaler" ? `OptiScaler ${st?.version ?? "?"}${st?.info?.reframework_version ? " · REFramework" : ""}${st?.info?.optipatcher_version ? " · OptiPatcher" : ""}${stale ? ` · ${upd?.optiscaler?.latest} is out, updates after you close the game` : " · newest version"}` : undefined} />
+            </PanelSectionRow>
+          )}
         </>
       )}
-      {needsAssets && (
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={() => download("optiscaler")}>Download OptiScaler</ButtonItem>
-          <ButtonItem layout="below" disabled={busy || state?.assets?.xess} onClick={() => download("xess")}>{state?.assets?.xess ? "XeSS DLLs ready" : "Download Intel XeSS DLLs"}</ButtonItem>
-          <Hint does="Fetches the releases from their own GitHub pages." why="ClawDeck never bundles upstream DLLs." cost="a few hundred MB once." />
-        </PanelSectionRow>
+      {plan && !plan.blocked && !foreign && (
+        <>
+          <PanelSectionRow>
+            <DropdownItem label="Use for this game" rgOptions={[
+              ...(plan.mode === "optiscaler" || plan.alternative === "optiscaler" ? [{ data: "optiscaler", label: MODE_LABEL.optiscaler + (plan.mode === "optiscaler" ? " (best)" : "") }] : []),
+              { data: "lsfg", label: MODE_LABEL.lsfg + (plan.mode === "lsfg" ? " (best)" : " (last resort)") },
+              { data: "none", label: plan.mode === "native" ? "Nothing: use XeSS in the game's settings (best)" : MODE_LABEL.none },
+            ]} selectedOption={mode} onChange={(o) => setMode(o.data)} />
+          </PanelSectionRow>
+          {mode === "optiscaler" && plan.options.fg !== false && (
+            <PanelSectionRow>
+              <DropdownItem label="XeSS frame generation" rgOptions={[
+                { data: 2, label: "2x" }, { data: 3, label: "3x (recommended on the Claw)" }, { data: 4, label: "4x" },
+              ]} selectedOption={mult} onChange={(o) => setMult(o.data)} />
+              <Hint does="How many frames XeSS adds per real frame. Runs on the XMX cores." why="3x from about 40 fps gives a smooth 120 on the Claw's screen." cost="more than 2x needs the XeSS driver (above); a little input delay." />
+            </PanelSectionRow>
+          )}
+          {mode === "lsfg" && (
+            <>
+              <PanelSectionRow>
+                <Status ok={own.owned === null ? null : own.owned && own.installed ? true : false}
+                  label={own.owned === false ? "You don't own Lossless Scaling yet" : own.installed === false ? "Lossless Scaling is in your library but not installed" : "Lossless Scaling is installed"} />
+                {own.owned === false && <ButtonItem layout="below" onClick={() => { if (!showLosslessInStore()) toast("Open the Steam store and search for Lossless Scaling"); }}>Get Lossless Scaling on Steam</ButtonItem>}
+                {own.owned && own.installed === false && <ButtonItem layout="below" onClick={() => { if (!installLossless()) toast("Install Lossless Scaling from your Steam library"); else toast("Steam is installing Lossless Scaling"); }}>Install Lossless Scaling</ButtonItem>}
+                <Hint does="lsfg-vk uses the frame generation from Lossless Scaling, a paid Steam app, so you need your own copy." why="it is the last option, for games with no DLSS, FSR or XeSS." cost="runs on the GPU's regular shader cores, not the XMX cores (only XeSS uses those); a little more input delay than XeSS frame generation." />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <Status ok={!!st?.lsfg?.layer} label={st?.lsfg?.layer ? `lsfg-vk installed${st?.lsfg_version ? ` (${st.lsfg_version})` : ""}` : "lsfg-vk is not installed yet"} />
+                {!st?.lsfg?.layer && <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { const r = await lsfgInstall(); toast(r.ok ? `lsfg-vk ${r.version ?? ""} installed` : `Not installed: ${r.error}`); } finally { setBusy(false); load(); } }}>Install lsfg-vk (newest)</ButtonItem>}
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <SliderField label="Frame multiplier" value={lsfg.multiplier} min={2} max={4} step={1} showValue onChange={(v) => setLsfg({ ...lsfg, multiplier: v })} />
+                <Hint does="Generated frames per real frame (2x, 3x, 4x)." why="2x from a steady 40–60 fps feels smoothest." cost="higher = more artifacts and input delay." />
+              </PanelSectionRow>
+              <Advanced id="lsfg" label="More frame generation settings">
+                <PanelSectionRow>
+                  <SliderField label="Flow scale" value={lsfg.flow_scale} min={0.25} max={1} step={0.05} showValue onChange={(v) => setLsfg({ ...lsfg, flow_scale: v })} />
+                  <ToggleField label="Performance mode" checked={lsfg.performance_mode} onChange={(v) => setLsfg({ ...lsfg, performance_mode: v })} />
+                  <Hint does="Lower flow scale and performance mode make frame generation cheaper." why="leaves more of the power budget for the game on battery." cost="slightly softer generated frames." />
+                </PanelSectionRow>
+              </Advanced>
+            </>
+          )}
+          {(mode !== "none" || installed !== "none") && (
+            <PanelSectionRow>
+              <ButtonItem layout="below" disabled={busy || (mode === "lsfg" && !(lsfgReady || (own.owned && own.installed)))} onClick={() => apply(mode)}>
+                {busy ? "Working…" : mode === "none" ? "Remove from this game" : installed === mode ? "Update settings for this game" : mode === "optiscaler" ? "Set up OptiScaler (newest)" : "Turn on Lossless Scaling for this game"}
+              </ButtonItem>
+              <Hint does={mode === "optiscaler" ? "Downloads the newest OptiScaler and installs it exactly as its own installer does, plus OptiPatcher and REFramework when this game needs them." : mode === "lsfg" ? "Turns lsfg-vk on for this game; nothing is copied into the game folder." : "Takes ClawDeck's files out of this game and puts its originals back."} why="takes effect the next time the game starts." />
+            </PanelSectionRow>
+          )}
+          {mode !== "none" && <LaunchWrapper appid={app.appid} name={app.name} />}
+        </>
       )}
-      {(mode !== "none" || state?.mode !== "none") && (
-      <PanelSectionRow>
-        <ButtonItem layout="below" disabled={!state?.dir || busy || needsAssets || foreign} onClick={async () => {
-          setBusy(true);
-          try {
-            const r = await injectorInstall(app!.appid, mode, xessFg, mode === "lsfg" ? lsfg : null);
-            toast(r.error ?? (r.dry_run ? `Dry run: ${r.would}` : mode === "none" ? "Injector removed, originals restored" : `${mode} set up; restart the game`));
-          } finally { setBusy(false); load(); }
-        }}>{mode === "none" ? "Remove injector" : "Apply to this game"}</ButtonItem>
-        <Hint does={mode === "none" ? "Takes ClawDeck's injector out of this game and puts its original files back." : mode === "lsfg" ? "Turns lsfg-vk on for this game; nothing is copied into the game folder." : "Copies OptiScaler into the game folder; the game's own files are backed up."}
-          why="takes effect the next time the game starts." />
-      </PanelSectionRow>
-      )}
-      {app && !state?.dir && <PanelSectionRow><Hint does="This game's folder was not found in Steam's library (non-Steam games are not supported yet)." /></PanelSectionRow>}
-      {app && state?.native_xess && <PanelSectionRow><Hint does="This game ships XeSS already: no injector needed, the XeSS driver above handles it." /></PanelSectionRow>}
-      {!app && <PanelSectionRow><Hint does="Start a game to set it up (ClawDeck reads the game folder from Steam)." /></PanelSectionRow>}
-      {app && mode !== "none" && <LaunchWrapper appid={app.appid} name={app.name} />}
+      {plan?.blocked && <PanelSectionRow><Hint does="Online games with anti-cheat can ban accounts for changed game files, so ClawDeck offers nothing here." why="use the game's own upscaler settings instead." /></PanelSectionRow>}
+      <UpdatesRow />
     </PanelSection>
+  );
+};
+
+const UpdatesRow: FC = () => {
+  const [u, setU] = useState<Updates | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = async (force = false) => setU(await getUpdates(force));
+  useEffect(() => { load(); }, []);
+  if (!u) return null;
+  const parts = [["OptiScaler", "optiscaler"], ["REFramework", "reframework"], ["lsfg-vk", "lsfg"]]
+    .filter(([, k]) => u[k]?.installed).map(([n, k]) => `${n} ${u[k].installed}${u[k].update ? ` → ${u[k].latest}` : ""}`);
+  const anyUpdate = ["optiscaler", "optipatcher", "reframework", "lsfg"].some((k) => u[k]?.update && u[k]?.installed);
+  return (
+    <Advanced id="updates" label="Updates">
+      <PanelSectionRow>
+        <div style={{ fontSize: 11, opacity: 0.8 }}>{parts.length ? parts.join(" · ") : "Nothing downloaded yet"}{u.optiscaler?.latest && !u.optiscaler.installed ? ` · newest OptiScaler: ${u.optiscaler.latest}` : ""}</div>
+        <ToggleField label="Keep tools up to date automatically" checked={u.auto !== false} onChange={async (v) => { await setSetting("auto_update", v); load(); }} />
+        <Hint does="Checks once a day for new OptiScaler, OptiPatcher, REFramework and lsfg-vk releases and updates your games right after you close them." why="game fixes arrive with new versions." cost="a small download now and then; never while a game runs." />
+        <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { if (anyUpdate) { await updateNow(); toast("Updated; games pick it up the next time they close"); } else { await load(true); toast("Everything is up to date"); } } finally { setBusy(false); load(); } }}>{anyUpdate ? "Update now" : "Check for updates"}</ButtonItem>
+      </PanelSectionRow>
+    </Advanced>
   );
 };
 

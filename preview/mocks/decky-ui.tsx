@@ -1,13 +1,14 @@
 // Stand-in for @decky/ui: the same component names and props the tabs use, drawn to look like Steam's Quick Access
 // menu. Only what ClawDeck's tabs touch is implemented.
 import { FC, ReactNode, useEffect, useState } from "react";
-import { scenario } from "../backend";
+import { GAMES, scenario } from "../backend";
 
 export const staticClasses = { Title: "qam-title" };
 
 export const Router = {
   get MainRunningApp() {
-    return scenario.game ? { appid: 2054970, display_name: "Dragon's Dogma 2" } : undefined;
+    const g = GAMES[scenario.which];
+    return scenario.game ? { appid: g.appid, display_name: g.name } : undefined;
   },
 };
 

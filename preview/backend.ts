@@ -2,12 +2,18 @@
 // Every number here is an example, not a measurement. The scenario switches (game running, charger, controller
 // service) are set from the preview page.
 
+export const GAMES = {
+  dd2: { appid: 2054970, name: "Dragon's Dogma 2" },
+  hk: { appid: 367520, name: "Hollow Knight" },
+};
+
 export const scenario = {
   game: true,
+  which: "dd2" as keyof typeof GAMES,
   plugged: false,
   controller: "inputplumber" as "inputplumber" | "hhd",
   listeners: [] as (() => void)[],
-  set(k: "game" | "plugged" | "controller", v: any) { (this as any)[k] = v; this.listeners.forEach((l) => l()); },
+  set(k: "game" | "plugged" | "controller" | "which", v: any) { (this as any)[k] = v; this.listeners.forEach((l) => l()); },
 };
 
 const hhd = () => scenario.controller === "hhd";
@@ -26,6 +32,9 @@ const state = {
   targetFps: 60,
   launch: { inject: "none", lsfg: { multiplier: 2, flow_scale: 0.8, performance_mode: true }, hdr: false, mesa: "", proton: "GE-Proton11-6" } as any,
   xessInstalled: false,
+  injected: {} as Record<string, string>,
+  lsfgInstalled: false,
+  autoUpdate: true,
   benchRunning: false,
   benchStart: 0,
   results: [
@@ -82,7 +91,7 @@ export const backend = {
     return ok();
   },
   get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "dry_run" ? state.dry : null),
-  set_setting: (k: string, v: any) => { if (k === "autotune") state.autotune = v; if (k === "dry_run") state.dry = v; return true; },
+  set_setting: (k: string, v: any) => { if (k === "autotune") state.autotune = v; if (k === "dry_run") state.dry = v; if (k === "auto_update") state.autoUpdate = v; return true; },
   set_dry_run: (v: boolean) => { state.dry = v; return v; },
   get_versions: () => ({}),
   get_sleep: () => ({
@@ -190,10 +199,39 @@ export const backend = {
   // ---- graphics ----
   get_launch: () => ({ launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }),
   set_launch: (_a: string, v: any) => { Object.assign(state.launch, v); return { launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }; },
-  injector_state: () => ({ dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", mode: state.launch.inject, optiscaler_present: state.launch.inject === "optiscaler",
-                           native_xess: false, info: null, assets: { optiscaler: true, xess: true }, lsfg: { layer: "/usr/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json", lossless_dll: null, ready: false } }),
-  injector_install: (_a: string, mode: string) => { state.launch.inject = mode; return { mode }; },
-  injector_download: () => ok({ tag: "v0.9.4" }),
+  injector_state: () => injectorState(),
+  injector_plan: () => {
+    const dd2 = scenario.which === "dd2";
+    const st = injectorState();
+    return dd2 ? {
+      found: true, state: st, updates: updates(),
+      found_in_game: ["Upscalers in this game: DLSS, FSR 3", "Capcom RE Engine game"],
+      compat: { listed: true, optipatcher: false, needs_reframework: true, list_loaded: true },
+      plan: { mode: "optiscaler", blocked: false, page: "https://github.com/optiscaler/OptiScaler/wiki/Dragons-Dogma-2",
+        reasons: [`This game has DLSS and FSR 3. OptiScaler turns it into XeSS${state.xessInstalled ? " on the XMX cores" : ""}, and adds XeSS frame generation.`,
+                  "OptiScaler's compatibility list: works (tested inputs: DLSS, FSR3)."],
+        steps: ["Newest OptiScaler, installed next to the game's main program", "REFramework, which Capcom RE Engine games need for OptiScaler"],
+        warnings: ["XeSS frame generation needs Borderless or Fullscreen Windowed mode in the game, and HDR10 (not scRGB) if you use HDR.",
+                   "Note for this game: Check Wiki entry for more info"],
+        options: { fg: true, fg_input: "upscaler", multiplier: state.xessInstalled ? 3 : 2, spoof: true, optipatcher: false, reframework: true } },
+    } : {
+      found: true, state: st, updates: updates(),
+      found_in_game: ["Upscalers in this game: none found"],
+      compat: { listed: false, optipatcher: false, needs_reframework: false, list_loaded: true },
+      plan: { mode: "lsfg", blocked: false, steps: [], options: {},
+        reasons: ["This game has no DLSS, FSR or XeSS for OptiScaler to work with.",
+                  "Lossless Scaling frame generation (lsfg-vk) works with any game, as the last option. It runs on the GPU's regular shader cores, not the XMX cores."],
+        warnings: ["Needs your own copy of Lossless Scaling from Steam."] },
+    };
+  },
+  injector_install: (_a: string, mode: string) => {
+    state.injected[scenario.which] = mode;
+    if (mode === "lsfg") state.lsfgInstalled = true;
+    return mode === "optiscaler" ? { mode, version: "v0.9.4", reframework_version: "nightly-01433" } : { mode };
+  },
+  lsfg_install: () => { state.lsfgInstalled = true; return ok({ version: "lsfg-vk-2.1.3" }); },
+  get_updates: () => ({ ...updates(), auto: state.autoUpdate }),
+  update_now: () => ({ optiscaler: "v0.9.4" }),
   xess_state: () => (state.xessInstalled
     ? { installed: true, package_dir: "/home/bazzite/.local/share/clawdeck/xess-xmx-linux-20261018", version: "20261018", drivers: ["26.1.2", "26.3.0-rc1"],
         default_driver: "26.3.0-rc1", status: { state: "ok", line: "ok 2026-10-21 18:02:11 Mesa 26.3.0-rc1", mode: "XMX (patched driver)" }, official_proton: [] }
@@ -208,3 +246,25 @@ export const backend = {
     { name: "proton_10", display: "Proton 10.0", kind: "valve" },
   ],
 };
+
+function injectorState() {
+  const mode = state.injected[scenario.which] ?? "none";
+  return { dir: `/home/bazzite/.local/share/Steam/steamapps/common/${GAMES[scenario.which].name}`, mode,
+           optiscaler_present: mode === "optiscaler", foreign_optiscaler: false, native_xess: false,
+           version: mode === "optiscaler" ? "v0.9.4" : null,
+           info: mode === "optiscaler" && scenario.which === "dd2" ? { reframework_version: "nightly-01433" } : null,
+           assets: { optiscaler: true, optipatcher: false, reframework: true },
+           lsfg: { layer: state.lsfgInstalled ? "/home/bazzite/.local/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json" : null,
+                   lossless_dll: "/home/bazzite/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll", ready: state.lsfgInstalled },
+           lsfg_version: state.lsfgInstalled ? "lsfg-vk-2.1.3" : null };
+}
+
+function updates() {
+  const anyOpti = Object.values(state.injected).includes("optiscaler");
+  return {
+    optiscaler: { installed: anyOpti ? "v0.9.4" : null, latest: "v0.9.4", update: false },
+    optipatcher: { installed: null, latest: "2026-10-19T08:12:00Z", update: false },
+    reframework: { installed: anyOpti ? "nightly-01433" : null, latest: "nightly-01433", update: false },
+    lsfg: { installed: state.lsfgInstalled ? "lsfg-vk-2.1.3" : null, latest: "lsfg-vk-2.1.3", update: false },
+  };
+}
