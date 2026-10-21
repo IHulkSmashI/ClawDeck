@@ -9,7 +9,7 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 |---|---|---|---|
 | Hardware table + discovery | `hw.py` | Setup | one row per Claw; EX = MS-1T91 (matches HHD's table) |
 | Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | also covers HHD writes now (nothing sent in dry run) |
-| Health check + one-tap fixes | `health.py`, `main.run_fix` | Setup | fixes: turn on HHD, install XeSS driver, save a hardware survey |
+| Health check + one-tap fixes | `health.py`, `main.run_fix` | Setup | fixes: turn on HHD, install XeSS driver, save a hardware survey, map the Claw 8 EX face buttons (`buttons.py`) |
 | Power + profiles | `power.py` | Power | TDP via HHD, else MSI firmware limits (current Bazzite), else RAPL (MMIO first) |
 | Which services run | `stack.py` | Setup | InputPlumber / PowerStation / HHD; never offers HHD next to InputPlumber |
 | Per-game profiles, AC follow | `profiles.py`, `main.power_source_changed` | Power | Steam's battery-state event switches battery ↔ plugged slot mid-game |
@@ -65,6 +65,12 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 - The README download button points at Releases, which stays empty until the first tested release.
 
 ## Needs the maintainer
+
+- Face buttons on the Claw 8 EX (`buttons.py`, Setup → "Map the face buttons"): the same hwdb entry was applied by
+  hand on the maintainer's Claw on 2026-10-21 (`/etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb`). Delete that hand-made
+  file, run `sudo systemd-hwdb update`, confirm the health check goes red, tap the fix, confirm it goes green and
+  both buttons work in Game Mode. Then send the one-board entry upstream to systemd's `60-keyboard.hwdb` (and
+  InputPlumber/Bazzite can drop any workaround): with it shipped the check passes without ClawDeck's file.
 
 - 30–120 Hz VRR (Display tab, `edid.py`): run the new survey first and post its "panel EDID" line. Turn it on only
   if the sha256 matches (the switch only appears then), restart, and check: the 120 Hz mode is still offered, the

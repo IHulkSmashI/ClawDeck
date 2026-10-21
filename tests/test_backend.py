@@ -156,3 +156,29 @@ def test_balanced_profile_applies(fake_hw):
     r = power.Power(fake_hw).apply_profile("balanced")
     assert r["applied"]["cpu_max_pct"] == 85
     assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 85
+
+
+def test_face_buttons_parse_and_dry_run(tmp_path, monkeypatch):
+    from clawdeck import buttons
+    devices = tmp_path / "devices"
+    devices.write_text('I: Bus=0011 Vendor=0001 Product=0001 Version=ab83\nN: Name="AT Translated Set 2 keyboard"\n'
+                       'P: Phys=isa0060/serio0/input0\nH: Handlers=sysrq kbd event4 leds\nB: KEY=1\n\n'
+                       'N: Name="MSI WMI hotkeys"\nH: Handlers=kbd event12\n\n')
+    assert buttons.keyboard_event(str(devices)) == "/dev/input/event4"
+    monkeypatch.setattr(buttons, "keyboard_event", lambda *a: "/dev/input/event4")
+
+    class R:
+        returncode = 0
+        stderr = ""
+        stdout = "E: KEYBOARD_KEY_b9=f15\nE: KEYBOARD_KEY_ba=f16\nE: KEYBOARD_KEY_a0=mute\n"
+    monkeypatch.setattr(buttons, "_run", lambda cmd, timeout=30: R())
+    assert buttons.mapped() == {"b9": "f15", "ba": "f16"}
+    assert buttons.status("MS-1T91")["ok"] and buttons.status("MS-1T91")["applies"]
+    assert not buttons.status("MS-1T41")["applies"]
+    R.stdout = "E: KEYBOARD_KEY_a0=mute\n"
+    assert not buttons.status("MS-1T91")["ok"]
+    sysfs.set_dry_run(True)
+    r = buttons.apply()
+    assert r["dry_run"] and "systemd-hwdb update" in r["would"] and "event4" in r["would"]
+    sysfs.set_dry_run(False)
+    assert "rnMS-1T91" in buttons.HWDB_TEXT and "KEYBOARD_KEY_b9=f15" in buttons.HWDB_TEXT

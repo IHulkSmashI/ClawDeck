@@ -11,6 +11,7 @@ const FIX_LABEL: Record<string, string> = {
   enable_hhd: "Turn on Handheld Daemon",
   install_xess: "Install the XeSS XMX driver",
   report_unknown_model: "Save a hardware survey for an issue",
+  fix_face_buttons: "Map the face buttons (hwdb entry for MS-1T91)",
 };
 
 export const SetupTab: FC = () => {

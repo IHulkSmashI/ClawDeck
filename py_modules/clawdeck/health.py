@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import hhd, hw, injector, sleep, stack, sysfs, xess
+from . import buttons, hhd, hw, injector, sleep, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -74,6 +74,15 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
         out.append({"id": "controller", "title": "Controller service", "ok": False,
                     "detail": "neither InputPlumber nor Handheld Daemon is running: the MSI buttons will not work",
                     "fix": "enable_hhd" if os.path.exists("/usr/bin/hhd") else None})
+    bs = buttons.status(hardware.model_id)
+    if bs["applies"]:
+        extra = "" if not bs["local_file"] else " (ClawDeck's hwdb file is in place" + \
+            ("" if not bs["ok"] else "; if a future image maps them on its own it can be removed") + ")"
+        out.append({"id": "face_buttons", "title": "MSI face buttons reach the controller service", "ok": bs["ok"],
+                    "detail": ("scancodes b9/ba map to F15/F16" + extra) if bs["ok"] else
+                              "this board (MS-1T91) is missing from systemd's keyboard table, so the two face buttons "
+                              "send nothing InputPlumber recognises: dead in Game Mode" + extra,
+                    "fix": None if bs["ok"] else "fix_face_buttons"})
     if not hhd_ok:
         out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
                     "detail": ("MSI firmware limits, set directly (Steam's own TDP slider may do nothing on this chip: "

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, benchmark, changes, compat, controller, display, downloads, edid, fans,  # noqa: E402
-                      gamescan, health, hhd, hw, injector, streaming, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
+                      buttons, gamescan, health, hhd, hw, injector, streaming, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -176,6 +176,10 @@ class Plugin:
             return {"ok": r.returncode == 0, "log": (r.stdout + r.stderr)[-2000:]}
         if fix == "install_xess":
             return await self.xess_install(allow_unpinned)
+        if fix == "fix_face_buttons":
+            return await asyncio.get_running_loop().run_in_executor(None, buttons.apply)
+        if fix == "undo_face_buttons":
+            return await asyncio.get_running_loop().run_in_executor(None, buttons.remove)
         if fix == "report_unknown_model":
             r = subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")], capture_output=True,
                                text=True, timeout=60, check=False)
