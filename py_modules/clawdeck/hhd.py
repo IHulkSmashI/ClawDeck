@@ -78,7 +78,13 @@ def get(key: str, default=None):
 
 def set_values(values: dict) -> dict | None:
     """Set dotted keys. HHD applies them on its next loop and returns the new state; a rejected value comes back
-    unchanged, so callers compare."""
+    unchanged, so callers compare. In dry-run nothing is sent; the current state with the values merged in comes back,
+    so callers behave as if HHD had accepted them."""
+    from . import sysfs
+    if sysfs.dry_run():
+        log.info("dry-run: would set Handheld Daemon %s", values)
+        st = get_state() or {}
+        return {**st, **values}
     tree: dict = {}
     for key, val in values.items():
         node = tree
@@ -143,3 +149,82 @@ def set_charge_limit(percent: int | None) -> bool:
 def has_key(key: str) -> bool:
     st = get_state()
     return st is not None and key in st
+
+
+# ---- settings schema (/api/v1/settings) --------------------------------------------------------------------------
+# HHD describes every setting it offers as a tree of containers: {"type": "container", "children": {...}}, with leaves
+# of type bool | int | float | multiple (options) | discrete (options list) | mode (modes: {name: container}) and
+# non-settings (display, action, version). A "mode" stores its choice at "<key>.mode" and its children under
+# "<key>.<mode name>.<child>". ClawDeck walks this tree instead of hard-coding keys, so a new HHD version that adds or
+# renames a gyro/RGB option shows up without a ClawDeck release.
+SETTING_TYPES = ("bool", "int", "float", "multiple", "discrete", "mode")
+
+
+def get_settings() -> dict | None:
+    return _request("GET", "/api/v1/settings")
+
+
+def describe(schema: dict, prefix: str = "") -> list[dict]:
+    """Flatten a settings tree into [{key, type, title, hint, options|min/max/step, tags}] for the leaves the UI can
+    render. Mode children are included under their mode name and carry "mode_of" so the UI can show them only when
+    that mode is selected."""
+    out: list[dict] = []
+
+    def leaf(key: str, node: dict, mode_of: tuple[str, str] | None) -> None:
+        t = node.get("type")
+        d = {"key": key, "type": t, "title": node.get("title") or key.rsplit(".", 1)[-1], "hint": node.get("hint"),
+             "tags": list(node.get("tags") or []), "default": node.get("default")}
+        if mode_of:
+            d["mode_of"] = {"key": mode_of[0], "mode": mode_of[1]}
+        if t == "multiple":
+            d["options"] = [{"value": k, "label": v} for k, v in (node.get("options") or {}).items()]
+        elif t == "discrete":
+            d["options"] = [{"value": v, "label": str(v)} for v in (node.get("options") or [])]
+        elif t in ("int", "float"):
+            for k in ("min", "max", "step", "unit"):
+                if k in node:
+                    d[k] = node[k]
+        out.append(d)
+
+    def walk(node: dict, key: str, mode_of: tuple[str, str] | None) -> None:
+        t = node.get("type")
+        if t == "container" or t is None:
+            # the top level (and HHD's section groups) are plain dicts of sections without a "type"
+            kids = node.get("children") if isinstance(node.get("children"), dict) else (node if t is None else {})
+            for k, child in kids.items():
+                if isinstance(child, dict):
+                    walk(child, f"{key}.{k}" if key else k, mode_of)
+        elif t == "mode":
+            modes = node.get("modes") or {}
+            d = {"key": f"{key}.mode", "type": "mode", "title": node.get("title") or key, "hint": node.get("hint"),
+                 "tags": list(node.get("tags") or []), "default": node.get("default"),
+                 "options": [{"value": m, "label": (c or {}).get("title") or m} for m, c in modes.items()]}
+            if mode_of:
+                d["mode_of"] = {"key": mode_of[0], "mode": mode_of[1]}
+            out.append(d)
+            for m, c in modes.items():
+                if isinstance(c, dict):
+                    walk(c, f"{key}.{m}", (f"{key}.mode", m))
+        elif t in SETTING_TYPES:
+            leaf(key, node, mode_of)
+
+    walk(schema, prefix, None)
+    return out
+
+
+def validate(desc: dict, value):
+    """Coerce a value from the UI to what the setting accepts, or raise ValueError."""
+    t = desc["type"]
+    if t == "bool":
+        return bool(value)
+    if t in ("int", "float"):
+        v = int(value) if t == "int" else float(value)
+        if "min" in desc and v < desc["min"] or "max" in desc and v > desc["max"]:
+            raise ValueError(f"{desc['key']}: {v} outside {desc.get('min')}..{desc.get('max')}")
+        return v
+    if t in ("multiple", "discrete", "mode"):
+        allowed = [o["value"] for o in desc.get("options", [])]
+        if value not in allowed:
+            raise ValueError(f"{desc['key']}: {value!r} not one of {allowed}")
+        return value
+    raise ValueError(f"{desc['key']}: type {t} is not settable")
