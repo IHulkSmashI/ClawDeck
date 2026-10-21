@@ -56,3 +56,11 @@ charge-limit write test (7), sleep soak (8), and 11 below.
 
 Open, needs the maintainer at the device: MSI buttons in Game Mode (left = Steam, right = Quick Access), each tab's first use
 with Dry run on, then TDP write-and-read-back, then the GPU window, then charge limit 80 %.
+
+## 11. Face buttons dead in Game Mode (found 2026-10-21, fixed in `buttons.py`)
+
+Root cause: systemd's `60-keyboard.hwdb` maps the Claw face-button scancodes `b9`/`ba` → F15/F16 for MS-1T41/1T42/
+1T52/1T8K only; MS-1T91 (Claw 8 EX) is missing, so InputPlumber's EX profile (which waits for KeyF15/KeyF16 from the
+"AT Translated Set 2 keyboard") never sees them. `hid-msi` is bound (mode xinput) and InputPlumber's composite
+device is fine. Fix: a one-board hwdb file + `systemd-hwdb update` + `udevadm trigger` + restart InputPlumber.
+Upstream: systemd (hwdb), then nothing else is needed.
