@@ -54,7 +54,7 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
 3. Open **ClawDeck → Setup**. Every line should be green; a red line says what's missing and has a button to fix it.
 4. For each game you want Autotune, OptiScaler or HDR on: start the game, open ClawDeck and tap
    **Add to launch options** (Power or Graphics tab).
-5. **Power** tab: pick Battery, Performance or Dock, set a target fps, turn Autotune on, and play.
+5. **Power** tab: pick Battery, Balanced, Performance or Dock, set a target fps, turn Autotune on, and play.
 
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
 may do nothing at all; ClawDeck sets the limit directly.

@@ -34,16 +34,27 @@
 ## What is ClawDeck?
 
 If you've used ClawTweaks or MSI Center M on Windows, ClawDeck is the same idea for Linux. It's a free plugin for
-[Decky Loader](https://decky.xyz) that adds one ClawDeck panel to the Quick Access menu (the right MSI button). From
-there you can:
+[Decky Loader](https://decky.xyz) that adds one ClawDeck panel to the Quick Access menu (the right MSI button). What
+it does:
 
-- switch between **Battery, Performance and Dock** power with one tap,
-- let **Autotune** find the lowest power each game needs,
-- get **XeSS upscaling and frame generation on the Claw's XMX cores**, even in games that only ship DLSS or FSR,
-  set up for you per game,
-- **stream games from your PC** with Moonlight,
-- set a **battery charge limit** so your battery stays healthy longer,
-- see at a glance **what's working and what isn't**, with a one-tap fix.
+- **VRR fix 30–120 Hz.** The Claw's screen can run VRR from 30 Hz, but tells the system 48, so games below 48 fps
+  judder. One tap applies ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
+- **Real power control on the Claw 8 EX.** Steam's own TDP slider may do nothing on this model under current
+  Bazzite; ClawDeck sets the Claw's power limit directly, inside the limits MSI's firmware allows.
+- **Four power profiles, per game:** Battery, Balanced, Performance and Dock, in one tap. Save one per game and it
+  switches by itself when you plug in or unplug.
+- **Autotune** finds the lowest power that holds your target fps in each game, using the GPU's real load.
+- **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
+  and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
+  games with nothing else.
+- **Always up to date:** OptiScaler, lsfg-vk and Moonlight update themselves, checked against their published
+  checksums, with one-tap rollback.
+- **Stream games from your PC** with Moonlight VRR, ready for Vibepollo, Apollo or Sunshine.
+- **Battery that reads right and lasts longer:** charge, watts and health shown correctly for the Claw, and a
+  charge limit from 50 to 100 %.
+- **Works with Bazzite, not against it:** it shows what InputPlumber (the controller service) and PowerStation (the
+  power service) are doing, and never installs a second controller service.
+- **Health check:** see at a glance what's working and what isn't, with a one-tap fix.
 
 Made for the **MSI Claw 8 EX AI+** on [Bazzite](https://bazzite.gg). It should also work on the Claw 8 AI+, 7 AI+,
 A1M and A8 (see [the questions](#questions) for what differs).
@@ -67,11 +78,24 @@ A1M and A8 (see [the questions](#questions) for what differs).
 ### Power
 | Feature | What it does | Good to know |
 |---|---|---|
-| **Profiles** | **Battery** (most frames per watt), **Performance** (plugged in) and **Dock** (full power) in one tap. Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
+| **Profiles** | Four levels of power in one tap (see the table below). Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
 | **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. | The first few minutes in a new game can stutter while it learns. |
 | **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
+
+**The four profiles** (Claw 8 EX values; other Claws are capped at their own maximum):
+
+| Profile | Power limit | CPU | Use it for |
+|---|---|---|---|
+| **Battery** | 20 W | up to 80 %, energy-saving mode | Indie and older games, long trips. Longest play time. |
+| **Balanced** | 25 W | up to 90 %, balanced mode | Newer, heavier games when you're not near a charger. More fps, shorter play time. |
+| **Performance** | 30 W | full speed | Plugged in, playing handheld. |
+| **Dock** | 35 W, boost to 45 W | full speed, performance mode | On a dock with a TV. Fans get audible. |
+
+Not sure which to pick? Choose a target fps and turn on **Autotune**: it starts from the profile and lowers the power
+until the game just holds your target. For a frame limit, use Steam's own (Quick Access → Performance → Frame
+limit) and set Autotune's target to the same number; ClawDeck doesn't add a second frame limiter.
 
 ### Graphics
 | Feature | What it does | Good to know |

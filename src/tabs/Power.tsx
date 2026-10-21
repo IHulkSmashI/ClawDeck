@@ -106,7 +106,8 @@ export const PowerTab: FC = () => {
       <PanelSection title="Profile">
         <PanelSectionRow>
           <DropdownItem label="Apply profile" rgOptions={[
-            { data: "battery", label: "Battery (best frames per watt)" },
+            { data: "battery", label: "Battery (longest play time)" },
+            { data: "balanced", label: "Balanced (more fps, still on battery)" },
             { data: "performance", label: "Performance (plugged in)" },
             { data: "dock", label: "Dock (full power, fans audible)" },
           ]} selectedOption={profile} onChange={async (o) => {
@@ -115,7 +116,7 @@ export const PowerTab: FC = () => {
             toast(r.failed?.length ? `Applied with failures: ${r.failed.join(", ")}` : `${o.data} profile applied`);
             refresh();
           }} />
-          <Hint does="Sets TDP, CPU ceiling and GPU clocks together." why="one tap when you dock or unplug." cost="none; reverts when the game closes unless saved." />
+          <Hint does="Sets power limit, CPU limit and CPU energy mode together. Battery 20 W, Balanced 25 W, Performance 30 W, Dock 35 W (Claw 8 EX)." why="Battery for light games and long trips, Balanced for heavier games unplugged, Performance on the charger, Dock on a TV." cost="more watts = more heat, fan noise and less play time; reverts when the game closes unless saved." />
         </PanelSectionRow>
         {appid && (
           <PanelSectionRow>

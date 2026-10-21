@@ -36,16 +36,20 @@ MODELS: dict[str, dict] = {
                 "tdp": {"min": 7, "battery_max": 35, "plugged_max": 35, "sppt_max": 40}, "panel_hz": [60, 120]},
 }
 
-# recommended profiles per model, watts (TDP = PL1 sustained; HHD sets PL2 from these). Battery numbers are where the
-# Claw gets its best frames per watt; dock is the firmware ceiling.
+# recommended profiles per model, watts (TDP = PL1 sustained; the boost limit PL2 follows from it). Four steps, lowest
+# to highest power: battery (most frames per watt), balanced (a middle step for heavier games on battery), performance
+# (plugged in, handheld) and dock (the firmware ceiling). Starting points until Benchmark numbers from a Claw replace
+# them.
 PROFILES: dict[str, dict[str, dict]] = {
     "default": {
         "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "best frames per watt"},
+        "balanced":    {"tdp": 25, "cpu_max_pct": 90,  "gpu_min_mhz": None, "epp": "balance_performance", "note": "more frames, still on battery"},
         "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
         "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "docked, fans audible"},
     },
     "MS-1T91": {
         "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "best frames per watt"},
+        "balanced":    {"tdp": 25, "cpu_max_pct": 90,  "gpu_min_mhz": None, "epp": "balance_performance", "note": "more frames, still on battery"},
         "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
         "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "35 W sustained / 45 W boost on the dock"},
     },

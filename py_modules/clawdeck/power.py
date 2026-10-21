@@ -187,7 +187,7 @@ class Power:
 
     # ---- profiles ----------------------------------------------------------------------------------------------------
     def apply_profile(self, name: str, overrides: dict | None = None, plugged: bool | None = None) -> dict:
-        """Apply a named profile (battery / performance / dock) with optional per-game overrides. Returns what was
+        """Apply a named profile (battery / balanced / performance / dock) with optional per-game overrides. Returns what was
         applied and what failed; a failed lever reverts itself."""
         prof = dict(hw.profiles_for(self.hw.model_key).get(name, {}))
         prof.update(overrides or {})
