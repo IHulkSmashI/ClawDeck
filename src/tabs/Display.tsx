@@ -40,7 +40,7 @@ const WideVrrSection: FC = () => {
           detail={w.pending && (w.pending === "on") !== w.wide ? "restart to apply the change" : `${w.panel_name ?? w.panel} panel`} />
       </PanelSectionRow>
       <PanelSectionRow>
-        <ToggleField label="Smooth down to 30 fps (30–120 Hz)" checked={want} disabled={busy}
+        <ToggleField label="VRR fix 30–120 Hz" checked={want} disabled={busy}
           onChange={(v) => confirmRestart(v ? "Widen the VRR range?" : "Back to the factory range?",
             v ? "ClawDeck gives the GPU driver a corrected description of this screen (ClawLab's fix, only for the exact panel they validated), so VRR works from 30 Hz instead of 48. Takes a minute or two, then restart. To undo, turn this off and restart, or pick the previous entry in the boot menu."
               : "ClawDeck removes its corrected screen description. Takes a minute or two, then restart.",

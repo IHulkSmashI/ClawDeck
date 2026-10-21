@@ -88,7 +88,7 @@ A1M and A8 (see [the questions](#questions) for what differs).
 | Feature | What it does |
 |---|---|
 | **VRR** | The screen refreshes as each frame is ready, for smooth play without tearing. |
-| **VRR down to 30 fps** | The Claw 8 AI+ / 8 EX and A1M / 7 AI+ screens can do 30–120 Hz, but tell the system 48–120 Hz, so games below 48 fps judder. One tap applies [ClawLab](https://github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory)'s fix, the same one Windows users install, for the exact screens ClawLab tested. Takes effect after a restart; turn it off to undo. |
+| **VRR fix 30–120 Hz** | The Claw 8 AI+ / 8 EX and A1M / 7 AI+ screens can do 30–120 Hz, but tell the system 48–120 Hz, so games below 48 fps judder. One tap applies [ClawLab](https://github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory)'s fix, the same one Windows users install, for the exact screens ClawLab tested. Takes effect after a restart; turn it off to undo. |
 | **Refresh range** | Sets which refresh rates Steam's own refresh slider offers. |
 | **HDR** | Turns on HDR for a TV or monitor on the dock. |
 | **Stream from your PC** | Installs [Moonlight with VRR](https://github.com/Nonary/moonlight-qt) and adds it to Steam. Save your PC's address to get a one-tap "Stream" shortcut. Works with [Vibepollo](https://github.com/Nonary/Vibepollo), Apollo or Sunshine on the PC. |
@@ -123,7 +123,7 @@ to Bazzite, with Windows staying on your Claw.
 5. Start a game, open **ClawDeck → Power**, pick a profile and a target fps, and tap **Add to launch options**.
 
 To remove it: Decky → gear → ClawDeck → Uninstall. Power, display and fan settings go back to how they were, and
-games you added ClawDeck to keep starting normally. The charge limit and the 30 Hz VRR range reset at the next
+games you added ClawDeck to keep starting normally. The charge limit and the VRR fix 30–120 Hz reset at the next
 reboot.
 
 ---
@@ -135,7 +135,7 @@ you play, and they check once a second while their game runs.
 
 **Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
 changes are undone when the game closes, when you tap *Revert to defaults*, or when you remove the plugin. The two
-things that stay on purpose are the charge limit and, if you turn it on, the 30 Hz VRR range; it applies only to
+things that stay on purpose are the charge limit and, if you turn it on, the VRR fix 30–120 Hz; it applies only to
 screens ClawLab tested, and the previous entry in the boot menu always starts without it.
 
 **Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything, and on the Claw
