@@ -149,9 +149,10 @@ def test_four_profiles_step_up_in_power():
         assert list(table) == ["battery", "balanced", "performance", "dock"]
         tdps = [table[n]["tdp"] for n in table]
         assert tdps == sorted(tdps) and len(set(tdps)) == 4
+        assert table["battery"]["tdp"] <= 15 and table["balanced"]["tdp"] <= 20   # battery play stays efficient
 
 
 def test_balanced_profile_applies(fake_hw):
     r = power.Power(fake_hw).apply_profile("balanced")
-    assert r["applied"]["cpu_max_pct"] == 90
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
+    assert r["applied"]["cpu_max_pct"] == 85
+    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 85
