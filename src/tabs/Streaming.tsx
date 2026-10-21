@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getStreaming, moonlightInstall, rollback, setSetting, setStreamHost, StreamingState } from "../api";
 import { Advanced } from "../components/Advanced";
-import { Hint, Status } from "../components/Hint";
+import { explain, Note, Status } from "../components/Hint";
 import { addShortcut, shortcutExists } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -46,16 +46,18 @@ export const StreamingSection: FC = () => {
       <PanelSectionRow>
         <Status ok={s ? s.installed : null} label={s?.installed ? `Moonlight VRR ${s.version}` : "Moonlight VRR is not installed"}
           detail={s?.installed ? (s.update ? `${s.latest} is out` : "newest version") : undefined} />
-        <Hint does="Plays games running on your PC on the Claw, over Wi-Fi or a cable. Use Vibepollo (or Apollo / Sunshine) on the PC." why="this Moonlight build shows each frame as soon as it arrives, so VRR stays smooth." cost="needs a good 5 GHz or 6 GHz Wi-Fi; on Wi-Fi pick AV1 in Moonlight's settings." />
-        <ButtonItem layout="below" disabled={busy} onClick={install}>{busy ? "Working…" : !s?.installed ? "Install Moonlight VRR" : s.update ? "Update Moonlight VRR" : inSteam ? "Check for a newer build" : "Add Moonlight to Steam"}</ButtonItem>
-        {s?.installed && inSteam && <Hint does="Moonlight VRR is in your Steam library: start it from there and pair with your PC once (it shows a PIN to type into Vibepollo's web page)." />}
-        {s?.flathub_moonlight && <Hint does="The regular Moonlight from Flathub is installed too. Both can stay; use Moonlight VRR for smoother streams." />}
+        <ButtonItem layout="below" disabled={busy} onClick={install}
+          description={explain("Play games running on your PC, over Wi-Fi or a cable. Use Vibepollo, Apollo or Sunshine on the PC; this Moonlight keeps VRR smooth.", undefined, "needs good 5 or 6 GHz Wi-Fi.")}>{busy ? "Working…" : !s?.installed ? "Install Moonlight VRR" : s.update ? "Update Moonlight VRR" : inSteam ? "Check for a newer build" : "Add Moonlight to Steam"}</ButtonItem>
+        {s?.installed && inSteam && <Note>In your Steam library: start it from there and pair with your PC once (type the PIN it shows into Vibepollo's web page).</Note>}
+        {s?.flathub_moonlight && <Note>The regular Moonlight is installed too. Both can stay; Moonlight VRR streams more smoothly.</Note>}
       </PanelSectionRow>
       {s?.installed && (
         <PanelSectionRow>
           <TextField label="Your PC (name or IP address)" value={host} onChange={(e: any) => setHost(e.target.value)} />
           <TextField label="App to open" value={app} onChange={(e: any) => setApp(e.target.value)} />
-          <ButtonItem layout="below" disabled={!host.trim() || busy} onClick={async () => {
+          <ButtonItem layout="below" disabled={!host.trim() || busy}
+            description={explain("A Steam shortcut that goes straight into the stream. Pair once in Moonlight first. To leave a stream: hold View + Menu + LB + RB.")}
+            onClick={async () => {
             const r = await setStreamHost(host, app);
             if (!r.ok) { toast(r.error ?? "Not saved"); return; }
             if (!hostInSteam) {
@@ -65,14 +67,13 @@ export const StreamingSection: FC = () => {
             } else toast("Saved");
             load();
           }}>{hostInSteam ? "Save" : "Add a one-tap stream to Steam"}</ButtonItem>
-          <Hint does="A Steam shortcut that opens the stream straight away, without going through Moonlight's menus." why="pair once in Moonlight first." cost="to leave a stream: hold View + Menu + LB + RB." />
         </PanelSectionRow>
       )}
       {s?.previous && (
         <Advanced id="streaming" label="Problems after an update?">
           <PanelSectionRow>
-            <ButtonItem layout="below" onClick={async () => { const r = await rollback("moonlight"); toast(r.ok ? `Back to Moonlight VRR ${r.version}` : `Not possible: ${r.error}`); load(); }}>Go back to the previous Moonlight build</ButtonItem>
-            <Hint does="Puts the build you had before back; automatic updates skip the one you left until a newer build comes out." />
+            <ButtonItem layout="below" description={explain("Puts the build you had before back. Updates skip the one you left until a newer one comes out.")}
+              onClick={async () => { const r = await rollback("moonlight"); toast(r.ok ? `Back to Moonlight VRR ${r.version}` : `Not possible: ${r.error}`); load(); }}>Go back to the previous Moonlight build</ButtonItem>
           </PanelSectionRow>
         </Advanced>
       )}

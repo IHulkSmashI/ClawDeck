@@ -1,16 +1,11 @@
 // Browser preview of ClawDeck's Quick Access panel: the real tab components from src/, with @decky/ui, @decky/api
 // and Steam's globals replaced by stand-ins (preview/mocks) and an example backend (preview/backend.ts).
 import { useEffect, useState } from "react";
-import { Tabs, ModalHost } from "@decky/ui";
+import { ModalHost, setNavigator } from "@decky/ui";
 import { onToast } from "@decky/api";
 
 import { scenario } from "./backend";
-import { SetupTab } from "../src/tabs/Setup";
-import { PowerTab } from "../src/tabs/Power";
-import { GraphicsTab } from "../src/tabs/Graphics";
-import { DisplayTab } from "../src/tabs/Display";
-import { ControllerTab } from "../src/tabs/Controller";
-import { BatteryTab } from "../src/tabs/Battery";
+import { FullPage, QuickPanel } from "../src/pages";
 
 let launchOptions = "";   // the example game starts without ClawDeck in its launch options
 let losslessInstalled = false;
@@ -38,29 +33,29 @@ const shortcutIds: number[] = [];
   },
 };
 
-const TABS = [
-  { id: "setup", title: "Setup", C: SetupTab },
-  { id: "power", title: "Power", C: PowerTab },
-  { id: "graphics", title: "Graphics", C: GraphicsTab },
-  { id: "display", title: "Display", C: DisplayTab },
-  { id: "controller", title: "Controller", C: ControllerTab },
-  { id: "battery", title: "Battery & Fans", C: BatteryTab },
-];
+const PAGES = ["power", "graphics", "display", "controller", "battery", "setup"];
 
-const initialTab = () => {
-  const h = location.hash.replace("#", "");
-  if (TABS.some((t) => t.id === h)) return h;
-  try { return localStorage.getItem("clawdeck.preview.tab") || "setup"; } catch { return "setup"; }
-};
-
-const Panel = () => {
-  const [tab, setTab] = useState(initialTab);
+/** Quick Access panel on the left, the full-screen page (Steam's sidebar layout) on the right. */
+const Panels = () => {
   const [rev, setRev] = useState(0);
+  const [page, setPage] = useState(() => {
+    const h = location.hash.replace("#", "");
+    return PAGES.includes(h) ? h : "power";
+  });
   useEffect(() => { scenario.listeners.push(() => setRev((r) => r + 1)); }, []);
-  useEffect(() => { try { localStorage.setItem("clawdeck.preview.tab", tab); } catch { /* private window */ } }, [tab]);
+  useEffect(() => { setNavigator((path) => { const p = path.split("/").pop() || "power"; setPage(p); location.hash = p; }); }, []);
   return (
-    <Tabs activeTab={tab} onShowTab={setTab}
-      tabs={TABS.map((t) => ({ id: t.id, title: t.title, content: <t.C key={`${t.id}-${rev}`} /> }))} />
+    <div className="screens">
+      <div className="device qam-device" aria-label="Quick Access panel">
+        <div className="qam">
+          <div className="qam-head"><span className="qam-title">ClawDeck</span><span className="qam-clock">18:20 · 64%</span></div>
+          <div className="qam-tabpanel"><QuickPanel key={`q-${rev}`} /></div>
+        </div>
+      </div>
+      <div className="device full-device" aria-label="Full-screen settings page">
+        <div className="full"><FullPage key={`f-${rev}-${page}`} page={`/clawdeck/${page}`} /></div>
+      </div>
+    </div>
   );
 };
 
@@ -128,11 +123,8 @@ const App = () => (
       <p className="note">Same code as the plugin's <code>src/tabs</code>, with Steam's parts swapped for stand-ins. Build it
         yourself with <code>pnpm preview</code>.</p>
     </header>
-    <div className="device" aria-label="Quick Access panel">
-      <div className="qam">
-        <div className="qam-head"><span className="qam-title">ClawDeck</span><span className="qam-clock">18:20 · 64%</span></div>
-        <Panel />
-      </div>
+    <div className="stage">
+      <Panels />
       <ModalHost />
       <Toasts />
     </div>

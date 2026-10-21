@@ -19,14 +19,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/setup.png" alt="Setup tab" width="32%">
-  <img src="docs/screenshots/power.png" alt="Power tab" width="32%">
-  <img src="docs/screenshots/graphics.png" alt="Graphics tab" width="32%">
+  <img src="docs/screenshots/quick.png" alt="ClawDeck in the Quick Access menu" width="24%">
+  <img src="docs/screenshots/power.png" alt="Full settings: Power" width="72%">
 </p>
 <p align="center">
-  <img src="docs/screenshots/display.png" alt="Display tab" width="32%">
-  <img src="docs/screenshots/controller.png" alt="Controller tab" width="32%">
-  <img src="docs/screenshots/battery.png" alt="Battery and Fans tab" width="32%">
+  <img src="docs/screenshots/graphics.png" alt="Full settings: Graphics" width="48%">
+  <img src="docs/screenshots/display.png" alt="Full settings: Display and streaming" width="48%">
 </p>
 
 ---
@@ -69,12 +67,20 @@ A1M and A8 (see [the questions](#questions) for what differs).
 
 > **Not released yet.** ClawDeck is brand new and is being tested on a Claw right now. The first download appears
 > under [Releases](https://github.com/IHulkSmashI/ClawDeck/releases) once that testing is done. Everything it changes
-> is undone when you close the game or remove the plugin, and **Dry run** (Setup tab) lets you try it without
+> is undone when you close the game or remove the plugin, and **Dry run** (Setup page) lets you try it without
 > changing anything.
 
 ---
 
-## What each tab does
+## Where things are
+
+- **Quick Access menu** (the right MSI button → ClawDeck): the things you change while playing. Power profile,
+  Autotune with its target fps, and a line that tells you if anything needs fixing.
+- **All settings** (the button at the bottom of the panel): a full-screen page with a sidebar, like Steam's own
+  settings. Move between Power, Graphics, Display & streaming, Controller, Battery & fans and Setup with the D-pad;
+  every explanation sits right under its control, so you never need to touch the screen.
+
+## What each page does
 
 ### Setup
 | Feature | What it does |
@@ -135,8 +141,8 @@ Display settings apply after Game Mode restarts. On the dock, the Claw picks you
 stream, hold View + Menu + LB + RB.
 
 ### Controller
-Shows what runs the MSI buttons, gyro and lights. On current Bazzite that's InputPlumber: the tab shows your
-controller and its profile, and you set buttons and gyro in Steam's own controller settings, as usual. On Claws running Handheld Daemon instead, this tab also offers gyro,
+Shows what runs the MSI buttons, gyro and lights. On current Bazzite that's InputPlumber: the page shows your
+controller and its profile, and you set buttons and gyro in Steam's own controller settings, as usual. On Claws running Handheld Daemon instead, this page also offers gyro,
 button layout and stick lighting. ClawDeck works with whichever your Claw has and never runs both.
 
 ### Battery & Fans
@@ -158,7 +164,8 @@ to Bazzite, with Windows staying on your Claw.
 3. Open **Quick Access → Decky (plug icon) → gear icon** and turn on **Developer mode**. Then open the new
    **Developer** section, choose **Install plugin from ZIP file** and pick ClawDeck.zip.
 4. Open **ClawDeck → Setup**. Fix anything the health check lists.
-5. Start a game, open **ClawDeck → Power**, pick a profile and a target fps, and tap **Add to launch options**.
+5. Start a game, open **ClawDeck** in Quick Access, pick a profile, turn on **Save power automatically** and set a
+   target fps. Then **All settings → Power → Add to launch options** once for that game.
 
 To remove it: Decky → gear → ClawDeck → Uninstall. Power, display and fan settings go back to how they were, and
 games you added ClawDeck to keep starting normally. The charge limit and the VRR fix 30–120 Hz reset at the next
@@ -187,7 +194,7 @@ number.
 
 **What are the XMX cores, and which games use them?** They are the AI units in the Claw's Arc graphics. XeSS
 upscaling and XeSS frame generation run on them, so games look sharper and run faster for the same battery. Games
-that ship XeSS use them once the XeSS driver is installed (Graphics tab). Games that only ship DLSS or FSR use them
+that ship XeSS use them once the XeSS driver is installed (Graphics page). Games that only ship DLSS or FSR use them
 through OptiScaler, which ClawDeck sets up for you.
 
 **Do I have to buy Lossless Scaling?** Only for the Lossless Scaling option, which is for games with no DLSS, FSR or
