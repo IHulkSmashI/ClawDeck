@@ -88,10 +88,14 @@ A1M and A8 (see [the questions](#questions) for what differs).
 
 | Profile | Power limit | CPU | Use it for |
 |---|---|---|---|
-| **Battery** | 20 W | up to 80 %, energy-saving mode | Indie and older games, long trips. Longest play time. |
-| **Balanced** | 25 W | up to 90 %, balanced mode | Newer, heavier games when you're not near a charger. More fps, shorter play time. |
-| **Performance** | 30 W | full speed | Plugged in, playing handheld. |
+| **Battery** | 12 W | up to 70 %, energy-saving mode | Indie, older and lighter games, long trips. Longest play time. |
+| **Balanced** | 17 W | up to 85 %, energy-saving mode | Newer, heavier games when you're not near a charger. More fps, shorter play time. |
+| **Performance** | 25 W | full speed, balanced mode | Plugged in, playing handheld. |
 | **Dock** | 35 W, boost to 45 W | full speed, performance mode | On a dock with a TV. Fans get audible. |
+
+Why so low on battery? The Claw's Intel chip gets most of its frames by about 12–17 W; above that, each extra watt
+buys few frames and a lot of battery. Notebookcheck's tests on the Claw 8 AI+ show roughly 8½ hours at 8 W, 3½ hours at 17 W and
+2⅓ hours at 25 W. These are starting points: Autotune and the Benchmark find the real best value for each game.
 
 Not sure which to pick? Choose a target fps and turn on **Autotune**: it starts from the profile and lowers the power
 until the game just holds your target. For a frame limit, use Steam's own (Quick Access → Performance → Frame

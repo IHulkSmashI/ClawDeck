@@ -37,22 +37,21 @@ MODELS: dict[str, dict] = {
 }
 
 # recommended profiles per model, watts (TDP = PL1 sustained; the boost limit PL2 follows from it). Four steps, lowest
-# to highest power: battery (most frames per watt), balanced (a middle step for heavier games on battery), performance
-# (plugged in, handheld) and dock (the firmware ceiling). Starting points until Benchmark numbers from a Claw replace
-# them.
+# to highest power: battery (longest play time), balanced (heavier games, still unplugged), performance (plugged in,
+# handheld) and dock (the firmware ceiling). Why these numbers: Intel's Lunar and Panther Lake chips get most of their
+# frames by about 12-17 W and little more per watt above that (Notebookcheck's Claw 8 AI+ runs: about 8 h 40 min at
+# 8 W, 3 h 40 min at 17 W, 2 h 20 min at 25 W), so battery play belongs at 12-17 W and 25 W+ is for the charger.
+# Starting points until Benchmark numbers from a Claw replace them; set_tdp clamps each to the model's own limits.
+_FOUR_STEPS = {
+    "battery":     {"tdp": 12, "cpu_max_pct": 70,  "gpu_min_mhz": None, "epp": "balance_power", "note": "longest play time"},
+    "balanced":    {"tdp": 17, "cpu_max_pct": 85,  "gpu_min_mhz": None, "epp": "balance_power", "note": "heavier games, still on battery"},
+    "performance": {"tdp": 25, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
+    "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "docked, fans audible"},
+}
 PROFILES: dict[str, dict[str, dict]] = {
-    "default": {
-        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "best frames per watt"},
-        "balanced":    {"tdp": 25, "cpu_max_pct": 90,  "gpu_min_mhz": None, "epp": "balance_performance", "note": "more frames, still on battery"},
-        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
-        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "docked, fans audible"},
-    },
-    "MS-1T91": {
-        "battery":     {"tdp": 20, "cpu_max_pct": 80,  "gpu_min_mhz": None, "epp": "balance_power", "note": "best frames per watt"},
-        "balanced":    {"tdp": 25, "cpu_max_pct": 90,  "gpu_min_mhz": None, "epp": "balance_performance", "note": "more frames, still on battery"},
-        "performance": {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
-        "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "35 W sustained / 45 W boost on the dock"},
-    },
+    "default": _FOUR_STEPS,
+    "MS-1T91": {**_FOUR_STEPS,
+                "dock": dict(_FOUR_STEPS["dock"], note="35 W sustained / 45 W boost on the dock")},
 }
 
 
