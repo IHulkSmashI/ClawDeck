@@ -9,8 +9,9 @@ PL3; Controller tab shows InputPlumber's device and profile over D-Bus), 2 (auto
 `GpuBusyPercent`), 3 (gt0 picked explicitly), 4 (board_name first; the EX now gets its own profiles, before it got
 the defaults), 5 (Intel ICD json → library → `Mesa X.Y.Z`, rpm as fallback; the health check passes when the driver
 exists), 6 (Wh from µAh × µV, power from `charge_now` change, `current_now` only when plausible, health capped at
-100 %), 7 (threshold 0 shown as 100 %), 10 (quiet log; tools already run through `bash`). Still open: fans (1),
-charge-limit write test (7), sleep soak (8).
+100 %), 7 (threshold 0 shown as 100 %), 10 (quiet log; tools already run through `bash`). Still open, all need the
+device: fan curves without Handheld Daemon (1; the survey now lists `msi_wmi_platform`'s fan, pwm and temp files),
+charge-limit write test (7), sleep soak (8), and 11 below.
 
 1. **Handheld Daemon is not on this image.** Bazzite deck 44 ships InputPlumber (controller) + PowerStation (power)
    + steamos-manager. There is no `hhd` package and no ujust recipe. Every HHD code path is a fallback at best.
@@ -46,6 +47,12 @@ charge-limit write test (7), sleep soak (8).
 10. **Decky**: v3.3.0 via `ujust setup-decky`. The plugin folder is made immutable by Decky, so `chmod` of tools at
     start logs "Operation not permitted" — harmless, but make that log line quieter and use `bash tools/x.sh` instead
     of relying on the executable bit.
+11. **VRR range** (added 2026-10-21): the screen's EDID says 48–120 Hz although the panel does 30–120 Hz; ClawLab's
+    Windows fix overrides the EDID. Display → "Smooth down to 30 fps" does the same on Bazzite (`edid.py`: only
+    ClawLab's validated factory EDIDs, only their range bytes, plus the DisplayID checksum Linux checks), through
+    `drm.edid_firmware` and `rpm-ostree initramfs-etc`, as Bazzite does for the AOKZOE A1. Needs the device: the
+    survey's "panel EDID" line (does its sha256 match ClawLab's `e49bc570…`, does Linux show 48–120?), then turn it on,
+    restart, check `edid-decode`/the Display tab shows 30–120 and the 120 Hz mode is still there, play at 35–45 fps.
 
 Open, needs the maintainer at the device: MSI buttons in Game Mode (left = Steam, right = Quick Access), each tab's first use
 with Dry run on, then TDP write-and-read-back, then the GPU window, then charge limit 80 %.

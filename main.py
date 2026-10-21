@@ -5,6 +5,7 @@ Battery rule: nothing here runs on a timer unless autotune is on for a running g
 (1 Hz, one asyncio task each). Power-source changes and resume arrive as events from Steam (frontend listeners).
 """
 import asyncio
+import glob
 import json
 import os
 import shutil
@@ -16,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, benchmark, changes, compat, controller, display, downloads, fans,  # noqa: E402
+from clawdeck import (autotune, battery, benchmark, changes, compat, controller, display, downloads, edid, fans,  # noqa: E402
                       gamescan, health, hhd, hw, injector, streaming, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -108,6 +109,8 @@ class Plugin:
         self.display.reset()
         if self.settings.get("fan_preset_set"):
             self.fans.apply_preset("auto")
+        if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
+            decky.logger.info("removing the wider VRR range: %s", edid.disable())
         try:
             _write_user_file(WRAPPER, PASSTHROUGH)
             os.chmod(WRAPPER, 0o755)
@@ -397,6 +400,16 @@ class Plugin:
 
     async def reset_display(self) -> dict:
         return self.display.reset()
+
+    async def get_wide_vrr(self) -> dict:
+        return await asyncio.get_event_loop().run_in_executor(None, edid.status)
+
+    async def set_wide_vrr(self, on: bool) -> dict:
+        """30-120 Hz VRR on the Claw's own screen (ClawLab's EDID fix). Rebuilds the initramfs: a minute or two."""
+        fn = edid.enable if on else edid.disable
+        r = await asyncio.get_event_loop().run_in_executor(None, fn, sysfs.dry_run())
+        decky.logger.info("wide VRR %s: %s", "on" if on else "off", r)
+        return r
 
     # ---- sleep -------------------------------------------------------------------------------------------------------
     async def get_sleep(self) -> dict:

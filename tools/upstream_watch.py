@@ -38,6 +38,8 @@ UPSTREAMS = {
     "lsfg-vk": ("page", "https://builds.lsfg-vk.dev/", "Lossless Scaling frame generation (auto-updated)"),
     "Moonlight VRR": ("prerelease", "Nonary/moonlight-qt", "streaming client (auto-updated)"),
     "Vibepollo": ("prerelease", "Nonary/Vibepollo", "streaming host on the PC"),
+    "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
+                              "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
     "xess-xmx-linux fork": ("commit", "IHulkSmashI/xess-xmx-linux", "our fork"),
     "Handheld Daemon": ("release", "hhd-dev/hhd", "TDP, fans, controller when installed"),
@@ -128,6 +130,16 @@ def canaries() -> list[tuple[str, bool, str]]:
         ok = any(n.endswith("-x86_64.AppImage") for n in names) and "SHA256SUMS" in names
         return ok, f"{rel['tag_name']}: AppImage + SHA256SUMS" if ok else f"{rel['tag_name']}: {names}"
     check("Moonlight VRR ships an AppImage and SHA256SUMS", moonlight)
+
+    def clawlab_panels():
+        from clawdeck import edid
+        src = raw("Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
+                  "utilities/msi-claw-8-intel-vrr-range-fix/MSI-Claw-VRR-Fix.ps1").lower()
+        missing = [k for k, p in edid.PANELS.items() if p["physical_sha256"] not in src]
+        offsets = "minimum = 95; maximum = 96" in src and "minimum = 142; maximum = 143" in src
+        return not missing and offsets, ("same panels and range offsets" if not missing and offsets else
+                                         f"changed: panels {missing or 'ok'}, offsets {'ok' if offsets else 'moved'}")
+    check("ClawLab still validates the panels and range bytes edid.py uses", clawlab_panels)
 
     def hhd_keys():
         msi = raw("hhd-dev/hhd", "src/adjustor/drivers/msi/settings.yml")
