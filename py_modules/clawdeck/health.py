@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import hhd, hw, sysfs
+from . import hhd, hw, injector, sleep, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -35,13 +35,9 @@ def hhd_version() -> str | None:
 
 def xess_state(home: str) -> dict:
     """The xess-xmx-linux package's state for this user (driver-status written by its session check)."""
-    status = sysfs.read(os.path.join(home, ".cache", "xess-xmx", "driver-status"))
-    env = sysfs.read(os.path.join(home, ".config", "environment.d", "50-xess-xmx.conf")) or ""
-    return {
-        "installed": bool(env) or status is not None,
-        "driver_status": status,
-        "env_configured": "VK_DRIVER_FILES" in env,
-    }
+    st = xess.state(home)
+    return {"installed": st["installed"], "driver_status": st["status"]["line"], "state": st["status"]["state"],
+            "version": st["version"]}
 
 
 def checks(hardware: hw.Hardware, home: str) -> list[dict]:
@@ -75,13 +71,22 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out.append({"id": "charge", "title": "Battery charge limit", "ok": p.charge_limit is not None,
                 "detail": p.charge_limit or "charge_control_end_threshold not exposed by this kernel", "fix": None})
     xs = xess_state(home)
-    out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and (xs["driver_status"] or "").startswith("ok"),
-                "detail": xs["driver_status"] or "not installed", "fix": None if xs["installed"] else "install_xess"})
+    out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and xs["state"] == "ok",
+                "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),
+                "fix": None if xs["installed"] else "install_xess"})
+    ls = injector.lsfg_state(home)
+    out.append({"id": "lsfg", "title": "lsfg-vk frame generation (optional)", "ok": ls["ready"],
+                "detail": "layer and Lossless Scaling found" if ls["ready"] else
+                          ("Vulkan layer missing" if not ls["layer"] else "Lossless Scaling (Steam) not installed: lsfg-vk needs its DLL"),
+                "fix": None, "optional": True})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
     out.append({"id": "protonup", "title": "ProtonUp-Qt / GE-Proton", "ok": _ge_proton_present(home),
                 "detail": "a GE-Proton is installed" if _ge_proton_present(home) else "no GE-Proton under compatibilitytools.d",
                 "fix": None})
+    for c in sleep.checks():
+        c.setdefault("fix", None)
+        out.append(c)
     return out
 
 
