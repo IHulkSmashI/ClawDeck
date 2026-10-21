@@ -59,6 +59,17 @@ class Plugin:
                           self.hw.kernel, sysfs.dry_run())
         # the one setting applied at every start on purpose: the charge limit (sysfs resets at boot)
         self._apply_charge_limit()
+        self._make_tools_executable()
+
+    def _make_tools_executable(self) -> None:
+        """Decky unpacks plugin zips without permission bits; the launch wrapper must be executable for Steam."""
+        tools = os.path.join(PLUGIN_DIR, "tools")
+        try:
+            for fn in os.listdir(tools):
+                if fn.endswith((".sh", ".py")):
+                    os.chmod(os.path.join(tools, fn), 0o755)
+        except OSError as e:
+            decky.logger.warning("could not mark tools executable: %s", e)
 
     async def _unload(self):
         self.autotune.stop()
