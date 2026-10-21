@@ -5,7 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { getDisplay, getWideVrr, resetDisplay, saveDisplay, setWideVrr, DisplaySettings, DisplayState, WideVrr } from "../api";
 import { Advanced } from "../components/Advanced";
 import { confirmRestart } from "../components/confirm";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 import { StreamingSection } from "./Streaming";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -14,6 +14,7 @@ const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 const WideVrrSection: FC = () => {
   const [w, setW] = useState<WideVrr | null>(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const load = async () => setW(await getWideVrr());
   useEffect(() => { load(); }, []);
   if (!w || (!w.supported && !w.wide)) {
@@ -30,7 +31,8 @@ const WideVrrSection: FC = () => {
     setBusy(true);
     try {
       const r = await setWideVrr(on);
-      toast(r.ok ? `${on ? "30–120 Hz" : "Factory range"} after the next restart` : `Not changed: ${r.error}`);
+      toast(r.ok ? `${on ? "30–120 Hz" : "Factory range"} after the next restart` : `VRR fix: not changed (${r.error})`);
+      setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(); }
   };
   return (
@@ -46,6 +48,7 @@ const WideVrrSection: FC = () => {
             v ? "ClawDeck gives the GPU driver a corrected description of this screen (ClawLab's fix, only for the exact panel they validated), so VRR works from 30 Hz instead of 48. Takes a minute or two, then restart. To undo, turn this off and restart, or pick the previous entry in the boot menu."
               : "ClawDeck removes its corrected screen description. Takes a minute or two, then restart.",
             v ? "Widen" : "Undo", () => run(v))} />
+        <Problem error={err} what="VRR fix" />
       </PanelSectionRow>
     </PanelSection>
   );
@@ -55,6 +58,7 @@ export const DisplayTab: FC = () => {
   const [d, setD] = useState<DisplayState | null>(null);
   const [s, setS] = useState<DisplaySettings | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const load = async () => { const r = await getDisplay(); setD(r); setS(r.settings); setDirty(false); };
   useEffect(() => { load(); }, []);
   const upd = (v: Partial<DisplaySettings>) => { setS({ ...(s as DisplaySettings), ...v }); setDirty(true); };
@@ -93,15 +97,17 @@ export const DisplayTab: FC = () => {
                 <Note label="Saved to">{d?.conf}{d?.other_overrides.length ? `; also set in: ${d.other_overrides.join(", ")}` : ""}</Note>
               </PanelSectionRow>
               <PanelSectionRow>
-                <ButtonItem layout="below" disabled={!d?.saved} onClick={async () => { const r = await resetDisplay(); toast(r.ok ? "Back to the image's defaults after Game Mode restarts" : `Failed: ${r.error}`); load(); }}>Reset display settings</ButtonItem>
+                <ButtonItem layout="below" disabled={!d?.saved} onClick={async () => { const r = await resetDisplay(); toast(r.ok ? "Back to the image's defaults after Game Mode restarts" : `Display settings: not reset (${r.error})`); setErr(r.ok ? null : (r.error ?? "unknown error")); load(); }}>Reset display settings</ButtonItem>
               </PanelSectionRow>
             </Advanced>
             <PanelSectionRow>
               <ButtonItem layout="below" disabled={!dirty} description={explain("Nothing changes until you save. Applies after Game Mode restarts.")} onClick={async () => {
                 const r = await saveDisplay(s);
-                toast(r.ok ? (r.dry_run ? "Dry run: nothing written (see log)" : "Saved. Restart Game Mode to apply: Steam → Power → Restart Steam") : `Failed: ${r.error}`);
+                toast(r.ok ? (r.dry_run ? "Dry run: nothing written (see log)" : "Saved. Restart Game Mode to apply: Steam → Power → Restart Steam") : `Display settings: not saved (${r.error})`);
+                setErr(r.ok ? null : (r.error ?? "unknown error"));
                 load();
               }}>Save</ButtonItem>
+              <Problem error={err} what="Display settings" />
             </PanelSectionRow>
           </>
         )}

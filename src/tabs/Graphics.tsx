@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Note, Status } from "../components/Hint";
+import { explain, Note, Problem, Status } from "../components/Hint";
 import { availableCompatTools, installLossless, losslessOwnership, runningApp, showLosslessInStore, specifyCompatTool, Ownership } from "../steam";
 import { confirmUntested } from "../components/confirm";
 
@@ -30,6 +30,7 @@ const XessSection: FC = () => {
   const [x, setX] = useState<XessState | null>(null);
   const [busy, setBusy] = useState(false);
   const [noXmx, setNoXmx] = useState<string | null>(null);   // model name when this Claw has no XMX cores
+  const [err, setErr] = useState<string | null>(null);
   const load = async () => setX(await xessState());
   useEffect(() => {
     load();
@@ -40,7 +41,8 @@ const XessSection: FC = () => {
     try {
       const r = await xessInstall(allow);
       if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("xess-xmx-linux", () => install(true)); return; }
-      toast(r.ok ? (r.would ?? r.next ?? "Installed") : `Install failed: ${r.error ?? r.log}`);
+      toast(r.ok ? (r.would ?? r.next ?? "Installed") : `XeSS driver: not installed (${r.error ?? r.log})`);
+      setErr(r.ok ? null : (r.error ?? (r.log ? r.log.trim().split("\n").slice(-3).join(" · ") : "see the log")));
     } finally { setBusy(false); load(); }
   };
   if (noXmx) {
@@ -65,6 +67,7 @@ const XessSection: FC = () => {
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={busy} onClick={() => install(false)}
           description={explain("Downloads and installs xess-xmx-linux for you.", undefined, "about 230 MB; restart the Claw once after. Each game's first launch takes a minute or two longer, once.")}>{x?.installed ? "Update driver" : "Install driver"}</ButtonItem>
+        <Problem error={err} what="XeSS driver" />
       </PanelSectionRow>
       {x?.installed && (
         <PanelSectionRow>
@@ -112,6 +115,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
   const [busy, setBusy] = useState(false);
   const [others, setOthers] = useState<string[]>([]);
   const [own, setOwn] = useState<Ownership>({ owned: null, installed: null });
+  const [err, setErr] = useState<string | null>(null);
   const load = async () => {
     setOthers((await getHardware()).other_plugins?.injector ?? []);
     setOwn(losslessOwnership());
@@ -143,7 +147,8 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
     setBusy(true);
     try {
       const r = await injectorInstall(app.appid, m, m === "optiscaler" ? { multiplier: mult } : null, m === "lsfg" ? lsfg : null, app.name);
-      toast(r.error ?? (r.dry_run ? `Dry run: ${r.would}` : m === "none" ? "Removed; the game's own files are back"
+      setErr(r.error ?? null);
+      toast(r.error ? `${m === "none" ? "Remove" : m === "optiscaler" ? "OptiScaler" : "Lossless Scaling"}: failed (${r.error})` : (r.dry_run ? `Dry run: ${r.would}` : m === "none" ? "Removed; the game's own files are back"
         : m === "optiscaler" ? `OptiScaler ${r.version ?? ""} set up${r.reframework_version ? " with REFramework" : ""}${r.optipatcher_version ? " and OptiPatcher" : ""}. Restart the game.`
         : "Lossless Scaling frame generation on for this game. Restart it."));
     } finally { setBusy(false); load(); }
@@ -198,7 +203,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
               </PanelSectionRow>
               <PanelSectionRow>
                 <Status ok={!!st?.lsfg?.layer} label={st?.lsfg?.layer ? `lsfg-vk installed${st?.lsfg_version ? ` (${st.lsfg_version})` : ""}` : "lsfg-vk is not installed yet"} />
-                {!st?.lsfg?.layer && <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { const r = await lsfgInstall(); toast(r.ok ? `lsfg-vk ${r.version ?? ""} installed` : `Not installed: ${r.error}`); } finally { setBusy(false); load(); } }}>Install lsfg-vk (newest)</ButtonItem>}
+                {!st?.lsfg?.layer && <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { const r = await lsfgInstall(); toast(r.ok ? `lsfg-vk ${r.version ?? ""} installed` : `lsfg-vk: not installed (${r.error})`); setErr(r.ok ? null : (r.error ?? "unknown error")); } finally { setBusy(false); load(); } }}>Install lsfg-vk (newest)</ButtonItem>}
               </PanelSectionRow>
               <PanelSectionRow>
                 <SliderField label="Frame multiplier" value={lsfg.multiplier} min={2} max={4} step={1} showValue onChange={(v) => setLsfg({ ...lsfg, multiplier: v })}
@@ -222,6 +227,7 @@ const InjectorSection: FC<{ app: ReturnType<typeof runningApp> }> = ({ app }) =>
               </ButtonItem>
             </PanelSectionRow>
           )}
+          <PanelSectionRow><Problem error={err} /></PanelSectionRow>
           {mode !== "none" && <LaunchWrapper appid={app.appid} name={app.name} />}
         </>
       )}

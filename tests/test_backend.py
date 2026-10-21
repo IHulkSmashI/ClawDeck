@@ -374,10 +374,24 @@ def test_tls_context_uses_system_bundle(monkeypatch, tmp_path):
     monkeypatch.setattr(tls, "CA_BUNDLES", (str(bundle),))
     tls._ctx = None
     try:
-        ctx = tls.context()
+        tls.context()
     except Exception:  # an empty PEM may be rejected by OpenSSL; the fallback path is then exercised below
-        ctx = None
+        pass
     tls._ctx = None
     monkeypatch.setattr(tls, "CA_BUNDLES", ("/nonexistent/ca.crt",))
     assert tls.context().verify_mode.name == "CERT_REQUIRED"
     tls._ctx = None
+
+
+def test_tdp_reads_back_from_rapl_and_failures_are_explained(fake_hw, tmp_path):
+    pl1 = tmp_path / "rapl/constraint_0_power_limit_uw"
+    _w(str(pl1), 25_000_000)
+    fake_hw.paths.rapl_package = str(tmp_path / "rapl")
+    fake_hw.paths.rapl_pl1 = str(pl1)
+    pw = power.Power(fake_hw)
+    assert pw.read_tdp() == 25 and pw.status()["tdp_w"] == 25
+    assert pw.set_tdp(17, plugged=False) and pw.read_tdp() == 17
+    sysfs.clear_error()
+    assert sysfs.last_error() is None
+    assert not sysfs.write(str(tmp_path / "missing/dir/file"), 1)      # a refused write says why
+    assert "writing 1 to" in (sysfs.last_error() or "") and "file" in sysfs.last_error()

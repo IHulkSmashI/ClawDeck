@@ -66,6 +66,12 @@ fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds in
 
 ## Needs the maintainer
 
+- Read-back UI (HARDWARE-FINDINGS §14, §16): on the Claw, move each control in Power → Fine-tuning and confirm the
+  toast says "… set to X → hardware reads X" and the control's description shows the same value; then try one
+  write that must fail (e.g. with Dry run off, a charge limit on a kernel without the file, or the VRR fix with a
+  read-only /etc) and confirm the red "didn't apply" row names the reason. Check the profile picker is not cut off
+  at 1280×800.
+
 - New UI (2026-10-21): check on the Claw that Quick Access shows ClawDeck's short panel, that **All settings** opens
   the full-screen page, and that every page can be read and used with the D-pad alone (sidebar left/right, each
   explanation scrolls into view with its control). Report anything you still have to touch.
