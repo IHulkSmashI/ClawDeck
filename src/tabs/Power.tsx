@@ -27,6 +27,7 @@ export const PowerTab: FC = () => {
   const [profile, setProfile] = useState("battery");
   const [otherPower, setOtherPower] = useState<string[]>([]);
   const [boost, setBoost] = useState(true);
+  const [batteryMax, setBatteryMax] = useState(17);
   const app = runningApp();
   const appid = app?.appid ?? null;
 
@@ -39,6 +40,8 @@ export const PowerTab: FC = () => {
     setAutotune(!!(await getSetting("autotune")));
     setProfile((await getSetting("last_profile")) || "battery");
     setBoost((await getSetting("tdp_boost")) !== false);
+    const bm = await getSetting("autotune_battery_max");
+    if (typeof bm === "number") setBatteryMax(bm);
     setOtherPower((await getHardware()).other_plugins?.power ?? []);
     setAt(await getAutotune());
     if (appid) {
@@ -85,6 +88,11 @@ export const PowerTab: FC = () => {
           <SliderField label="Target fps (this game)" value={targetFps} min={30} max={120} step={5} showValue disabled={!appid}
             onChange={async (v) => { setTargetFps(v); if (appid) { await setGameProfile(appid, false, { target_fps: v }); await setGameProfile(appid, true, { target_fps: v }); } }} />
           <Hint does={appid ? `Saved for ${app?.name}; starts learning at its next launch.` : "Start a game to set its target."} why="use the same number as Steam's frame limit (Performance menu), or none." cost="a target above Steam's frame limit can never be reached, so autotune would only add power." />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <SliderField label="Highest power on battery (W)" value={Math.min(batteryMax, lim.battery_max)} min={lim.min} max={lim.battery_max} step={1} showValue disabled={!autotune}
+            onChange={async (v) => { setBatteryMax(v); await setSetting("autotune_battery_max", v); }} />
+          <Hint does="The most power Autotune may use while you're unplugged, in every game. Plugged in, it can use the Claw's full limit." why="17 W (Balanced) keeps battery games efficient; raise it if a heavy game can't hold your target fps on battery." cost="higher = shorter play time; above about 17 W each watt buys few frames." />
         </PanelSectionRow>
         {app && autotune && <LaunchWrapper appid={app.appid} name={app.name} />}
         {at?.running && (

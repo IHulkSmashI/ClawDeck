@@ -198,6 +198,12 @@ class Plugin:
             self.autotune.enabled = bool(value)
             if not value:
                 self.autotune.pause("autotune switched off")
+        if key == "autotune_battery_max" and self.autotune.session and not self.running_plugged:
+            s = self.autotune.session
+            s.ceiling_tdp = autotune.ceiling(self.hw.model["tdp"], False, value)
+            if s.learned.tdp > s.ceiling_tdp:   # lowered mid-game: drop to the new limit now, not step by step
+                s.learned.tdp = s.ceiling_tdp
+                self.power.set_tdp(s.ceiling_tdp, False)
         return True
 
     async def set_dry_run(self, on: bool) -> bool:
@@ -326,7 +332,7 @@ class Plugin:
         if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
             lim = self.hw.model["tdp"]
             self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), lim["min"],
-                                lim["plugged_max"] if plugged else lim["battery_max"], plugged)
+                                autotune.ceiling(lim, plugged, self.settings.get("autotune_battery_max")), plugged)
             result["autotune"] = "started"
         return result
 

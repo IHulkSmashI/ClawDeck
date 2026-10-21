@@ -31,6 +31,21 @@ from . import hw, power, shadowblip, sysfs
 
 log = logging.getLogger("clawdeck.autotune")
 
+# On battery, autotune never raises power above this unless the user picks another limit (Power → Autotune): the
+# Balanced profile's 17 W, where Intel's handheld chips still get most of their frames per watt.
+BATTERY_CEILING_DEFAULT = 17
+
+
+def ceiling(lim: dict, plugged: bool, battery_ceiling) -> int:
+    """Highest TDP autotune may use: the model's limit, and on battery also the user's battery ceiling."""
+    if plugged:
+        return int(lim["plugged_max"])
+    try:
+        want = int(battery_ceiling) if battery_ceiling is not None else BATTERY_CEILING_DEFAULT
+    except (TypeError, ValueError):
+        want = BATTERY_CEILING_DEFAULT
+    return max(int(lim["min"]), min(int(lim["battery_max"]), want))
+
 
 @dataclass
 class Sample:
