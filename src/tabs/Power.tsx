@@ -72,7 +72,7 @@ export const PowerTab: FC = () => {
         )}
         {steamSlider && (
           <PanelSectionRow>
-            <Hint does="Turn off Steam's own TDP limit (Quick Access → Performance) while ClawDeck manages power." why="both set the same limit; with Steam's off, profiles and autotune hold." cost="none; turn it back on if you uninstall ClawDeck." />
+            <Hint does="Leave Steam's own TDP limit (Quick Access → Performance) off while ClawDeck manages power." why="on Claws where Steam's slider works, both set the same limit; on the Claw 8 EX it may do nothing at all, and ClawDeck sets the limit directly." cost="none; turn it back on if you uninstall ClawDeck." />
           </PanelSectionRow>
         )}
       </PanelSection>
@@ -136,7 +136,7 @@ export const PowerTab: FC = () => {
           <SliderField label="TDP (W)" value={tdp} min={lim.min} max={lim.plugged_max} step={1} showValue
             disabled={!st?.tdp_backend}
             onChange={async (v) => { setTdpV(v); if (!(await setTdp(v))) toast(st?.hhd ? "TDP not applied: enable TDP controls in Handheld Daemon once" : "TDP not applied: see Setup → Power limit control"); }} />
-          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="17–25 W on battery is the sweet spot; 35 W docked." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise; Steam's own TDP slider sets the same limit, so the last change wins."} />
+          <Hint does={st?.hhd ? "Package power limit, shared by CPU and GPU (through Handheld Daemon)." : "Package power limit, shared by CPU and GPU (MSI firmware limits)."} why="lower lasts longer on battery; higher is for the dock. Autotune can pick it for you." cost={st?.hhd ? "more watts = more heat and fan noise; pauses autotune for this session." : "more heat and fan noise. Leave Steam's own TDP slider off so the two don't fight."} />
         </PanelSectionRow>
         <Advanced id="power">
           <PanelSectionRow>

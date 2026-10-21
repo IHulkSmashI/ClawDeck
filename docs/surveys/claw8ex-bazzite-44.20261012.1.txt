@@ -1,0 +1,50 @@
+# tools/sysfs-survey.sh on the maintainer's MSI Claw 8 EX AI+ (CG3EM), Bazzite deck 44.20261012.1, 2026-10-21 (read-only)
+== dmi
+sys_vendor     Micro-Star International Co., Ltd.
+product_name   Claw 8 EX AI+ CG3EM Launch Pack      <- NOT "MS-1T91": match on board_name
+board_name     MS-1T91
+bios_version   E1T91IMS.10D
+== kernel
+7.2.9-ogc3.1.fc44.x86_64
+== cpu
+Intel(R) Arc(TM) G3 Extreme, 14 threads
+== mesa
+/usr/lib64/libvulkan_intel.so (ICD /usr/share/vulkan/icd.d/intel_icd.x86_64.json, api 1.4.354); also libvulkan_intel_hasvk.so
+== gpu  (driver xe, card0, PCI 8086:b080 rev 04, subsystem 1462:1510)
+/sys/class/drm/card0/device/tile0/gt0/freq0/: act_freq cur_freq max_freq min_freq power_profile rp0_freq rpa_freq rpe_freq rpn_freq throttle
+  gt0 (graphics): min 1000 max 2300 cur 1000 rp0 2300 rpe 1000 rpn 100   power_profile=[base] power_saving
+/sys/class/drm/card0/device/tile0/gt1/freq0/: same files
+  gt1 (media):    min 400  max 1200 cur 400  rp0 1200 rpe 400  rpn 100
+== intel_pstate
+max_perf_pct 100   min_perf_pct 9   no_turbo 0   status active
+== powercap
+intel-rapl:0       package-0  long_term 35 W (max 25 W reported)  short_term 50 W  peak 160 W
+intel-rapl:0:0 core / :0:1 uncore / :0:2 dram  (0)
+intel-rapl:1       psys (0)
+intel-rapl-mmio:0  package-0  long_term 25 W  short_term 37 W  peak 160 W   <- the effective limits (PowerStation reads these: TDP 25, Boost 12)
+== msi firmware (/sys/class/firmware-attributes/msi-wmi-platform/attributes/)
+pending_reboot  ppt_pl1_spl (current 0, min 8, max 35)  ppt_pl2_sppt (current 0, min 9, max 45)   <- no ppt_pl3_fppt on the EX
+== hwmon
+hwmon0 ADP1, hwmon1 acpi_fan, hwmon2 acpitz, hwmon3 BAT1, hwmon4 nvme, hwmon5/6 ucsi_source_psy_USBC000:001/002, hwmon7 msi_wmi_platform, hwmon8 coretemp, hwmon9 iwlwifi_1
+== battery
+/sys/class/power_supply/ADP1  type=Mains  online=0 when on battery
+/sys/class/power_supply/BAT1  type=Battery  charge_control_end_threshold present (value 0 = unset)
+  reports charge_* in uAh, NOT energy_*: charge_now 4952000  charge_full 5176000  charge_full_design 5000000  voltage_now 17472000 uV
+  current_now -65026000 (uA) while idle on battery -> NOT credible (65 A); power_now absent. Do not derive watts from current_now on this model.
+== services
+inputplumber active (0.82.0)   powerstation active (0.8.4)   steamos-manager active (system + user)
+hhd: NOT INSTALLED on this image (no hhd / hhd-ui / adjustor packages; no ujust recipe for it)
+InputPlumber composite device: "MSI Claw 8 EX AI+ CG3EM", profile "OpenGamepadUI Default", sources event13 event4 (AT Translated Set 2 keyboard = MSI buttons) event5 event11
+  config /usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml, capability maps msiclaw_type1/2.yaml
+Controller USB: 0db0:1901 "Micro Star International Xbox360 Controller for Windows"
+PowerStation D-Bus (org.shadowblip.PowerStation, /org/shadowblip/Performance/GPU/card0):
+  GPU: ClockLimitMhzMin/Max, ClockValueMhzMin/Max (writable), ManualClock true, GpuBusyPercent (live, e.g. 15), Class integrated
+  TDP interface: TDP 25, Boost 12, MinTdp 0, MaxTdp 0 (no range known for Intel -> Steam's TDP slider is inert), PowerProfile -, ThermalThrottleLimitC -
+  CPU: /org/shadowblip/Performance/CPU/Core0..13
+== display
+eDP-1 1920x1200; DP-1, DP-2 (dock). Sleep: mem_sleep [s2idle] deep; 1 suspend ok since boot; S0ix counter advancing.
+== tools
+mangohud /usr/bin/mangohud   gamescope /usr/bin/gamescope   hhdctl missing   ocloc missing   7z: check
+== os
+Bazzite 44, VARIANT_ID bazzite-deck, ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck:stable 44.20261012.1 (2026-10-13); rpm-ostree reports no update available on 2026-10-21
+Decky Loader v3.3.0 installed via `ujust setup-decky` on 2026-10-21; ClawDeck 0.1.0 sideloaded into ~/homebrew/plugins/ClawDeck and loads ("ClawDeck on MSI Claw 8 EX AI+ ..., kernel 7.2.9-ogc3.1.fc44.x86_64").

@@ -5,8 +5,12 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[Handheld Daemon](https://github.com/hhd-dev/hhd)** (LGPL-2.1) — MSI buttons, TDP through MSI firmware,
   fan curves, charge limit, controller and RGB. ClawDeck talks to its local API and reads its settings schema; the
   Claw model ids (MS-1T41/42/52/91/8K), the EX's 35/45 W limits and the fan curve points come from its source.
+- **[InputPlumber](https://github.com/ShadowBlip/InputPlumber)** and **[PowerStation](https://github.com/ShadowBlip/PowerStation)**
+  by ShadowBlip — the controller and power services on current Bazzite. ClawDeck detects them, works alongside them
+  instead of replacing them, and reads PowerStation's GPU load and InputPlumber's controller status over D-Bus.
+- **[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)** — the plugin system ClawDeck runs in.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)** — Intel xe/i915 GPU clock paths, RAPL package domain,
-  intel_pstate levers, the AC-state listener pattern. Not forked.
+  intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
   suspend/resume) and Decky patterns.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
@@ -20,8 +24,9 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[REFramework](https://github.com/praydog/REFramework)** — needed by OptiScaler in Capcom RE Engine games.
 - **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows one-click OptiScaler installer whose approach
   (newest release, per-game modules and fixes, Intel XeFG at 3x) ClawDeck follows. No code is shared.
-- **[lsfg-vk](https://lsfg-vk.dev)** — Lossless Scaling frame generation as a Vulkan layer (needs the user's own
-  [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) purchase).
+- **[lsfg-vk](https://lsfg-vk.dev)** — Lossless Scaling frame generation as a Vulkan layer on Linux.
+- **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** by THS — the frame generation
+  lsfg-vk runs. Users need their own copy; ClawDeck checks for it and never bundles it.
 - **[gamescope-session](https://github.com/ChimeraOS/gamescope-session)** — the environment variables the Display
   tab writes (`ADAPTIVE_SYNC`, `CUSTOM_REFRESH_RATES`, `ENABLE_GAMESCOPE_HDR`, `GAMESCOPE_HDR_NITS`).
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.

@@ -1,65 +1,89 @@
-# MSI Claw 8 EX on Bazzite — migration guide (for people who have never used Linux)
+# From Windows to Bazzite on the MSI Claw
 
-Nothing on your Windows drive changes. Bazzite goes on a second drive and you pick which one boots.
+A step-by-step guide for people who have never used Linux. Bazzite goes on a second drive, Windows stays on the
+first, and you choose which one starts. Nothing on your Windows drive changes.
 
-## Before you start
-- Back up anything on Windows you care about (we don't touch it, but back up anyway).
-- Get a drive: an external NVMe enclosure (reference: Sabrent EC-SNVE, USB 3.2 Gen 2) with any NVMe SSD, 256 GB
-  minimum, or a second internal SSD. Wipe it in Windows: `diskpart` → `list disk` → `select disk N` → `clean` →
-  `convert gpt` (double-check N is the new drive; disk 0 is Windows).
-- Windows: Settings → Power → turn **Fast Startup** off. BIOS (hold **Vol−** at power-on): **Fast Boot** off.
-  **Secure Boot stays on.**
-- A 16 GB USB stick and [Rufus](https://rufus.ie). Image: `bazzite-deck-stable-live-amd64.iso` from
-  [bazzite.gg](https://bazzite.gg) ("deck" = handheld Gaming Mode; "amd64" just means x86-64). Rufus: pick the stick,
-  the ISO, START; choose **DD image mode** if asked.
+## What you need
+
+- **A second drive** for Bazzite, 256 GB or more: an NVMe SSD in a USB enclosure (a fast USB 3.2 Gen 2 one, such as
+  the Sabrent EC-SNVE), or a second internal SSD.
+- **A USB stick**, 16 GB or more, for the installer.
+- **[Rufus](https://rufus.ie)** on Windows, to put the installer on the stick.
+- A backup of anything on Windows you care about. Bazzite won't touch it, but a backup is always a good idea.
+
+## Get ready (in Windows)
+
+1. **Wipe the new drive.** Open a Command Prompt as administrator and type `diskpart`, then `list disk`. Find the new
+   drive by its size, then `select disk N` (N is its number), `clean`, `convert gpt`. Double-check the number: disk 0
+   is Windows.
+2. **Turn off Fast Startup:** Control Panel → Power Options → *Choose what the power buttons do* → untick
+   *Turn on fast startup*.
+3. **Download Bazzite** from [bazzite.gg](https://bazzite.gg): pick **Handheld/HTPC** and your Claw. You get one
+   `.iso` file.
+4. **Make the USB stick:** open Rufus, pick the stick and the `.iso`, press START. If Rufus asks, choose
+   **DD image mode**.
+5. **In the Claw's BIOS** ([MSI's guide to opening it](https://us.msi.com/faq/faq-10336)): turn **Fast Boot** off.
+   Leave **Secure Boot** on.
 
 ## Install
-1. Power off. Hold **Vol−**, press Power, pick the USB stick.
-2. Installer: Installation Destination → tick **only** the new drive → Storage: Automatic → Done → Begin.
-3. Reboot. A blue **MOK Manager** screen appears: **Enroll MOK** → Continue → password `universalblue` → reboot.
-   That is the key that lets Bazzite boot with Secure Boot on.
-4. From now on, hold **Vol−** at power-on to choose Windows or Bazzite. With the external drive unplugged, Windows
-   boots as before.
 
-## First boot
-1. Bazzite Portal: install **Decky Loader** (and **Proton Plus** if you want GE-Proton). MangoHud is already built
-   in. Do **not** add Handheld Daemon: current Bazzite runs the Claw's controller with InputPlumber, and two
-   controller services fight each other.
-2. Desktop Mode (power menu → Switch to Desktop) → Konsole: `sudo rpm-ostree upgrade` → reboot.
-3. Press the two MSI buttons: left opens Steam, right opens the quick menu. If they do nothing, post
-   `tools/sysfs-survey.sh` output in an issue (it shows which controller service is running).
-4. Power: Steam's own quick-menu performance slider (TDP) works on the Claw. ClawDeck sets the same MSI firmware
-   limits, so whichever you change last wins.
+1. Plug in the USB stick and the new drive, restart, and start from the USB stick using the Claw's boot menu (MSI's
+   guide above shows the buttons).
+2. In the installer: *Installation Destination* → tick **only the new drive** → *Storage: Automatic* → Done →
+   Begin Installation.
+3. Restart. A blue **MOK Manager** screen appears once: choose **Enroll MOK** → Continue → type the password
+   `universalblue` → restart. This lets Bazzite start with Secure Boot on.
+4. From now on, use the boot menu to choose Windows or Bazzite. With the external drive unplugged, Windows starts as
+   before.
 
-Bazzite's Portal also offers OptiScaler and Lossless Scaling Decky plugins. They do the same job as ClawDeck's
-injector; use one or the other for a given game, not both.
+## First start
 
-## ClawDeck
-1. Decky (the plug icon in the quick menu) → settings gear → **Install plugin from zip** → `ClawDeck.zip` from
-   Releases.
-2. ClawDeck → Setup: every line should be green. Red lines say what's missing and how to fix it.
-3. For each game you want autotune or the XMX injector on: start the game, open ClawDeck and tap
-   **Add to launch options** (Power or Graphics tab). By hand it is
-   `~/.local/share/clawdeck/clawdeck-launch.sh %command%` in the game's Properties → Launch options.
-4. Power tab: pick Battery / Performance / Dock, set a target fps, turn Autotune on, play.
+1. **Bazzite Portal** opens on first start. Tick **Decky Loader**.
+   Don't add **Handheld Daemon**: current Bazzite already runs the Claw's controller with InputPlumber, and two
+   controller programs fight each other.
+2. **Update:** switch to Desktop Mode (power menu → Switch to Desktop), open **Konsole**, type `ujust update`, then
+   restart.
+3. **Check the MSI buttons:** the left one opens Steam, the right one opens Quick Access. If they do nothing,
+   [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose).
 
-## Power profiles without the plugin (optional)
-Desktop Mode → Konsole, from the unpacked plugin folder:
-`sudo tools/power-profile.sh battery` (or `performance`, `dock`, `reset`; `status` shows what is set; add
-`--dry-run` to see what it would change). Nothing survives a reboot.
+## Add ClawDeck
 
-## XeSS XMX and XeLL (optional, native XeSS games)
-ClawDeck → Graphics → **Install driver** downloads [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)
-and runs its installer for you; log out of Game Mode and back in afterwards. Or by hand: unpack the release,
-`./install.sh`, re-login. The Graphics tab shows whether the driver is active and has a **Probe driver** button. Run `tools/xell-probe.sh %command%` once on a game with
-frame generation to confirm XeLL is in driver mode.
+1. Download **ClawDeck.zip** from [Releases](https://github.com/IHulkSmashI/ClawDeck/releases).
+2. Quick Access → **Decky** (plug icon) → gear icon → turn on **Developer mode**. Open the new **Developer** section,
+   choose **Install plugin from ZIP file** and pick ClawDeck.zip.
+3. Open **ClawDeck → Setup**. Every line should be green; a red line says what's missing and has a button to fix it.
+4. For each game you want Autotune, OptiScaler or HDR on: start the game, open ClawDeck and tap
+   **Add to launch options** (Power or Graphics tab).
+5. **Power** tab: pick Battery, Performance or Dock, set a target fps, turn Autotune on, and play.
 
-## Going back / getting help
-- Windows: hold Vol− at power-on and pick it. Nothing was removed.
-- An update broke something: Desktop Mode → `rpm-ostree rollback` → reboot.
-- Bugs: ClawDeck → Setup → "Save a bug report to Desktop", attach the JSON to a GitHub issue.
-- Sleep problems: `sudo ~/homebrew/plugins/ClawDeck/tools/suspend-cycle.sh 20` and attach `~/clawdeck-suspend.csv`.
+Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
+may do nothing at all; ClawDeck sets the limit directly.
+
+Bazzite's Portal also offers OptiScaler and Lossless Scaling plugins. They do the same job as ClawDeck's Graphics
+tab, so use one or the other for a given game, not both.
+
+## XeSS on the XMX cores (optional)
+
+ClawDeck → **Graphics** → **Install driver** sets up [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux).
+Afterwards, restart the Claw once. The Graphics tab then shows whether the driver is active.
+
+## Going back and getting help
+
+- **Back to Windows:** choose it in the boot menu. Nothing was removed.
+- **A Bazzite update broke something:** Desktop Mode → Konsole → `rpm-ostree rollback` → restart. You're back on the
+  version from before the update.
+- **A ClawDeck bug:** ClawDeck → Setup → **Save a bug report to Desktop**, then attach the file to a
+  [GitHub issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose).
 
 ## What you give up
-Games with kernel anti-cheat (most competitive shooters) will not run. Peak frame rate on the open Mesa driver is a
-few percent behind Intel's Windows driver in some titles. We post real numbers, not promises.
+
+Games with kernel-level anti-cheat (most competitive shooters) don't run on Linux;
+[Are We Anti-Cheat Yet?](https://areweanticheatyet.com) lists them. In some games, the frame rate is a few percent
+lower than with Intel's Windows driver.
+
+## For testers: power profiles from a terminal
+
+Without the plugin, from the unpacked ClawDeck folder in Konsole: `sudo tools/power-profile.sh battery` (or
+`performance`, `dock`, `reset`; `status` shows what's set; add `--dry-run` to only show what it would change).
+Nothing survives a restart. To test sleep, run `sudo ~/homebrew/plugins/ClawDeck/tools/suspend-cycle.sh 20` and
+attach `~/clawdeck-suspend.csv` to an issue.

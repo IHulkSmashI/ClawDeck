@@ -4,7 +4,7 @@ GPU-bound, then apply that on the next launch.
 Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no busy polling):
   1. sample: frame time (MangoHud log, see Sampler), GPU clock vs its ceiling, package power (RAPL energy delta),
      CPU utilisation (/proc/stat delta).
-  2. classify: GPU-bound when the GPU sits at its ceiling / busy > 90 % while the CPU is < 60 %;
+  2. classify: GPU-bound when the GPU is busy >= 90 % (PowerStation) or sits at its clock ceiling, while the CPU is < 60 %;
      CPU-bound when CPU > 85 % on the busiest cores and the GPU is < 70 %; else balanced.
   3. control, one lever per step, with hysteresis:
      - frame time inside target (<= 1000/target_fps * 1.03) for `settle` samples: lower TDP by 1 W;
@@ -27,7 +27,7 @@ import os
 import time
 from dataclasses import dataclass, field
 
-from . import hw, power, sysfs
+from . import hw, power, shadowblip, sysfs
 
 log = logging.getLogger("clawdeck.autotune")
 
@@ -41,6 +41,7 @@ class Sample:
     gpu_max_mhz: int | None
     cpu_pct: float | None
     pkg_w: float | None
+    gpu_busy: int | None = None     # PowerStation's GpuBusyPercent; None when PowerStation doesn't run
 
 
 class Sampler:
@@ -54,6 +55,7 @@ class Sampler:
         self._last_energy: tuple[float, int] | None = None
         self._last_stat: tuple[int, int] | None = None
         self._log_pos: dict[str, int] = {}
+        self._busy_source = True        # stops asking PowerStation after the first miss (no D-Bus call per second)
 
     def _newest_log(self) -> str | None:
         files = glob.glob(os.path.join(self.log_dir, "*.csv"))
@@ -116,15 +118,29 @@ class Sampler:
             return None
         return 100.0 * (1.0 - (idle - prev[1]) / (total - prev[0]))
 
+    def gpu_busy(self) -> int | None:
+        if not self._busy_source:
+            return None
+        v = shadowblip.gpu_busy_percent()
+        if v is None:
+            self._busy_source = False
+        return v
+
     def sample(self) -> Sample:
         ft, fps = self.frametime()
         return Sample(t=time.monotonic(), frametime_ms=ft, fps=fps,
                       gpu_mhz=sysfs.read_int(self.p.gpu_cur_freq) if self.p.gpu_cur_freq else None,
                       gpu_max_mhz=sysfs.read_int(self.p.gpu_max_freq) if self.p.gpu_max_freq else None,
-                      cpu_pct=self.cpu_pct(), pkg_w=self.package_power())
+                      cpu_pct=self.cpu_pct(), pkg_w=self.package_power(), gpu_busy=self.gpu_busy())
 
 
 def classify(s: Sample) -> str:
+    if s.gpu_busy is not None:      # a real load figure beats guessing from the clock
+        if s.gpu_busy >= 90 and (s.cpu_pct is None or s.cpu_pct < 60):
+            return "gpu"
+        if s.cpu_pct is not None and s.cpu_pct > 85 and s.gpu_busy < 80:
+            return "cpu"
+        return "balanced"
     gpu_pinned = s.gpu_mhz is not None and s.gpu_max_mhz and s.gpu_mhz >= 0.95 * s.gpu_max_mhz
     if gpu_pinned and (s.cpu_pct is None or s.cpu_pct < 60):
         return "gpu"
