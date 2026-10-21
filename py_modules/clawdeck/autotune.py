@@ -31,22 +31,6 @@ from . import hw, power, shadowblip, sysfs
 
 log = logging.getLogger("clawdeck.autotune")
 
-# On battery, autotune never raises power above this unless the user picks another limit (Power → Autotune): the
-# Balanced profile's 17 W, where Intel's handheld chips still get most of their frames per watt.
-BATTERY_CEILING_DEFAULT = 17
-
-
-def ceiling(lim: dict, plugged: bool, battery_ceiling) -> int:
-    """Highest TDP autotune may use: the model's limit, and on battery also the user's battery ceiling."""
-    if plugged:
-        return int(lim["plugged_max"])
-    try:
-        want = int(battery_ceiling) if battery_ceiling is not None else BATTERY_CEILING_DEFAULT
-    except (TypeError, ValueError):
-        want = BATTERY_CEILING_DEFAULT
-    return max(int(lim["min"]), min(int(lim["battery_max"]), want))
-
-
 @dataclass
 class Sample:
     t: float
@@ -212,6 +196,17 @@ class Autotune:
         self._apply(l)
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
+
+    def set_ceiling(self, watts: int) -> None:
+        """The user picked a profile or a power limit while autotune runs: that is its new ceiling. Learning starts
+        again from there (the limit is applied by the caller) instead of pausing: autotune only ever goes lower."""
+        s = self.session
+        if not s:
+            return
+        s.ceiling_tdp = max(s.floor_tdp, int(watts))
+        s.learned.tdp = s.ceiling_tdp
+        s.paused, s.good_run, s.bad_run, s.unchanged = False, 0, 0, 0
+        log.info("autotune ceiling now %d W", s.ceiling_tdp)
 
     def pause(self, reason: str = "manual change") -> None:
         """Never fight the user: a manual power change stops learning for the rest of this session (values the user

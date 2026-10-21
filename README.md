@@ -46,8 +46,8 @@ it does:
   Bazzite; ClawDeck sets the Claw's power limit directly, inside the limits MSI's firmware allows.
 - **Four power profiles, per game:** Battery, Balanced, Performance and Dock, in one tap. Save one per game and it
   switches by itself when you plug in or unplug.
-- **Autotune** finds the lowest power that holds your target fps in each game, using the GPU's real load. On
-  battery it stays at or below 17 W unless you raise that limit.
+- **Autotune** saves power automatically: pick a profile and a target fps, and it finds the lowest power that holds
+  that fps, never more than the profile you picked.
 - **XeSS on the Claw's XMX cores**, even in games that only ship DLSS or FSR: ClawDeck picks the best option per game
   and sets up the newest OptiScaler, OptiPatcher and REFramework for you. Lossless Scaling is the last resort for
   games with nothing else.
@@ -84,8 +84,8 @@ A1M and A8 (see [the questions](#questions) for what differs).
 | Feature | What it does | Good to know |
 |---|---|---|
 | **Profiles** | Four levels of power in one tap (see the table below). Save one per game: it switches by itself when you plug in or unplug. | Goes back to normal when the game closes, unless you saved it. |
-| **Autotune** | Set a target fps for a game. Autotune learns the lowest power that keeps it there, and uses that every time you play. On battery it never goes above **17 W** (the Balanced profile) unless you raise **Highest power on battery**. | The first few minutes in a new game can stutter while it learns. If a heavy game can't hold your target on battery, lower the target or raise the limit. |
-| **TDP and clocks** | Pick the power limit. Under **Advanced**: TDP boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
+| **Autotune** ("Save power automatically") | Set a target fps for a game. Autotune finds the lowest power that keeps it there, never more than your profile's watts, and remembers it for next time. | The first few minutes in a new game can stutter while it learns. Can't hold your target? Pick a higher profile. |
+| **Advanced** | Your own power limit instead of a profile, power boost on or off, CPU energy mode, CPU and GPU limits. | Leave Steam's own TDP slider off. On the Claw 8 EX it may do nothing at all; on other Claws it sets the same limit, and the last change wins. |
 | **Benchmark** | Records fps, 1% lows and watts for a game, so you can compare profiles with real numbers. | Under **Advanced**. |
 | **Share profiles** | Export a game's settings as a file, or import someone else's. | Never overwrites a game you've already set up. |
 
@@ -102,8 +102,9 @@ Why so low on battery? The Claw's Intel chip gets most of its frames by about 12
 buys few frames and a lot of battery. Notebookcheck's tests on the Claw 8 AI+ show roughly 8½ hours at 8 W, 3½ hours at 17 W and
 2⅓ hours at 25 W. These are starting points: Autotune and the Benchmark find the real best value for each game.
 
-Not sure which to pick? Choose a target fps and turn on **Autotune**: it starts from the profile and lowers the power
-until the game just holds your target. For a frame limit, use Steam's own (Quick Access → Performance → Frame
+How it fits together: the **profile is the most power the game may use**. Turn on **Save power automatically**
+(Autotune) with a target fps, and ClawDeck lowers the power below that limit as far as the game allows while it still
+holds your target. Too slow? Pick the next profile up. For a frame limit, use Steam's own (Quick Access → Performance → Frame
 limit) and set Autotune's target to the same number; ClawDeck doesn't add a second frame limiter.
 
 ### Graphics

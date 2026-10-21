@@ -135,15 +135,15 @@ export const backend = {
     return { profile: name, applied: { tdp: p[0], cpu_max_pct: p[1] }, failed: [] };
   },
   revert_power: () => { state.tdp = 20; state.cpu = 100; state.gpuMin = 300; state.gpuMax = 2500; return 3; },
-  list_profiles: () => ({}),
+  list_profiles: () => ({ battery: { tdp: 12 }, balanced: { tdp: 17 }, performance: { tdp: 25 }, dock: { tdp: 35 } }),
   save_game_power: (_a: string, v: any) => v,
   get_game_profile: () => ({ battery: { base: "battery", target_fps: state.targetFps }, plugged: { base: "performance", target_fps: state.targetFps }, launch: state.launch }),
   set_game_profile: (_a: string, _p: boolean, v: any) => { if (v.target_fps) state.targetFps = v.target_fps; return v; },
   reset_learned: () => true,
   get_autotune: () => (scenario.game && state.autotune
     ? { running: true, enabled: true, appid: "2054970", target_fps: state.targetFps, paused: false,
-        learned: { tdp: 21, cpu_max_pct: 90, gpu_min_mhz: null, bound: "cpu", confidence: 2, samples: 412 },
-        last: { fps: 61.4, pkg_w: 20.8 } }
+        learned: { tdp: 10, cpu_max_pct: 70, gpu_min_mhz: null, bound: "gpu", confidence: 2, samples: 412 },
+        last: { fps: 60.2, pkg_w: 10.4 } }
     : { running: false, enabled: state.autotune }),
   export_profiles: () => "{}",
   import_profiles: () => 1,

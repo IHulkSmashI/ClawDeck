@@ -186,11 +186,15 @@ def test_face_buttons_override(tmp_path, monkeypatch):
     assert r["ok"] and len(r["removed"]) == 2 and not buttons.status("MS-1T91")["installed"]
 
 
-def test_autotune_battery_ceiling():
-    lim = hw.MODELS["MS-1T91"]["tdp"]
-    assert autotune.ceiling(lim, False, None) == 17                # default: Balanced
-    assert autotune.ceiling(lim, False, 25) == 25                  # the user's choice
-    assert autotune.ceiling(lim, False, 99) == lim["battery_max"]  # never above the model's limit
-    assert autotune.ceiling(lim, False, 2) == lim["min"]
-    assert autotune.ceiling(lim, False, "x") == 17
-    assert autotune.ceiling(lim, True, 17) == lim["plugged_max"]    # plugged in: the full limit
+
+def test_picked_power_is_autotunes_ceiling(fake_hw, monkeypatch):
+    at = autotune.Autotune(fake_hw, power.Power(fake_hw), "/nonexistent")
+    monkeypatch.setattr(at, "_apply", lambda l: None)
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    at.start("1", 60, {"tdp": 9, "cpu_max_pct": 100, "gpu_min_mhz": None}, 8, 17, False)
+    at.pause("manual GPU clocks")
+    at.set_ceiling(12)                      # the user picks Battery (12 W) mid-game
+    s = at.session
+    assert s.ceiling_tdp == 12 and s.learned.tdp == 12 and not s.paused
+    at.set_ceiling(3)
+    assert s.ceiling_tdp == 8               # never below the model's minimum

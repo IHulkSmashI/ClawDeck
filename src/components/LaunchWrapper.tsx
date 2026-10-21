@@ -28,7 +28,7 @@ export const LaunchWrapper: FC<{ appid: string; name: string }> = ({ appid, name
           load();
         }}>{on ? "Remove from launch options" : "Add to launch options"}</ButtonItem>
       )}
-      <Hint does="Lets autotune, the benchmark, the injector and HDR reach this game." why="needed once per game; your own launch options are kept." cost="takes effect the next time the game starts." />
+      <Hint does="Needed once per game for Autotune, Benchmark, OptiScaler and HDR. Your own launch options are kept; works from the next launch." />
       {!readable && <div style={{ fontSize: 11, opacity: 0.7, wordBreak: "break-all" }}>Add by hand: Properties → Launch options → <b>{wrapper} %command%</b></div>}
     </PanelSectionRow>
   );
