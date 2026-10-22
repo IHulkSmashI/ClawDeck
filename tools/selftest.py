@@ -123,6 +123,29 @@ def main() -> int:
     else:
         check("Charge limit", False, "charge_control_end_threshold not found")
 
+    # ---- every profile and the slider, as the panel applies them --------------------------------------------
+    # each held 6 s: longer than thermald's rewrite interval, so a value that holds shows nothing else fights it
+    if p.rapl_pl1 and p.rapl_pl2:
+        lim = h.model["tdp"]
+        def held(tag: str, watts: int) -> None:
+            time.sleep(6)
+            pl1, pl2 = (read_int(p.rapl_pl1) or 0) // 1_000_000, (read_int(p.rapl_pl2) or 0) // 1_000_000
+            want2 = pw._sppt_for(watts, lim)
+            check(f"{tag} holds", pl1 == watts and pl2 == want2, f"want {watts}/{want2} W, reads {pl1}/{pl2} W")
+        for name in hw.profiles_for(h.model_key):
+            res = pw.apply_profile(name)
+            if res["failed"]:
+                check(f"profile {name}", False, f"failed: {', '.join(res['failed'])}")
+                continue
+            held(f"profile {name}", res["applied"].get("tdp", -1))
+        for watts in (h.model["tdp"]["min"], 14, 21):
+            pw.set_tdp(watts)
+            held(f"slider {watts} W", watts)
+        check("thermald paused while held", not power.thermald_active() or not pw._thermald_paused,
+              "paused" if pw._thermald_paused else "was not running")
+        pw.revert_all()
+        time.sleep(2)
+
     # ---- face buttons ------------------------------------------------------------------------------------------
     bs = buttons.status(h.model_id)
     if bs["applies"]:
