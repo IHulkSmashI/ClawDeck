@@ -213,6 +213,13 @@ would have hit any other system tool with its own OpenSSL. Also: the XeSS status
 check's file, which is only rewritten at login — right after an install the panel keeps showing the previous
 verdict; the plugin should run the check itself after installing (see xess.py).
 
+Done in code (2026-10-22): after install.sh, `xess.session_check` runs the package's own `tools/session-check.sh
+--dry-run` as the user (loads the driver, enumerates the GPU, writes `driver-status`, leaves the session's environment
+alone), so Setup's line is right straight away. Update first looks up the newest release: when the installed
+package (`.clawdeck-source.json`) already is it, nothing is downloaded or re-run, the check still runs, and the toast
+says "up to date" instead of a red row. Re-unpacking over the package would also have overwritten the driver
+library the running session has loaded.
+
 ## 21. thermald overwrites the TDP every few seconds (2026-10-22, fixed in `power.py`)
 
 Bazzite runs `thermald` (polling mode) on Intel. It re-applies the platform's DPTF power table to

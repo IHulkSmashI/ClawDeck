@@ -26,7 +26,9 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
     try {
       const r = await xessInstall(allow);
       if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("xess-xmx-linux", () => installXess(true)); return; }
-      toast(r.ok ? (`${r.repo ?? "xess-xmx-linux"} ${r.tag ?? ""} installed. ${r.note ?? r.next ?? ""}`) : `XeSS XMX: not installed (${r.error})`);
+      // nothing newer: "up to date" (the driver check still ran, so the line above is current), never a red row
+      toast(r.up_to_date ? `XeSS XMX ${r.tag ?? ""}: up to date`
+        : r.ok ? (`${r.repo ?? "xess-xmx-linux"} ${r.tag ?? ""} installed. ${r.note ?? r.next ?? ""}`) : `XeSS XMX: not installed (${r.error})`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(null); refresh(); }
   };
@@ -38,7 +40,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   return (
     <PanelSection title="Setup">
       <PanelSectionRow>
-        <Status ok={x ? x.installed && x.status.state === "ok" : null} label={xessLine} detail={quick ? undefined : xessDetail} />
+        <Status ok={!x ? null : !x.installed || x.status.state === "failed" ? false : x.status.state === "ok" ? true : null} label={xessLine} detail={quick ? undefined : xessDetail} />
         {!noXmx && (
           <ButtonItem layout="below" disabled={!!busy} onClick={() => installXess(false)}
             description={explain("Downloads the fork's release (XeLL driver mode) and runs its installer; while the fork has no release, upstream's.", undefined, "about 230 MB; log out and in once after. Each game's first launch compiles for a minute or two, once.")}>

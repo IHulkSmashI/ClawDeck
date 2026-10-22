@@ -61,7 +61,9 @@ tools/
   anything.
 - **Fixes**: VRR fix install / remove, face-button fix install / remove, the health check in one line (the full list
   on the page).
-- **Setup**: install / update XeSS XMX, run the self-test (PASS/FAIL), export the log.
+- **Setup**: install / update XeSS XMX (then the package's driver check, `session-check.sh --dry-run`, so the line is
+  right without a re-login; "up to date" when the newest release is installed), run the self-test (PASS/FAIL),
+  export the log.
 
 ## Upscaling and frame generation: what runs where
 1. **Native XeSS** in the game → the xess-xmx-linux driver runs it on XMX, XeLL on. ClawDeck's job.

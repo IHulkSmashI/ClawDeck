@@ -166,7 +166,9 @@ export const backend = {
 
   // ---- setup: installs ----
   xess_state: () => xessState(),
-  xess_install: (allow: boolean) => (allow ? (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", note: "IHulkSmashI/xess-xmx-linux has no release yet; installed HHHHanasak1/xess-xmx-linux's instead (no XeLL driver mode)" }))
+  xess_install: (allow: boolean) => (state.xessInstalled
+    ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", summary: "XeSS XMX 20261018 is up to date" })
+    : allow ? (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", note: "IHulkSmashI/xess-xmx-linux has no release yet; installed HHHHanasak1/xess-xmx-linux's instead (no XeLL driver mode)" }))
     : { ok: false, error: "xess-xmx-linux has no tested version pinned yet; allow 'latest (untested)' to continue" }),
 
   // ---- fixes ----

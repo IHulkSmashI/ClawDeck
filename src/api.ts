@@ -72,7 +72,8 @@ export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------
 export const xessState = callable<[], XessState>("xess_state");
-export const xessInstall = callable<[allowUnpinned: boolean], Fix & { tag?: string; repo?: string }>("xess_install");
+export type DriverCheck = { ok: boolean; ran: boolean; error?: string; status: { state: string; line: string | null; mode?: string }; rc?: number; log?: string };
+export const xessInstall = callable<[allowUnpinned: boolean], Fix & { tag?: string; repo?: string; up_to_date?: boolean; summary?: string; check?: DriverCheck }>("xess_install");
 
 // ---- fixes -----------------------------------------------------------------------------------------------------------
 export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;
