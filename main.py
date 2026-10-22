@@ -78,6 +78,7 @@ class Plugin:
         userexec.chown_tree(mangohud_dir, HOME)
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         self.autotune.enabled = bool(self.settings.get("autotune"))
+        self._autotune_flag(self.autotune.enabled)
         self.running_appid: str | None = None
         self._health: tuple[float, list] | None = None
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
@@ -193,9 +194,26 @@ class Plugin:
         self._save_settings()
         if key == "autotune":
             self.autotune.enabled = bool(value)
+            self._autotune_flag(bool(value))
             if not value:
                 self.autotune.pause("autotune switched off")
         return True
+
+    @staticmethod
+    def _autotune_flag(on: bool) -> None:
+        """<runtime>/autotune.on tells the launch wrapper to ask the XeSS shim for XeLL's frame timing
+        (IGDEXT_XELL_LOG=1), so autotune counts rendered frames, not generated ones. Read at the next game start."""
+        flag = os.path.join(RUNTIME_DIR, "autotune.on")
+        try:
+            if on:
+                os.makedirs(RUNTIME_DIR, exist_ok=True)
+                with open(flag, "w", encoding="utf-8") as f:
+                    f.write("1\n")
+                os.chmod(flag, 0o644)
+            elif os.path.exists(flag):
+                os.remove(flag)
+        except OSError as e:
+            decky.logger.warning("autotune flag for the launch wrapper: %s", e)
 
     async def set_dry_run(self, on: bool) -> bool:
         sysfs.set_dry_run(bool(on))
@@ -247,6 +265,7 @@ class Plugin:
         st = self.power.status()
         st["custom_tdp"] = self.settings.get("custom_tdp")
         st["autotune_floor"] = self.settings.get("autotune_floor")
+        st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
         return st
 
     def _limit_result(self, name: str, applied: dict, failed: list, plugged) -> dict:
@@ -368,12 +387,15 @@ class Plugin:
         if base == "custom":     # the TDP slider's value is the limit; the rest of the levers stay as they are
             base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
         result = self.power.apply_profile(base, overrides, plugged)
-        if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
-            # the picked limit (profile or slider) is autotune's ceiling; its floor is the model minimum or the user's
+        if self.settings.get("autotune") and prof.get("autotune", True):
+            # the picked limit (profile or slider) is the set TDP autotune measures at and works under; its floor is
+            # the model minimum or the user's
             lo, hi = hw.tdp_range(self.hw.model, plugged)
             ceiling = result["applied"].get("tdp") or hi
             floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
-            self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), floor, int(ceiling), plugged)
+            self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
+                                keep_pct=self.settings.get("autotune_keep"),
+                                xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"))
             result["autotune"] = "started"
         return result
 
@@ -427,12 +449,14 @@ class Plugin:
     async def get_autotune(self) -> dict:
         return self.autotune.status()
 
-    async def set_target_fps(self, appid: str, fps: int) -> dict:
-        """Autotune's target for a game, the same on battery and plugged in."""
-        fps = max(30, min(240, int(fps)))
-        for plugged in (False, True):
-            self.profiles.set(appid, plugged, {"target_fps": fps})
-        return {"ok": True, "target_fps": fps}
+    async def set_autotune_keep(self, pct: float) -> dict:
+        """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,
+        larger = more battery."""
+        pct = max(2.0, min(float(pct), 15.0))
+        self.settings["autotune_keep"] = pct
+        self._save_settings()
+        self.autotune.set_keep(pct)
+        return {"ok": True, "keep_pct": pct, "summary": f"Autotune keeps within {pct:g} % of the most the TDP gives", "error": None}
 
     async def get_game_profile(self, appid: str) -> dict:
         return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),

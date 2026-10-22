@@ -223,3 +223,23 @@ make no TDP calls. Fix: `_set_rapl` stops thermald (stop only, never disable) th
 `revert_all` starts it again (game closed, plugin unloaded, reset). The SoC's TCC limit and the EC fan control are
 unaffected. Health check explains it. Autotune's new temperature-aware logic (§18) is the guard while thermald is
 paused: if package temperature passes 95 °C, step the TDP down. (intel_lpmd also runs; it did not touch RAPL here.)
+
+## 22. Autotune without a target: the most the set TDP gives, balanced, then the lowest TDP within 5 % (maintainer, 2026-10-22) — done in code
+
+The maintainer's call: no target fps. At the set TDP, find the most frames, balance power between CPU and GPU, and
+lower the TDP 1 W at a time to the lowest one that stays within a few % of that most. Measure **rendered** frames,
+never generated ones.
+
+Rendered frames: MangoHud counts presented frames, so XeSS frame generation (2-4x) inflates it. The xess-xmx-linux
+shim (upstream and fork, `shim/src/dll/XellHook.cpp`) hooks XeLL's `xellSleep`, which runs once per rendered frame,
+and with `IGDEXT_XELL_LOG=1` logs `xellSleep stats: 100 calls in W ms (P ms/frame)` to `drive_c/igdext_xell.log`.
+Rendered fps = 1000 / P. The launch wrapper exports the variable while autotune is on (`<runtime>/autotune.on`) and
+rotates the log at each launch. Caveats for the device: the same variable routes XeLL's own debug messages into that
+log (size over a long session?); frame generation that doesn't go through XeLL (OptiScaler's FSR FG, lsfg-vk) is
+still counted as presented frames (autotune compares the game against itself at the same multiplier, so its
+decisions hold; the fps shown include generated frames).
+
+Done in code (2026-10-22): `autotune.py` v3 (measure → balance → lower → hold, docs/DESIGN.md), the Power panel's
+status line ("25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W", "rendered, 2x shown"), Advanced → "keep
+within %" (2-15, default 5). The target-fps slider and endpoint are gone; §17's ceiling and §18's levers stay, §18's
+"below target / above target" rules are replaced by the phases above.

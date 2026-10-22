@@ -45,8 +45,11 @@ Quick Access do **not** already do:
   gives InputPlumber the right map for the EX: left = Steam menu, right = Quick Access.
 - **Power profiles, a real TDP slider and Autotune.** Six profiles from Battery saver 10 W to Max 35 W and a slider
   over the chip's whole 8–35 W range, set through the chip's own limit (Steam's TDP slider does nothing on the Claw
-  8 EX), read back after every change. Autotune holds your target fps with the least power under that limit and
-  fixes what is short first: the GPU clock floor when graphics hold the game back, CPU boost when the CPU does.
+  8 EX), read back after every change.
+- **Autotune, no target to set.** It measures the most frames your TDP gives in the running game, shares that power
+  between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within
+  5 % of those frames. It counts the frames the game renders, not the extra ones XeSS frame generation adds, so 2x or
+  3x frame generation never fools it.
 - **Every change reads back.** Each control shows what the hardware reports after the write; a failed write is red
   text with the reason, never a silent "applied".
 
@@ -75,8 +78,8 @@ with the longer explanations. Every explanation sits under its control, so the D
 |---|---|
 | **Profile** | Battery saver 10 W, Battery 12 W, Balanced 17 W, Performance 25 W, Plugged 30 W or Max 35 W (what each is for, and what it costs, is under the control). The most power the game may use. |
 | **TDP slider** | The same limit, anywhere from 8 to 35 W in 1 W steps. Moving it makes a *Custom* profile; picking a profile moves it. Under it, after every change: **"RAPL reads 17 W / 24 W"**, the limits the hardware reports. Why ClawDeck sets TDP at all: Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip). |
-| **Autotune** | Holds the target fps for the running game with the least power, between its floor (8 W) and the slider. When the game is short it fixes the bottleneck first: GPU-bound → a higher GPU clock floor; CPU-bound → CPU boost on and the CPU ceiling back to 100 %; only then more watts. On target it lowers the watts first. The status line says "Autotune on: 8–25 W, now 19 W, target 60 fps, last change −1 W 12 s ago", and under it what holds the game back and the last action ("GPU-bound · 52/60 fps · raised GPU floor to 1300 MHz"). |
-| **Advanced** | Folded away: CPU boost, CPU ceiling %, GPU floor and ceiling MHz, CPU energy mode, and Autotune's floor. Steam has none of these for this chip. Each shows what the hardware reads; a change here pauses Autotune for the game. |
+| **Autotune** | No target to set. For the running game it (1) measures the most frames the TDP above gives, (2) shares that power between CPU and graphics: when graphics hold the game back it gives them the CPU's spare share and a higher clock floor, when the CPU does it turns CPU boost on and its ceiling back to 100 %, and it keeps a change only if the game gets faster, (3) lowers the TDP 1 W at a time while the game stays within 5 % of the most, trying the CPU/graphics balance again at each step, and (4) holds there, measuring again in a new area, after a graphics change, or every few minutes. It counts rendered frames: with XeSS frame generation the screen shows 2–4 frames per rendered one, and Autotune reads the real rate from XeLL through the XMX driver. The status line: "Autotune: 25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W", and under it what holds the game back and the last action ("CPU-bound · holding · raised CPU ceiling to 100 %"). With a frame limit (Steam's or the game's) the most the TDP gives is the limit, so Autotune holds it with the least power. |
+| **Advanced** | Folded away: CPU boost, CPU ceiling %, GPU floor and ceiling MHz, CPU energy mode, how close to the most Autotune must stay (2–15 %, 5 % by default), and Autotune's floor. Steam has none of these for this chip. Each shows what the hardware reads; a change here pauses Autotune for the game. |
 
 **The six profiles** (Claw 8 EX values; other Claws are capped at their own maximum):
 
@@ -90,8 +93,9 @@ with the longer explanations. Every explanation sits under its control, so the D
 | **Max** | 35 W, boost to 45 W | full speed, performance mode | On a dock with a TV. Fans get audible. |
 
 Why so low on battery? The Claw's Intel chip gets most of its frames by about 12–17 W; above that, each extra watt
-buys few frames and a lot of battery. For a frame limit, use Steam's own and set Autotune's target to the same
-number; ClawDeck doesn't add a second limiter.
+buys few frames and a lot of battery. That is also why Autotune keeps "within 5 % of the most" rather than chasing
+the best frames per watt: frames per watt keep improving all the way down to 8 W, long after the game stops being
+playable. For a frame limit, use Steam's own; ClawDeck doesn't add a second limiter.
 
 ### Per-game (the running game)
 | Control | What it does |
@@ -132,7 +136,7 @@ to Bazzite, with Windows staying on your Claw.
    **Developer** section, choose **Install plugin from ZIP file** and pick ClawDeck.zip.
 4. Open **ClawDeck**. **Fixes** lists what the hardware gets wrong, with an Install button each; **Setup** installs
    the XeSS XMX driver.
-5. Start a game, open **ClawDeck**, pick a profile, turn on **Autotune** and set a target fps. Tap **Add to launch
+5. Start a game, open **ClawDeck**, pick a profile or move the TDP slider, and turn on **Autotune**. Tap **Add to launch
    options** once for that game (Per-game).
 
 To remove it: Decky → gear → ClawDeck → Uninstall. Power goes back to how it was, games you added ClawDeck to keep
@@ -145,7 +149,15 @@ starting normally, and the VRR fix resets at the next reboot. The MSI button fix
 **Does it drain my battery?** No. ClawDeck sleeps until you touch it. While a game runs, Autotune checks once a
 second for as long as you play, so it notices when you change graphics settings or reach a heavier area. Each check
 reads a few small files and takes well under a thousandth of a second of CPU time (measured: about 0.01 % of one
-core). With no game running, nothing runs at all.
+core). When it measures again (a new area, a graphics change, every few minutes) it spends about half a minute at
+the full TDP you set. With no game running, nothing runs at all.
+
+**Does frame generation fool Autotune?** No. With XeSS frame generation the game renders one frame and the screen
+shows two to four; MangoHud counts all of them. Autotune reads the rendered rate from XeLL, which the XMX driver's
+shim logs once per rendered frame, and shows both ("30 fps rendered, 2x shown"). A game without XeLL has no XeSS
+frame generation, so what MangoHud counts is what it renders. (Frame generation from OptiScaler's FSR or from
+Lossless Scaling doesn't go through XeLL: there Autotune still works, because it compares the game against itself
+at the same multiplier, but the fps it shows include generated frames.)
 
 **Can it damage my Claw?** No. It never overclocks: every power limit stays inside what MSI's firmware allows. Power
 changes are undone when the game closes or when you remove the plugin. The things that stay on purpose are the two
@@ -154,8 +166,8 @@ ClawLab tested, and the previous entry in the boot menu always starts without it
 
 **Steam already has a Performance menu. Why use this?** Steam gives you one TDP slider for everything, and on the Claw
 8 EX it may not change anything on current Bazzite. ClawDeck sets the Claw's power limit directly, reads it back,
-and adds Autotune. Leave Steam's TDP slider off so the two don't fight. Steam's frame limit is fine to keep: set
-Autotune's target to the same number. Everything Steam's panels already do (refresh rate, VRR on/off, HDR, the
+and adds Autotune. Leave Steam's TDP slider off so the two don't fight. Steam's frame limit is fine to keep:
+Autotune then holds it with the least power. Everything Steam's panels already do (refresh rate, VRR on/off, HDR, the
 frame limit) stays there.
 
 **What are the XMX cores, and which games use them?** They are the AI units in the Claw's Arc graphics. XeSS

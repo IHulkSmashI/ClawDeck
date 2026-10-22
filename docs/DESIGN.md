@@ -25,7 +25,7 @@ py_modules/clawdeck/
    power.py     levers (TDP via RAPL-MMIO on the EX, HHD / MSI firmware elsewhere; CPU max_perf_pct; GPU window)
                 + the four profiles (hw.PROFILES)
    battery.py   plugged detection only (profiles differ on battery / charger)
-   profiles.py  per-game JSON: base profile, target fps, what autotune learned, launch settings
+   profiles.py  per-game JSON: base profile, what autotune found, launch settings
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
    xess.py      xess-xmx-linux: fork-first install (asset sha256 checked) with upstream fallback, state, per-game XeLL
                 mode from the shim's logs, OptiScaler-present detection (read-only)
@@ -49,7 +49,8 @@ tools/
 ## The four panels
 - **Power**: profile dropdown (six, short label, what/why/cost under it), the TDP slider (model range, = Custom,
   autotune's ceiling), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
-  that enforces them), Autotune with its range, current watts, target, last change, bottleneck and last action.
+  that enforces them), Autotune with the set TDP, the TDP it uses, rendered fps against the most the set TDP gives,
+  frames per watt, the bottleneck, its phase and the last action.
   Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
   (one lock). Under an Advanced expander: CPU boost, CPU ceiling, GPU floor/ceiling, EPP, autotune floor (§19).
 - **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
@@ -79,15 +80,26 @@ enforces `intel-rapl-mmio:0`, so ClawDeck writes RAPL (PL2 before PL1 when raisi
 TDP when HHD runs; the MSI attributes only where RAPL is absent. Steam's own slider may do nothing on this chip.
 Every write answers with the value read back (§14).
 
-## Autotune controller
-The profile or the TDP slider is the ceiling; the floor is the model minimum (8 W) or the user's (Advanced).
-Moving the slider re-clamps at once. Decisions on a 10 s window (average and worst second) that restarts after every
-change, one lever per window (HARDWARE-FINDINGS §18): short and GPU-bound → GPU floor +100 MHz (from the efficient
-clock) up to the GPU ceiling, then TDP +2 W; short and CPU-bound → CPU boost on, CPU ceiling 100 %, drop a GPU floor
-autotune set, then TDP; short otherwise → TDP; on target → TDP −1 W, and only at the floor GPU floor −100 MHz then CPU
-ceiling −10 % (not below 60 %). At the ceiling and still short it says so and changes nothing. Learned per game
-(TDP, CPU ceiling, GPU floor, boost); rechecked every 5 min, relearned when fps sit far above target. A manual change
-(Advanced) pauses it; picking a profile or moving the slider hands control back. ~70 µs of CPU per step.
+## Autotune controller (v3, HARDWARE-FINDINGS §22)
+No target fps. Every decision uses a 10 s window of **rendered** fps that restarts after every change, one change per
+window. Rendered, not presented: with XeSS frame generation the screen shows 2–4 frames per rendered one and
+MangoHud counts them all; XeLL's `xellSleep` runs once per rendered frame and the xess-xmx-linux shim logs it every
+100 frames (`xellSleep stats: 100 calls in W ms (P ms/frame)`, `IGDEXT_XELL_LOG=1`, exported by the launch wrapper
+while autotune is on, read from `drive_c/igdext_xell.log`). Rendered = 1000 / P; presented / rendered = the
+frame-generation multiplier. No XeLL line = no XeSS frame generation, and MangoHud's rate is the rendered one.
+1. **measure**: at the set TDP (profile or slider), the median of three windows = the most it gives (`max_fps`);
+2. **balance**: one lever toward the bottleneck (GPU-bound: CPU ceiling −10 % to hand the GPU the shared budget,
+   then GPU floor +100 MHz; CPU-bound: CPU boost on, CPU ceiling 100 %, drop a GPU floor). Kept only with ≥2 % more
+   fps (and then it may take another step); otherwise undone and balancing ends;
+3. **lower**: TDP −1 W while fps ≥ (100 − keep) % of `max_fps` (keep = 5 % by default, 2–15 in Advanced); the first
+   miss is measured again, the second goes back up 1 W. Every new TDP gets one balance pass (the bottleneck moves as
+   watts drop);
+4. **hold**: below the line twice → +1 W; a sustained ±15 % shift, a frame-generation multiplier change or 5 min →
+   measure again.
+The floor is the model minimum (8 W) or the user's. Saved per game and power source: TDP, CPU ceiling, GPU floor,
+boost, `max_fps` and the ceiling it was measured at (a different set TDP is measured again). Frames per watt is
+shown, never chased: it keeps improving down to the minimum TDP. A manual change (Advanced) pauses it; picking a
+profile or moving the slider measures again and hands control back. ~70 µs of CPU per step.
 
 ## Open items (need the device)
 - The fork publishes no release: `tools/make-release.py` there needs the CI-built binaries (its Mesa 26.3 matrix job
