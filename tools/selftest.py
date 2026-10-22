@@ -78,8 +78,14 @@ def main() -> int:
             pl2 = (read_int(p.rapl_pl2) or target * 1_000_000) / 1e6
             check("TDP effect (power under load)", w is not None and w <= pl2 + 2, f"measured {w and round(w, 1)} W, limit {pl2:g} W")
         pw.revert_all()
-        check("TDP revert", read_int(p.rapl_pl1) == orig1 and read_int(p.rapl_pl2) == orig2,
-              f"back to {orig1 and orig1 / 1e6:g}/{orig2 and orig2 / 1e6:g} W")
+        # revert restarts thermald, which writes its own startup value (35 W on the Claw 8 EX) and settles back to the
+        # platform's table within ~10 s: wait for the original values instead of reading once (measured 2026-10-22)
+        deadline = time.time() + 15
+        while time.time() < deadline and not (read_int(p.rapl_pl1) == orig1 and read_int(p.rapl_pl2) == orig2):
+            time.sleep(1)
+        now1, now2 = read_int(p.rapl_pl1), read_int(p.rapl_pl2)
+        check("TDP revert", now1 == orig1 and now2 == orig2,
+              f"back to {orig1 and orig1 / 1e6:g}/{orig2 and orig2 / 1e6:g} W, reads {now1 and now1 / 1e6:g}/{now2 and now2 / 1e6:g} W")
         if not args.quick and p.rapl_energy:
             w = package_watts(p.rapl_energy)
             check("TDP effect after revert", w is not None and w > target + 3, f"measured {w and round(w, 1)} W (should exceed {target} W)")
