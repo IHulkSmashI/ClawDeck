@@ -45,7 +45,7 @@ export default definePlugin(() => {
     console.warn("ClawDeck: battery state hook unavailable", err);
   }
 
-  // Resume from sleep: firmware may reset limits; the backend re-applies the charge limit and the running game.
+  // Resume from sleep: firmware may reset limits; the backend re-applies the running game.
   try {
     const h = SteamClient?.System?.RegisterForOnResumeFromSuspend?.(() => { resumed().catch(() => { /* logged */ }); });
     if (h?.unregister) unregisters.push(() => h.unregister());
@@ -62,7 +62,7 @@ export default definePlugin(() => {
 
   return {
     name: "ClawDeck",
-    // the same title bar Decky plugins use, with a settings button that opens the full page (as "All settings" does)
+    // the same title bar Decky plugins use, with a settings button that opens the full page (as "More details" does)
     titleView: (
       <Focusable style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
         <div className={staticClasses.Title}>ClawDeck</div>
