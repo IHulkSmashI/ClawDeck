@@ -26,7 +26,7 @@ const state = {
   tdp: 12,
   cpu: 70,
   targetFps: 60,
-  launch: { mesa: "", xmx: true, xell: false } as any,
+  launch: { xmx: true, xell: false } as any,
   xessInstalled: true,
 };
 
@@ -127,6 +127,9 @@ export const backend = {
   set_launch: (_a: string, v: any) => { Object.assign(state.launch, v); return { ok: true, launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }; },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
+    optiscaler: scenario.which === "dd2"
+      ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
+      : { present: false, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Hollow Knight" },
     xell: state.launch.xell
       ? { mode: "cross-vendor", shim: true, detail: "XeLL is used, in its built-in cross-vendor mode (the upstream build has no driver mode)" }
       : { mode: "off", shim: true, detail: "XeLL driver mode is off for this game" },
@@ -136,7 +139,6 @@ export const backend = {
   xess_state: () => xessState(),
   xess_install: (allow: boolean) => (allow ? (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", note: "IHulkSmashI/xess-xmx-linux has no release yet; installed HHHHanasak1/xess-xmx-linux's instead (no XeLL driver mode)" }))
     : { ok: false, error: "xess-xmx-linux has no tested version pinned yet; allow 'latest (untested)' to continue" }),
-  xess_probe: () => ok(),
 
   // ---- fixes ----
   set_wide_vrr: (on: boolean) => { state.wideVrr = on; return { ok: true, restart: true }; },

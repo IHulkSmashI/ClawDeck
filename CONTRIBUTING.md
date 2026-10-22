@@ -39,7 +39,6 @@ Tools in `tools/`:
 | `clawdeck-launch.sh` | The per-game launch wrapper (MangoHud frame times for autotune, XeSS XMX / XeLL environment). |
 | `sysfs-survey.sh` | Read-only survey of a new machine: what the kernel exposes, which services run. |
 | `power-profile.sh` | Battery / performance / dock profiles from a terminal, without the plugin (`--dry-run`). |
-| `suspend-cycle.sh` | Sleep soak: N suspend/resume cycles with deep-idle time per cycle. |
 | `soak.py` | CPU %, peak memory and memory growth of the backend against the budget above. |
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |

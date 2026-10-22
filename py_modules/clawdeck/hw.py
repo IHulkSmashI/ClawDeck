@@ -5,7 +5,7 @@ capabilities instead of hard-coding paths, so Lunar Lake and Meteor Lake Claws (
 handhelds) get the same features where the kernel offers them.
 
 Sources: Handheld Daemon's device table (hhd/device/claw/const.py) for the DMI product names and button layout, its
-MSI adjustor driver for the TDP firmware attributes and fan hwmon, PowerControl for the Intel xe clock paths.
+MSI adjustor driver for the TDP firmware attributes, PowerControl for the Intel xe clock paths.
 """
 from __future__ import annotations
 
@@ -85,12 +85,9 @@ class Paths:
     msi_pl1: str | None = None
     msi_pl2: str | None = None
     msi_pl3: str | None = None
-    msi_fan_hwmon: str | None = None
     # battery
     battery: str | None = None
     charge_limit: str | None = None
-    # daemon sockets
-    hhd_api: str | None = None
 
 
 @dataclass
@@ -188,18 +185,12 @@ def discover_paths() -> Paths:
         fp = f"{base}/{attr}/current_value"
         if os.path.exists(fp):
             setattr(p, key, fp)
-    for hw in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
-        if sysfs.read(f"{hw}/name") == "msi_wmi_platform":
-            p.msi_fan_hwmon = hw
-            break
     # battery
     for bat in sorted(glob.glob("/sys/class/power_supply/BAT*")):
         p.battery = bat
         if os.path.exists(f"{bat}/charge_control_end_threshold"):
             p.charge_limit = f"{bat}/charge_control_end_threshold"
         break
-    if os.path.exists("/run/hhd/api"):
-        p.hhd_api = "/run/hhd/api"
     return p
 
 
