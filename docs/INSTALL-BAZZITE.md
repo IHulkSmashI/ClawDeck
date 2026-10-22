@@ -55,7 +55,7 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
    each; **Setup** installs the XeSS XMX driver and runs the self-test.
 4. For each game you want Autotune, XeSS XMX or XeLL in: start the game, open ClawDeck and tap
    **Add to launch options** (Per-game).
-5. **Power**: pick a profile (Battery saver 10 W to Max 35 W) or move the TDP slider, turn Autotune on, set a target fps, and play.
+5. **Power**: pick a profile (Battery saver 10 W to Max 35 W) or move the TDP slider, turn Autotune on, and play.
 
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
 may do nothing at all; ClawDeck sets the limit directly.

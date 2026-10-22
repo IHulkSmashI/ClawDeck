@@ -3,12 +3,12 @@ import { toaster } from "@decky/api";
 import { FC, useEffect, useRef, useState } from "react";
 
 import {
-  applyProfile, getAutotune, getGameProfile, getPower, getSetting, listProfiles, setAutotuneFloor, setCpuMaxPct, setCpuTurbo,
-  setEpp, setGpuWindow, setSetting, setTargetFps, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
+  applyProfile, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
+  setEpp, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Note, Problem, Status } from "../components/Hint";
+import { explain, Problem, Status } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -50,7 +50,6 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [st, setSt] = useState<PowerStatus | null>(null);
   const [at, setAt] = useState<AutotuneStatus | null>(null);
   const [autotune, setAutotune] = useState(false);
-  const [targetFps, setTarget] = useState(60);
   const [profile, setProfile] = useState("battery");
   const [tdp, setTdpV] = useState(12);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
@@ -62,14 +61,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const appid = app?.appid ?? null;
 
   const refresh = async () => {
-    const [s, auto, last, tbl, a, gp] = await Promise.all([
+    const [s, auto, last, tbl, a] = await Promise.all([
       getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(),
-      appid ? getGameProfile(appid) : Promise.resolve(null),
     ]);
     const name = last === "dock" ? "max" : (last || "battery");
     setSt(s); setAutotune(!!auto); setProfile(name); setTable(tbl); setAt(a);
     setTdpV(name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12));
-    if (gp?.battery.target_fps) setTarget(gp.battery.target_fps);
   };
   useEffect(() => { refresh(); }, []);
   // while the panel is open and Autotune runs, its line follows along (one cheap call every 3 s, only while visible)
@@ -100,14 +97,18 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
   const running = !!at?.running && !at.paused;
+  const phase = { measure: "measuring the most", balance: "balancing CPU/GPU", lower: "lowering", hold: "holding" }[at?.phase ?? "measure"];
+  // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
+  const fpsText = at?.avg_fps != null
+    ? `${Math.round(at.avg_fps)} fps${at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : ""}` +
+      (at.source === "rendered" && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (appid ? "Autotune on: waiting for frame times (is ClawDeck in the launch options?)" : "Autotune on: starts with the next game")
     : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
-    : `Autotune on: ${at.floor_tdp}–${at.ceiling_tdp} W, now ${at.learned?.tdp} W, target ${at.target_fps} fps` +
-      (at.last_delta ? `, last change ${at.last_delta} ${ago(at.last_change_s)}` : "");
+    : `Autotune: ${at.ceiling_tdp} W max → using ${at.tdp} W · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "");
   const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
-  const atDetail = running && at?.avg_fps != null
-    ? `${bound} · ${Math.round(at.avg_fps)}/${at.target_fps} fps · ${at.limited ?? at.last_action ?? "no change yet"}` : undefined;
+  const atDetail = running
+    ? `${bound} · ${phase}${at?.last_action ? ` · ${at.last_action}${at.last_change_s != null ? ` (${ago(at.last_change_s)})` : ""}` : ""}` : undefined;
   const rapl25 = st?.rapl.max_w && st.rapl.max_w < hi ? ` The chip reports ${st.rapl.max_w} W as its sustained maximum; above that it may not follow.` : "";
 
   return (
@@ -128,18 +129,10 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       </PanelSectionRow>
       <PanelSectionRow>
         <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(`Holds the target fps with the least power, up to the TDP above, and fixes what is short first: GPU clock floor when the GPU holds the game back, CPU boost and ceiling when the CPU does.`,
-            quick ? undefined : "longer play time at the same smoothness.", quick ? undefined : "the first minutes in a new game can stutter while it learns.")} />
-        <Status ok={!autotune ? false : running ? (at?.limited ? false : true) : null} label={atLine} detail={atDetail} />
+          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within ${st?.autotune_keep ?? 5} % of them. Counts rendered frames, not the ones frame generation adds.`,
+            quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
+        <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
       </PanelSectionRow>
-      {autotune && appid && (
-        <PanelSectionRow>
-          <SliderField label="Target fps (this game)" value={targetFps} min={30} max={120} step={5} showValue
-            description={explain("Use the same number as Steam's frame limit.")}
-            onChange={(v) => { setTarget(v); latest("fps", () => setTargetFps(appid, v), () => undefined); }} />
-        </PanelSectionRow>
-      )}
-      {autotune && !appid && <PanelSectionRow><Note>Start a game to set its target fps.</Note></PanelSectionRow>}
       {app && autotune && !quick && <LaunchWrapper appid={app.appid} name={app.name} />}
       {st && (
         <Advanced id="power" label="Advanced"
@@ -178,6 +171,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
               onChange={(o) => setEpp(o.data).then(onLever)}
               description={explain(`How eagerly the CPU clocks up, like Windows' power mode. Reads ${EPP.find((e) => e.data === st.cpu.epp)?.label ?? st.cpu.epp ?? "?"}.`,
                 quick ? undefined : "profiles set it for you.", "Fastest uses more battery at idle.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <SliderField label="Autotune: keep within (%)" value={st.autotune_keep ?? 5} min={2} max={15} step={1} showValue
+              onChange={(v) => latest("keep", () => setAutotuneKeep(v), (r) => { toast(r.summary); refresh(); })}
+              description={explain("How many of the most frames the TDP gives Autotune may trade for power (5 % of 60 fps = 3 fps).",
+                quick ? undefined : "smaller keeps more frames; larger saves more battery.", undefined)} />
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField label="Autotune floor (W)" value={st.autotune_floor ?? lo} min={lo} max={hi} step={1} showValue

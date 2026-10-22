@@ -12,14 +12,15 @@ export type PowerStatus = {
   tdp_w?: number | null;
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
-  custom_tdp?: number | null; autotune_floor?: number | null;
+  custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number;
 };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
 export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
-export type GameProfile = { base?: string; tdp?: number; cpu_max_pct?: number; gpu_min_mhz?: number; gpu_max_mhz?: number; target_fps?: number; autotune?: boolean; learned?: any };
-export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; target_fps?: number; learned?: any; paused?: boolean; last?: any;
-  avg_fps?: number | null; low_fps?: number | null; window_s?: number; last_action?: string | null; last_delta?: string | null;
-  last_change_s?: number | null; limited?: string | null; ceiling_tdp?: number; floor_tdp?: number; bound?: "gpu" | "cpu" | "balanced" };
+export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; last?: any;
+  phase?: "measure" | "balance" | "lower" | "hold"; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number;
+  max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
+  source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
+  last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced" };
 
 /** What every write answers: what was asked, what the hardware reads back, and why it failed (shown in red). */
 export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any; unit?: string; summary: string; error: string | null };
@@ -48,9 +49,8 @@ export const setCpuMaxPct = callable<[pct: number], WriteResult>("set_cpu_max_pc
 export const setGpuWindow = callable<[min: number | null, max: number | null], WriteResult>("set_gpu_window");
 export const setEpp = callable<[value: string], WriteResult>("set_epp");
 export const setAutotuneFloor = callable<[watts: number | null], WriteResult & { floor_w: number }>("set_autotune_floor");
+export const setAutotuneKeep = callable<[pct: number], WriteResult & { keep_pct: number }>("set_autotune_keep");
 export const listProfiles = callable<[], Record<string, { tdp?: number; cpu_max_pct?: number; note?: string }>>("list_profiles");
-export const getGameProfile = callable<[appid: string], { battery: GameProfile; plugged: GameProfile; launch: Launch }>("get_game_profile");
-export const setTargetFps = callable<[appid: string, fps: number], { ok: boolean; target_fps: number }>("set_target_fps");
 export const gameStarted = callable<[appid: string], any>("game_started");
 export const gameStopped = callable<[appid: string], any>("game_stopped");
 export const powerSourceChanged = callable<[plugged: boolean], any>("power_source_changed");

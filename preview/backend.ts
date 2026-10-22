@@ -31,7 +31,7 @@ const state = {
   epp: "balance_power",
   floor: null as null | number,
   customTdp: null as null | number,
-  targetFps: 60,
+  keep: 5,
   launch: { xmx: true, xell: false } as any,
   xessInstalled: true,
 };
@@ -123,7 +123,7 @@ export const backend = {
     hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "rapl", tdp_w: scenario.game && state.autotune ? atW() : state.tdp,
     firmware_tdp: { pl1_w: 0, pl2_w: 0 },
     limits: { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 }, range: { min: 8, max: 35 },
-    custom_tdp: state.customTdp, autotune_floor: state.floor,
+    custom_tdp: state.customTdp, autotune_floor: state.floor, autotune_keep: state.keep,
   }),
   apply_profile: (name: string) => {
     const p = PROFILE_TABLE[name];
@@ -140,13 +140,14 @@ export const backend = {
   set_epp: (v: string) => { state.epp = v; return done("CPU energy mode", v, v); },
   set_autotune_floor: (w: number | null) => { state.floor = w; return { ok: true, floor_w: w ?? 8, summary: `Autotune floor ${w ?? 8} W`, error: null }; },
   list_profiles: () => Object.fromEntries(Object.entries(PROFILE_TABLE).map(([k, v]) => [k, { tdp: v[0], cpu_max_pct: v[1] }])),
-  get_game_profile: () => ({ battery: { base: "battery", target_fps: state.targetFps }, plugged: { base: "performance", target_fps: state.targetFps }, launch: state.launch }),
-  set_target_fps: (_a: string, fps: number) => { state.targetFps = fps; return { ok: true, target_fps: fps }; },
+  set_autotune_keep: (v: number) => { state.keep = v; return { ok: true, keep_pct: v, summary: `Autotune keeps within ${v} % of the most the TDP gives`, error: null }; },
   get_autotune: () => (scenario.game && state.autotune
-    ? { running: true, enabled: true, appid: "2054970", target_fps: state.targetFps, paused: false, ceiling_tdp: state.tdp, floor_tdp: state.floor ?? 8,
-        learned: { tdp: atW(), cpu_max_pct: state.cpu, gpu_min_mhz: 1300, boost: true, bound: "gpu", confidence: 2, samples: 412 },
-        last: { fps: 52.4, pkg_w: atW() + 0.4 }, avg_fps: 52.4, low_fps: 47.0, window_s: 10, bound: "gpu",
-        last_action: "raised GPU floor to 1300 MHz", last_delta: "+100 MHz GPU floor", last_change_s: 12, limited: null }
+    ? { running: true, enabled: true, appid: "2054970", paused: false, phase: "hold", tdp: atW(), ceiling_tdp: state.tdp, floor_tdp: state.floor ?? 8,
+        keep_pct: state.keep, learned: { tdp: atW(), cpu_max_pct: state.cpu, gpu_min_mhz: null, boost: true, bound: "cpu", max_fps: 31.0 },
+        bound: "cpu", max_fps: 31.0, avg_fps: 30.2, low_fps: 28.4, pct_of_max: 97, fps_per_w: +(30.2 / (atW() + 0.4)).toFixed(2),
+        source: "rendered", multiplier: 2, window_s: 10,
+        last: { fps: 30.2, shown_fps: 60.4, pkg_w: atW() + 0.4 },
+        last_action: "raised CPU ceiling to 100 %: 29 → 31 fps, kept", last_delta: "CPU ceiling 100 %", last_change_s: 12 }
     : { running: false, enabled: state.autotune }),
   game_started: () => ({}), game_stopped: () => ({}), power_source_changed: () => ({}), resumed: () => ({}),
 
