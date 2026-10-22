@@ -212,3 +212,14 @@ child of the plugin inherited it and rpm-ostree loaded Decky's OpenSSL. main.py 
 would have hit any other system tool with its own OpenSSL. Also: the XeSS status line is read from the session
 check's file, which is only rewritten at login — right after an install the panel keeps showing the previous
 verdict; the plugin should run the check itself after installing (see xess.py).
+
+## 21. thermald overwrites the TDP every few seconds (2026-10-22, fixed in `power.py`)
+
+Bazzite runs `thermald` (polling mode) on Intel. It re-applies the platform's DPTF power table to
+`intel-rapl-mmio:0`: on the Claw 8 EX, PL1 went from ClawDeck's 15 W back to **30 W within 10 s**, PL2 left alone
+(so the panel showed odd pairs like 30/19 or 15/15). Proof on the device: with `systemctl stop thermald`, 15/19 W
+held for 30 s; on `systemctl start thermald` it was 30/37 W within 15 s. Steam/steamos-manager and PowerStation
+make no TDP calls. Fix: `_set_rapl` stops thermald (stop only, never disable) the first time ClawDeck sets a TDP and
+`revert_all` starts it again (game closed, plugin unloaded, reset). The SoC's TCC limit and the EC fan control are
+unaffected. Health check explains it. Autotune's new temperature-aware logic (§18) is the guard while thermald is
+paused: if package temperature passes 95 °C, step the TDP down. (intel_lpmd also runs; it did not touch RAPL here.)
