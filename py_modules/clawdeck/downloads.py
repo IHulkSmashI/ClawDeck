@@ -1,6 +1,7 @@
 """Fetch upstream releases ClawDeck installs on request: pinned in assets/versions.json, downloaded from the
 project's own GitHub releases at the moment the user taps Install (ClawDeck never redistributes upstream binaries,
-proprietary or not). Extraction refuses absolute paths and '..' so an archive cannot write outside its folder."""
+proprietary or not). A release asset that carries GitHub's sha256 digest is checked against it before anything is
+unpacked. Extraction refuses absolute paths and '..' so an archive cannot write outside its folder."""
 from __future__ import annotations
 
 import fnmatch
@@ -41,18 +42,6 @@ def release(repo: str, tag: str | None) -> dict:
     return json.loads(_get(API.format(repo=repo, which=which)))
 
 
-def newest_with_asset(repo: str, pattern: str, prereleases: bool = True) -> dict | None:
-    """The newest release (prereleases included when asked) that has an asset matching pattern. For projects that
-    only publish prereleases, such as Moonlight VRR's daily builds, where releases/latest finds nothing."""
-    rels = json.loads(_get(f"https://api.github.com/repos/{repo}/releases?per_page=10"))
-    for rel in rels:
-        if rel.get("draft") or (rel.get("prerelease") and not prereleases):
-            continue
-        if pick_asset(rel, pattern):
-            return rel
-    return None
-
-
 def sha256_of(path: str) -> str:
     import hashlib
     h = hashlib.sha256()
@@ -62,25 +51,10 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
-UNREACHABLE = "!unreachable"
-
-
-def expected_sha256(rel: dict, asset_name: str) -> str | None:
-    """The checksum a release publishes for one of its assets (SHA256SUMS / *.sha256 / sha256sum.txt), if any."""
-    for a in rel.get("assets", []):
-        n = a.get("name", "").lower()
-        if n in ("sha256sums", "sha256sums.txt", "sha256sum.txt", "checksums.txt") or n == asset_name.lower() + ".sha256":
-            try:
-                text = _get(a["browser_download_url"]).decode("utf-8", errors="replace")
-            except OSError:
-                return UNREACHABLE      # the release publishes sums but they can't be read: don't install unchecked
-            for line in text.splitlines():
-                parts = line.split()
-                if len(parts) >= 2 and parts[-1].lstrip("*") == asset_name:
-                    return parts[0].lower()
-                if len(parts) == 1 and n.endswith(".sha256"):
-                    return parts[0].lower()
-    return None
+def asset_digest(asset: dict) -> str | None:
+    """The sha256 GitHub records for a release asset ("digest": "sha256:<hex>"), when the API reports one."""
+    d = asset.get("digest") or ""
+    return d[7:].lower() if d.startswith("sha256:") and len(d) == 71 else None
 
 
 def pick_asset(rel: dict, pattern: str) -> dict | None:
@@ -167,5 +141,9 @@ def fetch(entry: dict, workdir: str, allow_unpinned: bool = False) -> dict:
         raise FileNotFoundError(f"no asset matching {entry.get('asset_glob')} in {repo} {rel.get('tag_name')}")
     tag = rel.get("tag_name", "unknown")
     archive = download(asset["browser_download_url"], os.path.join(workdir, "downloads", asset["name"]))
+    want = asset_digest(asset)
+    if want and sha256_of(archive) != want:
+        os.remove(archive)
+        raise ValueError(f"{asset['name']} does not match the sha256 GitHub publishes for it; not installed")
     out = extract(archive, os.path.join(workdir, f"{os.path.basename(repo)}-{tag}"))
     return {"tag": tag, "archive": archive, "dir": out, "repo": repo}

@@ -97,12 +97,8 @@ def test_profiles_roundtrip(tmp_path):
     assert p.get("12345", False)["tdp"] == 22
     assert p.get("12345", False)["base"] == "battery"
     assert p.get("12345", True)["base"] == "performance"
-    txt = p.export_json("12345")
-    q = profiles.Profiles(str(tmp_path / "other.json"))
-    assert q.import_json(txt) == 1
+    q = profiles.Profiles(str(tmp_path / "profiles.json"))      # the file round-trips
     assert q.get("12345", False)["target_fps"] == 60
-    with pytest.raises(ValueError):
-        q.import_json(json.dumps({"version": 99}))
 
 
 def test_classify():

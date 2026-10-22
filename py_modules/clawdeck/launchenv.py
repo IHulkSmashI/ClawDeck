@@ -2,12 +2,8 @@
 
 Every per-game choice that has to be in the game's environment lands here, composed from the game's launch settings
 (profiles.py, key "launch"):
-  inject   none | optiscaler | lsfg      -> injector.Injector.launch_env (WINEDLLOVERRIDES / LSFGVK_*)
-  proxy, reframework                     -> the DLL name OptiScaler got and REFramework's dinput8, loaded native-first
-  lsfg     {multiplier, flow_scale, performance_mode}
   xmx      bool (default on)             -> off: the stock Vulkan drivers for this game (xess.stock_env)
   xell     bool                          -> on: XeLL driver mode through the fork's shim (xess.XELL_ENV)
-  mesa     "" | "26.1" | "26.3"          -> MESA=<v>, xess-xmx-linux's per-game driver choice
 The plugin never edits Steam's launch options; the user adds the wrapper once per game and the file does the rest.
 An empty composition removes the file, so a game with nothing set runs exactly as without ClawDeck.
 """
@@ -19,7 +15,6 @@ import re
 from . import xess
 
 KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
-MESA_CHOICES = ("", "26.1", "26.3")
 
 
 def compose(launch: dict) -> dict[str, str]:
@@ -28,11 +23,6 @@ def compose(launch: dict) -> dict[str, str]:
         env.update(xess.stock_env())
     if launch.get("xell"):
         env.update(xess.XELL_ENV)
-    mesa = launch.get("mesa") or ""
-    if mesa:
-        if mesa not in MESA_CHOICES:
-            raise ValueError(f"mesa must be one of {MESA_CHOICES}")
-        env["MESA"] = mesa
     return env
 
 

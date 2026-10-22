@@ -6,7 +6,7 @@ What the package does (its README): install.sh writes ~/.config/environment.d/50
 VK_DRIVER_FILES at <package>/run/intel_icd.json, puts its igdext64.dll shim into every Proton and prefix, and
 enables xess-xmx-check.service, which before each session writes ~/.cache/xess-xmx/driver-status ("ok <date> <lib>
 <driverInfo>" or "FAILED <date> <lib>: <reason>"). The package carries patched drivers for two Mesa versions in
-lib/mesa-<version>/; lib/active names the default; tools/switch-driver.sh changes it; MESA=26.1 per game overrides.
+lib/mesa-<version>/; lib/active names the default.
 
 XeLL (Intel's latency reduction, used with XeSS frame generation) runs in its cross-vendor mode under stock Proton.
 The fork's shim offers XeLL its driver mode when IGDEXT_XELL_PROBE is set for the game; with IGDEXT_TRACE=1 and
@@ -14,7 +14,9 @@ IGDEXT_XELL_LOG=1 it logs what XeLL did into the game's prefix (drive_c/igdext_t
 is how ClawDeck tells per game whether XeLL is in driver mode, in cross-vendor mode, or not used at all.
 
 ClawDeck reads that state, downloads a release into ~/.local/share/clawdeck (the package must stay where it was
-unpacked), runs its install.sh / tools as the desktop user (never as root), and probes with its own session check.
+unpacked) and runs its install.sh / uninstall.sh as the desktop user (never as root). Any XeSS library loaded in a
+prefix goes through the shim, so OptiScaler's bundled libxess / libxess_fg / libxell (Bazzite's Decky Framegen
+puts them next to a game) run on XMX too; optiscaler_in() tells the Per-game panel when that is the case.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import glob
 import json
 import logging
 import os
+import re
 import urllib.error
 
 from . import downloads, sysfs, userexec
@@ -176,24 +179,47 @@ def _tool(home: str, rel: str, *args: str, timeout: float = 120) -> dict:
     return {"ok": r["rc"] == 0, "log": r["out"]}
 
 
-def probe(home: str) -> dict:
-    """The package's own pre-session check, in dry-run mode: does the patched driver load and find the GPU?"""
-    r = _tool(home, "tools/session-check.sh", "--dry-run")
-    r["state"] = state(home)
-    return r
-
-
-def switch_driver(home: str, version: str) -> dict:
-    if not version.replace(".", "").replace("-", "").replace("rc", "").isalnum():
-        raise ValueError("bad driver version")
-    return _tool(home, "tools/switch-driver.sh", version)
-
-
 def uninstall(home: str) -> dict:
     return _tool(home, "uninstall.sh", timeout=300)
 
 
 # ---- per game ------------------------------------------------------------------------------------------------------
+STEAM = ".local/share/Steam"
+
+
+def steam_install_dir(home: str, appid: str) -> str | None:
+    """The game's install folder from Steam's own records (libraryfolders.vdf, appmanifest_<appid>.acf)."""
+    if not str(appid).isdigit():
+        return None
+    libs = [os.path.join(home, STEAM)]
+    for m in re.finditer(r'"path"\s+"([^"]+)"', sysfs.read(os.path.join(home, STEAM, "steamapps", "libraryfolders.vdf")) or ""):
+        libs.append(m.group(1).replace("\\\\", "/"))
+    for lib in libs:
+        acf = sysfs.read(os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf"))
+        m = re.search(r'"installdir"\s+"([^"]+)"', acf or "")
+        if m:
+            d = os.path.join(lib, "steamapps", "common", m.group(1))
+            if os.path.isdir(d):
+                return d
+    return None
+
+
+def optiscaler_in(home: str, appid: str) -> dict:
+    """Is OptiScaler (Bazzite's Decky Framegen, or by hand) in this game? Read-only: ClawDeck never puts it there.
+    Its bundled XeSS libraries run on XMX through the same shim as a game's own."""
+    d = steam_install_dir(home, appid)
+    if not d:
+        return {"present": False, "dir": None}
+    for root, dirs, files in os.walk(d):
+        if root.count(os.sep) - d.count(os.sep) > 2:
+            dirs[:] = []
+            continue
+        if "OptiScaler.ini" in files or "OptiScaler.dll" in files:
+            m = re.search(r"OptiScaler\s+(v[\d.]+[^\s\]]*)", sysfs.read(os.path.join(root, "OptiScaler.log")) or "")
+            return {"present": True, "dir": root, "version": m.group(1) if m else None,
+                    "xess_fg": bool(re.search(r"^\s*FGOutput\s*=\s*xefg", sysfs.read(os.path.join(root, "OptiScaler.ini")) or "", re.M | re.I))}
+    return {"present": False, "dir": d}
+
 def stock_env() -> dict[str, str]:
     """Environment that puts one game back on the system's Vulkan drivers (XeSS XMX off for that game): the stock
     ICD list instead of the package's, and vkd3d-proton's extensions as shipped."""

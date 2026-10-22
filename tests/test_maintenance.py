@@ -1,6 +1,5 @@
 """Release downloads, the system-change check, and the ClawTweaks
 extras (CPU energy mode, TDP boost)."""
-import json
 import os
 import sys
 
@@ -25,20 +24,27 @@ def _clean():
     sysfs._originals.clear()
 
 
-# ---- downloads: prereleases, published checksums ---------------------------------------------------------------
-def test_newest_with_asset_takes_prereleases(monkeypatch):
-    rels = [{"tag_name": "draft", "draft": True, "assets": [{"name": "Moonlight-x-x86_64.AppImage"}]},
-            {"tag_name": "v6.2.0-daily.191", "prerelease": True, "assets": [{"name": "SHA256SUMS"}, {"name": "Moonlight-6.2.0-daily.191-x86_64.AppImage"}]}]
-    monkeypatch.setattr(downloads, "_get", lambda url, timeout=20.0: json.dumps(rels).encode())
-    assert downloads.newest_with_asset("Nonary/moonlight-qt", "Moonlight-*-x86_64.AppImage")["tag_name"] == "v6.2.0-daily.191"
-    assert downloads.newest_with_asset("Nonary/moonlight-qt", "Moonlight-*-x86_64.AppImage", prereleases=False) is None
+# ---- downloads: GitHub's asset digest -----------------------------------------------------------------------------
+def test_asset_digest_checked_when_published(tmp_path, monkeypatch):
+    import hashlib, zipfile
+    good = tmp_path / "pkg.zip"
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("xess-xmx-linux-1/install.sh", "echo")
+    digest = hashlib.sha256(good.read_bytes()).hexdigest()
+    rel = {"tag_name": "1", "assets": [{"name": "xess-xmx-linux-1.zip", "browser_download_url": "u", "digest": f"sha256:{digest}"}]}
+    monkeypatch.setattr(downloads, "release", lambda repo, tag: rel)
 
-
-def test_expected_sha256_reads_sha256sums(monkeypatch):
-    rel = {"assets": [{"name": "SHA256SUMS", "browser_download_url": "s"}, {"name": "Moonlight-1-x86_64.AppImage"}]}
-    monkeypatch.setattr(downloads, "_get", lambda url, timeout=20.0: b"abc123  Moonlight-1-x86_64.AppImage\nfff  other.flatpak\n")
-    assert downloads.expected_sha256(rel, "Moonlight-1-x86_64.AppImage") == "abc123"
-    assert downloads.expected_sha256({"assets": []}, "x") is None
+    def dl(url, dest, timeout=60):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        open(dest, "wb").write(good.read_bytes())
+        return dest
+    monkeypatch.setattr(downloads, "download", dl)
+    got = downloads.fetch({"repo": "a/b", "tag": "1", "asset_glob": "xess-xmx-linux-*.zip"}, str(tmp_path / "w"))
+    assert got["tag"] == "1" and os.path.exists(os.path.join(got["dir"], "xess-xmx-linux-1", "install.sh"))
+    rel["assets"][0]["digest"] = "sha256:" + "0" * 64
+    with pytest.raises(ValueError, match="sha256"):
+        downloads.fetch({"repo": "a/b", "tag": "1", "asset_glob": "xess-xmx-linux-*.zip"}, str(tmp_path / "w2"))
+    assert downloads.asset_digest({"digest": "md5:abc"}) is None and downloads.asset_digest({}) is None
 
 
 # ---- system changes ------------------------------------------------------------------------------------------------
