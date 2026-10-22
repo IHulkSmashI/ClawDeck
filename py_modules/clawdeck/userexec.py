@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import pwd
+
+from . import sysfs
 import subprocess
 
 
@@ -25,7 +27,7 @@ def run(cmd: list[str], home: str, timeout: float = 600, cwd: str | None = None,
     full = cmd if os.geteuid() != 0 else ["runuser", "-u", u.pw_name, "--", "env", *[f"{k}={v}" for k, v in uenv.items()], *cmd]
     try:
         r = subprocess.run(full, capture_output=True, text=True, timeout=timeout, cwd=cwd, check=False,
-                           env=None if os.geteuid() == 0 else {**os.environ, **uenv})
+                           env=sysfs.clean_env() if os.geteuid() == 0 else {**sysfs.clean_env(), **uenv})
         return {"rc": r.returncode, "out": ((r.stdout or "") + (r.stderr or ""))[-4000:]}
     except (OSError, subprocess.SubprocessError) as e:
         return {"rc": -1, "out": str(e)}

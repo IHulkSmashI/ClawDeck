@@ -387,3 +387,11 @@ def test_autotune_status_says_what_it_last_did(fake_hw, monkeypatch):
         at._step()
     st = at.status()
     assert st["last_action"] and "fps for a 60 target" in st["last_action"] and st["ceiling_tdp"] == 17
+
+
+def test_clean_env_drops_loader_variables(monkeypatch):
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEI123")
+    monkeypatch.setenv("PYTHONPATH", "/tmp/_MEI123/base_library.zip")
+    monkeypatch.setenv("HOME", "/home/x")
+    env = sysfs.clean_env()
+    assert "LD_LIBRARY_PATH" not in env and "PYTHONPATH" not in env and env["HOME"] == "/home/x" and env["PATH"]

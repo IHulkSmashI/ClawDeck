@@ -189,3 +189,13 @@ back — but under an **"Advanced" expander** in the Power panel, off the main v
   power).
 - Each with the what/why/cost Hint and the read-back value; profiles may set them; autotune (§18) may move them.
 - The main view keeps only: profile, TDP slider (§17), autotune, read-back line.
+
+## 20. VRR fix wrote the EDID but never set the kernel arguments: Decky's LD_LIBRARY_PATH (2026-10-22, fixed)
+
+`rpm-ostree initramfs-etc --track=…` died with `libsolv.so.1: undefined symbol: EVP_MD_CTX_dup, version
+OPENSSL_3.1.0`. Decky Loader is a PyInstaller bundle and exports `LD_LIBRARY_PATH` to its private libraries; every
+child of the plugin inherited it and rpm-ostree loaded Decky's OpenSSL. main.py now restores the `*_ORIG` values
+(or drops the variables) at startup, and `sysfs.clean_env()` is used for the tools that matter most. The same leak
+would have hit any other system tool with its own OpenSSL. Also: the XeSS status line is read from the session
+check's file, which is only rewritten at login — right after an install the panel keeps showing the previous
+verdict; the plugin should run the check itself after installing (see xess.py).

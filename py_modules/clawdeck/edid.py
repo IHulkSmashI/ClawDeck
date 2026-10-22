@@ -162,7 +162,7 @@ def _cmdline() -> str:
 def _kargs_pending() -> str:
     """Kernel arguments of the deployment the next boot uses."""
     try:
-        r = subprocess.run(["rpm-ostree", "kargs"], capture_output=True, text=True, timeout=30, check=False)
+        r = subprocess.run(["rpm-ostree", "kargs"], capture_output=True, text=True, timeout=30, check=False, env=sysfs.clean_env())
         return r.stdout.strip() if r.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -210,7 +210,7 @@ def _run(cmd: list[str], dry_run: bool) -> tuple[bool, str]:
         log.info("dry-run: would run %s", " ".join(cmd))
         return True, ""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False, env=sysfs.clean_env())
     except (OSError, subprocess.SubprocessError) as e:
         return False, str(e)
     if r.returncode != 0:
