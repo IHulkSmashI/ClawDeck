@@ -10,7 +10,7 @@ import pytest
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.join(ROOT, "py_modules"))
 
-from clawdeck import (autotune, downloads, hhd, hw, health,  # noqa: E402
+from clawdeck import (downloads, hhd, hw, health,  # noqa: E402
                       launchenv, power, profiles, sysfs, xess)
 
 
@@ -147,35 +147,8 @@ def test_power_reverts_hhd_tdp(monkeypatch):
     assert fake.state["tdp.msi.tdp.mode"] == "balanced" and fake.state["tdp.msi.tdp.custom.tdp"] == 30
 
 
-def test_autotune_pause_stops_learning(monkeypatch):
-    pw = power.Power(_hardware())
-    calls = []
-    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: calls.append(w) or True)
-    at = autotune.Autotune(_hardware(), pw, log_dir="/nonexistent")
-    at.session = autotune.Session(appid="1", target_fps=60, floor_tdp=8, ceiling_tdp=35,
-                                  learned=autotune.Learned(tdp=30, cpu_max_pct=100, gpu_min_mhz=None), settle=1)
-    good = autotune.Sample(t=0, frametime_ms=10.0, fps=100, gpu_mhz=1000, gpu_max_mhz=2400, cpu_pct=40, pkg_w=20)
-    monkeypatch.setattr(at.sampler, "sample", lambda: good)
-    at._step()
-    assert at.session.learned.tdp == 29
-    at.pause()
-    at._step(); at._step()
-    assert at.session.learned.tdp == 29 and calls == [29]
-    at.session = None
 
 
-def test_autotune_start_clamps_saved_tdp(monkeypatch):
-    import asyncio
-    pw = power.Power(_hardware())
-    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
-    at = autotune.Autotune(_hardware(), pw, log_dir="/nonexistent")
-
-    async def go():
-        at.start("1", 60, {"tdp": 35, "cpu_max_pct": 90, "gpu_min_mhz": None, "junk": 1}, 8, 25, plugged=False)
-        t = at.session.learned.tdp
-        at.stop()
-        return t
-    assert asyncio.run(go()) == 25
 
 
 # ---- wiring rule: every UI call has a backend method ----------------------------------------------------------------
@@ -363,3 +336,17 @@ def test_optiscaler_from_decky_framegen_is_seen_read_only(tmp_path):
     r = xess.optiscaler_in(str(home), "2054970")
     assert r["present"] and r["version"] == "v0.9.4-final" and r["xess_fg"]
     assert xess.optiscaler_in(str(home), "1")["present"] is False and xess.steam_install_dir(str(home), "../x") is None
+
+
+def test_launch_wrapper_asks_for_rendered_frame_timing_while_autotune_is_on(tmp_path):
+    import subprocess
+    pfx = tmp_path / "compat/pfx/drive_c"
+    _w(pfx / "igdext_xell.log", "last launch")
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "9",
+           "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"}
+    run = lambda: subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], env=env,
+                                 capture_output=True, text=True, check=True).stdout
+    assert "IGDEXT_XELL_LOG" not in run()                   # autotune off: the shim stays quiet
+    _w(tmp_path / "autotune.on", "1")
+    assert "IGDEXT_XELL_LOG=1" in run()
+    assert not (pfx / "igdext_xell.log").exists() and (pfx / "igdext_xell.log.prev").exists()   # one launch per log

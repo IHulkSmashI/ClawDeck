@@ -2,7 +2,9 @@
 # clawdeck-launch.sh - per-game launch wrapper. Steam launch options:   /path/to/clawdeck-launch.sh %command%
 # Exports what the running game needs from ClawDeck without the plugin touching Steam's launch options itself:
 #   - MangoHud frame-time log for autotune (1 s interval, CSV into ClawDeck's runtime folder)
-#   - the per-game environment the plugin saved (XeSS XMX off, XeLL driver mode, MESA=)
+#   - the per-game environment the plugin saved (XeSS XMX off, XeLL driver mode)
+#   - with autotune on (<runtime>/autotune.on): IGDEXT_XELL_LOG=1, so the XeSS shim logs XeLL's per-rendered-frame
+#     timing and autotune counts rendered frames, not the ones frame generation adds
 # Env: CLAWDECK_NO_MANGOHUD=1 skips the overlay/log; CLAWDECK_RUNTIME overrides the runtime folder.
 set -u
 RUNTIME="${CLAWDECK_RUNTIME:-$HOME/homebrew/data/ClawDeck}"
@@ -19,8 +21,9 @@ if [ -f "$envfile" ]; then
     export "$k=$v"
   done < "$envfile"
 fi
-# XeLL driver mode on: the shim appends to its logs in the prefix, so keep only this launch (the plugin reads them)
-if [ -n "${IGDEXT_XELL_PROBE:-}" ] && [ -d "${STEAM_COMPAT_DATA_PATH:-/nonexistent}/pfx/drive_c" ]; then
+if [ -f "$RUNTIME/autotune.on" ] && [ -z "${IGDEXT_XELL_LOG:-}" ]; then export IGDEXT_XELL_LOG=1; fi
+# the shim appends to its logs in the prefix, so keep only this launch (the plugin reads them)
+if { [ -n "${IGDEXT_XELL_PROBE:-}" ] || [ -n "${IGDEXT_XELL_LOG:-}" ]; } && [ -d "${STEAM_COMPAT_DATA_PATH:-/nonexistent}/pfx/drive_c" ]; then
   for f in igdext_trace.log igdext_xell.log; do
     [ -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" ] && mv -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f.prev"
   done

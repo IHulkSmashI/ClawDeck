@@ -21,7 +21,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
-| Autotune | `autotune.py` | Power | slider/profile = ceiling, model min or user floor; 10 s window; GPU-bound → GPU floor, CPU-bound → boost + ceiling, then watts; on target → watts first |
+| Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames |
 | XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
@@ -51,6 +51,11 @@ The four-panel UI has not been on the device yet.
   floor should climb before the watts; in a CPU-heavy one (Dragon's Dogma 2 town), CPU boost / ceiling first. Open
   Advanced, change CPU boost, the CPU ceiling, both GPU clocks and the energy mode: each toast reads back, and
   Autotune shows "paused".
+- **Autotune v3 (§22):** in a game with XeSS frame generation (Cyberpunk 2077, Wuthering Waves), the status line must
+  say "rendered, 2x shown" (or 3x) and the fps must be the rendered rate; check `drive_c/igdext_xell.log` in the
+  game's prefix has `xellSleep stats` lines and stays small over 10 minutes (the shim also routes XeLL's own debug
+  messages there). In a game without frame generation: max at the set TDP, then lowering 1 W at a time, holding
+  within 5 %. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
 - **XeSS XMX default:** after Install XeSS XMX and one log-out, Per-game should say "XeSS on XMX (default)" for any
   game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
   driver"; the game's XeSS then runs as DP4a.

@@ -2,7 +2,7 @@
 
 A profile is a dict of overrides on top of a base profile name:
   {"base": "battery", "tdp": 22, "cpu_max_pct": 80, "gpu_min_mhz": 1200, "gpu_max_mhz": null,
-   "target_fps": 60, "autotune": true, "learned": {...}}
+   "autotune": true, "learned": {...}}
 Keys are Steam app ids as strings; "default" is the fallback. Two slots per game: "battery" and "plugged", so the
 right one follows the power source automatically. A third, game-wide key "launch" holds what goes into the game's
 environment (launchenv.py): XeSS XMX on/off, XeLL driver mode.
