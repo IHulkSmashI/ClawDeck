@@ -165,3 +165,27 @@ Wanted:
   ("Autotune on: 8–25 W, now 19 W, target 60 fps, last change −1 W 12 s ago"). Changing the slider while autotune
   runs re-clamps immediately.
 - Boost (PL2) stays derived as today (`_sppt_for`), no separate control.
+
+## 18. Autotune must say *what* is short and act on it (maintainer, 2026-10-22) — for Claude Code
+
+Autotune today only moves the TDP. It already classifies frames as CPU- or GPU-bound (`autotune.classify`:
+frame time vs GPU busy % from PowerStation / RAPL power). Use that:
+- **GPU-bound and below target** → raise the GPU floor (min_freq) before raising TDP; if at the ceiling, raise TDP.
+- **CPU-bound and below target** → make sure CPU boost (`no_turbo = 0`) is on and the CPU ceiling (`max_perf_pct`)
+  is 100 before raising TDP; log which one it changed.
+- **Above target with margin** → lower TDP first (battery); only lower the GPU floor / CPU ceiling if TDP is at
+  the floor.
+- Status line names the bottleneck and the last action: "GPU-bound · 52/60 fps · raised GPU floor to 1300 MHz".
+  Every learned per-game result keeps TDP, GPU floor, CPU ceiling and boost together.
+- Hysteresis as today; never more than one change per sampling window; all writes revertible.
+
+## 19. Advanced power controls, because Bazzite has none for this chip (maintainer, 2026-10-22) — for Claude Code
+
+Steam's Performance panel offers no CPU boost, CPU ceiling, GPU clock window or EPP on the Claw 8 EX
+(PowerStation: no TDP range; the GPU clock entries exist but Steam does not expose them for Intel), so put them
+back — but under an **"Advanced" expander** in the Power panel, off the main view:
+- CPU boost on/off (`intel_pstate/no_turbo`), CPU ceiling % (`max_perf_pct`), GPU floor/ceiling MHz
+  (`gt0/freq0/min_freq`/`max_freq`, from `rpn`..`rp0`), EPP (performance / balance_performance / balance_power /
+  power).
+- Each with the what/why/cost Hint and the read-back value; profiles may set them; autotune (§18) may move them.
+- The main view keeps only: profile, TDP slider (§17), autotune, read-back line.
