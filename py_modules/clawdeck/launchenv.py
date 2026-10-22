@@ -5,7 +5,8 @@ Every per-game choice that has to be in the game's environment lands here, compo
   inject   none | optiscaler | lsfg      -> injector.Injector.launch_env (WINEDLLOVERRIDES / LSFGVK_*)
   proxy, reframework                     -> the DLL name OptiScaler got and REFramework's dinput8, loaded native-first
   lsfg     {multiplier, flow_scale, performance_mode}
-  hdr      bool                          -> DXVK_HDR=1 (Proton games output HDR when Game Mode HDR is on)
+  xmx      bool (default on)             -> off: the stock Vulkan drivers for this game (xess.stock_env)
+  xell     bool                          -> on: XeLL driver mode through the fork's shim (xess.XELL_ENV)
   mesa     "" | "26.1" | "26.3"          -> MESA=<v>, xess-xmx-linux's per-game driver choice
 The plugin never edits Steam's launch options; the user adds the wrapper once per game and the file does the rest.
 An empty composition removes the file, so a game with nothing set runs exactly as without ClawDeck.
@@ -15,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 
+from . import xess
 from .injector import Injector
 
 KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -25,8 +27,10 @@ def compose(launch: dict) -> dict[str, str]:
     env: dict[str, str] = {}
     env.update(Injector.launch_env(launch.get("inject", "none"), launch.get("lsfg"), launch.get("proxy"),
                                    bool(launch.get("reframework"))))
-    if launch.get("hdr"):
-        env["DXVK_HDR"] = "1"
+    if launch.get("xmx") is False:
+        env.update(xess.stock_env())
+    if launch.get("xell"):
+        env.update(xess.XELL_ENV)
     mesa = launch.get("mesa") or ""
     if mesa:
         if mesa not in MESA_CHOICES:

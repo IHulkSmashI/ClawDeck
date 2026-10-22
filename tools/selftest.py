@@ -20,7 +20,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "py_modules"))
 
-from clawdeck import battery, buttons, hw, power, sysfs  # noqa: E402
+from clawdeck import buttons, hw, power, sysfs  # noqa: E402
 
 results: list[tuple[str, bool, str]] = []
 
@@ -112,8 +112,7 @@ def main() -> int:
     # ---- charge limit ------------------------------------------------------------------------------------------
     if p.charge_limit:
         orig = read_int(p.charge_limit)
-        b = battery.Battery(h)
-        ok = b.set_charge_limit(80)
+        ok = sysfs.write(p.charge_limit, 80, persist=True)       # the kernel's charge threshold (not in the UI)
         back = read_int(p.charge_limit)
         check("Charge limit write", ok and back == 80, f"asked 80 %, sysfs reads {back} %")
         # the charge limit is written with persist=True (no revert record), so restore it explicitly: the original

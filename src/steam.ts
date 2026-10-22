@@ -16,18 +16,6 @@ export const runningApp = (): RunningApp | null => {
   } catch { return null; }
 };
 
-/** Steam's own per-game compatibility tool setter (Steam stays the owner of config.vdf). */
-export const specifyCompatTool = (appid: string, toolName: string): boolean => {
-  try { SteamClient.Apps.SpecifyCompatTool(Number(appid), toolName); return true; } catch { return false; }
-};
-
-export const availableCompatTools = async (appid: string): Promise<{ name: string; display: string }[] | null> => {
-  try {
-    const list = await SteamClient.Apps.GetAvailableCompatTools(Number(appid));
-    return (list ?? []).map((t: any) => ({ name: t.strToolName, display: t.strDisplayName }));
-  } catch { return null; }
-};
-
 // ---- launch options (Steam's own setting; ClawDeck changes it only when the user taps the button) ---------------
 const WRAPPER_NAME = "clawdeck-launch.sh";
 
@@ -83,19 +71,3 @@ export const showLosslessInStore = (): boolean => {
   try { SteamClient.Apps.ShowStore(LOSSLESS_APPID); return true; } catch { return false; }
 };
 
-// ---- non-Steam shortcuts (Moonlight) ---------------------------------------------------------------------------
-/** Adds a non-Steam shortcut and names it; returns its app id, or null when Steam refuses. */
-export const addShortcut = async (name: string, exe: string, dir: string, launchOptions: string): Promise<number | null> => {
-  try {
-    const id: number = await SteamClient.Apps.AddShortcut(name, exe, dir, launchOptions);
-    if (!id) return null;
-    try { SteamClient.Apps.SetShortcutName(id, name); } catch { /* the exe name stays */ }
-    try { SteamClient.Apps.SetShortcutLaunchOptions(id, launchOptions); } catch { /* AddShortcut set them */ }
-    return id;
-  } catch { return null; }
-};
-
-export const shortcutExists = (appid: number | null | undefined): boolean => {
-  if (!appid) return false;
-  try { return !!appStore?.GetAppOverviewByAppID?.(appid); } catch { return false; }
-};
