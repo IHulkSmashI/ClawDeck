@@ -1,6 +1,5 @@
-"""Tests for the modules added after 0.1's core: HHD schema walking, controller, fans, display, launch environment,
-injector lsfg mode, sleep parsing, xess state, Proton listing, benchmark summary, downloads safety, power revert of
-HHD TDP, autotune pause, and the UI <-> backend wiring rule (every callable in src/api.ts exists in main.py)."""
+"""Tests: HHD schema walking, the launch environment, xess state and install, downloads safety, power revert of HHD
+TDP, autotune pause, and the UI <-> backend wiring rule (every callable in src/api.ts exists in main.py)."""
 import os
 import re
 import sys
@@ -11,7 +10,7 @@ import pytest
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.join(ROOT, "py_modules"))
 
-from clawdeck import (autotune, downloads, hhd, hw, injector, health,  # noqa: E402
+from clawdeck import (autotune, downloads, hhd, hw, health,  # noqa: E402
                       launchenv, power, profiles, sysfs, xess)
 
 
@@ -110,20 +109,19 @@ def test_hhd_set_values_dry_run_sends_nothing(monkeypatch):
     assert st["a.b"] == 2 and all(m == "GET" for m, _, _ in sent)
 
 
-# ---- launch environment / injector -----------------------------------------------------------------------------------
+# ---- launch environment -----------------------------------------------------------------------------------------------
 def test_launch_env_compose_and_write(tmp_path):
-    env = launchenv.compose({"inject": "lsfg", "lsfg": {"multiplier": 9, "flow_scale": 0.1}, "mesa": "26.1", "xell": True})
-    assert env == {"LSFGVK_ENV": "1", "LSFGVK_MULTIPLIER": "4", "LSFGVK_FLOW_SCALE": "0.25",
-                   "LSFGVK_PERFORMANCE_MODE": "1", "MESA": "26.1", **xess.XELL_ENV}
+    env = launchenv.compose({"mesa": "26.1", "xell": True})
+    assert env == {"MESA": "26.1", **xess.XELL_ENV}
     off = launchenv.compose({"xmx": False})
     assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
     assert launchenv.compose({"xmx": True, "xell": False}) == {}
-    r = launchenv.write(str(tmp_path), "1234", {"inject": "optiscaler"})
-    assert open(r["path"]).read().splitlines()[1] == "WINEDLLOVERRIDES=dxgi=n,b"
-    assert launchenv.write(str(tmp_path), "1234", {"inject": "none"})["path"] is None
+    r = launchenv.write(str(tmp_path), "1234", {"xell": True})
+    assert open(r["path"]).read().splitlines()[1] == "IGDEXT_TRACE=1"
+    assert launchenv.write(str(tmp_path), "1234", {"xell": False})["path"] is None
     assert not os.path.exists(os.path.join(tmp_path, "launch", "1234.env"))
     with pytest.raises(ValueError):
-        launchenv.write(str(tmp_path), "../x", {"hdr": True})
+        launchenv.write(str(tmp_path), "../x", {"xell": True})
     with pytest.raises(ValueError):
         launchenv.compose({"mesa": "1; rm -rf"})
 
@@ -131,39 +129,21 @@ def test_launch_env_compose_and_write(tmp_path):
 def test_launch_wrapper_reads_env_file(tmp_path):
     import subprocess
     (tmp_path / "launch").mkdir()
-    (tmp_path / "launch" / "42.env").write_text("# c\nWINEDLLOVERRIDES=dxgi=n,b\nDXVK_HDR=1\n")
+    (tmp_path / "launch" / "42.env").write_text("# c\nWINEDLLOVERRIDES=dxgi=n,b\nMESA=26.1\n")
     out = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], capture_output=True, text=True,
                          env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path),
                               "SteamAppId": "42", "WINEDLLOVERRIDES": "foo=n", "CLAWDECK_NO_MANGOHUD": "1"}).stdout
-    assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "DXVK_HDR=1" in out
+    assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "MESA=26.1" in out   # the user's own overrides are kept
 
 
 def test_profiles_launch_slot_and_export(tmp_path):
     p = profiles.Profiles(str(tmp_path / "p.json"))
-    p.set_launch("7", {"inject": "lsfg", "hdr": True})
-    p.set_launch("7", {"hdr": None})
-    assert p.get_launch("7") == {"inject": "lsfg"}
+    p.set_launch("7", {"mesa": "26.1", "xell": True})
+    p.set_launch("7", {"xell": None})
+    assert p.get_launch("7") == {"mesa": "26.1"}
     q = profiles.Profiles(str(tmp_path / "q.json"))
     q.import_json(p.export_json("7"))
-    assert q.get_launch("7") == {"inject": "lsfg"} and q.games() == ["7"]
-
-
-def test_lsfg_state(tmp_path):
-    assert not injector.lsfg_state(str(tmp_path))["ready"]
-    _w(tmp_path / ".local/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json", "{}")
-    _w(tmp_path / ".local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll", "x")
-    st = injector.lsfg_state(str(tmp_path))
-    assert st["ready"] and st["lossless_dll"].endswith("Lossless.dll")
-
-
-def test_steam_install_dir(tmp_path):
-    steam = tmp_path / ".local/share/Steam"
-    _w(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1"\n {{\n  "path"  "{tmp_path}/sd"\n }}\n}}')
-    _w(tmp_path / "sd/steamapps/appmanifest_2054970.acf", '"AppState"\n{\n\t"appid"\t\t"2054970"\n\t"installdir"\t\t"Dragons Dogma 2"\n}')
-    (tmp_path / "sd/steamapps/common/Dragons Dogma 2").mkdir(parents=True)
-    assert injector.steam_install_dir(str(tmp_path), "2054970") == f"{tmp_path}/sd/steamapps/common/Dragons Dogma 2"
-    assert injector.steam_install_dir(str(tmp_path), "1") is None
-    assert injector.steam_install_dir(str(tmp_path), "../x") is None
+    assert q.get_launch("7") == {"mesa": "26.1"} and q.games() == ["7"]
 
 
 # ---- xess ------------------------------------------------------------------------------------------------------------
@@ -205,16 +185,14 @@ def test_downloads_refuses_unpinned_and_unsafe(tmp_path):
     assert os.path.exists(os.path.join(downloads.extract(str(good), str(tmp_path / "o2")), "pkg/install.sh"))
     assert downloads.pick_asset({"assets": [{"name": "x.txt"}, {"name": "xess-xmx-linux-20261018.zip"}]},
                                 "xess-xmx-linux-*.zip")["name"] == "xess-xmx-linux-20261018.zip"
-    # real asset names seen 2026-10-21 match the globs in versions.json
+    # the real asset name seen 2026-10-21 matches the glob in versions.json
     v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
-    for key, name in (("optiscaler", "Optiscaler_0.9.4-final.20260718._MM.7z"), ("reframework", "REFramework.zip"),
-                      ("xess_xmx_linux", "xess-xmx-linux-20261018.zip")):
-        assert downloads.pick_asset({"assets": [{"name": "v1.zip"}, {"name": name}]}, v[key]["asset_glob"])["name"] == name
+    assert downloads.pick_asset({"assets": [{"name": "v1.zip"}, {"name": "xess-xmx-linux-20261018.zip"}]}, v["xess_xmx_linux"]["asset_glob"])["name"] == "xess-xmx-linux-20261018.zip"
 
 
 def test_versions_file_is_valid():
     v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
-    for k in ("optiscaler", "reframework", "optipatcher", "xess_xmx_linux"):
+    for k in ("xess_xmx_linux",):
         assert "repo" in v[k] and "asset_glob" in v[k]
 
 
@@ -420,7 +398,7 @@ def test_xess_state_knows_a_fork_build_and_game_xell(tmp_path):
 
 def test_health_summary_one_line():
     checks = [{"id": "a", "title": "A", "ok": True}, {"id": "b", "title": "XeSS XMX driver", "ok": False},
-              {"id": "c", "title": "lsfg", "ok": False, "optional": True}]
+              {"id": "c", "title": "optional thing", "ok": False, "optional": True}]
     s = health.summary(checks)
     assert s == {"ok": False, "total": 3, "problems": 1, "line": "1 to fix: XeSS XMX driver"}
     assert health.summary([checks[0]])["line"] == "All checks pass"

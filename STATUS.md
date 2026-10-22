@@ -10,7 +10,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 |---|---|---|---|
 | 1 | **XeSS XMX + XeLL** from the fork (PRs #23/#24) | done: fork-first install with upstream fallback and a note; Setup shows version, driver mode and source; Per-game shows XeSS on/off, XeLL driver / cross-vendor / off per launch | the fork has no release yet (below); a game with XeSS frame generation to confirm the XeLL log markers |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
-| 3 | **OptiScaler injection per game** | done: one switch + the hook status line; tier dropdown to step down | OptiScaler overlay (Insert) shows XeSS + XeFG in a DLSS/FSR game |
+| 3 | ~~OptiScaler injection per game~~ | dropped 2026-10-22: Bazzite ships Decky Framegen (OptiScaler) and decky-lsfg-vk in the Portal | nothing |
 | 4 | **Power + autotune** | done: profile dropdown + Autotune switch, read-back line, debounced | pick profiles fast: the toast and the line show the last pick only |
 
 ## Done (code, tests)
@@ -23,7 +23,6 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
 | Autotune | `autotune.py` | Power | profile = ceiling; 10 s window; CPU/GPU balance; `last_action` for the status line |
 | XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
-| OptiScaler / lsfg-vk per game | `injector.py`, `gamescan.py`, `compat.py`, `updates.py` | Per-game, Setup | ladder: native XeSS → OptiScaler → lsfg-vk; anti-cheat blocked; daily updates |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs or in dry run |
@@ -32,8 +31,9 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 
 Removed in the scope reset (2026-10-21): VRR on/off, refresh rate, HDR, display save, fan presets, GPU clock
 window, CPU ceiling, EPP, turbo, charge limit, sleep readouts, dock readouts, benchmark, Proton picker, streaming
-(Moonlight), profile import/export, the Controller and Battery pages. Their modules are gone too
-(`benchmark`, `controller`, `display`, `fans`, `proton`, `sleep`, `streaming`); `battery.py` keeps only `plugged()`.
+(Moonlight), profile import/export, the Controller and Battery pages, and (2026-10-22, Bazzite does them) OptiScaler
+and Lossless Scaling per game with their updater. Their modules are gone too (`benchmark`, `controller`, `display`,
+`fans`, `proton`, `sleep`, `streaming`, `injector`, `gamescan`, `compat`, `updates`); `battery.py` keeps `plugged()`.
 
 ## Tested on real hardware
 

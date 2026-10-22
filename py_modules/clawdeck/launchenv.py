@@ -17,7 +17,6 @@ import os
 import re
 
 from . import xess
-from .injector import Injector
 
 KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 MESA_CHOICES = ("", "26.1", "26.3")
@@ -25,8 +24,6 @@ MESA_CHOICES = ("", "26.1", "26.3")
 
 def compose(launch: dict) -> dict[str, str]:
     env: dict[str, str] = {}
-    env.update(Injector.launch_env(launch.get("inject", "none"), launch.get("lsfg"), launch.get("proxy"),
-                                   bool(launch.get("reframework"))))
     if launch.get("xmx") is False:
         env.update(xess.stock_env())
     if launch.get("xell"):

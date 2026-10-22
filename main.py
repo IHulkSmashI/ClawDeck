@@ -5,14 +5,13 @@ need it. Battery rule: nothing here runs on a timer unless autotune is on for a 
 task). Power-source changes and resume arrive as events from Steam (frontend listeners).
 
 Scope (2026-10-21 reset): only what Bazzite and Steam's Quick Access do not already do. Four panels: Power
-(profile + autotune), Per-game (XeSS XMX, XeLL, OptiScaler), Fixes (VRR range, face buttons, health), Setup
-(installs, self-test, dry run, log export).
+(profile + autotune), Per-game (XeSS XMX, XeLL), Fixes (VRR range, face buttons, health), Setup (the XeSS driver,
+self-test, dry run, log export). OptiScaler and Lossless Scaling per game are Bazzite's own Decky plugins.
 """
 import asyncio
 import glob
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -21,8 +20,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, buttons, changes, compat, downloads, edid, gamescan, health, hw,  # noqa: E402
-                      injector, launchenv, power, profiles, stack, sysfs, updates, userexec, xess)
+from clawdeck import (autotune, battery, buttons, changes, downloads, edid, health, hw, launchenv, power,  # noqa: E402
+                      profiles, stack, sysfs, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -62,9 +61,6 @@ class Plugin:
         self.power = power.Power(self.hw)
         self.battery = battery.Battery(self.hw)
         self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
-        self.injector = injector.Injector(os.path.join(RUNTIME_DIR, "assets"))
-        self.updates = updates.Updates(os.path.join(RUNTIME_DIR, "assets"), os.path.join(RUNTIME_DIR, "updates.json"))
-        self.compat = compat.Compat(os.path.join(RUNTIME_DIR, "cache"))
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)
@@ -72,7 +68,6 @@ class Plugin:
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         self.autotune.enabled = bool(self.settings.get("autotune"))
         self.running_appid: str | None = None
-        self._tasks: set[asyncio.Task] = set()
         self._health: tuple[float, list] | None = None
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self.running_plugged: bool | None = None
@@ -303,9 +298,6 @@ class Plugin:
         learned = self._save_learned(appid, plugged)
         self.running_appid, self.running_plugged = None, None
         n = self.power.revert_all()
-        task = asyncio.get_running_loop().create_task(self._after_game(appid))
-        self._tasks.add(task)                      # keep a reference so it isn't garbage-collected mid-way
-        task.add_done_callback(self._tasks.discard)
         return {"reverted": n, "learned": learned}
 
     async def power_source_changed(self, plugged: bool) -> dict:
@@ -343,7 +335,7 @@ class Plugin:
         return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),
                 "launch": self.profiles.get_launch(appid)}
 
-    # ---- per-game launch environment (injector, XeSS XMX, XeLL, Mesa) ----------------------------------------------
+    # ---- per-game launch environment (XeSS XMX, XeLL, Mesa) --------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:
         try:
             return launchenv.write(RUNTIME_DIR, appid, self.profiles.get_launch(appid))
@@ -359,7 +351,7 @@ class Plugin:
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
-        allowed = {"lsfg", "mesa", "xmx", "xell"}   # inject / proxy / reframework are set by injector_install
+        allowed = {"mesa", "xmx", "xell"}
         clean = {k: v for k, v in values.items() if k in allowed}
         try:   # a value the launch wrapper can't use must be refused here, not break get_launch later
             launchenv.compose({**self.profiles.get_launch(appid), **clean})
@@ -369,206 +361,10 @@ class Plugin:
         return {"ok": True, **(await self.get_launch(appid)), "file": self._write_launch(appid)}
 
     async def game_status(self, appid: str) -> dict:
-        """The Per-game panel in one call: the XeSS driver, what XeLL did in this game, and the injector's state."""
+        """The Per-game panel in one call: the XeSS driver and what XeLL did in this game's last launch."""
         launch = self.profiles.get_launch(appid)
-        xs, xl, st = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))),
-                                          self.injector_state(appid))
-        return {"launch": launch, "xess": xs, "xell": xl, "injector": st, "wrapper": WRAPPER + " %command%"}
-
-    # ---- XMX injector: OptiScaler / lsfg-vk per game, always the newest release -------------------------------------
-    def _xess_ok(self) -> bool:
-        return xess.state(HOME)["status"]["state"] == "ok"
-
-    def _game(self, appid: str) -> tuple[str | None, dict | None]:
-        game_dir = injector.steam_install_dir(HOME, appid)
-        if not game_dir:
-            return None, None
-        exe_dir = injector.find_game_exe_dir(game_dir)
-        return game_dir, gamescan.scan(game_dir, exe_dir)
-
-    async def injector_state(self, appid: str) -> dict:
-        return await self._bg(self._injector_state, appid)
-
-    def _injector_state(self, appid: str) -> dict:
-        game_dir = injector.steam_install_dir(HOME, appid)
-        st = self.injector.state(game_dir) if game_dir else {"dir": None, "mode": "none", "optiscaler_present": False,
-                                                               "native_xess": False, "info": None, "foreign_optiscaler": False}
-        st["assets"] = self.injector.assets_ready()
-        st["lsfg"] = injector.lsfg_state(HOME)
-        st["lsfg_version"] = self.settings.get("lsfg_version")
-        return st
-
-    async def injector_plan(self, appid: str, name: str = "") -> dict:
-        """Everything the Per-game panel needs to recommend one tier for this game, OptiClick-style: what the game
-        ships, what OptiScaler's community list and OptiPatcher know about it, and what is installed now."""
-        loop = asyncio.get_running_loop()
-        game_dir, scan = await loop.run_in_executor(None, self._game, appid)
-        if scan is None:
-            return {"found": False}
-        info = await loop.run_in_executor(None, self.compat.for_game, name, scan["exes"])
-        p = injector.plan(scan, info, self._xess_ok())
-        st = await self.injector_state(appid)
-        latest = await loop.run_in_executor(None, self.updates.check)
-        return {"found": True, "plan": p, "found_in_game": gamescan.summary(scan), "scan": scan,
-                "compat": {k: info[k] for k in ("listed", "optipatcher", "needs_reframework", "list_loaded")},
-                "state": st, "updates": latest}
-
-    async def injector_install(self, appid: str, mode: str, options: dict | None = None, lsfg: dict | None = None,
-                               name: str = "") -> dict:
-        """Set this game up with mode (optiscaler | lsfg | none). options override the plan (multiplier 2/3/4, fg).
-        Downloads the newest OptiScaler / OptiPatcher / REFramework first when upstream has a newer one."""
-        game_dir = injector.steam_install_dir(HOME, appid)
-        if not game_dir:
-            return {"error": "game folder not found in Steam's library (is it a Steam game, installed?)"}
-        loop = asyncio.get_running_loop()
-        try:
-            if mode == "optiscaler":
-                _, scan = await loop.run_in_executor(None, self._game, appid)
-                info = await loop.run_in_executor(None, self.compat.for_game, name, scan["exes"])
-                p = injector.plan(scan, info, self._xess_ok())
-                opts = {**p["options"], **{k: v for k, v in (options or {}).items() if k in ("multiplier", "fg")}}
-                if sysfs.dry_run():
-                    return {"mode": mode, "dry_run": True, "would": f"install the newest OptiScaler into {scan['exe_dir']} with {opts}"}
-                versions = {"optiscaler": (await loop.run_in_executor(None, self.updates.ensure, "optiscaler"))["version"]}
-                for comp in ("optipatcher", "reframework"):
-                    if opts.get(comp):
-                        try:
-                            versions[comp] = (await loop.run_in_executor(None, self.updates.ensure, comp))["version"]
-                        except Exception as e:    # the game still works without it; say so
-                            decky.logger.warning("%s download failed: %s", comp, e)
-                r = await loop.run_in_executor(None, self.injector.install_optiscaler, game_dir, opts, versions)
-                self._give_back(r)
-                self.profiles.set_launch(appid, {"inject": "optiscaler", "proxy": r["proxy"],
-                                                 "reframework": bool(r.get("reframework_version")), "lsfg": None})
-            elif mode == "lsfg":
-                ls = injector.lsfg_state(HOME)
-                if not ls["lossless_dll"]:
-                    return {"error": "Lossless Scaling is not installed. Install it from your Steam library first (you need to own it)."}
-                if not ls["layer"]:
-                    got = await self.lsfg_install()
-                    if not got.get("ok"):
-                        return {"error": got.get("error", "lsfg-vk could not be installed")}
-                if (await self._bg(self.injector.state, game_dir))["optiscaler_present"]:
-                    await self._bg(self.injector.uninstall, game_dir)
-                self.profiles.set_launch(appid, {"inject": "lsfg", "proxy": None, "reframework": None,
-                                                 "lsfg": {**injector.LSFG_DEFAULTS, **(lsfg or {})}})
-                r = {"mode": "lsfg"}
-            elif mode == "none":
-                r = await self._bg(self.injector.uninstall, game_dir)
-                self.profiles.set_launch(appid, {"inject": "none", "proxy": None, "reframework": None, "lsfg": None})
-            else:
-                return {"error": f"unknown mode {mode}"}
-        except Exception as e:   # network, archive, permissions: report, never crash the backend
-            return {"error": f"{type(e).__name__}: {e}"}
-        self._write_launch(appid)
-        return r
-
-    def _give_back(self, info: dict) -> None:
-        """The backend runs as root; files it adds to a game folder must belong to the user, or Steam can no longer
-        update or verify the game."""
-        exe_dir = os.path.dirname(info["copied"][0]) if info.get("copied") else None
-        for p in info.get("copied", []) + info.get("created_dirs", []):
-            userexec.chown_tree(p, HOME)
-        for p in info.get("backed_up", []):
-            userexec.chown_tree(p + injector.BACKUP_SUFFIX, HOME)
-        if exe_dir:
-            for f in ("OptiScaler.ini", injector.MARKER):
-                userexec.chown_tree(os.path.join(exe_dir, f), HOME)
-
-    async def optiscaler_download(self) -> dict:
-        """Setup → Install OptiScaler: the newest release (and OptiPatcher, REFramework) into ClawDeck's assets, so a
-        game's first setup needs no download. Per game it goes in through injector_install."""
-        if sysfs.dry_run():
-            return {"ok": True, "dry_run": True, "would": "download the newest OptiScaler, OptiPatcher and REFramework into ClawDeck's assets"}
-        got, errors = {}, []
-        for comp in ("optiscaler", "optipatcher", "reframework"):
-            try:
-                got[comp] = (await self._bg(self.updates.ensure, comp))["version"]
-            except Exception as e:
-                errors.append(f"{comp}: {type(e).__name__}: {e}")
-        ok = "optiscaler" in got
-        return {"ok": ok, "versions": got, "error": None if ok and not errors else " · ".join(errors)}
-
-    async def lsfg_install(self) -> dict:
-        """Install or update lsfg-vk v2 (newest build). On Bazzite through its own `ujust get-lsfg install`, elsewhere
-        the same download ClawDeck unpacks into ~/.local itself."""
-        if sysfs.dry_run():
-            return {"ok": True, "dry_run": True, "would": "install the newest lsfg-vk into ~/.local"}
-        loop = asyncio.get_running_loop()
-        try:
-            latest = ((await loop.run_in_executor(None, self.updates.check)).get("lsfg") or {}).get("latest")
-            if shutil.which("ujust"):
-                r = await loop.run_in_executor(None, lambda: userexec.run(["ujust", "get-lsfg", "install"], HOME, timeout=300))
-                ok = r["rc"] == 0
-            else:
-                got = await loop.run_in_executor(None, self.updates.ensure, "lsfg")
-                await loop.run_in_executor(None, injector.install_lsfg_layer, got["dir"], HOME)
-                userexec.chown_tree(os.path.join(HOME, ".local", "lib"), HOME)
-                userexec.chown_tree(os.path.join(HOME, ".local", "share", "vulkan"), HOME)
-                ok, r = True, {"out": ""}
-        except Exception as e:
-            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
-        if ok:
-            self.settings["lsfg_version"] = latest
-            self._save_settings()
-        return {"ok": ok, "version": latest, "log": r.get("out", "")[-1500:]}
-
-    async def get_updates(self, force: bool = False) -> dict:
-        loop = asyncio.get_running_loop()
-        st = await loop.run_in_executor(None, self.updates.check, bool(force))
-        lat = (st.get("lsfg") or {}).get("latest")
-        st["lsfg"] = {"installed": self.settings.get("lsfg_version"), "latest": lat,
-                      "update": bool(lat) and bool(self.settings.get("lsfg_version")) and lat != self.settings.get("lsfg_version")}
-        st["auto"] = self.settings.get("auto_update", True)
-        return st
-
-    async def _refresh_all(self) -> None:
-        """Refresh every set-up game; one game that fails (moved, read-only) never stops the others."""
-        for appid in self.profiles.games():
-            if self.running_appid is not None:
-                return
-            try:
-                await self._refresh_game(appid)
-            except Exception as e:
-                decky.logger.warning("refreshing game %s failed: %s", appid, e)
-
-    async def _refresh_game(self, appid: str) -> dict | None:
-        """A game set up with an older OptiScaler / REFramework / OptiPatcher than the one downloaded: reinstall it
-        with the same options. Only called when no game is running."""
-        game_dir = injector.steam_install_dir(HOME, appid)
-        if not game_dir:
-            return None
-        info = await self._bg(lambda: self.injector.marker(injector.find_game_exe_dir(game_dir)))
-        if not info or info.get("mode") != "optiscaler":
-            return None
-        have = {"optiscaler": self.updates.installed("optiscaler"), "reframework": self.updates.installed("reframework"),
-                "optipatcher": self.updates.installed("optipatcher")}
-        if not have["optiscaler"]:          # nothing downloaded to refresh with (cleared cache, failed download)
-            return None
-        stale = info.get("version") != have["optiscaler"] or \
-            (info.get("reframework_version") and info["reframework_version"] != have["reframework"]) or \
-            (info.get("optipatcher_version") and info["optipatcher_version"] != have["optipatcher"])
-        if not stale or sysfs.dry_run() or self.running_appid is not None:   # never while a game runs
-            return None
-        loop = asyncio.get_running_loop()
-        r = await loop.run_in_executor(None, self.injector.install_optiscaler, game_dir, info.get("options") or {}, have)
-        self._give_back(r)
-        decky.logger.info("game %s: OptiScaler refreshed to %s", appid, have["optiscaler"])
-        return r
-
-    async def _after_game(self, appid: str) -> None:
-        """When a game closes: fetch newer releases if there are any (at most one check a day) and refresh this game."""
-        if not self.settings.get("auto_update", True):
-            return
-        try:
-            st = await asyncio.get_running_loop().run_in_executor(None, self.updates.check)
-            for comp in ("optiscaler", "optipatcher", "reframework"):
-                if st[comp]["update"] and self.updates.installed(comp):
-                    await asyncio.get_running_loop().run_in_executor(None, self.updates.ensure, comp)
-            if self.running_appid is None:
-                await self._refresh_game(appid)
-        except Exception as e:
-            decky.logger.warning("auto update after %s failed: %s", appid, e)
+        xs, xl = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))))
+        return {"launch": launch, "xess": xs, "xell": xl, "wrapper": WRAPPER + " %command%"}
 
     # ---- what changed since last start --------------------------------------------------------------------------
     async def get_changes(self) -> dict:

@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="docs/screenshots/quick.png" alt="ClawDeck in the Quick Access menu" width="24%">
-  <img src="docs/screenshots/game.png" alt="Per-game: XeSS on XMX, XeLL, OptiScaler" width="72%">
+  <img src="docs/screenshots/game.png" alt="Per-game: XeSS on XMX and XeLL" width="72%">
 </p>
 <p align="center">
   <img src="docs/screenshots/power.png" alt="Power: profile and Autotune" width="48%">
@@ -43,14 +43,16 @@ Quick Access do **not** already do:
   judder. One tap installs ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
 - **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode. One tap
   gives InputPlumber the right map for the EX: left = Steam menu, right = Quick Access.
-- **OptiScaler per game.** For games that only ship DLSS or FSR: one switch sets up the newest OptiScaler so the game
-  uses XeSS on the XMX cores plus XeSS frame generation. Lossless Scaling (lsfg-vk) is the last resort for games
-  with nothing else; it runs on the regular shader cores.
 - **Power profiles and Autotune.** Battery 12 W, Balanced 17 W, Performance 25 W, Dock 35 W, set directly through
   the chip's own limit (Steam's slider may do nothing on the Claw 8 EX), with the value read back after every
   change. Autotune holds your target fps with the least power under that profile and balances CPU and graphics.
 - **Every change reads back.** Each control shows what the hardware reports after the write; a failed write is red
   text with the reason, never a silent "applied".
+
+**What Bazzite already does, so ClawDeck doesn't:** refresh rate, VRR on/off, HDR and the frame limit (Steam's
+Performance panel); the MSI buttons, gyro and back buttons (InputPlumber); fan curves (the firmware); OptiScaler per
+game (Decky Framegen, in the Bazzite Portal) and Lossless Scaling (decky-lsfg-vk). Use those; ClawDeck only adds
+what is missing.
 
 Made for the **MSI Claw 8 EX AI+**. It should also work on the Claw 8 AI+, 7 AI+, A1M and A8 (see
 [the questions](#questions) for what differs).
@@ -89,12 +91,12 @@ number; ClawDeck doesn't add a second limiter.
 ### Per-game (the running game)
 | Control | What it does |
 |---|---|
-| **Tier** | Which rung of the ladder runs: *Native XeSS + XeLL* (the game ships XeSS, nothing injected), *OptiScaler → XMX* (DLSS/FSR turned into XeSS), *Lossless Scaling* (no upscaler at all; shader cores), or *Off*. The best tier for this game is recommended with the reason. |
 | **XeSS on XMX** | The patched driver runs this game's XeSS on the XMX cores. Off = the stock driver for this game only. |
 | **XeLL driver mode** | Intel's latency reduction gets real GPU timings from the shim instead of pacing blind. Needs the fork build of the driver; the line under it says whether XeLL ran in driver mode, cross-vendor mode, or not at all in the last launch. |
-| **OptiScaler injection** | On: the newest OptiScaler (plus OptiPatcher and REFramework when the game needs them) goes next to the game's exe. The line under it says whether the hook is active and which version. Off: the game's own files come back. Anti-cheat games are left alone. |
-| **Use for this game** | Step down a tier if one misbehaves. |
-| **Add to launch options** | Once per game: Autotune, XeSS XMX on/off, XeLL and OptiScaler all reach the game through ClawDeck's launch wrapper. Your own launch options are kept. |
+| **Add to launch options** | Once per game: Autotune, XeSS XMX on/off and XeLL reach the game through ClawDeck's launch wrapper. Your own launch options are kept. |
+
+A game that only ships DLSS or FSR: set it up with Bazzite's **Decky Framegen** (OptiScaler) and it uses XeSS, which
+the driver above then runs on the XMX cores. A game with no upscaler at all: Bazzite's **decky-lsfg-vk**.
 
 ### Fixes
 | Control | What it does |
@@ -107,7 +109,6 @@ number; ClawDeck doesn't add a second limiter.
 | Control | What it does |
 |---|---|
 | **Install XeSS XMX** | Downloads the driver (the fork's release when it has one; otherwise upstream's, and it says so) and runs its installer as you, never as root. Log out and in once after. |
-| **Install OptiScaler** | Fetches the newest OptiScaler, OptiPatcher and REFramework so a game's first setup takes no time. |
 | **Run self-test** | Writes each control, reads it back, measures it and reverts (`tools/selftest.py`); shows PASS/FAIL per control. |
 | **Dry run** | ClawDeck only logs what it would change. |
 | **Export log** | One file on the Desktop for a bug report. |
@@ -155,23 +156,15 @@ frame limit) stays there.
 **What are the XMX cores, and which games use them?** They are the AI units in the Claw's Arc graphics. XeSS
 upscaling and XeSS frame generation run on them, so games look sharper and run faster for the same battery. Games
 that ship XeSS use them once the XeSS driver is installed (Setup). Games that only ship DLSS or FSR use them
-through OptiScaler, which ClawDeck sets up for you (Per-game).
+through OptiScaler, which Bazzite's Decky Framegen plugin sets up.
 
 **What is XeLL, and why a fork?** XeLL is Intel's latency reduction, used with XeSS frame generation. Under Proton
 it runs in a cross-vendor mode that paces blind; its driver mode needs the graphics driver to hand it GPU timings.
 Our fork of xess-xmx-linux adds that (pull requests #23 and #24 upstream). Until the fork publishes a release,
 ClawDeck installs upstream's driver and the XeLL switch says so.
 
-**Do I have to buy Lossless Scaling?** Only for the Lossless Scaling option, which is for games with no DLSS, FSR or
-XeSS at all. lsfg-vk is free, but it uses the frame generation from your own copy of Lossless Scaling on Steam. It
-runs on the regular shader cores rather than the XMX cores. OptiScaler and XeSS need nothing extra.
-
-**Can OptiScaler get me banned online?** It can in games with anti-cheat, because it changes game files. That's why
-ClawDeck won't set it up in those games. Many online games run fine on Linux; the ones with kernel-level anti-cheat
-don't run at all. [Are We Anti-Cheat Yet?](https://areweanticheatyet.com) lists which is which.
-
-**Bazzite also offers OptiScaler and Lossless Scaling plugins. Which should I use?** Either one, but only one per
-game. ClawDeck spots the others and won't overwrite a game they've set up.
+**Where is OptiScaler / Lossless Scaling?** In Bazzite: Decky Framegen and decky-lsfg-vk, both in the Bazzite
+Portal. ClawDeck doesn't duplicate them; the XMX driver makes their XeSS output run on the XMX cores.
 
 **What happens when Bazzite updates?** ClawDeck notices a new kernel, graphics driver or controller service the next
 time it starts, runs its health check again, and tells you either "all checks still pass" or what needs a look.
@@ -195,9 +188,8 @@ for the MSI Claw on Bazzite.
 ## Thanks
 
 ClawDeck stands on the work of xess-xmx-linux, ClawLab, InputPlumber, PowerStation, Handheld Daemon,
-PowerControl, SimpleDeckyTDP, OptiScaler, OptiPatcher, REFramework, lsfg-vk and Lossless Scaling, MangoHud, Decky
-Loader and Bazzite. The per-game OptiScaler setup follows OptiClick's
-approach, and the feature set takes after ClawTweaks on Windows. The full list is in [CREDITS.md](CREDITS.md).
+PowerControl, SimpleDeckyTDP, MangoHud, Decky Loader and Bazzite. The feature set takes after ClawTweaks on Windows.
+The full list is in [CREDITS.md](CREDITS.md).
 
 ## Support
 
