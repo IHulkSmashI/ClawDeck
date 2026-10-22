@@ -112,6 +112,10 @@ frame-generation multiplier. No XeLL line = no XeSS frame generation, and MangoH
    watts drop);
 4. **hold**: below the line twice → +1 W; a sustained ±15 % shift, a frame-generation multiplier change or 5 min →
    measure again.
+PL1 window (§22.2): RAPL averages PL1 over tau (56 s on the EX), so for most of a minute after a change the package
+can still boost and a 10 s window would judge the boost. While learning (any phase but hold, or fewer than 3 quiet
+windows in hold) autotune sets tau to 8 s; once settled the firmware's tau comes back so play keeps its bursts.
+Paused → firmware's tau; every write revertible.
 The floor is the model minimum (8 W) or the user's. Saved per game and power source: TDP, CPU ceiling, GPU floor,
 boost, `max_fps` and the ceiling it was measured at (a different set TDP is measured again). Frames per watt is
 shown, never chased: it keeps improving down to the minimum TDP. A manual change (Advanced) pauses it; picking a

@@ -579,3 +579,94 @@ def test_guard_steps_a_plain_held_tdp_to_the_users_floor_only_while_thermald_is_
         return out
     assert asyncio.run(run()) == [None, 15, 13, 12, None]                # 2 W per check, never below the user's 12 W
     assert held["w"] == 12 and p.guard.status()["line"] == "thermal: stepped to 12 W"
+
+
+# ---- PL1 time window while autotune learns (findings §22.2) ---------------------------------------------------------
+TAU_FW = 55_970_000          # what the Claw 8 EX's firmware sets: 55.97 s
+
+
+def _with_tau(fake_hw, tmp_path):
+    t = tmp_path / "powercap/intel-rapl-mmio:0/constraint_0_time_window_us"
+    _w(t, TAU_FW)
+    fake_hw.paths.rapl_pl1_window = str(t)
+    return str(t)
+
+
+def test_pl1_window_is_found_next_to_pl1(tmp_path, monkeypatch):
+    d = tmp_path / "intel-rapl-mmio:0"
+    for n, v in (("name", "package-0"), ("constraint_0_name", "long_term"), ("constraint_0_power_limit_uw", 17000000),
+                 ("constraint_0_time_window_us", TAU_FW), ("constraint_1_name", "short_term"),
+                 ("constraint_1_power_limit_uw", 24000000), ("energy_uj", 1)):
+        _w(d / n, v)
+    real_glob = hw.glob.glob
+    monkeypatch.setattr(hw.glob, "glob", lambda pat: [str(d)] if pat == "/sys/class/powercap/intel-rapl-mmio:[0-9]" else
+                        ([] if pat.startswith("/sys/") else real_glob(pat)))
+    p = hw.discover_paths()
+    assert p.rapl_pl1_window == str(d / "constraint_0_time_window_us") and p.rapl_pl1 == str(d / "constraint_0_power_limit_uw")
+
+
+def test_pl1_window_set_restore_and_revert(fake_hw, tmp_path):
+    t = _with_tau(fake_hw, tmp_path)
+    pw = power.Power(fake_hw)
+    assert pw.set_pl1_window(8_000_000) and sysfs.read_int(t) == 8_000_000
+    assert pw.restore_pl1_window() and sysfs.read_int(t) == TAU_FW
+    assert pw.set_pl1_window(8_000_000)
+    pw.revert_all()
+    assert sysfs.read_int(t) == TAU_FW                               # a revert (game closed, unload) restores it too
+    pw.apply_profile("battery", plugged=False)
+    assert sysfs.read_int(t) == TAU_FW                               # profile writes outside autotune leave it alone
+
+
+def test_autotune_learns_on_an_8s_window_and_gives_the_firmwares_back_once_settled(fake_hw, monkeypatch, tmp_path):
+    t = _with_tau(fake_hw, tmp_path)
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp))
+    at._step()                                                       # first window, measuring
+    assert sysfs.read_int(t) == 8_000_000 and s.short_tau and at.status()["learning"]
+    steps = 0
+    while s.phase != "hold" and steps < 40:
+        at._step(); steps += 1
+        assert sysfs.read_int(t) == 8_000_000                        # every learning window on sustained power
+    assert s.phase == "hold"
+    for _ in range(autotune.SETTLED_WINDOWS):
+        at._step()
+    assert sysfs.read_int(t) == TAU_FW and not s.short_tau           # learned: the 56 s boost window is back
+    assert not at.status()["learning"] and at.status()["pl1_window_s"] == 56.0
+    at._remeasure(s, "routine check")                                # learning again: short at once
+    assert sysfs.read_int(t) == 8_000_000
+    at.stop()                                                        # game closed: everything reverts
+    assert sysfs.read_int(t) == TAU_FW
+
+
+def test_autotune_gives_the_window_back_when_paused_and_stops_asking_if_refused(fake_hw, monkeypatch, tmp_path):
+    t = _with_tau(fake_hw, tmp_path)
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda *_: 50.0)
+    at._step()
+    assert sysfs.read_int(t) == 8_000_000
+    at.pause("CPU ceiling by hand")
+    at._step()
+    assert sysfs.read_int(t) == TAU_FW and not s.short_tau           # the user has the controls
+    at.session = None
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda *_: 50.0)
+    tries = []
+    monkeypatch.setattr(at.power, "set_pl1_window", lambda us: tries.append(us) or False)
+    for _ in range(5):
+        at._step()
+    assert tries == [8_000_000] and s.tau_refused and sysfs.read_int(t) == TAU_FW
+    at.session = None
+
+
+def test_a_saved_result_starts_settled_with_the_firmwares_window(fake_hw, monkeypatch, tmp_path):
+    t = _with_tau(fake_hw, tmp_path)
+    pw = power.Power(fake_hw)
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
+    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    at.start("1", {"tdp": 17, "ceiling": 20, "max_fps": 60}, 8, 20)
+    assert at.session.phase == "hold" and sysfs.read_int(t) == TAU_FW
+    at.start("2", None, 8, 20)
+    assert at.session.phase == "measure" and sysfs.read_int(t) == 8_000_000
+    at.stop()
+    assert sysfs.read_int(t) == TAU_FW
