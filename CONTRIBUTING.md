@@ -36,7 +36,7 @@ Tools in `tools/`:
 
 | Tool | What it's for |
 |---|---|
-| `clawdeck-launch.sh` | The per-game launch wrapper (MangoHud frame times for autotune, injector and HDR environment). |
+| `clawdeck-launch.sh` | The per-game launch wrapper (MangoHud frame times for autotune, XeSS XMX / XeLL environment). |
 | `sysfs-survey.sh` | Read-only survey of a new machine: what the kernel exposes, which services run. |
 | `power-profile.sh` | Battery / performance / dock profiles from a terminal, without the plugin (`--dry-run`). |
 | `suspend-cycle.sh` | Sleep soak: N suspend/resume cycles with deep-idle time per cycle. |
@@ -49,17 +49,14 @@ Tools in `tools/`:
 
 ClawDeck depends on a lot of other people's projects, and each one can change under it. Three things keep it working:
 
-1. **For users, at runtime** (`py_modules/clawdeck/updates.py`): OptiScaler, OptiPatcher, REFramework and lsfg-vk
-   always come from their newest release, checked at most once a day, downloaded over HTTPS from the project's own
-   releases and verified against its checksum file when it publishes one (a checksum file that exists but can't be
-   read stops the install), with the previous version kept. Games are refreshed only after they close.
-   The xess-xmx-linux driver is the exception: it is pinned in `assets/versions.json` and bumped after testing, and
-   it comes from our fork (`use_fork`) while the XeLL driver-mode PRs wait upstream; with no fork release yet, the
-   installer falls back to upstream's and says so in the Setup panel.
+1. **For users, at runtime** (`py_modules/clawdeck/downloads.py`, `xess.py`): the xess-xmx-linux driver is pinned in
+   `assets/versions.json` and bumped after testing. It comes from our fork (`use_fork`) while the XeLL driver-mode
+   PRs wait upstream; with no fork release yet, the installer falls back to upstream's and says so in Setup.
+   Downloads go over HTTPS from the project's own releases, with a checksum check where one is published.
 2. **Every day, on GitHub** (`.github/workflows/upstream-watch.yml` → `tools/upstream_watch.py`): the newest version
    of every upstream is compared with `assets/upstream.lock.json` (what was last tested), and ClawDeck's own parsers
-   run against live upstream data (OptiScaler's compatibility list, OptiPatcher's list, the lsfg-vk builds page,
-   Handheld Daemon's keys, Bazzite's Claw handling, gamescope-session's variables, release assets and checksums).
+   run against live upstream data (the xess-xmx-linux release asset, InputPlumber's Claw 8 EX map, ClawLab's panel
+   list, Handheld Daemon's keys, Bazzite's Claw handling).
    Anything new or broken opens the "Upstream watch" issue; a broken canary also turns the run red.
 3. **On every system update, on the Claw** (`py_modules/clawdeck/changes.py`): a new kernel, Mesa, controller
    service, XeSS driver state or Decky version re-runs the health check and tells the user what changed.

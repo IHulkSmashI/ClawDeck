@@ -2,24 +2,23 @@ import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/u
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, getSetting, getUpdates, optiscalerDownload, selfTest, setDryRun, setSetting, xessInstall, xessState, Hardware, SelfTest, Updates, XessState } from "../api";
+import { collectLogs, getHardware, getSetting, selfTest, setDryRun, setSetting, xessInstall, xessState, Hardware, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status } from "../components/Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
-/** Installs (XeSS XMX from the fork, OptiScaler), the self-test, Dry run and the log export. */
+/** The XeSS XMX driver install, the self-test, Dry run and the log export. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [hw, setHw] = useState<Hardware | null>(null);
   const [x, setX] = useState<XessState | null>(null);
-  const [u, setU] = useState<Updates | null>(null);
   const [dry, setDry] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [test, setTest] = useState<SelfTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const refresh = async () => {
-    const [h, xs, d, up] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), getSetting("dry_run"), getUpdates(false)]);
-    setHw(h); setX(xs); setDry(!!d); setU(up);
+    const [h, xs, d] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), getSetting("dry_run")]);
+    setHw(h); setX(xs); setDry(!!d);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -48,20 +47,6 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         )}
         {noXmx && <Note>No XMX cores on the {hw?.model.name}: games use XeSS on the regular graphics cores.</Note>}
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <Status ok={u?.optiscaler?.installed ? true : null} label={u?.optiscaler?.installed ? `OptiScaler ${u.optiscaler.installed} downloaded${u.optiscaler.update ? ` (${u.optiscaler.latest} is out)` : ""}` : "OptiScaler: not downloaded yet"}
-          detail={quick ? undefined : "Per game it goes in from the Per-game panel; this only fetches the newest release so that takes no time."} />
-        <ButtonItem layout="below" disabled={!!busy} onClick={async () => {
-          setBusy("opti");
-          try {
-            const r = await optiscalerDownload();
-            toast(r.ok ? (r.would ?? `OptiScaler ${r.versions?.optiscaler ?? ""} ready${r.error ? ` (${r.error})` : ""}`) : `OptiScaler: not downloaded (${r.error})`);
-            setErr(r.ok ? null : r.error);
-          } finally { setBusy(null); refresh(); }
-        }} description={quick ? undefined : explain("The newest OptiScaler, OptiPatcher and REFramework from their releases, checked against a published checksum where there is one.")}>
-          {busy === "opti" ? "Downloading…" : u?.optiscaler?.installed ? "Update OptiScaler" : "Install OptiScaler"}
-        </ButtonItem>
       </PanelSectionRow>
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={!!busy} onClick={async () => {

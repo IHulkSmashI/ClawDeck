@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import buttons, hhd, hw, injector, stack, sysfs, xess
+from . import buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -102,12 +102,6 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and xs["state"] == "ok",
                 "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),
                 "fix": None if xs["installed"] else "install_xess"})
-    ls = injector.lsfg_state(home)
-    out.append({"id": "lsfg", "title": "Lossless Scaling frame generation (optional)", "ok": ls["ready"],
-                "detail": "lsfg-vk and Lossless Scaling are installed" if ls["ready"] else
-                          ("needs your own copy of Lossless Scaling from Steam" if not ls["lossless_dll"] else
-                           "lsfg-vk is not installed yet: All settings → Graphics installs it"),
-                "fix": None, "optional": True})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
     others = stack.other_plugins(home)

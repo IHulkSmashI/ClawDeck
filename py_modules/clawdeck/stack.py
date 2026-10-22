@@ -45,11 +45,10 @@ def detect() -> dict:
     }
 
 
-# Decky plugins that do one of ClawDeck's jobs. Two power plugins, or two injectors in one game, fight each other,
-# so ClawDeck names them and steps aside instead of silently overwriting their work.
+# Decky plugins that do one of ClawDeck's jobs. Two power plugins fight each other, so ClawDeck names them and steps
+# aside instead of silently overwriting their work. (OptiScaler and Lossless Scaling per game are Bazzite's own
+# Decky Framegen and decky-lsfg-vk plugins; ClawDeck no longer does that job.)
 OTHER_PLUGINS = {
-    "Decky-Framegen": ("injector", "OptiScaler (Bazzite's Decky Framegen)"),
-    "decky-lsfg-vk": ("injector", "Lossless Scaling (Bazzite's decky-lsfg-vk)"),
     "PowerControl": ("power", "PowerControl"),
     "SimpleDeckyTDP": ("power", "SimpleDeckyTDP"),
     "PowerTools": ("power", "PowerTools"),
@@ -57,7 +56,7 @@ OTHER_PLUGINS = {
 
 
 def other_plugins(home: str) -> dict:
-    found: dict[str, list[str]] = {"injector": [], "power": []}
+    found: dict[str, list[str]] = {"power": []}
     base = os.path.join(home, "homebrew", "plugins")
     try:
         names = os.listdir(base)

@@ -2,14 +2,14 @@
 # clawdeck-launch.sh - per-game launch wrapper. Steam launch options:   /path/to/clawdeck-launch.sh %command%
 # Exports what the running game needs from ClawDeck without the plugin touching Steam's launch options itself:
 #   - MangoHud frame-time log for autotune (1 s interval, CSV into ClawDeck's runtime folder)
-#   - the injector's environment for the mode chosen for this game (WINEDLLOVERRIDES for OptiScaler)
+#   - the per-game environment the plugin saved (XeSS XMX off, XeLL driver mode, MESA=)
 # Env: CLAWDECK_NO_MANGOHUD=1 skips the overlay/log; CLAWDECK_RUNTIME overrides the runtime folder.
 set -u
 RUNTIME="${CLAWDECK_RUNTIME:-$HOME/homebrew/data/ClawDeck}"
 LOGDIR="$RUNTIME/mangohud"
 mkdir -p "$LOGDIR" 2>/dev/null
 appid="${SteamAppId:-${SteamGameId:-0}}"
-# per-game injector mode saved by the plugin (plain file: <runtime>/launch/<appid>.env, KEY=VALUE lines)
+# per-game settings saved by the plugin (plain file: <runtime>/launch/<appid>.env, KEY=VALUE lines)
 envfile="$RUNTIME/launch/$appid.env"
 if [ -f "$envfile" ]; then
   while IFS='=' read -r k v; do

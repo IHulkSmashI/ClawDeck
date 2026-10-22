@@ -7,12 +7,11 @@
 
 Two kinds of checks:
   versions  the newest release / commit of each upstream, compared with assets/upstream.lock.json (the versions last
-            tested with ClawDeck). New ones are listed so they get tested; ClawDeck's runtime updater already
-            fetches OptiScaler, OptiPatcher, REFramework and lsfg-vk for users.
-  canaries  the formats ClawDeck reads from upstream, read live with ClawDeck's own parsers: OptiScaler's
-            compatibility list, OptiPatcher's executable list, the lsfg-vk builds page, Handheld Daemon's MSI keys,
-            Bazzite's Claw hardware handling, ClawLab's panel list. A failed canary means a ClawDeck parser needs
-            fixing before users notice.
+            tested with ClawDeck). New ones are listed so they get tested.
+  canaries  the formats ClawDeck reads from upstream, read live: the xess-xmx-linux release asset, Handheld Daemon's
+            MSI keys, Bazzite's Claw hardware handling, ClawLab's panel list, InputPlumber's Claw 8 EX map (the
+            face-button fix is needed only while it is still `claw2`). A failed canary means a ClawDeck parser
+            needs fixing before users notice.
 Only the standard library; GITHUB_TOKEN (set in CI) raises the API limit.
 """
 from __future__ import annotations
@@ -25,17 +24,12 @@ import urllib.request
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, os.path.join(ROOT, "py_modules"))
-from clawdeck import compat, updates  # noqa: E402
 
 LOCK = os.path.join(ROOT, "assets", "upstream.lock.json")
 ISSUE_TITLE = "Upstream watch: new versions to test"
 
-# name -> (kind, source, credit/why). kind: release | prerelease | commit | npm | page
+# name -> (kind, source, credit/why). kind: release | prerelease | commit | npm
 UPSTREAMS = {
-    "OptiScaler": ("release", "optiscaler/OptiScaler", "XeSS for DLSS/FSR games (auto-updated for users)"),
-    "OptiPatcher": ("release:rolling", "optiscaler/OptiPatcher", "DLSS inputs without spoofing (auto-updated)"),
-    "REFramework": ("release", "praydog/reframework-nightly", "RE Engine games (auto-updated)"),
-    "lsfg-vk": ("page", "https://builds.lsfg-vk.dev/", "Lossless Scaling frame generation (auto-updated)"),
     "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                               "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
@@ -76,9 +70,6 @@ def version_of(kind: str, src: str) -> str:
         return _json(f"https://api.github.com/repos/{src}/commits?per_page=1")[0]["sha"][:12]
     if kind == "npm":
         return _json(f"https://registry.npmjs.org/{src}/latest")["version"]
-    if kind == "page":
-        found = updates.lsfg_latest(_get(src, "text/html").decode("utf-8", "replace"), src)
-        return found[0] if found else "?"
     raise ValueError(kind)
 
 
@@ -96,29 +87,18 @@ def canaries() -> list[tuple[str, bool, str]]:
             ok, detail = False, f"error: {e}"
         out.append((name, ok, detail))
 
-    def wiki():
-        rows = compat.parse_wiki(_get(compat.WIKI, "text/plain").decode("utf-8", "replace"))
-        cp = compat.lookup(rows, "Cyberpunk 2077")
-        return len(rows) > 400 and cp is not None and cp["status"] == "works", f"{len(rows)} games parsed"
-    check("OptiScaler compatibility list parses", wiki)
-
-    def patcher():
-        n = compat.parse_optipatcher(_get(compat.OPTIPATCHER_SRC, "text/plain").decode("utf-8", "replace"))
-        return len(n) > 100, f"{len(n)} executables"
-    check("OptiPatcher executable list parses", patcher)
-
-    def lsfg():
-        found = updates.lsfg_latest(_get("https://builds.lsfg-vk.dev/", "text/html").decode("utf-8", "replace"),
-                                    "https://builds.lsfg-vk.dev/")
-        return found is not None and found[1].endswith(".tar.xz"), found[0] if found else "no 'Latest release' link"
-    check("lsfg-vk builds page has a latest release", lsfg)
-
-    def optiscaler_asset():
-        rel = _json("https://api.github.com/repos/optiscaler/OptiScaler/releases/latest")
+    def xess_asset():
+        rel = _json("https://api.github.com/repos/HHHHanasak1/xess-xmx-linux/releases/latest")
         names = [a["name"] for a in rel.get("assets", [])]
-        ok = any(n.lower().startswith("optiscaler_") and n.endswith(".7z") for n in names)
-        return ok, ", ".join(names[:3])
-    check("OptiScaler release still ships Optiscaler_*.7z", optiscaler_asset)
+        ok = any(n.startswith("xess-xmx-linux-") and n.endswith(".zip") for n in names)
+        return ok, ", ".join(names) or "no assets"
+    check("xess-xmx-linux release still ships xess-xmx-linux-*.zip", xess_asset)
+
+    def claw8ex_map():
+        s = raw("ShadowBlip/InputPlumber", "rootfs/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml")
+        stock = "capability_map_id: claw2" in s
+        return True, "still claw2: ClawDeck's face-button override is still needed" if stock else "changed upstream: check whether buttons.py's override can go"
+    check("InputPlumber's Claw 8 EX map", claw8ex_map)
 
     def clawlab_panels():
         from clawdeck import edid

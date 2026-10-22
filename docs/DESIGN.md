@@ -9,7 +9,8 @@ them). Priority, in order; nothing lower starts until the line above works on th
 1. **XeSS XMX + XeLL** — the one thing missing from Bazzite. Installed from our fork (PRs #23/#24: XeLL driver
    mode, GPU timestamps, review fixes), upstream's release as the fallback while the fork has none.
 2. **Controller and VRR fixes** — face buttons (InputPlumber override), the 30–120 Hz EDID fix (install / remove).
-3. **OptiScaler injection per game** with XeSS XMX + XeLL DLLs; lsfg-vk as the fallback. Bonus, not core.
+3. ~~OptiScaler injection per game~~ — Bazzite already ships it (Decky Framegen in the Portal, `ujust get-framegen`)
+   and Lossless Scaling (decky-lsfg-vk, `ujust get-lsfg`), so ClawDeck does not. Dropped 2026-10-22.
 4. **Power + autotune** — profiles through RAPL-MMIO, as a dropdown plus the Autotune switch.
 
 ## Architecture
@@ -27,11 +28,7 @@ py_modules/clawdeck/
    profiles.py  per-game JSON: base profile, target fps, what autotune learned, launch settings
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
    xess.py      xess-xmx-linux: fork-first install with upstream fallback, state, per-game XeLL mode from the shim's logs
-   launchenv.py per-game <runtime>/launch/<appid>.env: injector, XeSS XMX off, XeLL driver mode, MESA= (read by the wrapper)
-   injector.py  per-game plan (native XeSS → OptiScaler → lsfg-vk), OptiScaler install like setup_linux.sh, exact undo
-   gamescan.py  what a game ships: upscalers, frame generation, engine, anti-cheat (file names only)
-   compat.py    OptiScaler's compatibility list + OptiPatcher's supported exes, cached a day
-   updates.py   newest OptiScaler / OptiPatcher / REFramework / lsfg-vk, daily, checksum-verified where published
+   launchenv.py per-game <runtime>/launch/<appid>.env: XeSS XMX off, XeLL driver mode, MESA= (read by the wrapper)
    edid.py      ClawLab's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
    buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91
    health.py    checks + one-line summary + the bug report
@@ -54,22 +51,18 @@ tools/
   and, while it runs, what it is doing (target fps, current TDP, last adjustment). Profile changes are debounced in
   the UI (300 ms, only the newest change toasts) and serialised in the backend (one lock), so a fast flick through
   the list never shows a stale value.
-- **Per-game**: for the running game, which tier of the ladder is active and three switches: XeSS on XMX (off = the
-  stock driver for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` /
-  `igdext_xell.log` in the prefix, rotated per launch by the wrapper), OptiScaler injection (status: hook active +
-  version). A dropdown steps down a tier.
+- **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
+  for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` / `igdext_xell.log` in
+  the prefix, rotated per launch by the wrapper). DLSS/FSR games point at Bazzite's Decky Framegen.
 - **Fixes**: VRR fix install / remove, face-button fix install / remove, the health check in one line (the full list
   on the page).
-- **Setup**: install / update XeSS XMX, download OptiScaler, run the self-test (PASS/FAIL), Dry run, export the log.
+- **Setup**: install / update XeSS XMX, run the self-test (PASS/FAIL), Dry run, export the log.
 
-## The upscaling and frame-generation ladder (per game, automatic, user can step down)
-1. **Native XeSS** in the game → the xess-xmx-linux driver runs it on XMX, XeLL on. Nothing injected.
-2. **DLSS or FSR, no XeSS** → OptiScaler swaps the inputs to XeSS XMX and the game's frame generation for XeSS FG.
-3. **No upscaler at all** → lsfg-vk (Lossless Scaling's frame generation as a Vulkan layer). It runs on the shader
-   cores, not the XMX units, and needs the user's own copy of Lossless Scaling; the UI says both.
-Anti-cheat folders block injection. The install copies the release next to the main exe, takes the first free proxy
-name, writes WINEDLLOVERRIDES through the launch wrapper, and lists every file in .clawdeck-inject.json for an exact
-undo. Updates: upstream asked at most once a day; a newer release is applied after a game closes.
+## Upscaling and frame generation: what runs where
+1. **Native XeSS** in the game → the xess-xmx-linux driver runs it on XMX, XeLL on. ClawDeck's job.
+2. **DLSS or FSR, no XeSS** → Bazzite's Decky Framegen (OptiScaler) swaps the inputs to XeSS, which the same driver
+   then runs on XMX. Bazzite's job; ClawDeck only points at it.
+3. **No upscaler at all** → Bazzite's decky-lsfg-vk (Lossless Scaling, shader cores). Bazzite's job.
 
 ## Events instead of timers
 The backend never polls. The frontend registers Steam's own notifications and forwards them:

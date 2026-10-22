@@ -51,23 +51,3 @@ export const withoutWrapper = (opts: string): string => {
 export const setLaunchOptions = (appid: string, opts: string): boolean => {
   try { SteamClient.Apps.SetAppLaunchOptions(Number(appid), opts); return true; } catch { return false; }
 };
-
-// ---- Lossless Scaling (Steam app 993090): lsfg-vk runs its frame generation, so the user must own and install it ----
-declare const appStore: any;
-export const LOSSLESS_APPID = 993090;
-
-export type Ownership = { owned: boolean | null; installed: boolean | null };
-export const losslessOwnership = (): Ownership => {
-  try {
-    const o = appStore?.GetAppOverviewByAppID?.(LOSSLESS_APPID);
-    if (!o) return { owned: false, installed: false };
-    return { owned: typeof o.BIsOwned === "function" ? !!o.BIsOwned() : true, installed: !!o.installed };
-  } catch { return { owned: null, installed: null }; }
-};
-export const installLossless = (): boolean => {
-  try { SteamClient.Installs.OpenInstallWizard([LOSSLESS_APPID]); return true; } catch { return false; }
-};
-export const showLosslessInStore = (): boolean => {
-  try { SteamClient.Apps.ShowStore(LOSSLESS_APPID); return true; } catch { return false; }
-};
-

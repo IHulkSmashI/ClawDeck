@@ -1,4 +1,4 @@
-"""Checksum-verified updates with rollback, the system-change check, and the ClawTweaks
+"""Release downloads, the system-change check, and the ClawTweaks
 extras (CPU energy mode, TDP boost)."""
 import json
 import os
@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules"))
 
-from clawdeck import changes, downloads, hhd, hw, power, sysfs, updates  # noqa: E402
+from clawdeck import changes, downloads, hhd, hw, power, sysfs  # noqa: E402
 
 
 def _w(path, value="x"):
@@ -25,49 +25,7 @@ def _clean():
     sysfs._originals.clear()
 
 
-# ---- updates: checksum, prerelease, rollback -----------------------------------------------------------------------
-def _fake_dl(monkeypatch, content):
-    def download(url, dest, timeout=60):
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        open(dest, "w").write(content)
-        return dest
-    monkeypatch.setattr(updates.downloads, "download", download)
-
-
-def test_update_refused_when_checksum_does_not_match(tmp_path, monkeypatch):
-    up = updates.Updates(str(tmp_path / "a"), str(tmp_path / "u.json"))
-    monkeypatch.setattr(up, "latest", lambda c: {"version": "v2", "url": "u", "name": "OptiPatcher.asi", "sha256": "0" * 64})
-    _fake_dl(monkeypatch, "tampered")
-    with pytest.raises(ValueError, match="checksum"):
-        up.ensure("optipatcher")
-    assert up.installed("optipatcher") is None
-
-
-def test_update_with_matching_checksum_then_rollback_and_hold(tmp_path, monkeypatch):
-    up = updates.Updates(str(tmp_path / "a"), str(tmp_path / "u.json"))
-    import hashlib
-    ver = {"v": "v1"}
-    monkeypatch.setattr(up, "latest", lambda c: {"version": ver["v"], "url": "u", "name": "OptiPatcher.asi",
-                                                 "sha256": hashlib.sha256(f"build {ver['v']}\n".encode()).hexdigest()})
-
-    def dl(url, dest, timeout=60):
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        open(dest, "w").write(f"build {ver['v']}\n")
-        return dest
-    monkeypatch.setattr(updates.downloads, "download", dl)
-    up.ensure("optipatcher")
-    ver["v"] = "v2"
-    up.check(force=True)
-    assert up.ensure("optipatcher")["updated"] and up.installed("optipatcher") == "v2" and up.previous("optipatcher") == "v1"
-    r = up.rollback("optipatcher")
-    assert r["version"] == "v1" and r["previous"] == "v2"
-    st = up.check(force=True)
-    assert not st["optipatcher"]["update"]                       # v2 is the one rolled away from: not offered again
-    assert not up.ensure("optipatcher")["updated"]
-    ver["v"] = "v3"
-    assert up.check(force=True)["optipatcher"]["update"]          # a newer build is offered again
-
-
+# ---- downloads: prereleases, published checksums ---------------------------------------------------------------
 def test_newest_with_asset_takes_prereleases(monkeypatch):
     rels = [{"tag_name": "draft", "draft": True, "assets": [{"name": "Moonlight-x-x86_64.AppImage"}]},
             {"tag_name": "v6.2.0-daily.191", "prerelease": True, "assets": [{"name": "SHA256SUMS"}, {"name": "Moonlight-6.2.0-daily.191-x86_64.AppImage"}]}]
