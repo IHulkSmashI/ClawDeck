@@ -303,6 +303,27 @@ class Power:
                 self.reset_gpu_window()
         return result
 
+    # ---- PL1 time window (tau, findings §22.2) ----------------------------------------------------------------------
+    def pl1_window_us(self) -> int | None:
+        return sysfs.read_int(self.p.rapl_pl1_window) if self.p.rapl_pl1_window else None
+
+    def set_pl1_window(self, us: int) -> bool:
+        """RAPL enforces PL1 as an average over this window (56 s on the Claw 8 EX): for most of a minute after a change
+        the package may run up to PL2. Autotune shortens it while it learns so its 10 s windows see sustained
+        behaviour. Through sysfs.write, so revert_all restores the firmware's value; True only if it reads back."""
+        if not self.p.rapl_pl1_window:
+            return False
+        if not sysfs.write(self.p.rapl_pl1_window, int(us)):
+            return False
+        got = self.pl1_window_us()
+        if got != int(us):
+            log.warning("PL1 time window: asked %d us, reads %s (firmware rounds or refuses)", us, got)
+        return got is not None and abs(got - int(us)) <= int(us) // 4   # the firmware may round to its own steps
+
+    def restore_pl1_window(self) -> bool:
+        """Back to the window that was there before ClawDeck changed it (nothing to do if it never did)."""
+        return sysfs.revert(self.p.rapl_pl1_window) if self.p.rapl_pl1_window else True
+
     def thermald_paused(self) -> bool:
         """True while ClawDeck holds a TDP and has stopped thermald: the temperature guard (thermal.py) runs then."""
         return self._thermald_paused

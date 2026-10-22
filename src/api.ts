@@ -23,7 +23,7 @@ export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: strin
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
   source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
   last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced";
-  thermal_cap?: number | null; thermal?: Thermal };
+  thermal_cap?: number | null; thermal?: Thermal; learning?: boolean; pl1_window_s?: number | null };
 
 /** What every write answers: what was asked, what the hardware reads back, and why it failed (shown in red). */
 export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any; unit?: string; summary: string; error: string | null };

@@ -297,6 +297,12 @@ settle a few watts too low (fps falls once the average catches up). On this unit
   play still get the boost.
 - Profile writes outside autotune leave tau alone. Test: fake tau file, learn → 8 s, settle → original, revert.
 
+Done in code (2026-10-22): `hw.Paths.rapl_pl1_window` (`constraint_N_time_window_us` of the long_term constraint),
+`power.set_pl1_window` / `restore_pl1_window` (sysfs.write, so `revert_all` restores it), and autotune: 8 s from its
+first window while measuring / balancing / lowering, the firmware's value back after 3 windows in hold without a
+change, 8 s again on every re-measure, the firmware's value whenever it is paused. A refused write is tried once.
+Needs the Claw: does the firmware take 8 000 000 (read the file back while autotune measures)?
+
 ### 22.3 GPU efficiency mode `power_profile` — code change (Claude Code, now)
 `/sys/class/drm/card0/device/tile0/gt0/freq0/power_profile` offers `base` and `power_saving` (xe SLPC efficiency
 hint: prefers the efficient frequency, slower ramp). Not touched today.
