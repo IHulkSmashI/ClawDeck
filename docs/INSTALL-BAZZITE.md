@@ -51,21 +51,23 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
 1. Download **ClawDeck.zip** from [Releases](https://github.com/IHulkSmashI/ClawDeck/releases).
 2. Quick Access → **Decky** (plug icon) → gear icon → turn on **Developer mode**. Open the new **Developer** section,
    choose **Install plugin from ZIP file** and pick ClawDeck.zip.
-3. Open **ClawDeck → Setup**. Every line should be green; a red line says what's missing and has a button to fix it.
-4. For each game you want Autotune, OptiScaler or HDR on: start the game, open ClawDeck and tap
-   **Add to launch options** (All settings → Power or Graphics).
-5. **Power** tab: pick Battery, Balanced, Performance or Dock, set a target fps, turn Autotune on, and play.
+3. Open **ClawDeck**. **Fixes** shows what the hardware gets wrong (VRR range, face buttons) with an Install button
+   each; **Setup** installs the XeSS XMX driver and runs the self-test.
+4. For each game you want Autotune, XeSS XMX, XeLL or OptiScaler in: start the game, open ClawDeck and tap
+   **Add to launch options** (Per-game).
+5. **Power**: pick Battery, Balanced, Performance or Dock, turn Autotune on, set a target fps, and play.
 
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
 may do nothing at all; ClawDeck sets the limit directly.
 
-Bazzite's Portal also offers OptiScaler and Lossless Scaling plugins. They do the same job as ClawDeck's Graphics
-tab, so use one or the other for a given game, not both.
+Bazzite's Portal also offers OptiScaler and Lossless Scaling plugins. They do the same job as ClawDeck's Per-game
+panel, so use one or the other for a given game, not both.
 
 ## XeSS on the XMX cores (optional)
 
-ClawDeck → **Graphics** → **Install driver** sets up [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux).
-Afterwards, restart the Claw once. The Graphics page (All settings) then shows whether the driver is active.
+ClawDeck → **Setup** → **Install XeSS XMX** sets up [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)
+(our fork's release when it has one, for XeLL driver mode; otherwise upstream's). Afterwards, log out and in once.
+Setup then shows whether the driver loads, and the Per-game panel shows what XeSS and XeLL do in the running game.
 
 ## Going back and getting help
 

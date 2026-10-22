@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import buttons, hhd, hw, injector, sleep, stack, sysfs, xess
+from . import buttons, hhd, hw, injector, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -94,15 +94,10 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                                "Claw 8 EX). Steam's own TDP slider may do nothing on this chip"
                                if p.rapl_pl1 else "MSI firmware attributes only (no RAPL package domain); Steam's slider may do nothing" if p.msi_pl1 else "no way to set TDP on this system")
                               + ("; PowerStation running" if st["powerstation"] else ""), "fix": None})
-    out.append({"id": "msi_fw", "title": "MSI firmware controls (msi-wmi-platform)", "ok": p.msi_pl1 is not None,
-                "detail": "TDP and fan curve attributes present" if p.msi_pl1 else
-                          "kernel driver not loaded: TDP falls back to RAPL, no fan curves", "fix": None})
-    out.append({"id": "gpu_clocks", "title": "GPU clock control", "ok": p.gpu_min_freq is not None,
+    out.append({"id": "gpu_clocks", "title": "GPU clock control (autotune's GPU lever)", "ok": p.gpu_min_freq is not None,
                 "detail": "floor and ceiling can be set" if p.gpu_min_freq else "no xe/i915 frequency files", "fix": None})
-    out.append({"id": "cpu_pct", "title": "CPU ceiling control (intel_pstate)", "ok": p.cpu_max_perf_pct is not None,
+    out.append({"id": "cpu_pct", "title": "CPU ceiling control (autotune's CPU lever)", "ok": p.cpu_max_perf_pct is not None,
                 "detail": "available" if p.cpu_max_perf_pct else "intel_pstate not active", "fix": None})
-    out.append({"id": "charge", "title": "Battery charge limit", "ok": p.charge_limit is not None,
-                "detail": "available" if p.charge_limit else "this kernel does not offer a charge limit for the battery yet", "fix": None})
     xs = xess_state(home)
     out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and xs["state"] == "ok",
                 "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),
@@ -115,26 +110,19 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                 "fix": None, "optional": True})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
-    out.append({"id": "protonup", "title": "ProtonUp-Qt / GE-Proton", "ok": _ge_proton_present(home),
-                "detail": "a GE-Proton is installed" if _ge_proton_present(home) else "no GE-Proton under compatibilitytools.d",
-                "fix": None})
     others = stack.other_plugins(home)
     if others["power"]:
         out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,
                     "detail": f"{', '.join(others['power'])} also sets TDP and clocks; two power plugins undo each other. "
                               "Uninstall it in Decky, or leave ClawDeck's power settings alone", "fix": None})
-    for c in sleep.checks():
-        c.setdefault("fix", None)
-        out.append(c)
     return out
 
 
-def _ge_proton_present(home: str) -> bool:
-    d = os.path.join(home, ".local", "share", "Steam", "compatibilitytools.d")
-    try:
-        return any(n.startswith("GE-Proton") for n in os.listdir(d))
-    except OSError:
-        return False
+def summary(checks: list[dict]) -> dict:
+    """The one line the Fixes panel shows: how many checks fail (optional ones aside) and which."""
+    problems = [c for c in checks if not c["ok"] and not c.get("optional")]
+    return {"ok": not problems, "total": len(checks), "problems": len(problems),
+            "line": "All checks pass" if not problems else f"{len(problems)} to fix: " + " · ".join(c["title"] for c in problems)}
 
 
 def collect_logs(hardware: hw.Hardware, home: str, dest: str) -> str:

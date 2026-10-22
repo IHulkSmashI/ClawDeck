@@ -20,7 +20,7 @@ await p.evaluate(() => document.fonts.ready);
 // the Quick Access panel, then each page of the full-screen view (its sidebar entries, in order)
 await p.locator(".qam").screenshot({ path: join(out, "quick.png") });
 console.log("docs/screenshots/quick.png");
-const pages = ["power", "graphics", "display", "controller", "battery", "setup"];
+const pages = ["power", "game", "fixes", "setup"];
 for (const [i, name] of pages.entries()) {
   await p.click(`.sb-item >> nth=${i}`);
   await p.waitForTimeout(700);

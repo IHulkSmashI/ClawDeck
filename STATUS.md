@@ -1,111 +1,66 @@
 # ClawDeck status
 
-Updated 2026-10-21 (second pass). **Nothing has been tested on real hardware yet.** Everything below passes the backend tests against
-fake sysfs trees and a fake Handheld Daemon, and the UI typechecks and builds into the Decky zip.
+Updated 2026-10-22 (scope reset). The plugin does only what Bazzite and Steam's Quick Access do not already do, in
+four panels: **Power**, **Per-game**, **Fixes**, **Setup**. Everything below passes the backend tests against fake
+sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the browser preview.
+
+## Priorities (from the project brief; nothing lower starts until the line above works on the maintainer's Claw)
+
+| # | What | Code | Needs the Claw |
+|---|---|---|---|
+| 1 | **XeSS XMX + XeLL** from the fork (PRs #23/#24) | done: fork-first install with upstream fallback and a note; Setup shows version, driver mode and source; Per-game shows XeSS on/off, XeLL driver / cross-vendor / off per launch | the fork has no release yet (below); a game with XeSS frame generation to confirm the XeLL log markers |
+| 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
+| 3 | **OptiScaler injection per game** | done: one switch + the hook status line; tier dropdown to step down | OptiScaler overlay (Insert) shows XeSS + XeFG in a DLSS/FSR game |
+| 4 | **Power + autotune** | done: profile dropdown + Autotune switch, read-back line, debounced | pick profiles fast: the toast and the line show the last pick only |
 
 ## Done (code, tests)
 
-| Module | Backend | UI | Notes |
+| Module | Backend | Panel | Notes |
 |---|---|---|---|
-| Hardware table + discovery | `hw.py` | Setup | one row per Claw; EX = MS-1T91 (matches HHD's table) |
-| Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | also covers HHD writes now (nothing sent in dry run) |
-| Health check + one-tap fixes | `health.py`, `main.run_fix` | Setup | fixes: turn on HHD, install XeSS driver, save a hardware survey, map the Claw 8 EX face buttons via an InputPlumber override (`buttons.py`) |
-| Power + profiles | `power.py` | Power | TDP via HHD, else MSI firmware limits (current Bazzite), else RAPL (MMIO first) |
-| Which services run | `stack.py` | Setup | InputPlumber / PowerStation / HHD; never offers HHD next to InputPlumber |
-| Per-game profiles, AC follow | `profiles.py`, `main.power_source_changed` | Power | Steam's battery-state event switches battery ↔ plugged slot mid-game |
-| Profile import/export | `profiles.py` | Power → Advanced | JSON on Desktop; import from Desktop/Downloads, never overwrites |
-| Autotune | `autotune.py` | Power | pauses on any manual change; saved TDP clamped to the current ceiling |
-| Benchmark | `benchmark.py` | Power → Advanced | avg fps, 1 % low, watts, fps/W; CSV export |
-| Per-game recommendation | `gamescan.py`, `compat.py`, `injector.plan` | Graphics | native XeSS → OptiScaler → lsfg-vk, with reasons; anti-cheat blocked |
-| OptiScaler, OptiClick-style | `injector.py`, `updates.py` | Graphics | newest release, setup_linux.sh layout, OptiPatcher, REFramework, per-game INI fixes |
-| Lossless Scaling (lsfg-vk) | `injector.py`, `updates.py` | Graphics | lsfg-vk v2 installed/updated; Lossless Scaling ownership checked in Steam |
-| Always up to date | `updates.py`, `main._after_game` | Graphics → Updates | daily check, checksum-verified where upstream publishes sums, one-tap rollback; games refreshed after they close |
-| Streaming | `streaming.py` | Display | Moonlight VRR (Nonary) installed/updated, added to Steam, one-tap stream to a Vibepollo PC |
+| Hardware table + discovery | `hw.py` | Setup | one row per Claw; EX = MS-1T91 (board_name first) |
+| Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | `last_error()` feeds the red rows |
+| Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
+| Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
+| Autotune | `autotune.py` | Power | profile = ceiling; 10 s window; CPU/GPU balance; `last_action` for the status line |
+| XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
+| OptiScaler / lsfg-vk per game | `injector.py`, `gamescan.py`, `compat.py`, `updates.py` | Per-game, Setup | ladder: native XeSS → OptiScaler → lsfg-vk; anti-cheat blocked; daily updates |
+| VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
+| Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
+| Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs or in dry run |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
-| Upstream watch | `tools/upstream_watch.py`, workflow | GitHub issue | daily versions + live parser canaries; Dependabot for the build |
-| ClawTweaks extras | `power.py` | Power → Advanced | CPU energy mode (EPP) in profiles, TDP boost switch |
-| Per-game launch env | `launchenv.py`, `tools/clawdeck-launch.sh` | Graphics | injector, `DXVK_HDR`, `MESA=` choice; merges user DLL overrides |
-| XeSS driver | `xess.py`, `downloads.py` | Graphics | xess-xmx-linux state, install from fork release, probe, default Mesa |
-| Proton picker | `proton.py` + `SteamClient.Apps.SpecifyCompatTool` | Graphics | Steam stays owner of config.vdf |
-| Display and dock | `display.py` | Display | VRR, refresh range, HDR, SDR nits → `~/.config/environment.d/60-clawdeck-display.conf` on Save |
-| Controller | `controller.py` | Controller | with HHD: everything under `controllers.claw.*` / `rgb.handheld.*`; with InputPlumber: status only (next) |
-| Fans | `fans.py` | Battery & Fans | presets need HHD; without it the firmware curve runs (direct hwmon curve: next) |
-| Sleep | `sleep.py`, `tools/suspend-cycle.sh` | Setup → Advanced | read-only checks; cycle soak tool |
-| Battery | `battery.py` | Battery & Fans | 50–100 % charge limit |
-| Budget meter | `tools/soak.py` | — | CPU %, peak RSS, RSS slope against the release budget |
-| Browser preview | `preview/` (`pnpm preview`) | all tabs | the real tab code with example data, no Claw needed |
-| Profiles without the plugin | `tools/power-profile.sh` | — | battery / performance / dock / reset / status, `--dry-run` |
+| Browser preview | `preview/` (`pnpm preview`) | all four | the real panel code with example data |
 
-## Checked against upstream sources (2026-10-21, no hardware needed)
-
-- Steam client calls against @decky/ui 4.16 typings; fixed: no install-dir field exists (now read from Steam's
-  appmanifest), `Router` imported from @decky/ui.
-- Current Bazzite: no Handheld Daemon; InputPlumber + PowerStation + Steam's TDP slider (steamos-manager → MSI
-  firmware attributes). ClawDeck now sets TDP the same way when HHD is absent and no longer suggests installing HHD.
-- gamescope-session variables (Bazzite uses ChimeraOS's via Terra); no Claw device quirk.
-- Release assets and OptiScaler 0.9.4 INI keys (fixed `FGType` → `FGInput`/`FGOutput=xefg`, DX11 → `xess_12`).
-- The IHulkSmashI xess-xmx-linux fork has no releases: the installer uses upstream's (`use_fork: false`).
+Removed in the scope reset (2026-10-21): VRR on/off, refresh rate, HDR, display save, fan presets, GPU clock
+window, CPU ceiling, EPP, turbo, charge limit, sleep readouts, dock readouts, benchmark, Proton picker, streaming
+(Moonlight), profile import/export, the Controller and Battery pages. Their modules are gone too
+(`benchmark`, `controller`, `display`, `fans`, `proton`, `sleep`, `streaming`); `battery.py` keeps only `plugged()`.
 
 ## Tested on real hardware
 
-2026-10-21, Claw 8 EX on Bazzite deck 44.20261012.1: plugin loads in Decky 3.3.0, hardware detected, health check and power/battery readouts run. Evening: `tools/selftest.py` 12/12 PASS on the device (TDP via RAPL measured 15 W under load at a 12 W setting and 37 W after revert; CPU/GPU ceilings; charge limit 80 %; face buttons; full revert). Before that, three blockers were found and fixed the same day: backend not root (§13), MSI firmware TDP attributes ignored (§12), no CA store for downloads (§15). Findings and the resulting task list: `docs/HARDWARE-FINDINGS.md` (the big one: this Bazzite image has no Handheld Daemon; InputPlumber + PowerStation instead).
-
-## Next (on the Claw 8 EX, in this order)
-
-1. `tools/sysfs-survey.sh` → paste into an issue; fix any path in `hw.py` that differs.
-2. Sideload the CI zip; Setup tab: every check shows a real value.
-3. Turn on **Dry run**, apply each profile, read the log; then off, and measure fps/W in two games (Benchmark).
-4. Verify the items in docs/DESIGN.md → "Open items" one by one.
-5. `tools/soak.py --hours 2` with autotune on, then `--hours 4` for the leak soak.
-6. `sudo tools/suspend-cycle.sh 100` before saying anything about sleep.
-
-## Gaps the README now states honestly (to fix in code)
-
-- Fan presets need Handheld Daemon, which current Bazzite doesn't run: a direct hwmon curve is the next step.
-- The README download button points at Releases, which stays empty until the first tested release.
+2026-10-21, Claw 8 EX on Bazzite deck 44.20261012.1: plugin loads in Decky 3.3.0, hardware detected, health check and
+power readouts run. `tools/selftest.py` 12/12 PASS on the device (TDP via RAPL measured 15 W under load at a 12 W
+setting and 37 W after revert; CPU/GPU ceilings; charge threshold; face buttons; full revert). Blockers found and
+fixed the same day: backend not root (§13), MSI firmware TDP attributes ignored (§12), no CA store (§15).
+The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
-- Read-back UI (HARDWARE-FINDINGS §14, §16): on the Claw, move each control in Power → Fine-tuning and confirm the
-  toast says "… set to X → hardware reads X" and the control's description shows the same value; then try one
-  write that must fail (e.g. with Dry run off, a charge limit on a kernel without the file, or the VRR fix with a
-  read-only /etc) and confirm the red "didn't apply" row names the reason. Check the profile picker is not cut off
-  at 1280×800.
-
-- New UI (2026-10-21): check on the Claw that Quick Access shows ClawDeck's short panel, that **All settings** opens
-  the full-screen page, and that every page can be read and used with the D-pad alone (sidebar left/right, each
-  explanation scrolls into view with its control). Report anything you still have to touch.
-
-- Face buttons on the Claw 8 EX (`buttons.py`, Setup → "Map the face buttons"): the same InputPlumber override was
-  applied by hand on the maintainer's Claw on 2026-10-21 and both buttons work in Game Mode. To test the plugin's
-  path: `sudo rm /etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml /etc/inputplumber/capability_maps.d/msiclaw_claw8ex.yaml /etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb; sudo systemd-hwdb update; sudo systemctl restart inputplumber`,
-  confirm the health check goes red, tap the fix, confirm green and both buttons (left = Steam menu, right = Quick
-  Access). Upstream PR to ShadowBlip/InputPlumber: `docs/upstream/inputplumber-claw8ex.md`.
-
-- 30–120 Hz VRR (Display tab, `edid.py`): run the new survey first and post its "panel EDID" line. Turn it on only
-  if the sha256 matches (the switch only appears then), restart, and check: the 120 Hz mode is still offered, the
-  Display tab shows 30–120 Hz, games at 35–45 fps no longer judder. If anything is wrong: previous boot entry, then
-  turn it off.
-
-- Test the hardware-findings fixes on the Claw (docs/HARDWARE-FINDINGS.md → "Done in code"): Setup shows "Claw 8 EX
-  AI+ (MS-1T91)" and a Mesa version; Battery shows Wh and, after a minute on battery, watts; Controller shows
-  InputPlumber's device; with Dry run off, set 20 W and read back `ppt_pl1_spl` and `intel-rapl-mmio:0`; then set
-  the charge limit to 80 % and read back `charge_control_end_threshold`.
-- TDP now goes through RAPL-MMIO (docs/HARDWARE-FINDINGS.md §12: the MSI attributes are ignored on the EX and refuse
-  a revert to 0). Still to measure: PL1 above 25 W (`max_power_uw`) for the 35 W plugged profile. Old note: revert must
-  write the boot value read from `intel-rapl-mmio:0` instead.
-- Does Steam's own TDP slider change anything on the EX? PowerStation reports no TDP range for this chip, so it
-  probably does nothing; the README and the Power tab now say "may do nothing".
-
-- Check the install guide's Claw steps on the 8 EX: the boot-menu buttons (the guide links MSI's FAQ instead of naming
-  them), the Bazzite image picker wording, and the Decky "Install plugin from ZIP file" path.
-
-- After the first upstream-watch run: test the listed versions on the Claw, then `python3 tools/upstream_watch.py --update-lock`.
-
+- **Publish a release on the fork** (IHulkSmashI/xess-xmx-linux) so the installer can deliver XeLL driver mode: merge
+  `xell-driver-mode-probe` (5 commits, PR #23) and `review-fixes` (PR #24) into one branch, build the binaries
+  (its CI builds the shim, the ICD and the Mesa 26.1.2 driver; the Mesa 26.3 job fails on the vanished
+  `mesa-26.3.0-rc1` tag, see PR #24's notes), run `tools/make-release.py <version>` there, attach the zip to a
+  release. Until then `assets/versions.json` has `use_fork: true` and the installer falls back to upstream's
+  20261018, saying so in Setup. Once HHHHanasak1 merges, set `use_fork` back to false.
+- **XeSS install "file not found"** (brief): the backend now reports the exact step and reason (download: URL and
+  HTTP code; archive: what it unpacked where; install.sh: exit code and its last lines) in the toast and the red
+  row, and logs it. Tap Install XeSS XMX once more and post the red line if it still fails.
+- **XeLL markers**: with the fork build installed and "XeLL driver mode" on for a game that uses XeSS frame
+  generation, the Per-game line should say "driver mode" after a launch (from `igdext_trace.log` in the prefix).
+  With upstream's build it says "cross-vendor mode".
+- **Quick Access**: the four panels with the D-pad at 1280×800: nothing truncated in the profile picker, the read-back
+  line changes after every pick, a fast flick through the profiles toasts the last one only.
+- **VRR fix**: Fixes → Install, restart, `edid-decode` 30–120, 120 Hz mode still offered, games at 35–45 fps no
+  longer judder. Remove puts the factory range back.
+- **Self-test from the UI**: Setup → Run self-test with no game running; expect 12 PASS.
 - Pin tested versions in `assets/versions.json` (all are `pending-verification`, so installs ask "latest, untested?").
-- The fork publishes no releases, so the installer downloads HHHHanasak1's. To ship from the fork, publish a release
-  there (its `tools/make-release.py` builds the zip) and set `"use_fork": true`.
-- Decide how ClawDeck relates to Bazzite's own OptiScaler and Lossless Scaling Decky plugins (defer to them, or
-  replace them).
-- Look over the store banner (`assets/banner.png`, source `assets/src/banner.html`) and the first post draft
-  (`docs/posts/01-claw-8-ex-on-bazzite.md`); neither is published anywhere.
+- After the first upstream-watch run: test the listed versions, then `python3 tools/upstream_watch.py --update-lock`.

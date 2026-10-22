@@ -217,6 +217,7 @@ class Session:
     trim_turn: bool = True   # on target: alternate between rebalancing CPU/GPU and lowering the TDP
     window: list[float] = field(default_factory=list)   # per-second fps since the last change
     last_change_t: float | None = None
+    last_action: str | None = None       # the last adjustment, in words, for the Power panel's status line
     avg_fps: float | None = None
     low_fps: float | None = None
     history: list[Sample] = field(default_factory=list)
@@ -342,11 +343,17 @@ class Autotune:
             s.unchanged = 0
             s.window.clear()                         # judge the new setting on its own numbers only
             s.last_change_t = smp.t
+            s.last_action = self._describe(l, s.avg_fps, t)
         else:
             s.unchanged += 1
             if s.unchanged >= s.stable:
                 l.confidence = min(5, l.confidence + 1)
                 s.unchanged = 0
+
+    def _describe(self, l: Learned, avg: float, target: int) -> str:
+        why = f"{avg:.0f} fps for a {target} target"
+        gpu = f", GPU floor {l.gpu_min_mhz} MHz" if l.gpu_min_mhz else ""
+        return f"{l.tdp} W, CPU {l.cpu_max_pct}%{gpu} ({why}, {l.bound}-bound)"
 
     def _tdp(self, l: Learned, watts: int) -> bool:
         """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from)."""
@@ -424,4 +431,5 @@ class Autotune:
                 "learned": s.learned.__dict__, "paused": s.paused,
                 "avg_fps": None if s.avg_fps is None else round(s.avg_fps, 1),
                 "low_fps": None if s.low_fps is None else round(s.low_fps, 1), "window_s": s.settle,
+                "last_action": s.last_action, "ceiling_tdp": s.ceiling_tdp,
                 "last": None if last is None else last.__dict__}

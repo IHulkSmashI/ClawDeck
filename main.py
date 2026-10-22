@@ -1,8 +1,12 @@
 """ClawDeck - Decky Loader backend. Thin: every call maps to one module in py_modules/clawdeck.
 
-Runs as root (plugin.json flag _root) because sysfs, Handheld Daemon's socket and the Steam library need it.
-Battery rule: nothing here runs on a timer unless autotune is on for a running game or a benchmark run is going
-(1 Hz, one asyncio task each). Power-source changes and resume arrive as events from Steam (frontend listeners).
+Runs as root (plugin.json flag root) because sysfs, InputPlumber's config, /etc/firmware and the Steam library
+need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (1 Hz, one asyncio
+task). Power-source changes and resume arrive as events from Steam (frontend listeners).
+
+Scope (2026-10-21 reset): only what Bazzite and Steam's Quick Access do not already do. Four panels: Power
+(profile + autotune), Per-game (XeSS XMX, XeLL, OptiScaler), Fixes (VRR range, face buttons, health), Setup
+(installs, self-test, dry run, log export).
 """
 import asyncio
 import glob
@@ -17,8 +21,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, benchmark, changes, compat, controller, display, downloads, edid, fans,  # noqa: E402
-                      buttons, gamescan, health, hhd, hw, injector, streaming, updates, launchenv, power, profiles, proton, sleep, stack, sysfs, userexec, xess)
+from clawdeck import (autotune, battery, buttons, changes, compat, downloads, edid, gamescan, health, hw,  # noqa: E402
+                      injector, launchenv, power, profiles, stack, sysfs, updates, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -56,7 +60,6 @@ class Plugin:
         sysfs.set_dry_run(env_dry or bool(self.settings.get("dry_run")))
         self.hw = hw.detect()
         self.power = power.Power(self.hw)
-        self.power.boost = bool(self.settings.get("tdp_boost", True))
         self.battery = battery.Battery(self.hw)
         self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
         self.injector = injector.Injector(os.path.join(RUNTIME_DIR, "assets"))
@@ -68,48 +71,24 @@ class Plugin:
         userexec.chown_tree(mangohud_dir, HOME)
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         self.autotune.enabled = bool(self.settings.get("autotune"))
-        self.bench = benchmark.Benchmark(self.hw, mangohud_dir, os.path.join(SETTINGS_DIR, "benchmarks.json"))
-        self.controller = controller.Controller()
-        self.fans = fans.Fans(self.hw)
-        self.display = display.Display(self.hw, HOME)
         self.running_appid: str | None = None
         self._tasks: set[asyncio.Task] = set()
         self._health: tuple[float, list] | None = None
+        self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s, dry-run %s", self.hw.model["name"], self.hw.product,
                           self.hw.kernel, sysfs.dry_run())
-        # the one setting applied at every start on purpose: the charge limit (sysfs resets at boot)
-        self._apply_charge_limit()
-        self._make_tools_executable()
         self._install_wrapper()
-
-    def _make_tools_executable(self) -> None:
-        """Best effort for people running the tools by hand. ClawDeck itself never relies on the bit: it runs them
-        with `bash tools/x.sh`, and the launch wrapper Steam uses is a copy in the user's home (_install_wrapper).
-        Decky marks the plugin folder read-only on some installs, so "not permitted" is expected and only logged
-        at debug level."""
-        tools = os.path.join(PLUGIN_DIR, "tools")
-        try:
-            for fn in os.listdir(tools):
-                if fn.endswith((".sh", ".py")):
-                    os.chmod(os.path.join(tools, fn), 0o755)
-        except PermissionError as e:
-            decky.logger.debug("tools stay as unpacked (plugin folder is read-only): %s", e)
-        except OSError as e:
-            decky.logger.warning("could not mark tools executable: %s", e)
 
     async def _unload(self):
         self.autotune.stop()
-        self.bench.stop()
         n = self.power.revert_all()
         decky.logger.info("ClawDeck unloaded, %d value(s) reverted", n)
 
     async def _uninstall(self):
-        """Leave nothing behind that changes how the Claw or a game behaves."""
+        """Leave nothing behind that changes how the Claw or a game behaves (the face-button fix stays on purpose:
+        without it the buttons are dead)."""
         self.power.revert_all()
-        self.display.reset()
-        if self.settings.get("fan_preset_set"):
-            self.fans.apply_preset("auto")
         if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
             decky.logger.info("removing the wider VRR range: %s", edid.disable(sysfs.dry_run()))
         try:
@@ -125,14 +104,6 @@ class Plugin:
             os.chmod(WRAPPER, 0o755)
         except OSError as e:
             decky.logger.warning("could not install the launch wrapper: %s", e)
-
-    def _apply_charge_limit(self) -> None:
-        lim = self.settings.get("charge_limit")
-        if lim and self.battery.supported():
-            try:
-                self.battery.set_charge_limit(int(lim))
-            except ValueError:
-                pass
 
     def _load_settings(self) -> dict:
         try:
@@ -176,7 +147,7 @@ class Plugin:
         return path
 
     async def run_fix(self, fix: str, allow_unpinned: bool = False) -> dict:
-        """The one-tap fixes the health check offers (Health.fix)."""
+        """The one-tap fixes the health check offers (Health.fix) and the Fixes panel's buttons."""
         self._health = None   # whatever the fix does, the next health check is fresh
         if fix == "enable_hhd":
             if stack.detect()["inputplumber"]:
@@ -192,9 +163,9 @@ class Plugin:
         if fix == "install_xess":
             return await self.xess_install(allow_unpinned)
         if fix == "fix_face_buttons":
-            return await asyncio.get_running_loop().run_in_executor(None, buttons.apply)
+            return await self._bg(buttons.apply)
         if fix == "undo_face_buttons":
-            return await asyncio.get_running_loop().run_in_executor(None, buttons.remove)
+            return await self._bg(buttons.remove)
         if fix == "report_unknown_model":
             r = await self._bg(lambda: subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")],
                                                       capture_output=True, text=True, timeout=60, check=False))
@@ -202,6 +173,11 @@ class Plugin:
                                     r.stdout + r.stderr)
             return {"ok": True, "path": path, "next": "open a GitHub issue 'Survey: <model>' and attach this file"}
         return {"ok": False, "error": f"unknown fix {fix}"}
+
+    async def get_fixes(self) -> dict:
+        """The Fixes panel in one call: the VRR range fix, the face-button fix, and the health check in one line."""
+        vrr, checks = await asyncio.gather(self._bg(edid.status), self.get_health())
+        return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks)}
 
     async def get_setting(self, key: str):
         return self.settings.get(key)
@@ -219,102 +195,49 @@ class Plugin:
         sysfs.set_dry_run(bool(on))
         return sysfs.dry_run()
 
-    async def get_versions(self) -> dict:
-        v = self._versions()
-        return {k: {**e, "pinned": downloads.is_pinned(e)} for k, e in v.items() if not k.startswith("_")}
+    async def self_test(self) -> dict:
+        """tools/selftest.py through the plugin: every control written, read back, measured and reverted. Never
+        while a game runs (it would take the game's power away for a minute)."""
+        if self.running_appid is not None:
+            return {"ok": False, "error": "close the game first: the self-test changes and reverts the power limits"}
+        if sysfs.dry_run():
+            return {"ok": False, "error": "turn Dry run off first: the self-test has to write for real"}
+        script = os.path.join(PLUGIN_DIR, "tools", "selftest.py")
+        try:
+            r = await self._bg(lambda: subprocess.run([sys.executable, script], capture_output=True, text=True,
+                                                      timeout=240, check=False, cwd=PLUGIN_DIR))
+        except (OSError, subprocess.SubprocessError) as e:
+            return {"ok": False, "error": f"could not run the self-test: {e}"}
+        out = (r.stdout or "") + (r.stderr or "")
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip().startswith(("PASS", "FAIL"))]
+        total = [ln for ln in out.splitlines() if ln.strip().endswith("failed") and "passed" in ln]
+        failed = [ln for ln in lines if ln.startswith("FAIL")]
+        self._health = None
+        return {"ok": r.returncode == 0 and not failed, "passed": len(lines) - len(failed), "failed": len(failed),
+                "lines": lines, "summary": total[-1].strip() if total else (f"exit {r.returncode}: " + out.strip().splitlines()[-1] if out.strip() else f"exit {r.returncode}"),
+                "error": None if r.returncode == 0 and not failed else (" · ".join(failed) or out.strip()[-300:] or f"exit {r.returncode}")}
 
     # ---- power -------------------------------------------------------------------------------------------------------
-    @staticmethod
-    def _done(ok: bool, what: str, wanted, read, unit: str = "") -> dict:
-        """What every write answers (HARDWARE-FINDINGS §14): the value asked for, the value read back from the
-        hardware afterwards, and on failure the reason. The UI shows `summary` in its toast and `error` in red."""
-        u = f" {unit}" if unit else ""
-        fmt = lambda v: "?" if v is None else (f"{v}{u}" if not isinstance(v, bool) else ("on" if v else "off"))
-        err = None
-        if sysfs.dry_run():
-            summary = f"dry run: would set {what} to {fmt(wanted)} (hardware still reads {fmt(read)})"
-        elif not ok:
-            err = sysfs.last_error() or f"{what} could not be set"
-            summary = f"{what}: not set ({err})"
-        elif read is not None and read != wanted:
-            err = f"asked for {fmt(wanted)}, hardware reads {fmt(read)}"
-            summary = f"{what}: {err}"
-            ok = False
-        else:
-            summary = f"{what} set to {fmt(wanted)} → hardware reads {fmt(read)}"
-        return {"ok": ok, "what": what, "wanted": wanted, "read": read, "unit": unit, "summary": summary, "error": err}
-
     async def get_power(self) -> dict:
         return self.power.status()
 
-    async def set_tdp(self, watts: int) -> dict:
-        sysfs.clear_error()
-        plugged = self.battery.plugged()
-        want = self.power.clamp_tdp(int(watts), plugged)
-        ok = self.power.set_tdp(want, plugged)
-        self.autotune.set_ceiling(want)   # the power limit the user picked is autotune's new ceiling
-        return self._done(ok, "power limit", want, self.power.read_tdp(), "W")
-
-    async def set_cpu_max_pct(self, pct: int) -> dict:
-        sysfs.clear_error()
-        self.autotune.pause("manual CPU ceiling")
-        ok = self.power.set_cpu_max_pct(int(pct))
-        return self._done(ok, "CPU limit", int(pct), self.power.status()["cpu"]["max_perf_pct"], "%")
-
-    async def set_epp(self, value: str) -> dict:
-        sysfs.clear_error()
-        self.autotune.pause("manual CPU energy mode")
-        try:
-            ok = self.power.set_epp(str(value))
-        except ValueError as e:
-            return {"ok": False, "what": "CPU energy mode", "wanted": value, "read": self.power.epp(), "unit": "",
-                    "summary": f"CPU energy mode: {e}", "error": str(e)}
-        return self._done(ok, "CPU energy mode", str(value), self.power.epp())
-
-    async def set_tdp_boost(self, on: bool) -> bool:
-        self.power.boost = bool(on)
-        self.settings["tdp_boost"] = bool(on)
-        self._save_settings()
-        return True
-
-    async def set_cpu_turbo(self, on: bool) -> dict:
-        sysfs.clear_error()
-        ok = self.power.set_cpu_turbo(bool(on))
-        nt = self.power.status()["cpu"]["no_turbo"]
-        return self._done(ok, "CPU turbo", bool(on), None if nt is None else nt == 0)
-
-    async def set_gpu_window(self, min_mhz, max_mhz) -> dict:
-        sysfs.clear_error()
-        self.autotune.pause("manual GPU clocks")
-        lo = None if min_mhz is None else int(min_mhz)
-        hi = None if max_mhz is None else int(max_mhz)
-        ok = self.power.set_gpu_window(lo, hi)
-        g = self.power.status()["gpu"]
-        if lo is not None and hi is None:
-            return self._done(ok, "GPU minimum clock", lo, g["min_mhz"], "MHz")
-        if hi is not None and lo is None:
-            return self._done(ok, "GPU maximum clock", hi, g["max_mhz"], "MHz")
-        return self._done(ok, "GPU clocks", f"{lo}–{hi}", f"{g['min_mhz']}–{g['max_mhz']}", "MHz")
-
-    async def reset_gpu_window(self) -> dict:
-        sysfs.clear_error()
-        ok = self.power.reset_gpu_window()
-        g = self.power.status()["gpu"]
-        return self._done(ok, "GPU clocks", f"{g['min_mhz']}–{g['max_mhz']}", f"{g['min_mhz']}–{g['max_mhz']}", "MHz")
-
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
-        plugged = self.battery.plugged()
-        prof = self.profiles.get(appid, bool(plugged)) if appid else {}
-        # a profile picked by hand wins over the game's saved TDP: its watts are what the user just chose
-        overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
-        self.settings["last_profile"] = name
-        self._save_settings()
-        sysfs.clear_error()
-        r = self.power.apply_profile(name, overrides, plugged)
-        if "tdp" in r["applied"]:
-            self.autotune.set_ceiling(r["applied"]["tdp"])   # autotune now works under this profile's power
-        st = self.power.status()
-        r["read"] = {"tdp_w": st["tdp_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"], "epp": st["cpu"]["epp"]}
+        """Apply a profile and read the limits back (HARDWARE-FINDINGS §14): the UI shows `summary` in its toast
+        and `error` in red; `read` is what the hardware reports after the write."""
+        async with self._power_lock:
+            plugged = self.battery.plugged()
+            prof = self.profiles.get(appid, bool(plugged)) if appid else {}
+            # a profile picked by hand wins over the game's saved TDP: its watts are what the user just chose
+            overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
+            self.settings["last_profile"] = name
+            self._save_settings()
+            sysfs.clear_error()
+            r = self.power.apply_profile(name, overrides, plugged)
+            if "tdp" in r["applied"]:
+                self.autotune.set_ceiling(r["applied"]["tdp"])   # autotune now works under this profile's power
+            st = self.power.status()
+        r["read"] = {"tdp_w": st["tdp_w"], "pl2_w": st["rapl"]["pl2_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"],
+                     "epp": st["cpu"]["epp"], "backend": st["tdp_backend"]}
         r["ok"] = not r["failed"]
         want = r["applied"].get("tdp")
         if r["ok"] and want is not None and st["tdp_w"] is not None and st["tdp_w"] != want:
@@ -324,89 +247,28 @@ class Plugin:
             r["error"] = sysfs.last_error() or f"could not set: {', '.join(r['failed'])}"
         else:
             r["error"] = None
-        r["summary"] = (f"{name} set → hardware reads {st['tdp_w'] if st['tdp_w'] is not None else '?'} W"
-                        + (f", CPU {st['cpu']['max_perf_pct']}%" if st["cpu"]["max_perf_pct"] is not None else "")
-                        if r["ok"] else f"{name}: {r['error']}")
+        r["summary"] = (f"{name} set → {self._reads(st)}" if r["ok"] else f"{name}: {r['error']}")
         if sysfs.dry_run():
-            r["summary"] = f"dry run: would apply {name} (hardware unchanged, reads {st['tdp_w']} W)"
+            r["summary"] = f"dry run: would apply {name} (hardware unchanged, {self._reads(st)})"
             r["ok"], r["error"] = True, None
         return r
 
-    async def revert_power(self) -> dict:
-        sysfs.clear_error()
-        self.autotune.pause("revert to defaults")
-        n = self.power.revert_all()
-        st = self.power.status()
-        err = sysfs.last_error()
-        return {"ok": err is None, "reverted": n, "read": {"tdp_w": st["tdp_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"]},
-                "error": err, "summary": (f"{n} value(s) restored → hardware reads {st['tdp_w']} W, CPU {st['cpu']['max_perf_pct']}%"
-                                          if err is None else f"restore failed: {err}")}
+    @staticmethod
+    def _reads(st: dict) -> str:
+        """'RAPL reads 17 W / 24 W': the sustained and short-term limits from the backend that enforces them."""
+        who = {"rapl": "RAPL", "hhd": "Handheld Daemon", "msi-firmware": "MSI firmware"}.get(st["tdp_backend"] or "", "hardware")
+        w = "?" if st["tdp_w"] is None else f"{st['tdp_w']:g}"
+        pl2 = st["rapl"]["pl2_w"] if st["tdp_backend"] == "rapl" else None
+        return f"{who} reads {w} W" + (f" / {pl2:g} W" if pl2 else "") + \
+            (f", CPU {st['cpu']['max_perf_pct']}%" if st["cpu"]["max_perf_pct"] is not None else "")
 
     async def list_profiles(self) -> dict:
         return hw.profiles_for(self.hw.model_key)
 
-    async def save_game_power(self, appid: str, values: dict) -> dict:
-        """Save the current manual values as this game's profile for the current power source."""
-        plugged = bool(self.battery.plugged())
-        clean = {k: (None if values.get(k) is None else int(values[k])) for k in POWER_KEYS if k in values}
-        if "base" in values:
-            clean["base"] = str(values["base"])
-        return self.profiles.set(appid, plugged, clean)
-
-    # ---- per-game profiles -------------------------------------------------------------------------------------------
-    async def get_game_profile(self, appid: str) -> dict:
-        return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),
-                "launch": self.profiles.get_launch(appid)}
-
-    async def set_game_profile(self, appid: str, plugged: bool, values: dict) -> dict:
-        return self.profiles.set(appid, bool(plugged), values)
-
-    async def reset_learned(self, appid: str) -> bool:
-        for plugged in (False, True):
-            self.profiles.set(appid, plugged, {"learned": None})
-        return True
-
-    async def export_profiles(self, appid: str | None = None) -> str:
-        return self.profiles.export_json(appid)
-
-    async def import_profiles(self, text: str, overwrite: bool = False) -> int:
-        return self.profiles.import_json(text, bool(overwrite))
-
-    async def export_profiles_file(self, appid: str | None = None) -> str:
-        tag = appid or "all"
-        return _write_user_file(os.path.join(DESKTOP, f"clawdeck-profiles-{tag}-{time.strftime('%Y%m%d')}.json"),
-                                self.profiles.export_json(appid))
-
-    async def list_profile_files(self) -> list:
-        """Profile files the user can import: *.json with 'clawdeck' in the name on the Desktop or in Downloads."""
-        out = []
-        for d in (DESKTOP, os.path.join(HOME, "Downloads")):
-            try:
-                for fn in sorted(os.listdir(d)):
-                    if fn.lower().endswith(".json") and "clawdeck" in fn.lower() and "report" not in fn.lower():
-                        out.append(os.path.join(d, fn))
-            except OSError:
-                continue
-        return out
-
-    async def import_profiles_file(self, path: str, overwrite: bool = False) -> dict:
-        allowed = (os.path.realpath(DESKTOP) + os.sep, os.path.realpath(os.path.join(HOME, "Downloads")) + os.sep)
-        rp = os.path.realpath(path)
-        if not rp.startswith(allowed):
-            return {"ok": False, "error": "import only from Desktop or Downloads"}
-        try:
-            with open(rp, "r", encoding="utf-8") as f:
-                n = self.profiles.import_json(f.read(), bool(overwrite))
-        except (OSError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
-        for appid in self.profiles.games():
-            self._write_launch(appid)
-        return {"ok": True, "imported": n}
-
     # ---- game lifecycle (called by the frontend's Steam hooks) ------------------------------------------------------
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         prof = self.profiles.get(appid, plugged)
-        base = prof.get("base", "performance" if plugged else "battery")
+        base = prof.get("base") or self.settings.get("last_profile") or ("performance" if plugged else "battery")
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
         result = self.power.apply_profile(base, overrides, plugged)
         if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
@@ -435,7 +297,7 @@ class Plugin:
     async def game_stopped(self, appid: str) -> dict:
         appid = str(appid)
         if self.running_appid is not None and appid != self.running_appid:
-            # Steam reports every app that stops (launchers, the Moonlight shortcut): only the game ClawDeck set up counts
+            # Steam reports every app that stops (launchers): only the game ClawDeck set up counts
             return {"ignored": True}
         plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
         learned = self._save_learned(appid, plugged)
@@ -459,8 +321,7 @@ class Plugin:
         return {"changed": True, **self._start_game_power(appid, plugged)}
 
     async def resumed(self) -> dict:
-        """After resume from suspend: firmware may have reset limits; re-apply the charge limit and the running game."""
-        self._apply_charge_limit()
+        """After resume from suspend: firmware may have reset limits; re-apply the running game."""
         if self.running_appid is None:
             return {"reapplied": False}
         plugged = bool(self.battery.plugged())
@@ -471,71 +332,18 @@ class Plugin:
     async def get_autotune(self) -> dict:
         return self.autotune.status()
 
-    # ---- battery and fans --------------------------------------------------------------------------------------------
-    async def get_battery(self) -> dict:
-        return self.battery.status()
+    async def set_target_fps(self, appid: str, fps: int) -> dict:
+        """Autotune's target for a game, the same on battery and plugged in."""
+        fps = max(30, min(240, int(fps)))
+        for plugged in (False, True):
+            self.profiles.set(appid, plugged, {"target_fps": fps})
+        return {"ok": True, "target_fps": fps}
 
-    async def set_charge_limit(self, percent: int) -> dict:
-        sysfs.clear_error()
-        try:
-            ok = self.battery.set_charge_limit(int(percent))
-        except ValueError as e:
-            return {"ok": False, "what": "charge limit", "wanted": percent, "read": self.battery.charge_limit(), "unit": "%",
-                    "summary": f"charge limit: {e}", "error": str(e)}
-        if ok:
-            self.settings["charge_limit"] = int(percent)
-            self._save_settings()
-        if not ok and not self.battery.supported():
-            return {"ok": False, "what": "charge limit", "wanted": int(percent), "read": None, "unit": "%",
-                    "summary": "charge limit: this system offers no charge limit for the Claw",
-                    "error": "no charge_control_end_threshold on this kernel"}
-        return self._done(ok, "charge limit", int(percent), self.battery.charge_limit(), "%")
+    async def get_game_profile(self, appid: str) -> dict:
+        return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),
+                "launch": self.profiles.get_launch(appid)}
 
-    async def get_fans(self) -> dict:
-        return self.fans.status()
-
-    async def set_fan_preset(self, name: str) -> dict:
-        r = self.fans.apply_preset(name)
-        if r.get("ok"):
-            self.settings["fan_preset_set"] = name != "auto"
-            self._save_settings()
-        return r
-
-    # ---- display -----------------------------------------------------------------------------------------------------
-    async def get_display(self) -> dict:
-        return self.display.read()
-
-    async def save_display(self, settings: dict) -> dict:
-        return self.display.save(settings, sysfs.dry_run())
-
-    async def reset_display(self) -> dict:
-        return self.display.reset(sysfs.dry_run())
-
-    async def get_wide_vrr(self) -> dict:
-        return await asyncio.get_event_loop().run_in_executor(None, edid.status)
-
-    async def set_wide_vrr(self, on: bool) -> dict:
-        """30-120 Hz VRR on the Claw's own screen (ClawLab's EDID fix). Rebuilds the initramfs: a minute or two."""
-        fn = edid.enable if on else edid.disable
-        r = await asyncio.get_event_loop().run_in_executor(None, fn, sysfs.dry_run())
-        decky.logger.info("wide VRR %s: %s", "on" if on else "off", r)
-        return r
-
-    # ---- sleep -------------------------------------------------------------------------------------------------------
-    async def get_sleep(self) -> dict:
-        return sleep.status()
-
-    # ---- controller --------------------------------------------------------------------------------------------------
-    async def get_controller(self) -> dict:
-        return self.controller.settings()
-
-    async def set_controller(self, key: str, value) -> dict:
-        try:
-            return self.controller.set(key, value)
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}
-
-    # ---- per-game launch environment (injector, HDR, Mesa) ---------------------------------------------------------
+    # ---- per-game launch environment (injector, XeSS XMX, XeLL, Mesa) ----------------------------------------------
     def _write_launch(self, appid: str) -> dict:
         try:
             return launchenv.write(RUNTIME_DIR, appid, self.profiles.get_launch(appid))
@@ -551,14 +359,21 @@ class Plugin:
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
-        allowed = {"lsfg", "hdr", "mesa", "proton"}   # inject / proxy / reframework are set by injector_install
+        allowed = {"lsfg", "mesa", "xmx", "xell"}   # inject / proxy / reframework are set by injector_install
         clean = {k: v for k, v in values.items() if k in allowed}
         try:   # a value the launch wrapper can't use must be refused here, not break get_launch later
             launchenv.compose({**self.profiles.get_launch(appid), **clean})
         except ValueError as e:
             return {"ok": False, "error": str(e), **(await self.get_launch(appid))}
         self.profiles.set_launch(appid, clean)
-        return {**(await self.get_launch(appid)), "file": self._write_launch(appid)}
+        return {"ok": True, **(await self.get_launch(appid)), "file": self._write_launch(appid)}
+
+    async def game_status(self, appid: str) -> dict:
+        """The Per-game panel in one call: the XeSS driver, what XeLL did in this game, and the injector's state."""
+        launch = self.profiles.get_launch(appid)
+        xs, xl, st = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))),
+                                          self.injector_state(appid))
+        return {"launch": launch, "xess": xs, "xell": xl, "injector": st, "wrapper": WRAPPER + " %command%"}
 
     # ---- XMX injector: OptiScaler / lsfg-vk per game, always the newest release -------------------------------------
     def _xess_ok(self) -> bool:
@@ -584,7 +399,7 @@ class Plugin:
         return st
 
     async def injector_plan(self, appid: str, name: str = "") -> dict:
-        """Everything the Graphics tab needs to recommend one thing for this game, OptiClick-style: what the game
+        """Everything the Per-game panel needs to recommend one tier for this game, OptiClick-style: what the game
         ships, what OptiScaler's community list and OptiPatcher know about it, and what is installed now."""
         loop = asyncio.get_running_loop()
         game_dir, scan = await loop.run_in_executor(None, self._game, appid)
@@ -644,7 +459,7 @@ class Plugin:
             else:
                 return {"error": f"unknown mode {mode}"}
         except Exception as e:   # network, archive, permissions: report, never crash the backend
-            return {"error": str(e)}
+            return {"error": f"{type(e).__name__}: {e}"}
         self._write_launch(appid)
         return r
 
@@ -659,6 +474,20 @@ class Plugin:
         if exe_dir:
             for f in ("OptiScaler.ini", injector.MARKER):
                 userexec.chown_tree(os.path.join(exe_dir, f), HOME)
+
+    async def optiscaler_download(self) -> dict:
+        """Setup → Install OptiScaler: the newest release (and OptiPatcher, REFramework) into ClawDeck's assets, so a
+        game's first setup needs no download. Per game it goes in through injector_install."""
+        if sysfs.dry_run():
+            return {"ok": True, "dry_run": True, "would": "download the newest OptiScaler, OptiPatcher and REFramework into ClawDeck's assets"}
+        got, errors = {}, []
+        for comp in ("optiscaler", "optipatcher", "reframework"):
+            try:
+                got[comp] = (await self._bg(self.updates.ensure, comp))["version"]
+            except Exception as e:
+                errors.append(f"{comp}: {type(e).__name__}: {e}")
+        ok = "optiscaler" in got
+        return {"ok": ok, "versions": got, "error": None if ok and not errors else " · ".join(errors)}
 
     async def lsfg_install(self) -> dict:
         """Install or update lsfg-vk v2 (newest build). On Bazzite through its own `ujust get-lsfg install`, elsewhere
@@ -678,7 +507,7 @@ class Plugin:
                 userexec.chown_tree(os.path.join(HOME, ".local", "share", "vulkan"), HOME)
                 ok, r = True, {"out": ""}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if ok:
             self.settings["lsfg_version"] = latest
             self._save_settings()
@@ -692,25 +521,6 @@ class Plugin:
                       "update": bool(lat) and bool(self.settings.get("lsfg_version")) and lat != self.settings.get("lsfg_version")}
         st["auto"] = self.settings.get("auto_update", True)
         return st
-
-    async def update_now(self) -> dict:
-        """Download every newer release now; games pick it up the next time they close (refresh_game)."""
-        loop = asyncio.get_running_loop()
-        done = {}
-        for comp in ("optiscaler", "optipatcher", "reframework"):
-            if self.updates.installed(comp):
-                try:
-                    done[comp] = (await loop.run_in_executor(None, self.updates.ensure, comp))["version"]
-                except Exception as e:
-                    done[comp] = f"failed: {e}"
-        if streaming.current(HOME):
-            done["moonlight"] = (await self.moonlight_install()).get("version")
-        if self.settings.get("lsfg_version"):
-            lsfg = await self.get_updates()
-            if lsfg["lsfg"]["update"]:
-                done["lsfg"] = (await self.lsfg_install()).get("version")
-        await self._refresh_all()
-        return done
 
     async def _refresh_all(self) -> None:
         """Refresh every set-up game; one game that fails (moved, read-only) never stops the others."""
@@ -755,57 +565,10 @@ class Plugin:
             for comp in ("optiscaler", "optipatcher", "reframework"):
                 if st[comp]["update"] and self.updates.installed(comp):
                     await asyncio.get_running_loop().run_in_executor(None, self.updates.ensure, comp)
-            if st["moonlight"]["update"] and streaming.current(HOME):
-                await self.moonlight_install()
             if self.running_appid is None:
                 await self._refresh_game(appid)
         except Exception as e:
             decky.logger.warning("auto update after %s failed: %s", appid, e)
-
-    async def rollback(self, comp: str) -> dict:
-        """Go back to the previous version of a tool after an update broke something. Games set up with it are
-        reinstalled with the previous version right away when no game runs."""
-        loop = asyncio.get_running_loop()
-        try:
-            if comp == "moonlight":
-                st = streaming.state(HOME, self.settings)
-                prev = self.updates.previous("moonlight")
-                r = await loop.run_in_executor(None, self.updates.rollback, "moonlight")
-                got = await loop.run_in_executor(None, streaming.install, HOME, self.updates.dir("moonlight"), r["version"])
-                return {"ok": True, "version": got["version"], "was": st["version"] or prev}
-            r = await loop.run_in_executor(None, self.updates.rollback, comp)
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        await self._refresh_all()
-        return {"ok": True, **r}
-
-    # ---- streaming: Moonlight (VRR) to Vibepollo / Apollo / Sunshine -------------------------------------------
-    async def get_streaming(self) -> dict:
-        st = streaming.state(HOME, self.settings)
-        up = (await self.get_updates()).get("moonlight") or {}
-        return {**st, "latest": up.get("latest"), "update": up.get("update", False), "previous": up.get("previous")}
-
-    async def moonlight_install(self) -> dict:
-        if sysfs.dry_run():
-            return {"ok": True, "dry_run": True, "would": "download and unpack the newest Moonlight VRR into ~/.local/share/clawdeck/moonlight"}
-        loop = asyncio.get_running_loop()
-        try:
-            got = await loop.run_in_executor(None, self.updates.ensure, "moonlight")
-            if got["version"] == streaming.current(HOME):
-                return {"ok": True, "version": got["version"], "launcher": streaming.launcher(HOME), "updated": False}
-            r = await loop.run_in_executor(None, streaming.install, HOME, got["dir"], got["version"])
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        return {"ok": True, **r, "updated": True}
-
-    async def set_stream_host(self, host: str, app: str = "Desktop") -> dict:
-        try:
-            args = streaming.stream_args(host.strip(), app.strip() or "Desktop")
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}
-        self.settings["stream_host"], self.settings["stream_app"] = host.strip(), app.strip() or "Desktop"
-        self._save_settings()
-        return {"ok": True, "launch_options": args, "launcher": streaming.launcher(HOME)}
 
     # ---- what changed since last start --------------------------------------------------------------------------
     async def get_changes(self) -> dict:
@@ -818,62 +581,34 @@ class Plugin:
             r["failing"] = [{"title": c["title"], "detail": c["detail"]} for c in checks if not c["ok"] and not c.get("optional")]
         return r
 
-    async def injector_launch_env(self, mode: str) -> dict:
-        return injector.Injector.launch_env(mode)
-
     # ---- XeSS driver (xess-xmx-linux) --------------------------------------------------------------------------------
     async def xess_state(self) -> dict:
-        return xess.state(HOME)
+        return await self._bg(xess.state, HOME)
 
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
+        self._health = None
         try:
-            return await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned), sysfs.dry_run())
+            r = await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned), sysfs.dry_run())
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        if not r.get("ok"):
+            decky.logger.warning("XeSS XMX install failed: %s", r.get("error"))
+        return r
 
     async def xess_probe(self) -> dict:
         return await self._bg(xess.probe, HOME)
 
-    async def xess_switch_driver(self, version: str) -> dict:
-        try:
-            return await self._bg(xess.switch_driver, HOME, version)
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}
-
     async def xess_uninstall(self) -> dict:
+        self._health = None
         return await self._bg(xess.uninstall, HOME)
 
-    # ---- Proton ------------------------------------------------------------------------------------------------------
-    async def list_proton(self) -> list:
-        return proton.installed(HOME)
+    # ---- the VRR range fix (ClawLab's EDID, Fixes panel) -------------------------------------------------------------
+    async def get_wide_vrr(self) -> dict:
+        return await self._bg(edid.status)
 
-    # ---- benchmark ---------------------------------------------------------------------------------------------------
-    async def bench_start(self, appid: str, name: str, label: str, duration_s: int = 120) -> dict:
-        st = self.power.status()
-        settings = {"tdp": (st.get("tdp") or {}).get("custom_tdp"), "tdp_mode": (st.get("tdp") or {}).get("mode"),
-                    "cpu_max_pct": st["cpu"]["max_perf_pct"], "gpu_min_mhz": st["gpu"]["min_mhz"],
-                    "gpu_max_mhz": st["gpu"]["max_mhz"], "plugged": self.battery.plugged(),
-                    "launch": self.profiles.get_launch(appid)}
-        return self.bench.start(appid, name, label, settings, int(duration_s))
-
-    async def bench_status(self) -> dict:
-        return self.bench.status()
-
-    async def bench_stop(self) -> dict | None:
-        return self.bench.stop()
-
-    async def bench_results(self) -> list:
-        return self.bench.results()
-
-    async def bench_export(self) -> str:
-        return _write_user_file(os.path.join(DESKTOP, f"clawdeck-benchmarks-{time.strftime('%Y%m%d-%H%M%S')}.csv"),
-                                self.bench.export_csv())
-
-    async def bench_clear(self) -> bool:
-        self.bench.clear()
-        return True
-
-    # ---- HHD passthrough (read-only; writes go through the modules above) --------------------------------------------
-    async def hhd_state(self) -> dict | None:
-        return hhd.get_state()
-
+    async def set_wide_vrr(self, on: bool) -> dict:
+        """30-120 Hz VRR on the Claw's own screen (ClawLab's EDID fix). Rebuilds the initramfs: a minute or two."""
+        fn = edid.enable if on else edid.disable
+        r = await self._bg(fn, sysfs.dry_run())
+        decky.logger.info("wide VRR %s: %s", "install" if on else "remove", r)
+        return r

@@ -127,3 +127,24 @@ description in the Hint below it, and verify at 1280×800 in Game Mode.
 Done (2026-10-21): the picker's options are "Battery 12 W", "Balanced 17 W", "Performance 25 W", "Dock 35 W",
 "Custom 17 W"; what each profile is for, and the watts the hardware reads now, are in the control's description.
 Still to verify at 1280×800 in Game Mode (STATUS → Needs the maintainer).
+
+## 17. Scope reset (2026-10-21 evening, project brief) — done in code 2026-10-22, for the device
+
+The plugin keeps only what Bazzite and Steam's Quick Access do not do: four panels (Power, Per-game, Fixes, Setup).
+Three bugs from the brief, and what changed:
+
+- **XeSS XMX install fails with "file not found"**: the fork (IHulkSmashI/xess-xmx-linux) has no release, so with
+  `use_fork` the GitHub API answers 404 "Not Found". The installer now tries the fork first and, on 404, upstream's
+  release (`xess-xmx-linux-20261018.zip`, verified asset name) with a note; every other failure names the step
+  (download / archive / install.sh) and the real reason in the toast, the red row and the log. Needs the device to
+  confirm the original failure is this one.
+- **TDP toast shows the previous value when the dropdown is changed quickly**: the profile picker is debounced
+  (300 ms) and only the newest change may toast; the backend serialises profile writes behind one lock and reads
+  back after the write; the line under the control shows "RAPL reads 17 W / 24 W" from that read-back.
+- **Profile label truncated in Quick Access**: short labels ("Battery 12 W"), the full name under the control.
+
+XeLL per game: the fork's shim logs into the prefix (`drive_c/igdext_trace.log`, `igdext_xell.log`) when
+`IGDEXT_XELL_PROBE` / `IGDEXT_XELL_LOG` / `IGDEXT_TRACE` are set; the launch wrapper sets them when "XeLL driver
+mode" is on for the game and rotates the logs per launch, and `xess.game_xell` reads them: `LatencyReductionExt(`
+/ `RenderSubmitStart(` = driver mode, `xellSetSleepMode` only = cross-vendor. Markers come from the branch's
+source (`shim/src/dll/XellDriver.cpp`, `XellHook.cpp`); confirm with Wuthering Waves or Cyberpunk 2077 with XeSS FG on.
