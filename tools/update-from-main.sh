@@ -8,11 +8,17 @@ tmp=$(mktemp -d)
 curl -fsSL "$URL/ClawDeck.zip" -o "$tmp/ClawDeck.zip"
 curl -fsSL "$URL/BUILD.txt" || true
 echo
+# unpack first, swap after: a broken download must not leave the user without a plugin
+unzip -qo "$tmp/ClawDeck.zip" -d "$tmp/new"
+[ -f "$tmp/new/ClawDeck/main.py" ] || { echo "downloaded archive has no ClawDeck/main.py; nothing changed" >&2; exit 1; }
 sudo rm -rf "$DEST/ClawDeck"
-sudo unzip -qo "$tmp/ClawDeck.zip" -d "$DEST"
+sudo mv "$tmp/new/ClawDeck" "$DEST/ClawDeck"
 sudo chown -R "$USER:$USER" "$DEST/ClawDeck" 2>/dev/null || true
 # a plain restart can leave the old PluginLoader process alive (seen on Bazzite: "Unit process remains running after
 # unit stopped"), and the Quick Access menu then keeps talking to the old plugin code. Stop, kill leftovers, start.
-sudo systemctl stop plugin_loader; sudo pkill -f homebrew/services/PluginLoader 2>/dev/null; sleep 1; sudo systemctl start plugin_loader
+sudo systemctl stop plugin_loader
+sudo pkill -x PluginLoader 2>/dev/null || true   # by process name (not -f: that matched sudo's own command line)
+sleep 1
+sudo systemctl start plugin_loader
 rm -rf "$tmp"
 echo "ClawDeck updated in $DEST; Decky restarted. Open Quick Access -> Decky -> ClawDeck."

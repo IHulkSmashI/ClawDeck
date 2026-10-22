@@ -344,3 +344,64 @@ edits. If it behaves, document it and leave it alone (it saves real battery at i
 Undervolt / voltage offsets (locked on Intel since the Plundervolt fixes), memory or ring clock control, per-core
 power limits. EPP is per core but ClawDeck sets all cores alike — per-core-type EPP (performance on P-cores,
 balance_power on LP-E) is possible and goes into 22.1's sweep as an experiment, not a default.
+
+## 23. Full code review (2026-10-22): what to change, ranked — for Claude Code
+
+Three independent reviews (power path; installs/security/CI; UI + API wiring), each finding traced to code and the
+top ones re-checked by hand. All 31 UI callables match main.py; RAPL ordering, units, `_sppt_for`, guard hysteresis,
+tls/clean_env, zip-slip checks and EDID panel gating were found correct. Fixed already in this PR: the update
+script (unpack before swapping, `pkill -x` instead of `-f`), CI permissions (read by default; only the `sideload`
+and `release` jobs write, never on pull requests) and a concurrency group so an old run can't overwrite a newer
+sideload build.
+
+### A. Behaviour the user hits today (do first, one PR)
+1. **The picked profile is ignored when a game starts.** `profiles.py:26` default slots carry `base`
+   (battery/performance), so `main._start_game_power` never reaches `settings.last_profile`; the dropdown says
+   Balanced, the hardware gets Battery. Default slots → `{}`; `base` only from a game's own slot. Test.
+2. **Autotune off doesn't stop it.** `set_setting("autotune", False)` only pauses; `set_ceiling` (autotune.py:334)
+   sets `paused=False` on the next profile pick. Off → `autotune.stop()` + re-apply the profile; `set_ceiling` no-op
+   when disabled. **On during a game** → start the session for `running_appid` now (today: next launch only). Tests.
+3. **Autotune overrides the profile's CPU ceiling/boost.** A new `Learned` defaults to 100 % / boost on and `_apply`
+   writes them (autotune.py:309, 395). Seed `Learned` from the hardware after `apply_profile`; write only levers that
+   came from saved data. Same in `set_ceiling`: re-read cpu %, turbo, GPU floor, power_profile into `Learned`.
+4. **Self-test button can't run under Decky.** main.py:225 uses `sys.executable` (the PyInstaller loader). Use
+   `/usr/bin/python3 -I` with `env=sysfs.clean_env()`.
+5. **UI shows stale or no results.** Power.tsx: the read-back `line` is never cleared (autotune/thermal changes are
+   invisible) → always `reads(st)` and poll `get_power` too; no try/catch on writes/`refresh()` (a backend error
+   blanks the panel or does nothing) → red error row with the message, in Power/PerGame/Fixes/Setup/LaunchWrapper;
+   older `refresh()` can overwrite a newer pick → request token; toasts still use `main._reads` "17 W / 24 W, CPU 85%"
+   → one TDP, the UI's profile names ("Battery saver", not "Saver").
+6. **Polling runs with Quick Access closed** (battery): gate the 1–3 s polls on `useQuickAccessVisible()`.
+7. **CPU energy mode dropdown truncates** (side `label`, same as the fixed profile dropdown) → `menuLabel`.
+
+### B. Safety and revertibility (second PR)
+8. **Crash leaves thermald stopped / tau at 8 s.** The paused flag and originals live in RAM. Write
+   `/run/clawdeck/power.json` (tmpfs) when stopping thermald or shortening tau; on start, if present, restore PL1/PL2/
+   tau, start thermald, delete it. `sysfs.revert` must keep the record when the write fails (sysfs.py:77).
+9. **Root extracts into a user-owned dir** (downloads.extract → `~/.local/share/clawdeck/...`): a pre-planted symlink
+   lets a user process redirect root writes. Unpack as the user (`userexec` + `unzip`), or into a root-only mkdtemp
+   then rename. Same class: `_write_user_file` parents and `health.collect_logs` → refuse symlinked parents,
+   `O_NOFOLLOW`, write as the user.
+10. **No way to undo XeSS.** Add `xess.uninstall()` (package `uninstall.sh` as the user) + a Setup button with Hint;
+    call it from `_uninstall`.
+11. **Blocking calls on Decky's loop:** `systemctl` in power (thermald), `edid.disable()` in `_uninstall`,
+    `stack.detect()`, `busctl` in autotune's step → executor. Switch paths (`power_source_changed`, `resumed`,
+    re-`game_started`) call `autotune.stop()` → full revert → thermald restart → stop again: add `stop(revert=False)`.
+12. **Partial reverts:** edid `disable()` ignores a failed `--untrack` and returns ok; `enable()` leaves the .bin on
+    failure and checks only the booted cmdline for a foreign override (use `_kargs_pending()`); buttons `remove()` /
+    `apply()` ignore InputPlumber's restart result; the buttons device override is a frozen copy of the stock YAML →
+    store its sha, warn/regenerate when the stock file changes, not-ok when the stock file is gone.
+13. **Downloads:** add `sha256` to versions.json and require it when pinned; refuse when unpinned and GitHub reports
+    no digest. `_set_rapl` failure path must restore the values read just before, not the pre-ClawDeck ones.
+
+### C. Smaller (third PR)
+14. Autotune: classify on the window's median, not the last 1 s sample; undo a lever on trial before `_remeasure`;
+    slider below the user floor lowers the floor; rotate autotune.csv per game.
+15. Running game not tracked while the panel stays open (PerGame/Power) → re-read on app-lifetime events.
+16. Hints missing on Fixes' "Fix"/"Re-check", quick-mode "Export log" and Advanced; Fixes' XeSS fix must go through
+    Setup's confirm flow; one error row per fix in Fixes.
+17. Dead code: `Power.boost` (never false), `_power_lock`, unused `Paths.cpu_boost/cpu_governor/gpu_busy`, 7z/tar in
+    downloads ("OptiScaler" text), `WINEDLLOVERRIDES` merge in clawdeck-launch.sh, `changes.LABELS["hhd"]`,
+    `shadowblip.log`; selftest "thermald paused" check → assert against the state at start.
+18. VRR floor (maintainer report: Steam UI laggy in Game Mode with VRR on, no game running): offer EDID variants
+    30/40/48 Hz floor, **48 Hz default**, same apply/revert path; confirm on the Claw.
