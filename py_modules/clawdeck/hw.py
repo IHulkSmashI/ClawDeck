@@ -88,6 +88,7 @@ class Paths:
     rapl_pl1: str | None = None
     rapl_pl2: str | None = None
     rapl_pl1_max: str | None = None      # constraint_N_max_power_uw of PL1: what the firmware says the chip sustains
+    rapl_pl1_window: str | None = None   # constraint_N_time_window_us of PL1 (tau: the average PL1 is enforced over)
     rapl_energy: str | None = None       # energy_uj for power readings
     rapl_alt_pl1: str | None = None      # the other RAPL interface's limits (MSR when MMIO is primary): raised so it never caps
     rapl_alt_pl2: str | None = None
@@ -176,6 +177,8 @@ def discover_paths() -> Paths:
                     p.rapl_pl1 = limit
                     if os.path.exists(f"{d}/constraint_{idx}_max_power_uw"):
                         p.rapl_pl1_max = f"{d}/constraint_{idx}_max_power_uw"
+                    if os.path.exists(f"{d}/constraint_{idx}_time_window_us"):
+                        p.rapl_pl1_window = f"{d}/constraint_{idx}_time_window_us"
                 elif n == "short_term":
                     p.rapl_pl2 = limit
             if os.path.exists(f"{d}/energy_uj"):

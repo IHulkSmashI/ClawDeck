@@ -56,6 +56,8 @@ BALANCE_GAIN = 0.02     # a CPU/GPU lever stays only if it adds this much fps
 SHIFT = 0.15            # a sustained change this large (two windows) means a new scene: measure again
 RESCAN_S = 300          # and every this long anyway
 XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer counts
+LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_S, so a window sees sustained power
+SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
 XELL_RE = re.compile(rb"xellSleep stats: 100 calls in (\d+) ms \(([\d.]+) ms/frame\)")
 
 
@@ -276,6 +278,9 @@ class Session:
     fps_per_w: float | None = None
     source: str = "presented"
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
+    quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
+    short_tau: bool = False             # the PL1 time window is LEARN_TAU_US right now (findings §22.2)
+    tau_refused: bool = False           # the firmware refused it once: don't retry every window
     history: list[Sample] = field(default_factory=list)
 
 
@@ -305,9 +310,11 @@ class Autotune:
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
                     keep_pct=float(keep_pct or KEEP_PCT), phase="hold" if reuse else "measure")
         s.measured_at = time.monotonic() if reuse else None
+        s.quiet = SETTLED_WINDOWS if reuse else 0           # a saved result is already learned: keep the boost window
         self.session = s
         self.sampler.set_prefix(xell_log)
         self._apply(l)
+        self._tau(s, not reuse)
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
 
@@ -407,6 +414,8 @@ class Autotune:
             del s.history[:-600]
         if self.csv_log:
             self._log(s, smp)
+        if s.paused:
+            self._tau(s, False)                          # the user has the controls: the firmware's window again
         if not smp.fps or s.paused:
             return
         s.learned.samples += 1
@@ -425,6 +434,7 @@ class Autotune:
         s.window, s.watts, s.shown = [], [], []
         l = s.learned
         l.bound = classify(smp)
+        changed_at = s.last_change_at
         if s.phase == "measure":
             self._measure(s, fps)
         elif s.phase == "balance":
@@ -433,6 +443,25 @@ class Autotune:
             self._lower(s, fps)
         else:
             self._hold(s, fps)
+        s.quiet = 0 if s.last_change_at != changed_at else s.quiet + 1
+        self._tau(s, s.phase != "hold" or s.quiet < SETTLED_WINDOWS)
+
+    def _tau(self, s: Session, learning: bool) -> None:
+        """RAPL averages PL1 over a 56 s window: right after a change the package can still boost, and a 10 s window
+        would judge the boost. While learning, an 8 s window; once learned, the firmware's again so play keeps its
+        short bursts (findings §22.2). Both through sysfs.write, so a revert restores it in any case."""
+        if learning and not s.short_tau and not s.tau_refused and self.hw.paths.rapl_pl1_window:
+            if self.power.set_pl1_window(LEARN_TAU_US):
+                s.short_tau = True
+                log.info("autotune learning: PL1 time window %d s", LEARN_TAU_US // 1_000_000)
+            else:
+                s.tau_refused = True
+                self.power.restore_pl1_window()
+                log.warning("autotune: the firmware did not take a %d s PL1 window; keeping its own", LEARN_TAU_US // 1_000_000)
+        elif not learning and s.short_tau:
+            self.power.restore_pl1_window()
+            s.short_tau = False
+            log.info("autotune settled: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
     # ---- the phases ----------------------------------------------------------------------------------------------
     def _line(self, s: Session) -> float:
@@ -451,6 +480,8 @@ class Autotune:
         if l.tdp != top:
             self._tdp(l, top)
         l.ceiling = s.ceiling_tdp
+        s.quiet = 0
+        self._tau(s, True)                               # learning again: sustained power only, from the first window
         self._did(s, f"measuring the most {top} W gives ({why})", f"{top} W")
 
     def _measure(self, s: Session, fps: float) -> None:
@@ -654,6 +685,8 @@ class Autotune:
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
                 "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap,
+                "learning": s.short_tau or s.phase != "hold" or s.quiet < SETTLED_WINDOWS,
+                "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,
                 "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),
                 "last": None if last is None else last.__dict__}
