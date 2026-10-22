@@ -122,3 +122,14 @@ def revert_all() -> int:
 def touched() -> dict[str, str | None]:
     with _lock:
         return dict(_originals)
+
+
+def clean_env() -> dict[str, str]:
+    """The environment for system tools the plugin launches. Decky Loader's bundled Python (PyInstaller) exports
+    LD_LIBRARY_PATH to its private libraries, and anything inheriting it loads the wrong OpenSSL: on the Claw
+    rpm-ostree died with "libsolv.so.1: undefined symbol: EVP_MD_CTX_dup" before doing anything. Strip the loader
+    and Python variables; keep the rest."""
+    drop = ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME", "_MEIPASS", "_MEIPASS2")
+    env = {k: v for k, v in os.environ.items() if k not in drop and not k.startswith("_PYI_")}
+    env.setdefault("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    return env

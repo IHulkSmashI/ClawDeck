@@ -69,7 +69,7 @@ filtered_events: []
 
 
 def _run(cmd: list[str], timeout: float = 30) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False, env=sysfs.clean_env())
 
 
 def _read(path: str) -> str | None:

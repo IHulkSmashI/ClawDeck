@@ -18,6 +18,17 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "py_modules"))
 
+# Decky Loader is a PyInstaller bundle: it exports LD_LIBRARY_PATH (and friends) pointing at its private libraries,
+# and every program the plugin starts inherits that. On the Claw, rpm-ostree then loaded Decky's OpenSSL and died
+# with "libsolv.so.1: undefined symbol: EVP_MD_CTX_dup" before writing the kernel arguments for the VRR fix.
+# PyInstaller keeps the original value in *_ORIG; restore it (or drop the variable) once, here, so no child sees it.
+for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
+    _orig = os.environ.pop(f"{_v}_ORIG", None)
+    if _orig:
+        os.environ[_v] = _orig
+    else:
+        os.environ.pop(_v, None)
+
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, health, hw, launchenv, power,  # noqa: E402
