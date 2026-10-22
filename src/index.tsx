@@ -1,9 +1,9 @@
 import { DialogButton, Focusable, staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
-import { GiClawHammer } from "react-icons/gi";
 import { MdSettings } from "react-icons/md";
 
 import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } from "./api";
+import { LogoIcon } from "./components/LogoIcon";
 import { FullPage, openPage, QuickPanel, ROUTE } from "./pages";
 
 declare const SteamClient: any;
@@ -73,7 +73,7 @@ export default definePlugin(() => {
       </Focusable>
     ),
     content: <QuickPanel />,
-    icon: <GiClawHammer />,
+    icon: <LogoIcon />,
     onDismount() {
       unregisters.forEach((u) => { try { u(); } catch { /* already gone */ } });
       routerHook.removeRoute(ROUTE);
