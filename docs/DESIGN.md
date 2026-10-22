@@ -47,11 +47,11 @@ tools/
 ```
 
 ## The four panels
-- **Power**: profile dropdown (short label, full name in the description), one read-back line after every change
-  ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend that enforces them), Autotune on/off with a green/red status
-  and, while it runs, what it is doing (target fps, current TDP, last adjustment). Profile changes are debounced in
-  the UI (300 ms, only the newest change toasts) and serialised in the backend (one lock), so a fast flick through
-  the list never shows a stale value.
+- **Power**: profile dropdown (six, short label, what/why/cost under it), the TDP slider (model range, = Custom,
+  autotune's ceiling), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
+  that enforces them), Autotune with its range, current watts, target, last change, bottleneck and last action.
+  Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
+  (one lock). Under an Advanced expander: CPU boost, CPU ceiling, GPU floor/ceiling, EPP, autotune floor (§19).
 - **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
   for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` / `igdext_xell.log` in
   the prefix, rotated per launch by the wrapper), and a line saying whether OptiScaler (Bazzite's Decky Framegen) is
@@ -80,10 +80,14 @@ TDP when HHD runs; the MSI attributes only where RAPL is absent. Steam's own sli
 Every write answers with the value read back (§14).
 
 ## Autotune controller
-Profile = the ceiling. Decisions on a 10 s window (average and worst second) that restarts after every change:
-below target → feed the bound side (CPU ceiling or GPU floor) before adding watts; on target → trim the unbound side,
-then one watt less; learned games are rechecked every 5 min and relearn when fps sit far above target (graphics
-lowered). A manual change pauses it for the session. ~70 µs of CPU per step.
+The profile or the TDP slider is the ceiling; the floor is the model minimum (8 W) or the user's (Advanced).
+Moving the slider re-clamps at once. Decisions on a 10 s window (average and worst second) that restarts after every
+change, one lever per window (HARDWARE-FINDINGS §18): short and GPU-bound → GPU floor +100 MHz (from the efficient
+clock) up to the GPU ceiling, then TDP +2 W; short and CPU-bound → CPU boost on, CPU ceiling 100 %, drop a GPU floor
+autotune set, then TDP; short otherwise → TDP; on target → TDP −1 W, and only at the floor GPU floor −100 MHz then CPU
+ceiling −10 % (not below 60 %). At the ceiling and still short it says so and changes nothing. Learned per game
+(TDP, CPU ceiling, GPU floor, boost); rechecked every 5 min, relearned when fps sit far above target. A manual change
+(Advanced) pauses it; picking a profile or moving the slider hands control back. ~70 µs of CPU per step.
 
 ## Open items (need the device)
 - The fork publishes no release: `tools/make-release.py` there needs the CI-built binaries (its Mesa 26.3 matrix job

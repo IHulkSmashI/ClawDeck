@@ -36,23 +36,32 @@ MODELS: dict[str, dict] = {
                 "tdp": {"min": 7, "battery_max": 35, "plugged_max": 35, "sppt_max": 40}, "panel_hz": [60, 120]},
 }
 
-# recommended profiles per model, watts (TDP = PL1 sustained; the boost limit PL2 follows from it). Four steps, lowest
-# to highest power: battery (longest play time), balanced (heavier games, still unplugged), performance (plugged in,
-# handheld) and dock (the firmware ceiling). Why these numbers: Intel's Lunar and Panther Lake chips get most of their
-# frames by about 12-17 W and little more per watt above that (Notebookcheck's Claw 8 AI+ runs: about 8 h 40 min at
-# 8 W, 3 h 40 min at 17 W, 2 h 20 min at 25 W), so battery play belongs at 12-17 W and 25 W+ is for the charger.
-# Starting points until Benchmark numbers from a Claw replace them; set_tdp clamps each to the model's own limits.
-_FOUR_STEPS = {
-    "battery":     {"tdp": 12, "cpu_max_pct": 70,  "gpu_min_mhz": None, "epp": "balance_power", "note": "longest play time"},
+# recommended profiles per model, watts (TDP = PL1 sustained; the boost limit PL2 follows from it). Six steps, lowest
+# to highest power (HARDWARE-FINDINGS §17): battery saver and battery (longest play time), balanced (heavier games,
+# still unplugged), performance (plugged in, handheld), plugged (heavy games on the charger) and max (the firmware
+# ceiling, docked). Why these numbers: Intel's Lunar and Panther Lake chips get most of their frames by about 12-17 W
+# and little more per watt above that (Notebookcheck's Claw 8 AI+ runs: about 8 h 40 min at 8 W, 3 h 40 min at 17 W,
+# 2 h 20 min at 25 W), so battery play belongs at 10-17 W and 25 W+ is for the charger. Starting points until
+# measurements from a Claw replace them; set_tdp clamps each to the model's own limits.
+_SIX_STEPS = {
+    "saver":       {"tdp": 10, "cpu_max_pct": 60,  "gpu_min_mhz": None, "epp": "power", "note": "2D, indie and old games; the longest play time"},
+    "battery":     {"tdp": 12, "cpu_max_pct": 70,  "gpu_min_mhz": None, "epp": "balance_power", "note": "light games, long trips"},
     "balanced":    {"tdp": 17, "cpu_max_pct": 85,  "gpu_min_mhz": None, "epp": "balance_power", "note": "heavier games, still on battery"},
     "performance": {"tdp": 25, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
-    "dock":        {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "docked, fans audible"},
+    "plugged":     {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "heavy games on the charger; warm"},
+    "max":         {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "the firmware ceiling, docked; fans audible"},
 }
 PROFILES: dict[str, dict[str, dict]] = {
-    "default": _FOUR_STEPS,
-    "MS-1T91": {**_FOUR_STEPS,
-                "dock": dict(_FOUR_STEPS["dock"], note="35 W sustained / 45 W boost on the dock")},
+    "default": _SIX_STEPS,
+    "MS-1T91": {**_SIX_STEPS,
+                "max": dict(_SIX_STEPS["max"], note="35 W sustained / 45 W boost, docked; fans audible")},
 }
+# names saved by earlier versions (settings.json, per-game profiles) that map onto today's
+PROFILE_ALIASES = {"dock": "max"}
+
+
+def profile_name(name: str | None) -> str | None:
+    return PROFILE_ALIASES.get(name, name) if name else name
 
 
 @dataclass
@@ -78,6 +87,7 @@ class Paths:
     rapl_package: str | None = None      # intel-rapl-mmio:0 or intel-rapl:0 directory
     rapl_pl1: str | None = None
     rapl_pl2: str | None = None
+    rapl_pl1_max: str | None = None      # constraint_N_max_power_uw of PL1: what the firmware says the chip sustains
     rapl_energy: str | None = None       # energy_uj for power readings
     rapl_alt_pl1: str | None = None      # the other RAPL interface's limits (MSR when MMIO is primary): raised so it never caps
     rapl_alt_pl2: str | None = None
@@ -161,6 +171,8 @@ def discover_paths() -> Paths:
                 limit = f"{d}/constraint_{idx}_power_limit_uw"
                 if n == "long_term":
                     p.rapl_pl1 = limit
+                    if os.path.exists(f"{d}/constraint_{idx}_max_power_uw"):
+                        p.rapl_pl1_max = f"{d}/constraint_{idx}_max_power_uw"
                 elif n == "short_term":
                     p.rapl_pl2 = limit
             if os.path.exists(f"{d}/energy_uj"):
@@ -230,6 +242,12 @@ def detect() -> Hardware:
 
 def profiles_for(product: str) -> dict[str, dict]:
     return PROFILES.get(product, PROFILES["default"])
+
+
+def tdp_range(model: dict, plugged: bool | None = None) -> tuple[int, int]:
+    """The watts the TDP slider spans: the model's minimum to its maximum for this power source (8-35 W on the EX)."""
+    lim = model["tdp"]
+    return lim["min"], lim["plugged_max"] if plugged else lim["battery_max"]
 
 
 ICD_DIRS = ("/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d")

@@ -2,35 +2,61 @@ import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField }
 import { toaster } from "@decky/api";
 import { FC, useEffect, useRef, useState } from "react";
 
-import { applyProfile, getAutotune, getGameProfile, getPower, getSetting, listProfiles, setSetting, setTargetFps, AutotuneStatus, PowerStatus } from "../api";
+import {
+  applyProfile, getAutotune, getGameProfile, getPower, getSetting, listProfiles, setAutotuneFloor, setCpuMaxPct, setCpuTurbo,
+  setEpp, setGpuWindow, setSetting, setTargetFps, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
+} from "../api";
+import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Note, Problem, Status } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
-// short label in the control (nothing truncated at 1280x800), full name and use in the description under it
-const PROFILES: { id: string; short: string; name: string; use: string }[] = [
-  { id: "battery", short: "Battery", name: "Battery (longest play time)", use: "indie, older and lighter games, long trips" },
-  { id: "balanced", short: "Balanced", name: "Balanced (heavier games on battery)", use: "newer games away from a charger; more fps, shorter play" },
-  { id: "performance", short: "Performance", name: "Performance (plugged in, handheld)", use: "on the charger, playing handheld" },
-  { id: "dock", short: "Dock", name: "Dock (on a TV, fans audible)", use: "on a dock with a TV; the firmware's ceiling" },
+// short label in the control (nothing truncated at 1280x800); what it is for, and what it costs, under it (§17)
+const PROFILES: { id: string; short: string; does: string; cost: string }[] = [
+  { id: "saver", short: "Battery saver", does: "2D, indie and old games; the longest play time", cost: "newer 3D games drop frames" },
+  { id: "battery", short: "Battery", does: "light games and long trips", cost: "heavier games need Balanced" },
+  { id: "balanced", short: "Balanced", does: "newer, heavier games away from a charger", cost: "shorter play time than Battery" },
+  { id: "performance", short: "Performance", does: "handheld on the charger", cost: "drains the battery fast unplugged" },
+  { id: "plugged", short: "Plugged", does: "heavy games on the charger", cost: "warm; fans audible" },
+  { id: "max", short: "Max", does: "the firmware's ceiling, docked", cost: "hot and loud; few extra frames per watt" },
+];
+const EPP: { data: string; label: string }[] = [
+  { data: "power", label: "Most battery" }, { data: "balance_power", label: "Balanced, battery first" },
+  { data: "balance_performance", label: "Balanced, speed first" }, { data: "performance", label: "Fastest" },
 ];
 
 const backendName = (b: string | null | undefined) => (b === "rapl" ? "RAPL" : b === "hhd" ? "Handheld Daemon" : b === "msi-firmware" ? "MSI firmware" : "hardware");
+const reads = (st: PowerStatus | null) =>
+  `${backendName(st?.tdp_backend)} reads ${st?.tdp_w ?? "?"} W${st?.tdp_backend === "rapl" && st.rapl.pl2_w ? ` / ${st.rapl.pl2_w} W` : ""}`;
+const ago = (s: number | null | undefined) => (s == null ? "" : s < 90 ? `${s} s ago` : `${Math.round(s / 60)} min ago`);
 
-/** The Power panel: one profile dropdown and the Autotune switch, with the read-back line after every change. */
+/** Writes that follow a slider or a quick flick through a list: wait for the last value, write once, and let only the
+ *  newest answer through (an older one that arrives late is dropped), so the toast never shows a stale value. */
+const useLatest = () => {
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const seq = useRef<Record<string, number>>({});
+  return <T,>(key: string, write: () => Promise<T>, done: (r: T) => void, ms = 300) => {
+    clearTimeout(timers.current[key]);
+    const mine = (seq.current[key] = (seq.current[key] ?? 0) + 1);
+    timers.current[key] = setTimeout(async () => { const r = await write(); if (mine === seq.current[key]) done(r); }, ms);
+  };
+};
+
+/** The Power panel: profile, TDP slider, Autotune and the read-back line; everything else under Advanced (§19). */
 export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [st, setSt] = useState<PowerStatus | null>(null);
   const [at, setAt] = useState<AutotuneStatus | null>(null);
   const [autotune, setAutotune] = useState(false);
   const [targetFps, setTarget] = useState(60);
   const [profile, setProfile] = useState("battery");
+  const [tdp, setTdpV] = useState(12);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
-  const [reads, setReads] = useState<string | null>(null);    // the line after the last change: "RAPL reads 17 W / 24 W"
+  const [line, setLine] = useState<string | null>(null);      // after the last change: "RAPL reads 17 W / 24 W"
   const [err, setErr] = useState<string | null>(null);        // the last write that didn't take, in red
-  const seq = useRef(0);                                      // only the newest profile change may toast or write state
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [advErr, setAdvErr] = useState<string | null>(null);
+  const latest = useLatest();
   const app = runningApp();
   const appid = app?.appid ?? null;
 
@@ -39,7 +65,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(),
       appid ? getGameProfile(appid) : Promise.resolve(null),
     ]);
-    setSt(s); setAutotune(!!auto); setProfile(last || "battery"); setTable(tbl); setAt(a);
+    const name = last === "dock" ? "max" : (last || "battery");
+    setSt(s); setAutotune(!!auto); setProfile(name); setTable(tbl); setAt(a);
+    setTdpV(name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12));
     if (gp?.battery.target_fps) setTarget(gp.battery.target_fps);
   };
   useEffect(() => { refresh(); }, []);
@@ -50,59 +78,109 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     return () => clearInterval(t);
   }, [at?.running]);
 
-  const lim = st?.limits ?? { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 };
-  const wattsOf = (id: string) => Math.min(table[id]?.tdp ?? 0, lim.plugged_max) || undefined;
-  const picked = PROFILES.find((p) => p.id === profile) ?? PROFILES[0];
-  const limitW = at?.ceiling_tdp ?? wattsOf(picked.id) ?? st?.tdp_w ?? undefined;
-
-  // Picked quickly through the list: wait 300 ms for the last choice, write once, and show the toast only after the
-  // write completed and the value was read back; an older answer that arrives late is ignored.
+  const lo = st?.range?.min ?? st?.limits.min ?? 8, hi = st?.range?.max ?? st?.limits.plugged_max ?? 35;
+  const wattsOf = (id: string) => (table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
+  const picked = PROFILES.find((p) => p.id === profile);
+  const custom = profile === "custom";
+  const onLimit = (r: LimitResult) => {
+    toast(r.summary); setErr(r.ok ? null : r.error);
+    setLine(`${backendName(r.read?.backend)} reads ${r.read?.tdp_w ?? "?"} W${r.read?.pl2_w ? ` / ${r.read.pl2_w} W` : ""}`);
+    refresh();
+  };
   const pick = (id: string) => {
     setProfile(id);
-    if (timer.current) clearTimeout(timer.current);
-    const mine = ++seq.current;
-    timer.current = setTimeout(async () => {
-      const r = await applyProfile(id, appid);
-      if (mine !== seq.current) return;
-      toast(r.summary); setErr(r.ok ? null : r.error);
-      setReads(`${backendName(r.read?.backend)} reads ${r.read?.tdp_w ?? "?"} W${r.read?.pl2_w ? ` / ${r.read.pl2_w} W` : ""}`);
-      await refresh();
-    }, 300);
+    if (wattsOf(id)) setTdpV(wattsOf(id)!);          // the slider follows the profile at once
+    latest("limit", () => applyProfile(id, appid), onLimit);
   };
+  const slide = (w: number) => {
+    setTdpV(w); setProfile("custom");               // moving the slider = the Custom profile
+    latest("limit", () => setTdp(w), onLimit);
+  };
+  const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
-  const tuning = at?.running && !at.paused;
+  const running = !!at?.running && !at.paused;
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (appid ? "Autotune on: waiting for frame times (is ClawDeck in the launch options?)" : "Autotune on: starts with the next game")
-    : at.paused ? "Autotune paused: you changed power by hand"
-    : at.avg_fps != null ? `Holding ${at.target_fps} fps: ${Math.round(at.avg_fps)} fps at ${at.learned?.tdp} W (limit ${at.ceiling_tdp} W)`
-    : `Measuring for ${at.target_fps} fps at ${at.learned?.tdp} W`;
+    : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
+    : `Autotune on: ${at.floor_tdp}–${at.ceiling_tdp} W, now ${at.learned?.tdp} W, target ${at.target_fps} fps` +
+      (at.last_delta ? `, last change ${at.last_delta} ${ago(at.last_change_s)}` : "");
+  const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
+  const atDetail = running && at?.avg_fps != null
+    ? `${bound} · ${Math.round(at.avg_fps)}/${at.target_fps} fps · ${at.limited ?? at.last_action ?? "no change yet"}` : undefined;
+  const rapl25 = st?.rapl.max_w && st.rapl.max_w < hi ? ` The chip reports ${st.rapl.max_w} W as its sustained maximum; above that it may not follow.` : "";
 
   return (
     <PanelSection title="Power">
       <PanelSectionRow>
-        <DropdownItem label="Profile" rgOptions={PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} ${wattsOf(p.id)} W` : p.short }))}
-          selectedOption={profile} onChange={(o) => pick(o.data)}
-          description={explain(`${picked.name}: ${picked.use}. The most power the game may use; Autotune saves below it.`)} />
-        <Status ok={err ? false : null} label={reads ?? `${backendName(st?.tdp_backend)} reads ${st?.tdp_w ?? "?"} W${st?.tdp_backend === "rapl" && st.rapl.pl2_w ? ` / ${st.rapl.pl2_w} W` : ""}`}
-          detail={app ? app.name : "No game running: the profile applies when one starts"} />
-        <Problem error={err} what="Profile" />
+        <DropdownItem label="Profile" selectedOption={profile} onChange={(o) => pick(o.data)}
+          rgOptions={[...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} ${wattsOf(p.id)} W` : p.short })),
+            ...(custom ? [{ data: "custom", label: `Custom ${tdp} W` }] : [])]}
+          description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
+            quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} />
+        <SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={slide}
+          description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
+            quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
+            quick ? undefined : "each watt more buys fps with play time and heat.")} />
+        <Status ok={err ? false : null} label={line ?? reads(st)} detail={app ? app.name : "No game running: the profile applies when one starts"} />
+        <Problem error={err} what="Power limit" />
       </PanelSectionRow>
       <PanelSectionRow>
         <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(quick ? `Holds the target fps with the least power, up to ${limitW ?? "the profile's"} W.`
-            : `Holds the target fps with the least power, never more than the profile (${limitW ?? "?"} W), and moves power between CPU and graphics to where the game needs it. Can't hold it? Pick a higher profile.`)} />
-        <Status ok={!autotune ? false : tuning ? true : null} label={atLine}
-          detail={autotune && at?.running && !at.paused ? (at.last_action ? `Last change: ${at.last_action}` : "No change yet") : undefined} />
+          description={explain(`Holds the target fps with the least power, up to the TDP above, and fixes what is short first: GPU clock floor when the GPU holds the game back, CPU boost and ceiling when the CPU does.`,
+            quick ? undefined : "longer play time at the same smoothness.", quick ? undefined : "the first minutes in a new game can stutter while it learns.")} />
+        <Status ok={!autotune ? false : running ? (at?.limited ? false : true) : null} label={atLine} detail={atDetail} />
       </PanelSectionRow>
       {autotune && appid && (
         <PanelSectionRow>
           <SliderField label="Target fps (this game)" value={targetFps} min={30} max={120} step={5} showValue
             description={explain("Use the same number as Steam's frame limit.")}
-            onChange={async (v) => { setTarget(v); await setTargetFps(appid, v); }} />
+            onChange={(v) => { setTarget(v); latest("fps", () => setTargetFps(appid, v), () => undefined); }} />
         </PanelSectionRow>
       )}
       {autotune && !appid && <PanelSectionRow><Note>Start a game to set its target fps.</Note></PanelSectionRow>}
       {app && autotune && !quick && <LaunchWrapper appid={app.appid} name={app.name} />}
+      {st && (
+        <Advanced id="power" label="Advanced"
+          description={quick ? undefined : explain("CPU boost, CPU ceiling, GPU clocks, CPU energy mode and Autotune's floor. Steam has none of these for this chip.", undefined, "a change here pauses Autotune for this game.")}>
+          <PanelSectionRow>
+            <ToggleField label="CPU boost" checked={st.cpu.no_turbo === 0} disabled={st.cpu.no_turbo == null}
+              onChange={(v) => setCpuTurbo(v).then(onLever)}
+              description={explain(`Short bursts above base clock. Reads ${st.cpu.no_turbo == null ? "?" : st.cpu.no_turbo === 0 ? "on" : "off"}.`,
+                quick ? undefined : "off is cooler and quieter on battery.", "off costs fps in CPU-heavy scenes.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <SliderField label="CPU ceiling (%)" value={st.cpu.max_perf_pct ?? 100} min={10} max={100} step={5} showValue disabled={!st.cpu.available}
+              onChange={(v) => latest("cpu", () => setCpuMaxPct(v), onLever)}
+              description={explain(`Caps the CPU's clock so graphics get more of the shared power. Reads ${st.cpu.max_perf_pct ?? "?"} %.`,
+                quick ? undefined : "graphics-heavy games; try 70–80 %.", "CPU-heavy scenes get slower.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <SliderField label="GPU floor (MHz)" value={st.gpu.min_mhz ?? st.gpu.hw_min_mhz ?? 0} min={st.gpu.hw_min_mhz ?? 100} max={st.gpu.hw_max_mhz ?? 2300} step={50} showValue disabled={!st.gpu.available}
+              onChange={(v) => latest("gpumin", () => setGpuWindow(v, null), onLever)}
+              description={explain(`The GPU never clocks below this while a game runs. Reads ${st.gpu.min_mhz ?? "?"} MHz (now ${st.gpu.cur_mhz ?? "?"}).`,
+                quick ? undefined : "stops stutter from clock dips.", "the GPU's share of power stays up even when it isn't needed.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <SliderField label="GPU ceiling (MHz)" value={st.gpu.max_mhz ?? st.gpu.hw_max_mhz ?? 0} min={st.gpu.hw_min_mhz ?? 100} max={st.gpu.hw_max_mhz ?? 2300} step={50} showValue disabled={!st.gpu.available}
+              onChange={(v) => latest("gpumax", () => setGpuWindow(null, v), onLever)}
+              description={explain(`The GPU never clocks above this. Reads ${st.gpu.max_mhz ?? "?"} MHz of ${st.gpu.hw_max_mhz ?? "?"}.`,
+                quick ? undefined : "hands power back to the CPU in CPU-heavy games.", "lower peak fps.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <DropdownItem label="CPU energy mode" disabled={!st.cpu.epp_available} rgOptions={EPP} selectedOption={st.cpu.epp ?? "balance_performance"}
+              onChange={(o) => setEpp(o.data).then(onLever)}
+              description={explain(`How eagerly the CPU clocks up, like Windows' power mode. Reads ${EPP.find((e) => e.data === st.cpu.epp)?.label ?? st.cpu.epp ?? "?"}.`,
+                quick ? undefined : "profiles set it for you.", "Fastest uses more battery at idle.")} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <SliderField label="Autotune floor (W)" value={st.autotune_floor ?? lo} min={lo} max={hi} step={1} showValue
+              onChange={(v) => latest("floor", () => setAutotuneFloor(v === lo ? null : v), (r) => { toast(r.summary); refresh(); })}
+              description={explain(`The least power Autotune may use (${lo} W, the chip's minimum, unless you raise it).`,
+                quick ? undefined : "a game that stutters on the way down.", undefined)} />
+            <Problem error={advErr} what="Advanced" />
+          </PanelSectionRow>
+        </Advanced>
+      )}
     </PanelSection>
   );
 };

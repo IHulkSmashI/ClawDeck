@@ -1,5 +1,5 @@
-"""Autotune: learn, per game, the lowest power that holds a target frame rate, and whether the game is CPU- or
-GPU-bound, then apply that on the next launch.
+"""Autotune: learn, per game, the lowest power that holds a target frame rate, and what holds the game back (CPU or
+GPU), then apply that on the next launch.
 
 Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no busy polling):
   1. sample: frame time (MangoHud log, see Sampler), GPU clock vs its ceiling, package power (RAPL energy delta),
@@ -10,14 +10,16 @@ Loop (1 Hz while a game runs, idle otherwise; one asyncio task, no threads, no b
      average fps and the worst second in that window. After every change the window starts empty, so the next
      decision is based only on what the new setting did. "On target" = average >= 97 % of the target and no second
      below 85 %; "missing" = average below 95 % or a second below 75 % (stutter); in between, hold.
-  4. control, one lever per decision. CPU and GPU share one power budget (the TDP), so balancing them is half the
-     job: power the side that isn't holding the game back doesn't need goes to the side that is.
-     - on target: alternately trim the side that isn't
-       the bottleneck (GPU-bound: CPU ceiling -10 %, down to 60 %; CPU-bound: GPU floor -100 MHz, or off) and lower
-       the TDP by 1 W, so the budget shrinks without starving the bound side;
-     - missing: first move budget to the bound side without more watts (GPU-bound: CPU ceiling
-       -10 % if the CPU is idle enough, else GPU floor +100 MHz; CPU-bound: CPU ceiling +10 %, else drop the GPU
-       floor), then TDP +2 W; never above the ceiling (the profile or power limit the user picked).
+  4. control, one lever per decision window (HARDWARE-FINDINGS §18): act on what is short, then on watts.
+     - missing and GPU-bound: raise the GPU floor (+100 MHz from its efficient clock) until it reaches the GPU
+       ceiling, then raise the TDP (+2 W);
+     - missing and CPU-bound: CPU boost on, then the CPU ceiling back to 100 %, then drop a GPU floor autotune set
+       (it eats the shared budget), then raise the TDP;
+     - missing, neither: raise the TDP;
+     - on target (battery first): lower the TDP by 1 W; only at the floor lower the GPU floor (-100 MHz, off below
+       its efficient clock) and then the CPU ceiling (-10 %, not below 60 %).
+     The TDP stays between the floor (the model minimum, or the user's) and the ceiling (the profile or TDP slider
+     the user picked); at the ceiling and still short, the status line says so instead of changing anything.
   5. after `stable` decisions without a change, confidence goes up; at 3 the game is "learned" and autotune stops
      lowering, but keeps checking for as long as the game runs, because the player can change graphics settings or
      reach a heavier area at any time: a miss raises power again at once (settings raised), fps far above the target
@@ -47,7 +49,6 @@ from . import hw, power, shadowblip, sysfs
 log = logging.getLogger("clawdeck.autotune")
 
 CPU_MIN_PCT = 60        # autotune never trims the CPU below this: below it, frame pacing suffers in most games
-CPU_IDLE_PCT = 50       # "the CPU has power to spare": its utilisation is under this while the GPU is the bottleneck
 GPU_STEP_MHZ = 100
 LOG_RESCAN_S = 30       # look for a new MangoHud log file this often (a new file appears only when a game starts)
 BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (one D-Bus call per decision window)
@@ -196,6 +197,7 @@ class Learned:
     tdp: int
     cpu_max_pct: int
     gpu_min_mhz: int | None
+    boost: bool = True              # CPU boost (intel_pstate no_turbo = 0)
     bound: str = "balanced"
     confidence: int = 0
     samples: int = 0
@@ -214,10 +216,12 @@ class Session:
     bad_run: int = 0
     unchanged: int = 0
     paused: bool = False
-    trim_turn: bool = True   # on target: alternate between rebalancing CPU/GPU and lowering the TDP
     window: list[float] = field(default_factory=list)   # per-second fps since the last change
     last_change_t: float | None = None
-    last_action: str | None = None       # the last adjustment, in words, for the Power panel's status line
+    last_change_at: float | None = None  # monotonic time of the last change, for "12 s ago"
+    last_action: str | None = None       # the last adjustment, in words: "raised GPU floor to 1300 MHz"
+    last_delta: str | None = None        # the same, short: "+100 MHz GPU floor", "−1 W"
+    limited: str | None = None           # short of the target with nothing left to raise: why
     avg_fps: float | None = None
     low_fps: float | None = None
     history: list[Sample] = field(default_factory=list)
@@ -246,17 +250,34 @@ class Autotune:
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
 
-    def set_ceiling(self, watts: int) -> None:
-        """The user picked a profile or a power limit while autotune runs: that is its new ceiling. Learning starts
-        again from there (the limit is applied by the caller) instead of pausing: autotune only ever goes lower."""
+    def set_ceiling(self, watts: int) -> int | None:
+        """The user picked a profile or moved the TDP slider while autotune runs: that is its new ceiling
+        (HARDWARE-FINDINGS §17). The TDP autotune uses is re-clamped under it and written at once (the caller has
+        just written the ceiling itself); a raised ceiling leaves the current TDP, and autotune raises it when the
+        game needs it. Picking a power level hands control back after a manual change. Returns the watts applied."""
+        s = self.session
+        if not s:
+            return None
+        s.ceiling_tdp = max(s.floor_tdp, int(watts))
+        l = s.learned
+        want = max(s.floor_tdp, min(l.tdp, s.ceiling_tdp))
+        if not self.power.set_tdp(want, self.plugged):
+            log.warning("autotune: re-clamp to %d W was not applied", want)
+        l.tdp = want
+        s.paused, s.good_run, s.bad_run, s.unchanged, s.limited = False, 0, 0, 0, None
+        s.window.clear()
+        log.info("autotune range now %d-%d W, using %d W", s.floor_tdp, s.ceiling_tdp, want)
+        return want
+
+    def set_floor(self, watts: int) -> None:
+        """The lowest TDP autotune may use (the model minimum unless the user sets one)."""
         s = self.session
         if not s:
             return
-        s.ceiling_tdp = max(s.floor_tdp, int(watts))
-        s.learned.tdp = s.ceiling_tdp
-        s.paused, s.good_run, s.bad_run, s.unchanged = False, 0, 0, 0
-        s.window.clear()
-        log.info("autotune ceiling now %d W", s.ceiling_tdp)
+        lo = self.hw.model["tdp"]["min"]
+        s.floor_tdp = max(lo, min(int(watts), s.ceiling_tdp))
+        if s.learned.tdp < s.floor_tdp:
+            self._tdp(s.learned, s.floor_tdp)
 
     def pause(self, reason: str = "manual change") -> None:
         """Never fight the user: a manual power change stops learning for the rest of this session (values the user
@@ -279,6 +300,8 @@ class Autotune:
     def _apply(self, l: Learned) -> None:
         self.power.set_tdp(l.tdp, self.plugged)
         self.power.set_cpu_max_pct(l.cpu_max_pct)
+        if self.hw.paths.cpu_no_turbo and self.power.turbo() != l.boost:
+            self.power.set_cpu_turbo(l.boost)
         if l.gpu_min_mhz:
             self.power.set_gpu_window(l.gpu_min_mhz, None)
 
@@ -318,13 +341,13 @@ class Autotune:
         s.low_fps = min(s.window)
         l.bound = classify(smp)
         t = s.target_fps
-        changed = False
+        changed = None                               # what was done, in words, or None
         if s.avg_fps < t * MISS_AVG or s.low_fps < t * MISS_LOW:
-            changed = self._feed_bound(l, smp)
-            if not changed and l.tdp < s.ceiling_tdp:
-                changed = self._tdp(l, min(s.ceiling_tdp, l.tdp + 2))
+            changed = self._raise(s, l)
+            s.limited = None if changed else f"at the {s.ceiling_tdp} W limit and still short: pick a higher profile or lower the target"
             l.confidence = max(0, l.confidence - 1)
         elif s.avg_fps >= t * ON_AVG and s.low_fps >= t * ON_LOW:
+            s.limited = None
             if l.confidence >= 3 and s.avg_fps >= t * HEADROOM:
                 # far above target on a learned game: the player lowered the graphics (or a scene got lighter for
                 # good), so there is power to save now, not in RECHECK_S
@@ -332,28 +355,21 @@ class Autotune:
                 l.confidence = 0
             recheck = l.confidence >= 3 and smp.t - s.last_change_t >= RECHECK_S
             if l.confidence < 3 or recheck:
-                if s.trim_turn:
-                    changed = self._trim_unbound(l, smp)
-                if not changed and l.tdp > s.floor_tdp:
-                    changed = self._tdp(l, l.tdp - 1)
-                s.trim_turn = not s.trim_turn
+                changed = self._lower(s, l)
                 if recheck:
                     log.info("autotune recheck: trying one step lower after %d s on target", RECHECK_S)
         if changed:
             s.unchanged = 0
             s.window.clear()                         # judge the new setting on its own numbers only
             s.last_change_t = smp.t
-            s.last_action = self._describe(l, s.avg_fps, t)
+            s.last_change_at = time.monotonic()
+            s.last_action, s.last_delta = changed
+            log.info("autotune: %s-bound, %.0f/%d fps: %s", l.bound, s.avg_fps, t, s.last_action)
         else:
             s.unchanged += 1
             if s.unchanged >= s.stable:
                 l.confidence = min(5, l.confidence + 1)
                 s.unchanged = 0
-
-    def _describe(self, l: Learned, avg: float, target: int) -> str:
-        why = f"{avg:.0f} fps for a {target} target"
-        gpu = f", GPU floor {l.gpu_min_mhz} MHz" if l.gpu_min_mhz else ""
-        return f"{l.tdp} W, CPU {l.cpu_max_pct}%{gpu} ({why}, {l.bound}-bound)"
 
     def _tdp(self, l: Learned, watts: int) -> bool:
         """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from)."""
@@ -363,49 +379,69 @@ class Autotune:
         l.tdp = watts
         return True
 
-    # ---- balancing CPU and GPU inside one power budget ---------------------------------------------------------------
-    def _set_cpu(self, l: Learned, pct: int) -> bool:
+    # ---- the levers (HARDWARE-FINDINGS §18): one per decision, each returns (what was done, short form) or None ----
+    def _gpu_limits(self) -> tuple[int | None, int | None]:
+        """(efficient clock, current ceiling) of the GPU: where a floor starts, and where it must stop."""
+        p = self.hw.paths
+        rpe = sysfs.read_int(p.gpu_rpe_freq) if p.gpu_rpe_freq else None
+        top = (sysfs.read_int(p.gpu_max_freq) if p.gpu_max_freq else None) or \
+            (sysfs.read_int(p.gpu_rp0_freq) if p.gpu_rp0_freq else None)
+        return rpe, top
+
+    def _gpu_floor(self, l: Learned, mhz: int | None) -> bool:
+        if not self.hw.paths.gpu_min_freq or mhz == l.gpu_min_mhz:
+            return False
+        ok = self.power.reset_gpu_floor() if mhz is None else self.power.set_gpu_window(mhz, None)
+        if ok:
+            l.gpu_min_mhz = mhz
+        return ok
+
+    def _cpu_ceiling(self, l: Learned, pct: int) -> bool:
         pct = max(CPU_MIN_PCT, min(100, pct))
         if pct == l.cpu_max_pct or not self.hw.paths.cpu_max_perf_pct:
             return False
-        l.cpu_max_pct = pct
-        self.power.set_cpu_max_pct(pct)
-        return True
-
-    def _set_gpu_floor(self, l: Learned, mhz: int | None) -> bool:
-        if not self.hw.paths.gpu_min_freq or mhz == l.gpu_min_mhz:
-            return False
-        if mhz is None:
-            l.gpu_min_mhz = None
-            self.power.reset_gpu_window()
+        if self.power.set_cpu_max_pct(pct):
+            l.cpu_max_pct = pct
             return True
-        hw_max = sysfs.read_int(self.hw.paths.gpu_rp0_freq) if self.hw.paths.gpu_rp0_freq else None
-        if hw_max and mhz > hw_max:
-            return False
-        l.gpu_min_mhz = mhz
-        self.power.set_gpu_window(mhz, None)
-        return True
-
-    def _trim_unbound(self, l: Learned, smp: Sample) -> bool:
-        """On target: take power from the side that isn't the bottleneck, so the TDP can drop further."""
-        if l.bound == "gpu" and (smp.cpu_pct is None or smp.cpu_pct < CPU_IDLE_PCT):
-            return self._set_cpu(l, l.cpu_max_pct - 10)
-        if l.bound == "cpu" and l.gpu_min_mhz:
-            floor = l.gpu_min_mhz - GPU_STEP_MHZ
-            rpe = sysfs.read_int(self.hw.paths.gpu_rpe_freq) if self.hw.paths.gpu_rpe_freq else None
-            return self._set_gpu_floor(l, None if rpe is None or floor <= rpe else floor)
         return False
 
-    def _feed_bound(self, l: Learned, smp: Sample) -> bool:
-        """Below target: move budget to the bottleneck before asking for more watts."""
+    def _raise(self, s: Session, l: Learned) -> tuple[str, str] | None:
+        """Short of the target: give the bound side what it lacks before asking for more watts."""
         if l.bound == "gpu":
-            if smp.cpu_pct is not None and smp.cpu_pct < CPU_IDLE_PCT and self._set_cpu(l, l.cpu_max_pct - 10):
-                return True
-            rpe = sysfs.read_int(self.hw.paths.gpu_rpe_freq) if self.hw.paths.gpu_rpe_freq else None
-            return self._set_gpu_floor(l, (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ)
-        if l.bound == "cpu":
-            return self._set_cpu(l, l.cpu_max_pct + 10) or (l.gpu_min_mhz is not None and self._set_gpu_floor(l, None))
-        return False
+            rpe, top = self._gpu_limits()
+            nxt = (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ
+            if top:
+                nxt = min(nxt, top)
+            if self.hw.paths.gpu_min_freq and (l.gpu_min_mhz or 0) < (top or nxt) and self._gpu_floor(l, nxt):
+                return f"raised GPU floor to {nxt} MHz", f"+{GPU_STEP_MHZ} MHz GPU floor"
+        elif l.bound == "cpu":
+            if not l.boost and self.hw.paths.cpu_no_turbo and self.power.set_cpu_turbo(True):
+                l.boost = True
+                return "turned CPU boost on", "CPU boost on"
+            if l.cpu_max_pct < 100 and self._cpu_ceiling(l, 100):
+                return "raised CPU ceiling to 100 %", "CPU ceiling 100 %"
+            if l.gpu_min_mhz is not None and self._gpu_floor(l, None):
+                return "dropped the GPU floor (budget back to the CPU)", "GPU floor off"
+        if l.tdp < s.ceiling_tdp:
+            was, w = l.tdp, min(s.ceiling_tdp, l.tdp + 2)
+            if self._tdp(l, w):
+                return f"raised TDP to {w} W", f"+{w - was} W"
+        return None
+
+    def _lower(self, s: Session, l: Learned) -> tuple[str, str] | None:
+        """On target: save battery. Watts first; only at the floor give back GPU floor, then CPU ceiling."""
+        if l.tdp > s.floor_tdp:
+            w = l.tdp - 1
+            return (f"lowered TDP to {w} W", "−1 W") if self._tdp(l, w) else None
+        if l.gpu_min_mhz:
+            rpe, _ = self._gpu_limits()
+            nxt = l.gpu_min_mhz - GPU_STEP_MHZ
+            nxt = None if rpe is None or nxt <= rpe else nxt
+            if self._gpu_floor(l, nxt):
+                return (f"lowered GPU floor to {nxt} MHz", f"−{GPU_STEP_MHZ} MHz GPU floor") if nxt else ("dropped the GPU floor", "GPU floor off")
+        if l.cpu_max_pct > CPU_MIN_PCT and self._cpu_ceiling(l, l.cpu_max_pct - 10):
+            return f"lowered CPU ceiling to {l.cpu_max_pct} %", "−10 % CPU"
+        return None
 
     def _log(self, s: Session, smp: Sample) -> None:
         try:
@@ -431,5 +467,7 @@ class Autotune:
                 "learned": s.learned.__dict__, "paused": s.paused,
                 "avg_fps": None if s.avg_fps is None else round(s.avg_fps, 1),
                 "low_fps": None if s.low_fps is None else round(s.low_fps, 1), "window_s": s.settle,
-                "last_action": s.last_action, "ceiling_tdp": s.ceiling_tdp,
+                "last_action": s.last_action, "last_delta": s.last_delta, "limited": s.limited,
+                "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),
+                "ceiling_tdp": s.ceiling_tdp, "floor_tdp": s.floor_tdp, "bound": s.learned.bound,
                 "last": None if last is None else last.__dict__}

@@ -5,7 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { gameStatus, setLaunch, GameStatus } from "../api";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Note, Problem, Status } from "../components/Hint";
-import { runningApp } from "../steam";
+import { getLaunchOptions, hasWrapper, runningApp, setLaunchOptions, withWrapper } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
@@ -13,12 +13,17 @@ const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
  * The running game's XeSS: on the XMX cores or not, and XeLL in driver mode or not (the fork shim's logs say what
  * it did in the last launch). OptiScaler and Lossless Scaling per game are Bazzite's own Decky plugins (Decky
  * Framegen, decky-lsfg-vk), so they are not here.
+ *
+ * XMX is on for every game once the driver is installed (its installer sets the session's Vulkan driver); this panel
+ * is the per-game opt-out. The opt-out, like XeLL driver mode, reaches the game only through ClawDeck's launch
+ * wrapper, so switching either adds the wrapper to the game's launch options when it isn't there yet.
  */
 export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const app = runningApp();
   const [gs, setGs] = useState<GameStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const load = async () => { if (app) setGs(await gameStatus(app.appid)); };
+  const [opts, setOpts] = useState<string | null>(null);    // the game's Steam launch options; null = unreadable
+  const load = async () => { if (app) { setGs(await gameStatus(app.appid)); setOpts(await getLaunchOptions(app.appid)); } };
   useEffect(() => { load(); }, [app?.appid]);
 
   if (!app) {
@@ -32,10 +37,19 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const xmxOn = launch.xmx !== false;
   const xessOk = !!gs?.xess.installed && gs.xess.status.state === "ok";
   const xell = gs?.xell;
+  const wrapped = hasWrapper(opts);
+  // XMX off, or XeLL driver mode on, needs the wrapper in front of the game: add it as part of the same tap
   const save = async (v: Partial<typeof launch>) => {
     const r = await setLaunch(app.appid, v);
     setErr(r.ok ? null : (r.error ?? "not saved"));
-    if (!r.ok) toast(`Not saved: ${r.error}`);
+    if (!r.ok) { toast(`Not saved: ${r.error}`); load(); return; }
+    const needs = { ...launch, ...v }.xmx === false || !!{ ...launch, ...v }.xell;
+    if (needs && !wrapped && opts !== null && gs?.wrapper) {
+      const added = setLaunchOptions(app.appid, withWrapper(opts, gs.wrapper.replace(/ %command%$/, "")));
+      toast(added ? `Added ClawDeck to ${app.name}'s launch options so this reaches the game. Restart it.` : `Saved, but Steam refused the launch options: add ClawDeck by hand (below)`);
+    } else {
+      toast(`Saved for ${app.name}: from the next launch`);
+    }
     load();
   };
 
@@ -43,11 +57,15 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
     <PanelSection title={`Per-game: ${app.name}`}>
       <PanelSectionRow>
         <ToggleField label="XeSS on XMX" checked={xmxOn} disabled={!gs?.xess.installed}
-          description={explain(gs?.xess.installed ? `The patched driver runs this game's XeSS on the XMX cores (driver ${xessOk ? "loads: " + (gs.xess.status.mode ?? "") : "not loaded: " + (gs?.xess.status.line ?? "no check yet")}). Off = stock driver for this game only.`
-            : "Install the XeSS XMX driver in Setup first.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
+          description={explain(gs?.xess.installed ? "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves."
+            : "Install the XeSS XMX driver in Setup first; from then it is on for every game.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
           onChange={(v) => save({ xmx: v })} />
-        <Status ok={gs ? (xmxOn && xessOk ? true : xmxOn && gs.xess.installed ? false : null) : null}
-          label={!gs ? "XeSS: …" : !gs.xess.installed ? "XeSS: driver not installed (Setup)" : xmxOn ? (xessOk ? `XeSS on XMX: ${gs.xess.status.mode ?? "patched driver"}` : "XeSS: patched driver not loading, DP4a fallback") : "XeSS: stock driver for this game (DP4a)"} />
+        <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && gs.xess.installed) || (!xmxOn && !wrapped) ? false : null) : null}
+          label={!gs ? "XeSS: …" : !gs.xess.installed ? "XeSS: driver not installed (Setup)"
+            : xmxOn ? (xessOk ? `XeSS on XMX (default): ${gs.xess.status.mode ?? "patched driver"}`
+              : gs.xess.status.state === "unknown" ? "XeSS on XMX from your next log-in (the session check hasn't run yet)" : "XeSS: patched driver not loading, DP4a fallback")
+            : wrapped ? "XeSS: stock driver for this game (DP4a)" : "XMX off is saved, but ClawDeck isn't in this game's launch options yet, so the game still uses XMX"}
+          detail={xmxOn && gs?.xess.status.state === "failed" ? gs.xess.status.line ?? undefined : undefined} />
       </PanelSectionRow>
       <PanelSectionRow>
         <ToggleField label="XeLL driver mode" checked={!!launch.xell} disabled={!gs?.xess.installed}
@@ -69,7 +87,7 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
               : "DLSS or FSR game? Bazzite's Decky Framegen (Portal) puts OptiScaler in; its XeSS then runs on XMX through the driver above. No upscaler at all? Bazzite's decky-lsfg-vk."} />
         </PanelSectionRow>
       )}
-      {!quick && <LaunchWrapper appid={app.appid} name={app.name} />}
+      {!quick && <LaunchWrapper key={wrapped ? "on" : "off"} appid={app.appid} name={app.name} />}
     </PanelSection>
   );
 };

@@ -128,14 +128,16 @@ def test_autotune_lowers_then_raises(fake_hw, monkeypatch):
     monkeypatch.setattr(at.sampler, "sample", lambda: bad)
     for _ in range(3):
         at._step()
-    # GPU-bound with an idle CPU: moves budget from the CPU to the GPU first, no extra watts
-    assert s.learned.cpu_max_pct == 90 and s.learned.gpu_min_mhz is None and s.learned.tdp == 29
-    for _ in range(9):                             # three more decisions: CPU 80, 70, 60 (its floor)
+    # GPU-bound and short: the GPU floor goes up first (from its efficient clock, 1300 MHz), no extra watts
+    assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 29 and s.learned.cpu_max_pct == 100
+    assert sysfs.read_int(fake_hw.paths.gpu_min_freq) == 1400
+    assert at.status()["last_action"] == "raised GPU floor to 1400 MHz" and at.status()["bound"] == "gpu"
+    for _ in range(3 * 10):                        # ten more decisions: the floor climbs to the GPU ceiling (2400)
         at._step()
-    assert s.learned.cpu_max_pct == 60
-    for _ in range(3):                             # CPU can't give more: then the GPU floor, still no extra watts
+    assert s.learned.gpu_min_mhz == 2400 and s.learned.tdp == 29
+    for _ in range(3):                             # nothing left on the GPU side: now the watts
         at._step()
-    assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 29
+    assert s.learned.tdp == 31 and applied[-1] == 31
     at.session = None
 
 
@@ -155,26 +157,44 @@ def _sample(fps, t=0.0, **kw):
     return autotune.Sample(t=t, frametime_ms=1000.0 / fps, fps=fps, **base)
 
 
-def test_autotune_on_target_trims_the_side_that_isnt_the_bottleneck(fake_hw, monkeypatch):
-    at, s = _session(fake_hw, monkeypatch)
+def test_autotune_on_target_lowers_watts_first_then_the_levers_at_the_floor(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch, tdp=9, gpu_min_mhz=1500, cpu_max_pct=100)
     monkeypatch.setattr(at.sampler, "sample", lambda: _sample(62, cpu_pct=35, gpu_busy=97))
-    at._step()                                # rebalance turn: CPU gives up budget
-    assert s.learned.cpu_max_pct == 90 and s.learned.tdp == 17
-    at._step()                                # TDP turn
-    assert s.learned.tdp == 16
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
+    at._step()
+    assert s.learned.tdp == 8 and s.learned.gpu_min_mhz == 1500     # battery first: one watt less
+    assert at.status()["last_delta"] == "−1 W"
+    at._step()                                # at the 8 W floor: the GPU floor comes down
+    assert s.learned.gpu_min_mhz == 1400 and s.learned.tdp == 8
+    at._step()                                # 1300 is the efficient clock: below it the floor goes
+    assert s.learned.gpu_min_mhz is None
+    at._step()
+    assert s.learned.cpu_max_pct == 90 and sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
     at.session = None
 
 
-def test_autotune_cpu_bound_gets_cpu_then_gives_back_gpu_floor(fake_hw, monkeypatch):
-    at, s = _session(fake_hw, monkeypatch, cpu_max_pct=70, gpu_min_mhz=1800)
+def test_autotune_cpu_bound_turns_boost_on_then_ceiling_then_watts(fake_hw, monkeypatch):
+    _w(fake_hw.paths.cpu_no_turbo, 1)                              # boost off, as a profile or the user left it
+    at, s = _session(fake_hw, monkeypatch, tdp=12, cpu_max_pct=70, gpu_min_mhz=1800, boost=False)
     monkeypatch.setattr(at.sampler, "sample", lambda: _sample(45, gpu_mhz=1200, cpu_pct=95, gpu_busy=55))
     at._step()
-    assert s.learned.cpu_max_pct == 80 and s.learned.tdp == 17     # more CPU, not more watts
-    at._step(); at._step()
-    assert s.learned.cpu_max_pct == 100
+    assert s.learned.boost and sysfs.read_int(fake_hw.paths.cpu_no_turbo) == 0 and s.learned.tdp == 12
+    assert at.status()["last_action"] == "turned CPU boost on" and at.status()["bound"] == "cpu"
     at._step()
-    assert s.learned.gpu_min_mhz is None and s.learned.tdp == 17   # then the GPU floor goes, freeing budget
+    assert s.learned.cpu_max_pct == 100 and s.learned.tdp == 12
+    at._step()
+    assert s.learned.gpu_min_mhz is None and s.learned.tdp == 12   # the GPU floor's budget goes back to the CPU
+    at._step()
+    assert s.learned.tdp == 14                                     # only then more watts
+    sysfs.revert_all()
+    assert sysfs.read_int(fake_hw.paths.cpu_no_turbo) == 1         # every lever it moved is revertible
+    at.session = None
+
+
+def test_autotune_short_at_the_ceiling_says_so(fake_hw, monkeypatch):
+    at, s = _session(fake_hw, monkeypatch)                         # 17 W of a 17 W ceiling
+    monkeypatch.setattr(at.sampler, "sample", lambda: _sample(45))
+    at._step()
+    assert s.learned.tdp == 17 and "17 W limit" in at.status()["limited"]
     at.session = None
 
 
@@ -209,12 +229,13 @@ def test_autotune_rechecks_a_learned_game(fake_hw, monkeypatch):
     at.session = None
 
 
-def test_four_profiles_step_up_in_power():
+def test_six_profiles_step_up_in_power():
     for table in hw.PROFILES.values():
-        assert list(table) == ["battery", "balanced", "performance", "dock"]
+        assert list(table) == ["saver", "battery", "balanced", "performance", "plugged", "max"]
         tdps = [table[n]["tdp"] for n in table]
-        assert tdps == sorted(tdps) and len(set(tdps)) == 4
-        assert table["battery"]["tdp"] <= 15 and table["balanced"]["tdp"] <= 20   # battery play stays efficient
+        assert tdps == [10, 12, 17, 25, 30, 35]
+    assert hw.profile_name("dock") == "max"                        # a saved "dock" from an earlier version still works
+    assert hw.tdp_range(hw.MODELS["MS-1T91"]) == (8, 35)
 
 
 def test_balanced_profile_applies(fake_hw):
@@ -252,16 +273,25 @@ def test_face_buttons_override(tmp_path, monkeypatch):
 
 
 def test_picked_power_is_autotunes_ceiling(fake_hw, monkeypatch):
-    at = autotune.Autotune(fake_hw, power.Power(fake_hw), "/nonexistent")
+    pw = power.Power(fake_hw)
+    written = []
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: written.append(w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
     monkeypatch.setattr(at, "_apply", lambda l: None)
     monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
-    at.start("1", 60, {"tdp": 9, "cpu_max_pct": 100, "gpu_min_mhz": None}, 8, 17, False)
+    at.start("1", 60, {"tdp": 15, "cpu_max_pct": 100, "gpu_min_mhz": None}, 8, 17, False)
     at.pause("manual GPU clocks")
-    at.set_ceiling(12)                      # the user picks Battery (12 W) mid-game
+    assert at.set_ceiling(12) == 12         # the slider goes to 12 W mid-game: re-clamped and written at once
     s = at.session
-    assert s.ceiling_tdp == 12 and s.learned.tdp == 12 and not s.paused
+    assert s.ceiling_tdp == 12 and s.learned.tdp == 12 and written[-1] == 12 and not s.paused
+    assert at.set_ceiling(25) == 12         # a higher ceiling leaves the current TDP; autotune raises it if needed
     at.set_ceiling(3)
     assert s.ceiling_tdp == 8               # never below the model's minimum
+    at.set_floor(10)
+    assert s.floor_tdp == 8                 # a floor never above the ceiling
+    s.ceiling_tdp = 20
+    at.set_floor(10)
+    assert s.floor_tdp == 10 and s.learned.tdp == 10
 
 
 def test_sampler_averages_every_new_mangohud_row(fake_hw, tmp_path):
@@ -386,7 +416,26 @@ def test_autotune_status_says_what_it_last_did(fake_hw, monkeypatch):
     for _ in range(s.settle):
         at._step()
     st = at.status()
-    assert st["last_action"] and "fps for a 60 target" in st["last_action"] and st["ceiling_tdp"] == 17
+    assert st["last_action"] == "lowered TDP to 16 W" and st["last_delta"] == "−1 W" and st["last_change_s"] == 0
+    assert st["ceiling_tdp"] == 17 and st["floor_tdp"] == 8 and st["bound"] == "gpu"
+
+
+def test_cpu_boost_lever_and_profile(fake_hw):
+    pw = power.Power(fake_hw)
+    assert pw.turbo() is True
+    assert pw.set_cpu_turbo(False) and pw.turbo() is False and pw.status()["cpu"]["no_turbo"] == 1
+    pw.revert_all()
+    assert pw.turbo() is True
+    r = pw.apply_profile("dock")                                   # alias of max
+    assert r["profile"] == "max" and r["applied"]["cpu_max_pct"] == 100
+    assert pw.status()["range"] == {"min": 8, "max": 35}
+
+
+def test_gpu_floor_reset_keeps_a_user_ceiling(fake_hw):
+    pw = power.Power(fake_hw)
+    assert pw.set_gpu_window(None, 2000) and pw.set_gpu_window(1500, None)
+    assert pw.reset_gpu_floor()
+    assert sysfs.read_int(fake_hw.paths.gpu_min_freq) == 300 and sysfs.read_int(fake_hw.paths.gpu_max_freq) == 2000
 
 
 def test_clean_env_drops_loader_variables(monkeypatch):

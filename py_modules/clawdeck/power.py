@@ -1,4 +1,9 @@
-"""Power profiles: TDP (Handheld Daemon, else MSI firmware attributes, else RAPL), CPU ceiling and GPU clock window (sysfs, PowerControl's paths).
+"""Power profiles: TDP (Handheld Daemon, else RAPL, else MSI firmware attributes), CPU boost, CPU ceiling, CPU energy mode
+and GPU clock window (sysfs, PowerControl's paths).
+
+Why ClawDeck sets TDP at all: Steam's TDP slider does nothing on the Claw 8 EX. PowerStation reports MinTdp = MaxTdp
+= 0 for Panther Lake (HARDWARE-FINDINGS §1) and the MSI firmware attributes steamos-manager writes are ignored (§12);
+the chip's own RAPL-MMIO limit is the only control that works.
 
 Why three levers: on the Claw the package TDP is shared by CPU and GPU and the firmware splits it dynamically.
 Capping the CPU hands the budget to the GPU in GPU-bound games; a GPU floor stops the GPU idling down between
@@ -56,13 +61,16 @@ class Power:
             "available": p.rapl_package is not None,
             "pl1_w": (sysfs.read_int(p.rapl_pl1) or 0) / 1e6 if p.rapl_pl1 else None,
             "pl2_w": (sysfs.read_int(p.rapl_pl2) or 0) / 1e6 if p.rapl_pl2 else None,
+            # what the firmware says PL1 sustains (25 W on the EX); a higher PL1 may or may not take effect
+            "max_w": round(v / 1e6) if p.rapl_pl1_max and (v := sysfs.read_int(p.rapl_pl1_max)) else None,
         }
         fw = None
         if p.msi_pl1:
             fw = {"pl1_w": sysfs.read_int(p.msi_pl1), "pl2_w": sysfs.read_int(p.msi_pl2) if p.msi_pl2 else None}
         return {"gpu": gpu, "cpu": cpu, "rapl": rapl, "tdp": hhd.get_tdp(), "hhd": hhd.available(),
                 "msi_firmware": p.msi_pl1 is not None, "firmware_tdp": fw, "tdp_backend": self.tdp_backend(),
-                "tdp_w": self.read_tdp(), "limits": self.hw.model["tdp"]}
+                "tdp_w": self.read_tdp(), "limits": self.hw.model["tdp"],
+                "range": dict(zip(("min", "max"), hw.tdp_range(self.hw.model, True)))}
 
     def read_tdp(self) -> int | None:
         """The sustained power limit as the hardware reports it now, from the backend that enforces it."""
@@ -159,6 +167,17 @@ class Power:
             return "msi-firmware"
         return None
 
+    def set_cpu_turbo(self, on: bool) -> bool:
+        """CPU boost (intel_pstate no_turbo: 0 = boost on). Off is cooler and quieter, and costs fps in CPU-heavy
+        scenes; autotune turns it back on when a game is CPU-bound."""
+        if not self.p.cpu_no_turbo:
+            return False
+        return sysfs.write(self.p.cpu_no_turbo, 0 if on else 1)
+
+    def turbo(self) -> bool | None:
+        v = sysfs.read_int(self.p.cpu_no_turbo) if self.p.cpu_no_turbo else None
+        return None if v is None else v == 0
+
     def set_cpu_max_pct(self, pct: int) -> bool:
         if not self.p.cpu_max_perf_pct:
             return False
@@ -208,6 +227,10 @@ class Power:
             ok = sysfs.write(self.p.gpu_max_freq, new_max) and ok
         return ok
 
+    def reset_gpu_floor(self) -> bool:
+        """Only the floor back to what it was before ClawDeck; a ceiling the user set stays."""
+        return sysfs.revert(self.p.gpu_min_freq) if self.p.gpu_min_freq else False
+
     def reset_gpu_window(self) -> bool:
         ok = True
         if self.p.gpu_min_freq:
@@ -218,8 +241,9 @@ class Power:
 
     # ---- profiles ----------------------------------------------------------------------------------------------------
     def apply_profile(self, name: str, overrides: dict | None = None, plugged: bool | None = None) -> dict:
-        """Apply a named profile (battery / balanced / performance / dock) with optional per-game overrides. Returns what was
-        applied and what failed; a failed lever reverts itself."""
+        """Apply a named profile (hw.PROFILES) with optional per-game overrides. Returns what was applied and what
+        failed; a failed lever reverts itself."""
+        name = hw.profile_name(name)
         prof = dict(hw.profiles_for(self.hw.model_key).get(name, {}))
         prof.update(overrides or {})
         result = {"profile": name, "applied": {}, "failed": []}
@@ -233,6 +257,11 @@ class Power:
                 result["applied"]["epp"] = prof["epp"]
             else:
                 result["failed"].append("epp")
+        if prof.get("boost") is not None and self.p.cpu_no_turbo:
+            if self.set_cpu_turbo(bool(prof["boost"])):
+                result["applied"]["boost"] = bool(prof["boost"])
+            else:
+                result["failed"].append("boost")
         if prof.get("cpu_max_pct") is not None:
             if self.set_cpu_max_pct(prof["cpu_max_pct"]):
                 result["applied"]["cpu_max_pct"] = prof["cpu_max_pct"]
