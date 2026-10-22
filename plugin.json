@@ -5,7 +5,7 @@
   "api_version": 1,
   "publish": {
     "tags": ["msi-claw", "intel", "power", "xess", "autotune", "root"],
-    "description": "Everything the MSI Claw needs on Bazzite / SteamOS in one Quick Access panel: power profiles, per-game autotune, XeSS XMX injector, battery charge limit, health check.",
+    "description": "What Bazzite does not do for the MSI Claw, in one Quick Access panel: XeSS on the XMX cores with XeLL, the VRR range and face-button fixes, OptiScaler per game, power profiles with autotune.",
     "image": "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/assets/banner.png"
   }
 }
