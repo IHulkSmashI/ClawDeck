@@ -53,15 +53,15 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
    choose **Install plugin from ZIP file** and pick ClawDeck.zip.
 3. Open **ClawDeck**. **Fixes** shows what the hardware gets wrong (VRR range, face buttons) with an Install button
    each; **Setup** installs the XeSS XMX driver and runs the self-test.
-4. For each game you want Autotune, XeSS XMX, XeLL or OptiScaler in: start the game, open ClawDeck and tap
+4. For each game you want Autotune, XeSS XMX or XeLL in: start the game, open ClawDeck and tap
    **Add to launch options** (Per-game).
 5. **Power**: pick Battery, Balanced, Performance or Dock, turn Autotune on, set a target fps, and play.
 
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
 may do nothing at all; ClawDeck sets the limit directly.
 
-Bazzite's Portal also offers OptiScaler and Lossless Scaling plugins. They do the same job as ClawDeck's Per-game
-panel, so use one or the other for a given game, not both.
+For games that only ship DLSS or FSR, use Bazzite's own **Decky Framegen** (OptiScaler) from the Portal; for games
+with no upscaler, **decky-lsfg-vk**. ClawDeck's driver then runs their XeSS output on the XMX cores.
 
 ## XeSS on the XMX cores (optional)
 
