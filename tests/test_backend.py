@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules"))
 
-from clawdeck import autotune, hw, power, profiles, sysfs  # noqa: E402
+from clawdeck import autotune, hw, power, profiles, sysfs, thermal  # noqa: E402
 
 
 def _w(path, value):
@@ -467,3 +467,115 @@ def test_autotune_a_refused_tdp_is_not_learned(fake_hw, monkeypatch):
         at._step()
     assert s.learned.tdp == 20 and s.phase == "hold"
     at.session = None
+
+
+# ---- temperature guard while thermald is paused (findings §21) ----------------------------------------------------
+def test_package_temperature_sensor_x86_pkg_temp_first_coretemp_fallback(tmp_path):
+    _w(tmp_path / "class/thermal/thermal_zone0/type", "acpitz")
+    _w(tmp_path / "class/thermal/thermal_zone0/temp", "40000")
+    _w(tmp_path / "class/hwmon/hwmon3/name", "coretemp")
+    _w(tmp_path / "class/hwmon/hwmon3/temp1_label", "Core 0")
+    _w(tmp_path / "class/hwmon/hwmon3/temp1_input", "60000")
+    _w(tmp_path / "class/hwmon/hwmon3/temp2_label", "Package id 0")
+    _w(tmp_path / "class/hwmon/hwmon3/temp2_input", "71000")
+    path, sensor = hw.find_pkg_temp(str(tmp_path))                 # no x86_pkg_temp zone: coretemp's package line
+    assert sensor == "coretemp" and path.endswith("temp2_input") and thermal.read_c(path) == 71.0
+    _w(tmp_path / "class/thermal/thermal_zone4/type", "x86_pkg_temp")
+    _w(tmp_path / "class/thermal/thermal_zone4/temp", "72000")
+    path, sensor = hw.find_pkg_temp(str(tmp_path))
+    assert sensor == "x86_pkg_temp" and path.endswith("thermal_zone4/temp")
+    assert hw.find_pkg_temp(str(tmp_path / "none")) == (None, None)
+
+
+def test_thermal_guard_steps_2w_per_check_from_95_to_under_90_never_below_floor(tmp_path):
+    t = tmp_path / "temp"
+    g = thermal.Guard(str(t), "x86_pkg_temp")
+    tdp = {"w": 17}
+    set_w = lambda w: tdp.update(w=w) or True
+    check = lambda c: (_w(t, int(c * 1000)), g.check(tdp["w"], 8, set_w))[1]
+    assert check(95) is None and tdp["w"] == 17 and not g.tripped        # 95 °C itself does not trip
+    assert check(96) == 15 and g.tripped                                 # over 95: −2 W
+    assert check(92) == 13 and check(90) == 11                           # still 90 or more: another 2 W each check
+    assert check(89.5) is None and not g.tripped and tdp["w"] == 11      # under 90: stops, the step stays
+    assert g.status()["line"] == "thermal: stepped to 11 W" and g.status()["temp_c"] == 90
+    assert check(93) is None and tdp["w"] == 11                          # 90-95 again does not re-trip
+    assert check(99) == 9 and check(99) == 8 and check(99) is None       # the floor, then the SoC's own limit
+    assert tdp["w"] == 8
+    g.reset()
+    assert g.status()["line"] is None and not g.tripped
+    assert thermal.Guard(None).check(17, 8, set_w) is None               # no sensor: never acts
+
+
+def test_autotune_stays_under_the_thermal_step_until_the_user_sets_a_tdp(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=25)
+    _Game(at, lambda tdp, *_: 2.0 * tdp)                  # every watt buys frames: autotune wants the full 25 W
+    for _ in range(3):
+        at._step()
+    assert s.learned.max_fps == 50 and s.learned.tdp == 25
+    assert at.thermal_step(23) and s.learned.tdp == 23 and s.thermal_cap == 23
+    assert at.status()["thermal_cap"] == 23 and s.last_action == "thermal: stepped to 23 W"
+    for _ in range(30):
+        at._step()
+        assert s.learned.tdp <= 23                         # never back above the step, whatever the phase
+    s.phase = "measure"
+    at._remeasure(s, "routine check")                      # a re-measure goes to the step, not the set TDP
+    assert s.learned.tdp == 23 and "23 W" in s.last_action
+    assert at.set_ceiling(25) == 25 and s.thermal_cap is None   # the user's choice replaces the step
+    at.session = None
+
+
+def test_thermal_step_undoes_a_lever_on_trial(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=20)
+    undone = []
+    s.phase, s.balance_undo = "balance", ("cpu_down", lambda: undone.append(1), 50.0, "lowered CPU ceiling", "−10 %")
+    assert at.thermal_step(18) and undone == [1] and s.balance_undo is None and s.learned.tdp == 18
+    at.session = None
+
+
+def _load_main(tmp_path, monkeypatch):
+    """main.py with a stand-in for Decky's module (it is only there inside Decky Loader)."""
+    import importlib.util
+    import types
+    d = types.ModuleType("decky")
+    for k in ("DECKY_PLUGIN_SETTINGS_DIR", "DECKY_PLUGIN_RUNTIME_DIR", "DECKY_PLUGIN_LOG_DIR", "DECKY_USER_HOME"):
+        setattr(d, k, str(tmp_path / k.lower()))
+    import logging
+    d.logger = logging.getLogger("decky-stub")
+    monkeypatch.setitem(sys.modules, "decky", d)
+    env = dict(os.environ)
+    try:
+        spec = importlib.util.spec_from_file_location("clawdeck_main", os.path.join(os.path.dirname(__file__), "..", "main.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+    finally:
+        os.environ.clear()
+        os.environ.update(env)          # main.py drops Decky's loader variables at import; give the tests theirs back
+    return m
+
+
+def test_guard_steps_a_plain_held_tdp_to_the_users_floor_only_while_thermald_is_paused(tmp_path, fake_hw, monkeypatch):
+    import asyncio
+    m = _load_main(tmp_path, monkeypatch)
+    p = m.Plugin.__new__(m.Plugin)
+    pw = power.Power(fake_hw)
+    held = {"w": 17}
+    monkeypatch.setattr(pw, "read_tdp", lambda: held["w"])
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: held.update(w=w) or True)
+    t = tmp_path / "pkg_temp"
+    _w(t, 97000)
+    p.hw, p.power, p.settings = fake_hw, pw, {"autotune_floor": 12}
+    p.battery = type("B", (), {"plugged": lambda self: False})()
+    p.autotune = autotune.Autotune(fake_hw, pw, "/nonexistent")          # autotune off: no session
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+
+    async def run():
+        p._power_lock = asyncio.Lock()
+        out = []
+        pw._thermald_paused = False
+        out.append(await p._guard_check())                               # thermald in charge: the guard keeps out
+        pw._thermald_paused = True
+        for _ in range(4):
+            out.append(await p._guard_check())
+        return out
+    assert asyncio.run(run()) == [None, 15, 13, 12, None]                # 2 W per check, never below the user's 12 W
+    assert held["w"] == 12 and p.guard.status()["line"] == "thermal: stepped to 12 W"

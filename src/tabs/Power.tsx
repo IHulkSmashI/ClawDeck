@@ -69,12 +69,14 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     setTdpV(name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12));
   };
   useEffect(() => { refresh(); }, []);
-  // while the panel is open and Autotune runs, its line follows along (one cheap call every 3 s, only while visible)
+  // while the panel is open and Autotune runs (or the temperature guard is acting), its line follows along (one cheap
+  // call every 3 s, only while visible)
+  const hot = !!(at?.thermal?.tripped || at?.thermal?.stepped_w);
   useEffect(() => {
-    if (!at?.running) return;
+    if (!at?.running && !hot) return;
     const t = setInterval(() => { getAutotune().then(setAt).catch(() => undefined); }, 3000);
     return () => clearInterval(t);
-  }, [at?.running]);
+  }, [at?.running, hot]);
 
   const lo = st?.range?.min ?? st?.limits.min ?? 8, hi = st?.range?.max ?? st?.limits.plugged_max ?? 35;
   const wattsOf = (id: string) => (table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
@@ -97,6 +99,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
   const running = !!at?.running && !at.paused;
+  const thermalLine = at?.thermal?.line ?? null;     // "thermal: stepped to 15 W" once the temperature guard acted
   const phase = { measure: "measuring the most", balance: "balancing CPU/GPU", lower: "lowering", hold: "holding" }[at?.phase ?? "measure"];
   // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
   const fpsText = at?.avg_fps != null
@@ -124,7 +127,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
             quick ? undefined : "each watt more buys fps with play time and heat.")} />
-        <Status ok={err ? false : null} label={line ?? reads(st)} detail={app ? app.name : "No game running: the profile applies when one starts"} />
+        <Status ok={err ? false : null} label={(line ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
+          detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`
+            : app ? app.name : "No game running: the profile applies when one starts"} />
         <Problem error={err} what="Power limit" />
       </PanelSectionRow>
       <PanelSectionRow>

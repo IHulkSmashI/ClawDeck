@@ -224,6 +224,11 @@ make no TDP calls. Fix: `_set_rapl` stops thermald (stop only, never disable) th
 unaffected. Health check explains it. Autotune's new temperature-aware logic (§18) is the guard while thermald is
 paused: if package temperature passes 95 °C, step the TDP down. (intel_lpmd also runs; it did not touch RAPL here.)
 
+Temperature guard done in code (2026-10-22, `thermal.py`): while thermald is paused, the package temperature
+(`x86_pkg_temp`, coretemp as the fallback) is read every 10 s; above 95 °C the TDP steps −2 W per check until it is
+under 90 °C, never below the floor. It works for autotune (a cap it stays under) and for a plain held TDP. The status
+line says "thermal: stepped to N W"; picking a profile or moving the slider clears it. Needs a hot run on the Claw.
+
 ## 22. Autotune without a target: the most the set TDP gives, balanced, then the lowest TDP within 5 % (maintainer, 2026-10-22) — done in code
 
 The maintainer's call: no target fps. At the set TDP, find the most frames, balance power between CPU and GPU, and

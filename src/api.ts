@@ -12,15 +12,18 @@ export type PowerStatus = {
   tdp_w?: number | null;
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
-  custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number;
+  custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number; thermal?: Thermal;
 };
+/** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
+export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; line: string | null; stepped_s: number | null };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
 export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; last?: any;
   phase?: "measure" | "balance" | "lower" | "hold"; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number;
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
   source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
-  last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced" };
+  last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced";
+  thermal_cap?: number | null; thermal?: Thermal };
 
 /** What every write answers: what was asked, what the hardware reads back, and why it failed (shown in red). */
 export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any; unit?: string; summary: string; error: string | null };

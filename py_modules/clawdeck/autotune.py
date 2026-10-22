@@ -275,6 +275,7 @@ class Session:
     low_fps: float | None = None
     fps_per_w: float | None = None
     source: str = "presented"
+    thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
     history: list[Sample] = field(default_factory=list)
 
 
@@ -318,6 +319,7 @@ class Autotune:
         if not s:
             return None
         s.ceiling_tdp = max(s.floor_tdp, int(watts))
+        s.thermal_cap = None                              # the user's new choice replaces the guard's step
         self._remeasure(s, "TDP set to %d W" % s.ceiling_tdp)
         s.paused = False
         return s.learned.tdp
@@ -335,6 +337,29 @@ class Autotune:
     def set_keep(self, pct: float) -> None:
         if self.session:
             self.session.keep_pct = max(1.0, min(float(pct), 25.0))
+
+    def thermal_step(self, watts: int) -> bool:
+        """The temperature guard (thermal.py) brings the TDP down: from now on autotune works under `watts`. What was
+        being measured or tried at the old TDP no longer counts, so that starts over at the new one."""
+        s = self.session
+        if not s:
+            return False
+        s.thermal_cap = int(watts)
+        l = s.learned
+        if s.balance_undo:                                # a lever on trial can't be judged across a TDP change
+            s.balance_undo[1]()
+            s.balance_undo = None
+        if not self._tdp(l, s.thermal_cap):
+            return False
+        s.window, s.watts, s.shown, s.misses = [], [], [], 0
+        if s.phase == "measure":
+            s.max_runs = []
+        self._did(s, f"thermal: stepped to {l.tdp} W", "thermal")
+        return True
+
+    def _top(self, s: Session) -> int:
+        """The most autotune may use: the set TDP, or less while the temperature guard holds it down."""
+        return s.ceiling_tdp if s.thermal_cap is None else min(s.ceiling_tdp, s.thermal_cap)
 
     def pause(self, reason: str = "manual change") -> None:
         """Never fight the user: a manual power change stops autotune for the rest of this session (values the user
@@ -422,10 +447,11 @@ class Autotune:
         s.phase, s.max_runs, s.misses, s.balance_undo = "measure", [], 0, None
         s.balance_tried = set()
         s.window, s.watts, s.shown = [], [], []
-        if l.tdp != s.ceiling_tdp:
-            self._tdp(l, s.ceiling_tdp)
+        top = self._top(s)
+        if l.tdp != top:
+            self._tdp(l, top)
         l.ceiling = s.ceiling_tdp
-        self._did(s, f"measuring the most {s.ceiling_tdp} W gives ({why})", f"{s.ceiling_tdp} W")
+        self._did(s, f"measuring the most {top} W gives ({why})", f"{top} W")
 
     def _measure(self, s: Session, fps: float) -> None:
         s.max_runs.append(fps)
@@ -436,7 +462,7 @@ class Autotune:
         l.fps = l.max_fps
         s.measured_at = time.monotonic()
         s.phase, s.balance_tried = "balance", set()
-        self._did(s, f"{s.ceiling_tdp} W gives {l.max_fps:.0f} fps", "measured")
+        self._did(s, f"{self._top(s)} W gives {l.max_fps:.0f} fps", "measured")
 
     def _levers(self, s: Session) -> list:
         """(name, apply, undo, words) for the next untried lever toward the side that holds the game back."""
@@ -473,7 +499,7 @@ class Autotune:
             if fps >= before * (1 + BALANCE_GAIN):
                 s.balance_tried.discard(name)             # it helped: the same lever may go one more step
                 l.fps = fps
-                if l.tdp == s.ceiling_tdp:
+                if l.tdp == self._top(s):
                     l.max_fps = max(l.max_fps or 0, fps)  # the set TDP gives more than measured: that is the most now
                 self._did(s, f"{words}: {before:.0f} → {fps:.0f} fps, kept", delta)
             else:
@@ -512,7 +538,7 @@ class Autotune:
         if s.misses < 2:
             return                                         # one window can be a heavier patch of the map: again
         s.misses = 0
-        w = min(s.ceiling_tdp, l.tdp + 1)
+        w = min(self._top(s), l.tdp + 1)
         if w != l.tdp and self._tdp(l, w):
             self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: back up to {w} W, holding", "+1 W")
         s.phase = "hold"
@@ -531,7 +557,7 @@ class Autotune:
             return
         if l.max_fps and fps < self._line(s):
             s.misses += 1
-            if s.misses >= 2 and l.tdp < s.ceiling_tdp:
+            if s.misses >= 2 and l.tdp < self._top(s):
                 s.misses = 0
                 if self._tdp(l, l.tdp + 1):
                     self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: raised TDP to {l.tdp} W", "+1 W")
@@ -552,7 +578,13 @@ class Autotune:
 
     # ---- the levers --------------------------------------------------------------------------------------------------
     def _tdp(self, l: Learned, watts: int) -> bool:
-        """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from)."""
+        """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from).
+        Never above the temperature guard's step."""
+        s = self.session
+        if s is not None and s.thermal_cap is not None and watts > s.thermal_cap:
+            watts = s.thermal_cap
+            if watts == l.tdp:
+                return False
         if not self.power.set_tdp(watts, self.plugged):
             log.warning("autotune: TDP %d W was not applied", watts)
             return False
@@ -621,7 +653,7 @@ class Autotune:
                 "floor_tdp": s.floor_tdp, "keep_pct": s.keep_pct, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
-                "multiplier": s.multiplier, "window_s": s.settle,
+                "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap,
                 "last_action": s.last_action, "last_delta": s.last_delta,
                 "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),
                 "last": None if last is None else last.__dict__}

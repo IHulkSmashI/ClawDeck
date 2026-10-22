@@ -303,6 +303,10 @@ class Power:
                 self.reset_gpu_window()
         return result
 
+    def thermald_paused(self) -> bool:
+        """True while ClawDeck holds a TDP and has stopped thermald: the temperature guard (thermal.py) runs then."""
+        return self._thermald_paused
+
     def revert_all(self) -> int:
         """Back to what was there before ClawDeck: every sysfs value it touched, and HHD's TDP mode/value."""
         n = sysfs.revert_all()

@@ -56,6 +56,12 @@ The four-panel UI has not been on the device yet.
   game's prefix has `xellSleep stats` lines and stays small over 10 minutes (the shim also routes XeLL's own debug
   messages there). In a game without frame generation: max at the set TDP, then lowering 1 W at a time, holding
   within 5 %. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
+- **Temperature guard (§21), on the Claw:** check the sensor: `cat /sys/class/thermal/thermal_zone*/type` should list
+  `x86_pkg_temp` (the health check names the one ClawDeck uses). Then set Max 35 W, start a heavy game, cover the fan
+  vents or block the airflow briefly, and watch the Power panel: past 95 °C the read-back line should say "thermal:
+  stepped to 33 W", then 31, 29… every 10 s until under 90 °C, never below the floor; the TDP read back must
+  follow. Moving the slider afterwards should clear it. Does 95 °C come before the chip's own throttle (TCC)? If TCC
+  always wins first, note the temperature it settles at.
 - **XeSS XMX default:** after Install XeSS XMX and one log-out, Per-game should say "XeSS on XMX (default)" for any
   game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
   driver"; the game's XeSS then runs as DP4a.

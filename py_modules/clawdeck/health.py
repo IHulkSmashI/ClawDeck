@@ -95,7 +95,9 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                                if p.rapl_pl1 else "MSI firmware attributes only (no RAPL package domain); Steam's slider may do nothing" if p.msi_pl1 else "no way to set TDP on this system")
                               + ("; PowerStation running" if st["powerstation"] else "")
                               + ("; thermald runs and rewrites RAPL PL1 every few seconds: ClawDeck pauses it while it holds a "
-                                 "TDP and restarts it on revert" if p.rapl_pl1 and power.thermald_active() else ""), "fix": None})
+                                 "TDP and restarts it on revert; meanwhile it steps the TDP down 2 W at a time above 95 °C "
+                                 + (f"({p.pkg_temp_sensor} sensor)" if p.pkg_temp else "(but no package temperature sensor was found)")
+                                 if p.rapl_pl1 and power.thermald_active() else ""), "fix": None})
     out.append({"id": "gpu_clocks", "title": "GPU clock control (autotune's GPU lever)", "ok": p.gpu_min_freq is not None,
                 "detail": "floor and ceiling can be set" if p.gpu_min_freq else "no xe/i915 frequency files", "fix": None})
     out.append({"id": "cpu_pct", "title": "CPU ceiling control (autotune's CPU lever)", "ok": p.cpu_max_perf_pct is not None,
