@@ -90,6 +90,7 @@ public static class Pawn {
         return v | (1UL << 15) | (1UL << 47);
     }
     public static ulong Energy() { return Read(0x611) & 0xFFFFFFFFUL; }
+    public static ulong Throttled() { return Read(0x613) & 0xFFFFFFFFUL; }   // time held back by a package power limit
 }
 public static class Burn {
     static volatile bool run;
@@ -109,6 +110,7 @@ public static class Burn {
 $units = [Pawn]::Read(0x606)
 $pu = 1.0 / [math]::Pow(2, [int]($units % 16))                    # watts per power unit (bits 3:0)
 $eu = 1.0 / [math]::Pow(2, [int]([math]::Floor($units / 256) % 32)) # joules per energy unit (bits 12:8)
+$tu = 1.0 / [math]::Pow(2, [int]([math]::Floor($units / 65536) % 16)) # seconds per time unit (bits 19:16)
 function Decode($v) {
     "PL1 {0:N1} W (on={1})  PL2 {2:N1} W (on={3})  locked={4}" -f [Pawn]::Pl1($v, $pu), [Pawn]::Bit($v, 15),
         [Pawn]::Pl2($v, $pu), [Pawn]::Bit($v, 47), [Pawn]::Bit($v, 63)
@@ -117,12 +119,13 @@ function Measure-Watts([int]$seconds = 6) {
     [Burn]::Start()
     try {
         Start-Sleep -Milliseconds 2500
-        $a = [double][Pawn]::Energy(); $t = [Diagnostics.Stopwatch]::StartNew()
+        $a = [double][Pawn]::Energy(); $ta = [double][Pawn]::Throttled(); $t = [Diagnostics.Stopwatch]::StartNew()
         Start-Sleep -Seconds $seconds
-        $b = [double][Pawn]::Energy(); $s = $t.Elapsed.TotalSeconds
+        $b = [double][Pawn]::Energy(); $tb = [double][Pawn]::Throttled(); $s = $t.Elapsed.TotalSeconds
     } finally { [Burn]::Stop() }
     if ($b -lt $a) { $b += 4294967296.0 }                    # 32-bit counter wrapped
-    [math]::Round(($b - $a) * $eu / $s, 1)
+    if ($tb -lt $ta) { $tb += 4294967296.0 }
+    "{0} W, held back by a power limit {1}% of the time" -f [math]::Round(($b - $a) * $eu / $s, 1), [math]::Round(($tb - $ta) * $tu * 100 / $s)
 }
 
 $orig = [Pawn]::Read(0x610)
@@ -131,17 +134,17 @@ Say ("power unit {0} W, energy unit {1} uJ" -f $pu, [math]::Round($eu * 1e6, 2))
 Say ("0x610 now:      " + (Decode $orig) + ("  raw 0x{0:x16}" -f $orig))
 if ([Pawn]::Bit($orig, 63)) { Say "0x610 is locked by the firmware: MSR writes cannot change the limit."; $out | Set-Content "$env:USERPROFILE\Desktop\msr-probe.txt"; exit 0 }
 
-Say ("load at current limit:      {0} W" -f (Measure-Watts))
+Say ("load at current limit:      {0}" -f (Measure-Watts))
 try {
     [Pawn]::Write(0x610, [Pawn]::Encode($orig, 12, 15, $pu))
     Say ("0x610 after write: " + (Decode ([Pawn]::Read(0x610))))
-    Say ("load at MSR 12/15 W:        {0} W   (works if this is about 15 W or less)" -f (Measure-Watts))
+    Say ("load at MSR 12/15 W:        {0}" -f (Measure-Watts))
 } finally {
     [Pawn]::Write(0x610, $orig)
 }
 $back = [Pawn]::Read(0x610)
 Say ("0x610 restored: " + (Decode $back) + $(if ($back -eq $orig) { "  (identical)" } else { "  (DIFFERENT from the original)" }))
-Say ("load after restore:         {0} W" -f (Measure-Watts))
+Say ("load after restore:         {0}" -f (Measure-Watts))
 Say ("ClawTweaks / MSI Center TDP setting at the time: write it here by hand -> ")
 $out | Set-Content "$env:USERPROFILE\Desktop\msr-probe.txt"
 Write-Host "`nSaved to Desktop\msr-probe.txt"
