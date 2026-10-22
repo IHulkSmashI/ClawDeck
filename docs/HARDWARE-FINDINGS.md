@@ -148,3 +148,20 @@ XeLL per game: the fork's shim logs into the prefix (`drive_c/igdext_trace.log`,
 mode" is on for the game and rotates the logs per launch, and `xess.game_xell` reads them: `LatencyReductionExt(`
 / `RenderSubmitStart(` = driver mode, `xellSetSleepMode` only = cross-vendor. Markers come from the branch's
 source (`shim/src/dll/XellDriver.cpp`, `XellHook.cpp`); confirm with Wuthering Waves or Cyberpunk 2077 with XeSS FG on.
+
+## 17. Power panel: full-range TDP slider + autotune ceiling (maintainer, 2026-10-22) — for Claude Code
+
+Why ClawDeck sets TDP at all (keep this in the Hint): Steam's TDP slider is a no-op on the Claw 8 EX, because
+PowerStation reports MinTdp = MaxTdp = 0 for Panther Lake (survey §1); RAPL-MMIO is the only working control (§12).
+
+Wanted:
+- A **TDP slider over the full hardware range** (8–35 W on the EX, from `hw.MODELS[...]["tdp"]` and the RAPL
+  `max_power_uw`), 1 W steps, next to the profile dropdown. Moving the slider = "Custom" profile; picking a profile
+  moves the slider to that profile's watts. Read-back line stays ("RAPL reads 17 W / 24 W").
+- **More profiles**: Battery saver 10 W, Battery 12 W, Balanced 17 W, Performance 25 W, Plugged 30 W, Max 35 W —
+  short labels, watts in the label, full description in the Hint (what/why/cost, as everywhere).
+- **Autotune uses the slider as its ceiling**: the current TDP (slider or profile) is the maximum autotune may use;
+  its floor is the model minimum (8 W) unless the user sets one. Show both in the autotune status line
+  ("Autotune on: 8–25 W, now 19 W, target 60 fps, last change −1 W 12 s ago"). Changing the slider while autotune
+  runs re-clamps immediately.
+- Boost (PL2) stays derived as today (`_sppt_for`), no separate control.
