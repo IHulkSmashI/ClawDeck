@@ -130,12 +130,13 @@ def extract(archive: str, dest: str) -> str:
     return dest
 
 
-def fetch(entry: dict, workdir: str, allow_unpinned: bool = False) -> dict:
-    """Download and unpack one versions.json entry. Returns {tag, archive, dir}."""
+def fetch(entry: dict, workdir: str, allow_unpinned: bool = False, rel: dict | None = None) -> dict:
+    """Download and unpack one versions.json entry. Returns {tag, archive, dir}. `rel`: the release, when the caller
+    has already looked it up."""
     if not is_pinned(entry) and not allow_unpinned:
         raise PermissionError(f"{entry['repo']} has no tested version pinned yet; allow 'latest (untested)' to continue")
     repo = (entry.get("fork") or entry["repo"]) if entry.get("use_fork") else entry["repo"]
-    rel = release(repo, entry.get("tag"))
+    rel = rel or release(repo, entry.get("tag"))
     asset = pick_asset(rel, entry.get("asset_glob", "*"))
     if asset is None:
         raise FileNotFoundError(f"no asset matching {entry.get('asset_glob')} in {repo} {rel.get('tag_name')}")

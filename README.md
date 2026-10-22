@@ -117,7 +117,7 @@ the driver above then runs on the XMX cores. A game with no upscaler at all: Baz
 ### Setup
 | Control | What it does |
 |---|---|
-| **Install XeSS XMX** | Downloads the driver (the fork's release when it has one; otherwise upstream's, and it says so) and runs its installer as you, never as root. Log out and in once after. |
+| **Install XeSS XMX** | Downloads the driver (the fork's release when it has one; otherwise upstream's, and it says so) and runs its installer as you, never as root, then runs the driver's own check, so the line above it is right at once. Log out and in once after, so games pick it up. **Update** with nothing newer says "up to date" and downloads nothing. |
 | **Run self-test** | Writes each control, reads it back, measures it and reverts (`tools/selftest.py`); shows PASS/FAIL per control. |
 | **Export log** | One file on the Desktop for a bug report. |
 

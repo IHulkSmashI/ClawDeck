@@ -228,19 +228,54 @@ def test_chown_tree_handles_a_single_file(tmp_path, monkeypatch):
 
 
 # ---- scope reset (2026-10-21): XeSS from the fork, XeLL per game, the one-line health summary ---------------------
+def _xess_release(monkeypatch, tags, asked=None):
+    """downloads.release answering {repo: tag}; a repo without one answers 404 (no release published)."""
+    import urllib.error
+
+    def rel(repo, tag):
+        if asked is not None:
+            asked.append(repo)
+        if repo not in tags:
+            raise urllib.error.HTTPError("https://api.github.com/x", 404, "Not Found", {}, None)
+        return {"tag_name": tags[repo], "assets": []}
+    monkeypatch.setattr(downloads, "release", rel)
+
+
+def _xess_runs(monkeypatch, home, install_rc=0, check_line="ok 2026-10-22 12:00 /x/libvulkan_intel.so Mesa 26.1.2"):
+    """userexec.run for install.sh and session-check.sh: the check writes driver-status as the real one does."""
+    ran = []
+
+    def run(cmd, h, timeout=600, cwd=None, env=None):
+        ran.append(os.path.basename(cmd[1]) + (" " + " ".join(cmd[2:]) if cmd[2:] else ""))
+        if cmd[1].endswith("session-check.sh"):
+            _w(os.path.join(home, xess.STATUS), check_line)
+            return {"rc": 0 if check_line.startswith("ok") else 1, "out": check_line}
+        if install_rc == 0:      # install.sh points the session at the package (environment.d)
+            _w(os.path.join(home, xess.ENV_CONF), f"VK_DRIVER_FILES={cwd}/run/intel_icd.json")
+        return {"rc": install_rc, "out": "== fetching\nmissing igdext64.dll - run this from the unpacked package\n" if install_rc else "done"}
+    monkeypatch.setattr(xess.userexec, "run", run)
+    return ran
+
+
+def _xess_fetch(monkeypatch, home, fetched=None):
+    def fetch(entry, workdir, allow_unpinned=False, rel=None):
+        if not downloads.is_pinned(entry) and not allow_unpinned:     # as the real one: ask before an untested version
+            raise PermissionError(f"{entry['repo']} has no tested version pinned yet; allow 'latest (untested)' to continue")
+        if fetched is not None:
+            fetched.append(entry["repo"])
+        tag = rel["tag_name"]
+        pkg = home / f".local/share/clawdeck/xess-xmx-linux-{tag}"
+        _w(pkg / "install.sh", "echo hi"); _w(pkg / "uninstall.sh", ""); _w(pkg / "tools/session-check.sh", "")
+        return {"tag": tag, "archive": str(home / "a.zip"), "dir": str(pkg), "repo": entry["repo"]}
+    monkeypatch.setattr(downloads, "fetch", fetch)
+
+
 def test_xess_install_falls_back_to_upstream_when_the_fork_has_no_release(tmp_path, monkeypatch):
     import urllib.error
     asked = []
-
-    def fake_fetch(entry, workdir, allow_unpinned=False):
-        asked.append(entry["repo"])
-        if entry["repo"].startswith("IHulkSmashI/"):
-            raise urllib.error.HTTPError("https://api.github.com/x", 404, "Not Found", {}, None)
-        pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-20261018"
-        _w(pkg / "install.sh", "echo hi"); _w(pkg / "uninstall.sh", "")
-        return {"tag": "20261018", "archive": str(tmp_path / "a.zip"), "dir": str(pkg), "repo": entry["repo"]}
-    monkeypatch.setattr(downloads, "fetch", fake_fetch)
-    monkeypatch.setattr(xess.userexec, "run", lambda *a, **k: {"rc": 0, "out": "done"})
+    _xess_release(monkeypatch, {"HHHHanasak1/xess-xmx-linux": "20261018"}, asked)
+    _xess_fetch(monkeypatch, tmp_path)
+    _xess_runs(monkeypatch, str(tmp_path))
     entry = {"repo": "HHHHanasak1/xess-xmx-linux", "fork": "IHulkSmashI/xess-xmx-linux", "use_fork": True, "tag": "pending-verification"}
     r = xess.install(str(tmp_path), entry, allow_unpinned=True)
     assert r["ok"] and asked == ["IHulkSmashI/xess-xmx-linux", "HHHHanasak1/xess-xmx-linux"]
@@ -248,18 +283,58 @@ def test_xess_install_falls_back_to_upstream_when_the_fork_has_no_release(tmp_pa
     assert xess.source_of(r["package_dir"]) == {"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261018"}
     # any other failure names the step and the real reason, never a bare "file not found"
     monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no asset matching x in y")))
+    _w(tmp_path / xess.ENV_CONF, "")                                   # nothing installed: no up-to-date shortcut
     assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: FileNotFoundError: no asset matching x in y"
-    monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(urllib.error.HTTPError("https://u", 403, "rate limited", {}, None)))
+    monkeypatch.setattr(downloads, "release", lambda *a: (_ for _ in ()).throw(urllib.error.HTTPError("https://u", 403, "rate limited", {}, None)))
     assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: https://u answered 403 rate limited"
 
 
 def test_xess_install_reports_the_script_failure(tmp_path, monkeypatch):
-    pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-1"
-    _w(pkg / "install.sh", ""); _w(pkg / "uninstall.sh", "")
-    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": "1", "archive": "a.zip", "dir": str(pkg), "repo": e["repo"]})
-    monkeypatch.setattr(xess.userexec, "run", lambda *a, **k: {"rc": 1, "out": "== fetching\nmissing igdext64.dll - run this from the unpacked package\n"})
+    _xess_release(monkeypatch, {"a/b": "1"})
+    _xess_fetch(monkeypatch, tmp_path)
+    ran = _xess_runs(monkeypatch, str(tmp_path), install_rc=1)
     r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "1"})
     assert not r["ok"] and r["error"].startswith("install.sh exited 1: == fetching · missing igdext64.dll")
+    assert ran == ["install.sh"]                                       # no driver check of a failed install
+
+
+def test_xess_install_runs_the_driver_check_so_setup_is_right_without_a_relogin(tmp_path, monkeypatch):
+    _xess_release(monkeypatch, {"a/b": "2"})
+    _xess_fetch(monkeypatch, tmp_path)
+    _w(tmp_path / xess.STATUS, "FAILED 2026-10-01 10:00 /old/libvulkan_intel.so: old driver")   # the last log-in's verdict
+    ran = _xess_runs(monkeypatch, str(tmp_path))
+    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "2"})
+    assert r["ok"] and ran == ["install.sh", "session-check.sh --dry-run"]
+    assert r["check"]["ok"] and xess.state(str(tmp_path))["status"]["state"] == "ok"   # read straight after
+    # a driver that fails its check: installed, and the toast says why (the log-in unit switches drivers)
+    _xess_release(monkeypatch, {"a/b": "3"})
+    _xess_runs(monkeypatch, str(tmp_path), check_line="FAILED 2026-10-22 12:00 /x: vulkaninfo found no device")
+    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "3"})
+    assert r["ok"] and not r["check"]["ok"] and "driver check failed" in r["next"] and "no device" in r["next"]
+
+
+def test_xess_update_with_nothing_newer_says_up_to_date_and_reinstalls_nothing(tmp_path, monkeypatch):
+    _xess_release(monkeypatch, {"a/b": "2"})
+    fetched = []
+    _xess_fetch(monkeypatch, tmp_path, fetched)
+    ran = _xess_runs(monkeypatch, str(tmp_path))
+    assert xess.install(str(tmp_path), {"repo": "a/b", "tag": "2"})["ok"] and fetched == ["a/b"]
+    ran.clear()
+    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"})   # Update; no confirm needed
+    assert r["ok"] and r["up_to_date"] and r["summary"] == "XeSS XMX 2 is up to date" and "error" not in r
+    assert fetched == ["a/b"] and ran == ["session-check.sh --dry-run"]   # no download, no install.sh, line refreshed
+    _xess_release(monkeypatch, {"a/b": "3"})                             # a newer release: a real update again
+    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"})
+    assert not r["ok"] and "no tested version" in r["error"]            # the untested-version prompt, as before
+    assert xess.install(str(tmp_path), {"repo": "a/b", "tag": "3"})["tag"] == "3" and fetched == ["a/b", "a/b"]
+
+
+def test_xess_session_check_without_a_package_or_script(tmp_path, monkeypatch):
+    assert not xess.session_check(str(tmp_path))["ran"]
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    r = xess.session_check(str(tmp_path), str(pkg))
+    assert not r["ran"] and "session-check.sh" in r["error"]
 
 
 def test_xess_state_knows_a_fork_build_and_game_xell(tmp_path):

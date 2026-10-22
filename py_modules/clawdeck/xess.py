@@ -112,26 +112,54 @@ def state(home: str) -> dict:
     }
 
 
-def _fetch(entry: dict, root: str, allow_unpinned: bool) -> tuple[dict, str | None]:
-    """The fork's release when versions.json says use_fork; when the fork has published none (404), upstream's,
-    with a note the UI shows. Any other failure is reported with the step that failed."""
-    note = None
+def _latest(entry: dict) -> tuple[str, dict, str | None]:
+    """(repo, release, note): the fork's release when versions.json says use_fork; when the fork has published none
+    (404), upstream's, with a note the UI shows. Any other failure is raised for install() to report."""
     if entry.get("use_fork") and entry.get("fork"):
         try:
-            return downloads.fetch({**entry, "repo": entry["fork"], "use_fork": False}, root, allow_unpinned), None
+            return entry["fork"], downloads.release(entry["fork"], entry.get("tag")), None
         except urllib.error.HTTPError as e:
             if e.code != 404:
                 raise
             note = f"{entry['fork']} has no release yet; installed {entry['repo']}'s instead (no XeLL driver mode)"
             log.warning(note)
-    got = downloads.fetch({**entry, "use_fork": False}, root, allow_unpinned)
-    return got, note
+            return entry["repo"], downloads.release(entry["repo"], entry.get("tag")), note
+    return entry["repo"], downloads.release(entry["repo"], entry.get("tag")), None
+
+
+def session_check(home: str, pkg: str | None = None) -> dict:
+    """Run the package's own driver check now (tools/session-check.sh, what xess-xmx-check.service runs before each
+    session), so Setup's line is right straight after an install or update instead of after the next log-in
+    (findings §20). --dry-run: it loads the driver, enumerates the GPU and writes driver-status, but leaves the
+    running session's environment alone; switching drivers on a failure stays the log-in unit's job."""
+    pkg = pkg or package_dir(home)
+    if not pkg:
+        return {"ok": False, "ran": False, "error": "xess-xmx-linux is not installed", "status": parse_status(None)}
+    script = os.path.join(pkg, "tools", "session-check.sh")
+    if not os.path.exists(script):
+        return {"ok": False, "ran": False, "error": f"no tools/session-check.sh in {pkg}",
+                "status": parse_status(sysfs.read(os.path.join(home, STATUS)))}
+    r = userexec.run(["bash", script, "--dry-run"], home, timeout=120, cwd=pkg)
+    st = parse_status(sysfs.read(os.path.join(home, STATUS)))
+    log.info("XeSS XMX driver check (exit %s): %s", r["rc"], st.get("line"))
+    return {"ok": st["state"] == "ok", "ran": True, "status": st, "rc": r["rc"], "log": r["out"]}
 
 
 def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
+    """Install, or update to the newest release. When the installed package already is that release, nothing is
+    downloaded or re-run ("up to date"; re-unpacking would also overwrite the driver the session has loaded). Either
+    way the driver check runs at the end, so the status line is current."""
     root = os.path.join(home, INSTALL_ROOT)
     try:
-        got, note = _fetch(entry, root, allow_unpinned)
+        repo, rel, note = _latest(entry)
+        tag = rel.get("tag_name", "unknown")
+        pkg_now = package_dir(home)
+        have = source_of(pkg_now)
+        if pkg_now and os.path.isdir(pkg_now) and have == {"repo": repo, "tag": tag}:
+            chk = session_check(home, pkg_now)
+            return {"ok": True, "up_to_date": True, "tag": tag, "repo": repo, "package_dir": pkg_now, "note": note,
+                    "check": chk, "next": None, "summary": f"XeSS XMX {tag} is up to date"}
+        got = downloads.fetch({**entry, "repo": repo, "use_fork": False}, root, allow_unpinned, rel=rel)
     except PermissionError as e:
         return {"ok": False, "error": str(e)}
     except urllib.error.HTTPError as e:
@@ -153,6 +181,10 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     if r["rc"] != 0:
         tail = [ln for ln in r["out"].strip().splitlines() if ln.strip()][-3:]
         out["error"] = f"install.sh exited {r['rc']}: " + (" · ".join(tail) or "no output")
+        return out
+    out["check"] = chk = session_check(home, pkg)
+    if chk["ran"] and not chk["ok"]:
+        out["next"] = f"installed, but the driver check failed: {chk['status'].get('line') or chk.get('log', '')[-200:]}"
     return out
 
 
