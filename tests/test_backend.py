@@ -444,3 +444,35 @@ def test_clean_env_drops_loader_variables(monkeypatch):
     monkeypatch.setenv("HOME", "/home/x")
     env = sysfs.clean_env()
     assert "LD_LIBRARY_PATH" not in env and "PYTHONPATH" not in env and env["HOME"] == "/home/x" and env["PATH"]
+
+
+def test_thermald_paused_while_tdp_held_and_restarted_on_revert(fake_hw, monkeypatch, tmp_path):
+    from clawdeck import power as pw
+    root = tmp_path / "rapl"
+    _w(str(root / "constraint_0_power_limit_uw"), 30_000_000)
+    _w(str(root / "constraint_1_power_limit_uw"), 37_000_000)
+    fake_hw.paths.rapl_pl1 = str(root / "constraint_0_power_limit_uw")
+    fake_hw.paths.rapl_pl2 = str(root / "constraint_1_power_limit_uw")
+    calls = []
+    state = {"active": True}
+
+    class R:
+        def __init__(self, out=""): self.returncode, self.stdout, self.stderr = 0, out, ""
+
+    def fake(*args):
+        calls.append(args)
+        if args[0] == "is-active":
+            return R("active" if state["active"] else "inactive")
+        state["active"] = args[0] == "start"
+        return R()
+    monkeypatch.setattr(pw, "_systemctl", fake)
+    monkeypatch.setattr(pw.hhd, "available", lambda: False)
+    p = pw.Power(fake_hw)
+    assert p.set_tdp(15)
+    assert ("stop", pw.THERMALD) in calls and not state["active"]
+    assert sysfs.read_int(fake_hw.paths.rapl_pl1) == 15_000_000
+    p.set_tdp(12)
+    assert calls.count(("stop", pw.THERMALD)) == 1          # stopped once, not per write
+    p.revert_all()
+    assert ("start", pw.THERMALD) in calls and state["active"]
+    assert sysfs.read_int(fake_hw.paths.rapl_pl1) == 30_000_000

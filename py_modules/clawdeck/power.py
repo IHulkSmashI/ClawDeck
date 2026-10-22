@@ -13,6 +13,7 @@ clamped to what the hardware reports (rp0/rpn, 0-100 %), and every write is reve
 from __future__ import annotations
 
 import logging
+import subprocess
 
 from . import hhd, hw, sysfs
 
@@ -31,12 +32,29 @@ def firmware_range(current_value: str) -> tuple[int, int]:
     return (lo if lo is not None else 0, hi if hi is not None else 1000)
 
 
+THERMALD = "thermald.service"
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess | None:
+    try:
+        return subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=30, check=False,
+                              env=sysfs.clean_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def thermald_active() -> bool:
+    r = _systemctl("is-active", THERMALD)
+    return bool(r) and r.stdout.strip() == "active"
+
+
 class Power:
     def __init__(self, hardware: hw.Hardware):
         self.hw = hardware
         self.p = hardware.paths
         self._hhd_orig: dict | None = None    # HHD's TDP state before ClawDeck's first change, for revert_all
         self.boost = True                     # TDP boost (short bursts above the TDP); off = PL2 is TDP + 1 W
+        self._thermald_paused = False         # True while ClawDeck holds a TDP and has stopped thermald (see _set_rapl)
 
     # ---- readouts --------------------------------------------------------------------------------------------------
     def status(self) -> dict:
@@ -123,6 +141,18 @@ class Power:
         return min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as ClawTweaks does from a single slider
 
     def _set_rapl(self, watts: int, lim: dict) -> bool:
+        # thermald re-applies the platform's DPTF power table to this RAPL domain every few seconds (polling mode):
+        # on the Claw 8 EX it put PL1 back to 30 W within 10 s of every write (findings §21). While ClawDeck holds a
+        # TDP it stops thermald (stop only, never disable) and starts it again in revert_all(). The SoC's own thermal
+        # limit (TCC) and the EC's fan control stay active throughout.
+        if not sysfs.dry_run() and not self._thermald_paused and thermald_active():
+            r = _systemctl("stop", THERMALD)
+            if r is not None and r.returncode == 0:
+                self._thermald_paused = True
+                log.info("thermald stopped while ClawDeck sets the TDP (it overwrites RAPL PL1); restarted on revert")
+            else:
+                log.warning("could not stop thermald: it will overwrite the TDP within seconds (%s)",
+                            (r.stderr if r else "systemctl failed").strip()[-200:])
         pl2 = self._sppt_for(watts, lim) if self.p.rapl_pl2 else None
         cur_pl1 = sysfs.read_int(self.p.rapl_pl1, 0) // 1_000_000
         raising = watts >= cur_pl1
@@ -280,6 +310,13 @@ class Power:
     def revert_all(self) -> int:
         """Back to what was there before ClawDeck: every sysfs value it touched, and HHD's TDP mode/value."""
         n = sysfs.revert_all()
+        if self._thermald_paused:
+            r = _systemctl("start", THERMALD)
+            self._thermald_paused = not (r is not None and r.returncode == 0)
+            if self._thermald_paused:
+                log.error("could not restart thermald after reverting the TDP: run 'sudo systemctl start thermald'")
+            else:
+                log.info("thermald restarted")
         orig, self._hhd_orig = self._hhd_orig, None
         if orig and orig.get("mode"):
             vals = {hhd.KEY_TDP_MODE: orig["mode"]}
