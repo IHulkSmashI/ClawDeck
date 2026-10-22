@@ -128,11 +128,8 @@ def _fetch(entry: dict, root: str, allow_unpinned: bool) -> tuple[dict, str | No
     return got, note
 
 
-def install(home: str, entry: dict, allow_unpinned: bool = False, dry_run: bool = False) -> dict:
+def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     root = os.path.join(home, INSTALL_ROOT)
-    repo = entry.get("fork") if entry.get("use_fork") else entry["repo"]
-    if dry_run:
-        return {"ok": True, "dry_run": True, "would": f"download {repo} {entry.get('tag')} into {root}, run install.sh as the user"}
     try:
         got, note = _fetch(entry, root, allow_unpinned)
     except PermissionError as e:
@@ -166,21 +163,6 @@ def _find_package(d: str) -> str | None:
         if root.count(os.sep) - d.count(os.sep) > 2:
             dirs[:] = []
     return None
-
-
-def _tool(home: str, rel: str, *args: str, timeout: float = 120) -> dict:
-    pkg = package_dir(home)
-    if not pkg:
-        return {"ok": False, "error": "xess-xmx-linux is not installed"}
-    script = os.path.join(pkg, rel)
-    if not os.path.exists(script):
-        return {"ok": False, "error": f"{rel} missing in {pkg}"}
-    r = userexec.run(["bash", script, *args], home, timeout=timeout, cwd=pkg)
-    return {"ok": r["rc"] == 0, "log": r["out"]}
-
-
-def uninstall(home: str) -> dict:
-    return _tool(home, "uninstall.sh", timeout=300)
 
 
 # ---- per game ------------------------------------------------------------------------------------------------------

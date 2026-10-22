@@ -6,7 +6,7 @@ task). Power-source changes and resume arrive as events from Steam (frontend lis
 
 Scope (2026-10-21 reset): only what Bazzite and Steam's Quick Access do not already do. Four panels: Power
 (profile + autotune), Per-game (XeSS XMX, XeLL), Fixes (VRR range, face buttons, health), Setup (the XeSS driver,
-self-test, dry run, log export). OptiScaler and Lossless Scaling per game are Bazzite's own Decky plugins.
+self-test, log export). OptiScaler and Lossless Scaling per game are Bazzite's own Decky plugins.
 """
 import asyncio
 import glob
@@ -66,8 +66,8 @@ class Plugin:
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
     async def _main(self):
         self.settings = self._load_settings()
-        env_dry = os.environ.get("CLAWDECK_DRY_RUN", "0") not in ("", "0")
-        sysfs.set_dry_run(env_dry or bool(self.settings.get("dry_run")))
+        if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
+            self._save_settings()
         self.hw = hw.detect()
         self.power = power.Power(self.hw)
         self.battery = battery.Battery(self.hw)
@@ -83,8 +83,7 @@ class Plugin:
         self._health: tuple[float, list] | None = None
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self.running_plugged: bool | None = None
-        decky.logger.info("ClawDeck on %s (%s), kernel %s, dry-run %s", self.hw.model["name"], self.hw.product,
-                          self.hw.kernel, sysfs.dry_run())
+        decky.logger.info("ClawDeck on %s (%s), kernel %s", self.hw.model["name"], self.hw.product, self.hw.kernel)
         self._install_wrapper()
 
     async def _unload(self):
@@ -97,7 +96,7 @@ class Plugin:
         without it the buttons are dead)."""
         self.power.revert_all()
         if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
-            decky.logger.info("removing the wider VRR range: %s", edid.disable(sysfs.dry_run()))
+            decky.logger.info("removing the wider VRR range: %s", edid.disable())
         try:
             _write_user_file(WRAPPER, PASSTHROUGH)
             os.chmod(WRAPPER, 0o755)
@@ -162,8 +161,6 @@ class Plugin:
             u = userexec.user_of(HOME)
             if u is None:
                 return {"ok": False, "error": "cannot tell which user to enable Handheld Daemon for"}
-            if sysfs.dry_run():
-                return {"ok": True, "dry_run": True, "would": f"systemctl enable --now hhd@{u.pw_name}"}
             r = await self._bg(lambda: subprocess.run(["systemctl", "enable", "--now", f"hhd@{u.pw_name}"],
                                                       capture_output=True, text=True, timeout=60, check=False))
             return {"ok": r.returncode == 0, "log": (r.stdout + r.stderr)[-2000:]}
@@ -215,17 +212,11 @@ class Plugin:
         except OSError as e:
             decky.logger.warning("autotune flag for the launch wrapper: %s", e)
 
-    async def set_dry_run(self, on: bool) -> bool:
-        sysfs.set_dry_run(bool(on))
-        return sysfs.dry_run()
-
     async def self_test(self) -> dict:
         """tools/selftest.py through the plugin: every control written, read back, measured and reverted. Never
         while a game runs (it would take the game's power away for a minute)."""
         if self.running_appid is not None:
             return {"ok": False, "error": "close the game first: the self-test changes and reverts the power limits"}
-        if sysfs.dry_run():
-            return {"ok": False, "error": "turn Dry run off first: the self-test has to write for real"}
         script = os.path.join(PLUGIN_DIR, "tools", "selftest.py")
         try:
             r = await self._bg(lambda: subprocess.run([sys.executable, script], capture_output=True, text=True,
@@ -249,9 +240,7 @@ class Plugin:
         u = f" {unit}" if unit else ""
         fmt = lambda v: "?" if v is None else (("on" if v else "off") if isinstance(v, bool) else f"{v}{u}")
         err = None
-        if sysfs.dry_run():
-            summary = f"dry run: would set {what} to {fmt(wanted)} (hardware still reads {fmt(read)})"
-        elif not ok:
+        if not ok:
             err = sysfs.last_error() or f"{what} could not be set"
             summary = f"{what}: not set ({err})"
         elif read is not None and read != wanted:
@@ -287,9 +276,6 @@ class Plugin:
             r["error"] = None
         tail = f" (Autotune uses {at_w} W of it)" if at_w is not None and at_w != want else ""
         r["summary"] = f"{name} {want} W → {self._reads(st)}{tail}" if r["ok"] else f"{name}: {r['error']}"
-        if sysfs.dry_run():
-            r["summary"] = f"dry run: would set {name} {want} W (hardware unchanged, {self._reads(st)})"
-            r["ok"], r["error"] = True, None
         return r
 
     async def set_tdp(self, watts: int) -> dict:
@@ -458,10 +444,6 @@ class Plugin:
         self.autotune.set_keep(pct)
         return {"ok": True, "keep_pct": pct, "summary": f"Autotune keeps within {pct:g} % of the most the TDP gives", "error": None}
 
-    async def get_game_profile(self, appid: str) -> dict:
-        return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),
-                "launch": self.profiles.get_launch(appid)}
-
     # ---- per-game launch environment (XeSS XMX, XeLL) --------------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:
         try:
@@ -512,24 +494,17 @@ class Plugin:
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
         self._health = None
         try:
-            r = await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned), sysfs.dry_run())
+            r = await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned))
         except Exception as e:
             r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if not r.get("ok"):
             decky.logger.warning("XeSS XMX install failed: %s", r.get("error"))
         return r
 
-    async def xess_uninstall(self) -> dict:
-        self._health = None
-        return await self._bg(xess.uninstall, HOME)
-
     # ---- the VRR range fix (ClawLab's EDID, Fixes panel) -------------------------------------------------------------
-    async def get_wide_vrr(self) -> dict:
-        return await self._bg(edid.status)
-
     async def set_wide_vrr(self, on: bool) -> dict:
         """30-120 Hz VRR on the Claw's own screen (ClawLab's EDID fix). Rebuilds the initramfs: a minute or two."""
         fn = edid.enable if on else edid.disable
-        r = await self._bg(fn, sysfs.dry_run())
+        r = await self._bg(fn)
         decky.logger.info("wide VRR %s: %s", "install" if on else "remove", r)
         return r

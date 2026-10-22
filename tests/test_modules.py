@@ -36,10 +36,8 @@ class FakeHHD:
 
 @pytest.fixture(autouse=True)
 def _clean_sysfs():
-    sysfs.set_dry_run(False)
     sysfs._originals.clear()
     yield
-    sysfs.set_dry_run(False)
     sysfs._originals.clear()
 
 
@@ -97,11 +95,6 @@ def test_xess_state_from_package_layout(tmp_path):
     assert st["drivers"] == ["26.1.2", "26.3.0-rc1"] and st["status"]["state"] == "ok"
     assert xess.parse_status("FAILED 2026 x: no device")["state"] == "failed"
     assert not xess.state(str(tmp_path / "nobody"))["installed"]
-
-
-def test_xess_install_dry_run(tmp_path):
-    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"}, dry_run=True)
-    assert r["dry_run"] and not os.path.exists(tmp_path / ".local")
 
 
 # ---- downloads -------------------------------------------------------------------------------------------------------
@@ -173,14 +166,6 @@ def test_soak_verdict():
     assert "OVER" in soak.verdict(0.9, 40, 2, 1)[0] and "leak" in soak.verdict(0.9, 40, 2, 1)[2]
 
 
-def test_power_profile_script_dry_run():
-    import subprocess
-    r = subprocess.run(["bash", os.path.join(ROOT, "tools", "power-profile.sh"), "battery", "--dry-run"],
-                       capture_output=True, text=True)
-    assert r.returncode == 0 and "== battery" in r.stdout
-    assert subprocess.run(["bash", os.path.join(ROOT, "tools", "power-profile.sh"), "turbo"], capture_output=True).returncode == 1
-
-
 # ---- current Bazzite: no HHD, MSI firmware limits, InputPlumber ------------------------------------------------------
 def _msi_fw(tmp_path):
     base = tmp_path / "fw"
@@ -202,14 +187,6 @@ def test_tdp_through_msi_firmware_when_no_hhd(tmp_path, monkeypatch):
     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 45, 45]
     pw.revert_all()
     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 30, 40]
-
-
-def test_msi_firmware_dry_run(tmp_path, monkeypatch):
-    monkeypatch.setattr(hhd, "available", lambda: False)
-    p = _msi_fw(tmp_path)
-    sysfs.set_dry_run(True)
-    assert power.Power(_hardware(p)).set_tdp(25, plugged=True)
-    assert sysfs.read_int(p.msi_pl1) == 20
 
 
 def test_stack_detection(monkeypatch):

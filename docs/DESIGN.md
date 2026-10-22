@@ -21,7 +21,7 @@ Decky backend (Python, root)                  main.py       thin dispatch, game 
         │
 py_modules/clawdeck/
    hw.py        model table (one row per Claw) + sysfs path discovery
-   sysfs.py     every write recorded → revert_all(); dry-run; last_error() for the UI's red rows
+   sysfs.py     every write recorded → revert_all(); last_error() for the UI's red rows
    power.py     levers (TDP via RAPL-MMIO on the EX, HHD / MSI firmware elsewhere; CPU max_perf_pct; GPU window)
                 + the four profiles (hw.PROFILES)
    battery.py   plugged detection only (profiles differ on battery / charger)
@@ -42,7 +42,7 @@ py_modules/clawdeck/
 tools/
    clawdeck-launch.sh   %command% wrapper: MangoHud log for autotune + per-game env file + XeLL log rotation
    selftest.py          every control written, read back, measured, reverted (Setup → Run self-test)
-   sysfs-survey.sh      read-only survey for a new model;  power-profile.sh  profiles from a terminal
+   sysfs-survey.sh      read-only survey for a new model (the health check's "report this model" fix)
    soak.py              CPU % / RSS of the backend against the battery budget (maintainer)
 ```
 
@@ -60,7 +60,7 @@ tools/
   anything.
 - **Fixes**: VRR fix install / remove, face-button fix install / remove, the health check in one line (the full list
   on the page).
-- **Setup**: install / update XeSS XMX, run the self-test (PASS/FAIL), Dry run, export the log.
+- **Setup**: install / update XeSS XMX, run the self-test (PASS/FAIL), export the log.
 
 ## Upscaling and frame generation: what runs where
 1. **Native XeSS** in the game → the xess-xmx-linux driver runs it on XMX, XeLL on. ClawDeck's job.

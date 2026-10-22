@@ -117,9 +117,6 @@ def apply() -> dict:
     dev = device_override_text()
     if dev is None:
         return {"ok": False, "error": f"{STOCK_DEVICE} not found: this InputPlumber has no config for the Claw 8 EX"}
-    if sysfs.dry_run():
-        return {"ok": True, "dry_run": True,
-                "would": f"write {MAP_OVERRIDE} and {DEVICE_OVERRIDE}; systemctl restart inputplumber"}
     try:
         for path, text in ((MAP_OVERRIDE, MAP_TEXT), (DEVICE_OVERRIDE, dev)):
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -142,8 +139,6 @@ def remove() -> dict:
     targets = [p for p in (DEVICE_OVERRIDE, MAP_OVERRIDE, *LEGACY_HWDB) if os.path.exists(p)]
     if not targets:
         return {"ok": True, "removed": []}
-    if sysfs.dry_run():
-        return {"ok": True, "dry_run": True, "would": f"rm {' '.join(targets)}; systemctl restart inputplumber"}
     try:
         for p in targets:
             os.remove(p)

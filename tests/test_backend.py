@@ -1,4 +1,4 @@
-"""Backend tests against a fake sysfs tree (no hardware needed): detection, clamping, revert, dry-run, profiles,
+"""Backend tests against a fake sysfs tree (no hardware needed): detection, clamping, revert, profiles,
 autotune control logic. Run: python3 -m pytest -q tests"""
 import json
 import os
@@ -38,7 +38,6 @@ def fake_hw(tmp_path, monkeypatch):
                  battery=str(root / "bat/BAT1"), charge_limit=str(root / "bat/BAT1/charge_control_end_threshold"))
     h = hw.Hardware(product="MS-1T91", model=hw.MODELS["MS-1T91"], known=True, kernel="test", cpu_model="test",
                     gpu_driver="xe", paths=p)
-    sysfs.set_dry_run(False)
     sysfs._originals.clear()
     monkeypatch.setattr("clawdeck.hhd.available", lambda: False)
     return h
@@ -71,14 +70,6 @@ def test_revert_restores_originals(fake_hw):
     assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
     assert sysfs.read_int(fake_hw.paths.gpu_min_freq) == 300
     assert sysfs.read_int(fake_hw.paths.gpu_max_freq) == 2400
-
-
-def test_dry_run_writes_nothing(fake_hw):
-    sysfs.set_dry_run(True)
-    pw = power.Power(fake_hw)
-    assert pw.set_cpu_max_pct(40)
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
-    sysfs.set_dry_run(False)
 
 
 def test_cpu_pct_never_below_min(fake_hw):
@@ -142,9 +133,6 @@ def test_face_buttons_override(tmp_path, monkeypatch):
     st = buttons.status("MS-1T91")
     assert st["applies"] and not st["ok"] and not st["installed"]
     assert "capability_map_id: claw8ex" in buttons.device_override_text()
-    sysfs.set_dry_run(True)
-    assert buttons.apply()["dry_run"]
-    sysfs.set_dry_run(False)
     calls = []
     monkeypatch.setattr(buttons, "_run", lambda cmd, timeout=30: calls.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
     r = buttons.apply()
@@ -182,17 +170,6 @@ def test_sampler_caches_the_dear_reads(fake_hw, tmp_path, monkeypatch):
         smp.frametime()
         smp.gpu_busy()
     assert len(globs) == 1 and len(busy) == 1        # one directory listing, one D-Bus call, not 20 of each
-
-
-def test_dry_run_keeps_the_revert_record(fake_hw):
-    pw = power.Power(fake_hw)
-    pw.set_cpu_max_pct(50)                            # a real write
-    sysfs.set_dry_run(True)
-    pw.revert_all()                                   # only logged
-    sysfs.set_dry_run(False)
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 50
-    pw.revert_all()                                   # still knows the original
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
 
 
 

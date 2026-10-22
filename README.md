@@ -63,8 +63,7 @@ Made for the **MSI Claw 8 EX AI+**. It should also work on the Claw 8 AI+, 7 AI+
 
 > **Not released yet.** ClawDeck is brand new and is being tested on a Claw right now. The first download appears
 > under [Releases](https://github.com/IHulkSmashI/ClawDeck/releases) once that testing is done. Power changes are
-> undone when you close the game or remove the plugin, and **Dry run** (Setup) lets you try it without changing
-> anything.
+> undone when you close the game or remove the plugin.
 
 ---
 
@@ -119,7 +118,6 @@ the driver above then runs on the XMX cores. A game with no upscaler at all: Baz
 |---|---|
 | **Install XeSS XMX** | Downloads the driver (the fork's release when it has one; otherwise upstream's, and it says so) and runs its installer as you, never as root. Log out and in once after. |
 | **Run self-test** | Writes each control, reads it back, measures it and reverts (`tools/selftest.py`); shows PASS/FAIL per control. |
-| **Dry run** | ClawDeck only logs what it would change. |
 | **Export log** | One file on the Desktop for a bug report. |
 
 ---

@@ -1,24 +1,23 @@
-import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, getSetting, selfTest, setDryRun, setSetting, xessInstall, xessState, Hardware, SelfTest, XessState } from "../api";
+import { collectLogs, getHardware, selfTest, xessInstall, xessState, Hardware, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status } from "../components/Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
-/** The XeSS XMX driver install, the self-test, Dry run and the log export. */
+/** The XeSS XMX driver install, the self-test and the log export. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [hw, setHw] = useState<Hardware | null>(null);
   const [x, setX] = useState<XessState | null>(null);
-  const [dry, setDry] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [test, setTest] = useState<SelfTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const refresh = async () => {
-    const [h, xs, d] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), getSetting("dry_run")]);
-    setHw(h); setX(xs); setDry(!!d);
+    const [h, xs] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState()]);
+    setHw(h); setX(xs);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -27,7 +26,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
     try {
       const r = await xessInstall(allow);
       if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("xess-xmx-linux", () => installXess(true)); return; }
-      toast(r.ok ? (r.would ?? `${r.repo ?? "xess-xmx-linux"} ${r.tag ?? ""} installed. ${r.note ?? r.next ?? ""}`) : `XeSS XMX: not installed (${r.error})`);
+      toast(r.ok ? (`${r.repo ?? "xess-xmx-linux"} ${r.tag ?? ""} installed. ${r.note ?? r.next ?? ""}`) : `XeSS XMX: not installed (${r.error})`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(null); refresh(); }
   };
@@ -56,10 +55,6 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
           {busy === "test" ? "Testing…" : "Run self-test"}
         </ButtonItem>
         {test && <Status ok={test.ok} label={`Self-test: ${test.summary ?? (test.ok ? "PASS" : "FAIL")}`} detail={quick ? test.error ?? undefined : (test.lines ?? []).join(" · ") || test.error || undefined} />}
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }}
-          description={explain("ClawDeck only logs what it would change, and changes nothing.")} />
       </PanelSectionRow>
       <PanelSectionRow>
         <ButtonItem layout="below" onClick={async () => { const p = await collectLogs(); toast(`Report saved: ${p}`); }}

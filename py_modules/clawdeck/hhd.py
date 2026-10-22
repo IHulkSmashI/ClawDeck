@@ -74,13 +74,7 @@ def get(key: str, default=None):
 
 def set_values(values: dict) -> dict | None:
     """Set dotted keys. HHD applies them on its next loop and returns the new state; a rejected value comes back
-    unchanged, so callers compare. In dry-run nothing is sent; the current state with the values merged in comes back,
-    so callers behave as if HHD had accepted them."""
-    from . import sysfs
-    if sysfs.dry_run():
-        log.info("dry-run: would set Handheld Daemon %s", values)
-        st = get_state() or {}
-        return {**st, **values}
+    unchanged, so callers compare."""
     tree: dict = {}
     for key, val in values.items():
         node = tree

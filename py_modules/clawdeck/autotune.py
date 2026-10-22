@@ -26,7 +26,7 @@ the minimum TDP, which is why the rule is "within KEEP of the most", not "the be
 Cost, per second while a game runs: the new lines of two small logs, /proc/stat, two GPU clock files and the RAPL
 energy counter. The log directory listing and PowerStation's GPU load are cached (LOG_RESCAN_S, BUSY_EVERY_S).
 
-Rules: dry-run prints every would-be write; a manual change (Advanced) pauses it for the session; picking a profile or
+Rules: a manual change (Advanced) pauses it for the session; picking a profile or
 moving the TDP slider hands control back; everything applied is reverted on game exit.
 """
 from __future__ import annotations

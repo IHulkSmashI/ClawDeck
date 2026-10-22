@@ -114,9 +114,6 @@ class Power:
             if not hhd.tdp_ready():
                 log.warning("Handheld Daemon's TDP controls are not enabled yet (accept them once in HHD's settings)")
                 return False
-            if sysfs.dry_run():
-                log.info("dry-run: would set Handheld Daemon TDP to %d W", watts)
-                return True
             if self._hhd_orig is None:
                 self._hhd_orig = hhd.get_tdp() or {}
             return hhd.set_tdp(watts, self.boost)
@@ -145,7 +142,7 @@ class Power:
         # on the Claw 8 EX it put PL1 back to 30 W within 10 s of every write (findings §21). While ClawDeck holds a
         # TDP it stops thermald (stop only, never disable) and starts it again in revert_all(). The SoC's own thermal
         # limit (TCC) and the EC's fan control stay active throughout.
-        if not sysfs.dry_run() and not self._thermald_paused and thermald_active():
+        if not self._thermald_paused and thermald_active():
             r = _systemctl("stop", THERMALD)
             if r is not None and r.returncode == 0:
                 self._thermald_paused = True
@@ -180,8 +177,7 @@ class Power:
                 continue
             lo, hi = firmware_range(path)
             ok = sysfs.write(path, clamp(val, lo, hi)) and ok
-            if not sysfs.dry_run():
-                time.sleep(0.05)   # the EC applies one limit at a time (HHD waits between writes too)
+            time.sleep(0.05)   # the EC applies one limit at a time (HHD waits between writes too)
         if not ok:
             for path in (self.p.msi_pl1, self.p.msi_pl2, self.p.msi_pl3):
                 if path:

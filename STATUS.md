@@ -18,14 +18,14 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Module | Backend | Panel | Notes |
 |---|---|---|---|
 | Hardware table + discovery | `hw.py` | Setup | one row per Claw; EX = MS-1T91 (board_name first) |
-| Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | `last_error()` feeds the red rows |
+| Revertible sysfs | `sysfs.py` | every write | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
 | Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames |
 | XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
-| Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs or in dry run |
+| Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
 | Browser preview | `preview/` (`pnpm preview`) | all four | the real panel code with example data |
 
@@ -47,7 +47,7 @@ The four-panel UI has not been on the device yet.
 
 - **Power (§17–§19), on the Claw:** move the TDP slider: the profile turns Custom and "RAPL reads N W" follows; pick
   Max 35 W and check whether PL1 above the chip's `max_power_uw` (25 W) takes effect (busy loop or
-  `tools/power-profile.sh`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound and the GPU
+  `tools/selftest.py`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound and the GPU
   floor should climb before the watts; in a CPU-heavy one (Dragon's Dogma 2 town), CPU boost / ceiling first. Open
   Advanced, change CPU boost, the CPU ceiling, both GPU clocks and the energy mode: each toast reads back, and
   Autotune shows "paused".
