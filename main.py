@@ -2,7 +2,8 @@
 
 Runs as root (plugin.json flag root) because sysfs, InputPlumber's config, /etc/firmware and the Steam library
 need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (1 Hz, one asyncio
-task). Power-source changes and resume arrive as events from Steam (frontend listeners).
+task) or thermald is paused while ClawDeck holds a TDP (the temperature guard: one file read every 10 s, §21).
+Power-source changes and resume arrive as events from Steam (frontend listeners).
 
 Scope (2026-10-21 reset): only what Bazzite and Steam's Quick Access do not already do. Four panels: Power
 (profile + autotune), Per-game (XeSS XMX, XeLL), Fixes (VRR range, face buttons, health), Setup (the XeSS driver,
@@ -32,7 +33,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, health, hw, launchenv, power,  # noqa: E402
-                      profiles, stack, sysfs, userexec, xess)
+                      profiles, stack, sysfs, thermal, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -82,6 +83,8 @@ class Plugin:
         self.running_appid: str | None = None
         self._health: tuple[float, list] | None = None
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
+        self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
+        self._guard_task: asyncio.Task | None = None
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s", self.hw.model["name"], self.hw.product, self.hw.kernel)
         self._install_wrapper()
@@ -255,6 +258,7 @@ class Plugin:
         st["custom_tdp"] = self.settings.get("custom_tdp")
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
+        st["thermal"] = self.guard.status()
         return st
 
     def _limit_result(self, name: str, applied: dict, failed: list, plugged) -> dict:
@@ -287,7 +291,9 @@ class Plugin:
             self.settings["last_profile"], self.settings["custom_tdp"] = "custom", want
             self._save_settings()
             sysfs.clear_error()
+            self.guard.reset()                          # the user's new limit replaces the guard's step
             ok = self.power.set_tdp(want, plugged)
+            self._ensure_guard()
             return self._limit_result("Custom", {"tdp": want} if ok else {}, [] if ok else ["tdp"], plugged)
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
@@ -304,7 +310,9 @@ class Plugin:
             self.settings["last_profile"] = name
             self._save_settings()
             sysfs.clear_error()
+            self.guard.reset()
             r = self.power.apply_profile(name, overrides, plugged)
+            self._ensure_guard()
             out = self._limit_result(name.capitalize(), r["applied"], r["failed"], plugged)
         return {**out, "profile": name}
 
@@ -372,6 +380,7 @@ class Plugin:
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
         if base == "custom":     # the TDP slider's value is the limit; the rest of the levers stay as they are
             base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
+        self.guard.reset()
         result = self.power.apply_profile(base, overrides, plugged)
         if self.settings.get("autotune") and prof.get("autotune", True):
             # the picked limit (profile or slider) is the set TDP autotune measures at and works under; its floor is
@@ -383,7 +392,42 @@ class Plugin:
                                 keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"))
             result["autotune"] = "started"
+        self._ensure_guard()
         return result
+
+    # ---- temperature guard (findings §21): only while thermald is paused --------------------------------------------
+    def _floor_w(self) -> int:
+        """The lowest TDP the guard may step to: autotune's floor while it runs, else the user's or the model's."""
+        if self.autotune.session is not None:
+            return self.autotune.session.floor_tdp
+        lo, _ = hw.tdp_range(self.hw.model, self.battery.plugged())
+        return max(lo, int(self.settings.get("autotune_floor") or lo))
+
+    def _ensure_guard(self) -> None:
+        """Start the guard's 10 s loop if ClawDeck now holds a TDP with thermald stopped (and it isn't running)."""
+        if self.power.thermald_paused() and (self._guard_task is None or self._guard_task.done()):
+            self._guard_task = asyncio.get_event_loop().create_task(self._guard_loop())
+
+    async def _guard_loop(self) -> None:
+        if not self.guard.path:
+            decky.logger.warning("thermald is paused but no package temperature sensor was found: no temperature guard")
+            return
+        while self.power.thermald_paused():
+            await asyncio.sleep(thermal.CHECK_S)
+            try:
+                await self._guard_check()
+            except Exception as e:   # a sensor hiccup must never kill the guard
+                decky.logger.exception("temperature guard: %s", e)
+        self.guard.reset()          # thermald is back in charge
+
+    async def _guard_check(self) -> int | None:
+        async with self._power_lock:
+            if not self.power.thermald_paused():
+                return None
+            if self.autotune.session is not None:
+                return self.guard.check(self.autotune.session.learned.tdp, self._floor_w(), self.autotune.thermal_step)
+            plugged = self.battery.plugged()
+            return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged))
 
     def _save_learned(self, appid: str, plugged: bool) -> dict | None:
         learned = self.autotune.stop()
@@ -409,6 +453,7 @@ class Plugin:
         learned = self._save_learned(appid, plugged)
         self.running_appid, self.running_plugged = None, None
         n = self.power.revert_all()
+        self.guard.reset()                          # thermald is back; its loop ends at its next check
         return {"reverted": n, "learned": learned}
 
     async def power_source_changed(self, plugged: bool) -> dict:
@@ -433,7 +478,7 @@ class Plugin:
         return {"reapplied": True, **self._start_game_power(self.running_appid, plugged)}
 
     async def get_autotune(self) -> dict:
-        return self.autotune.status()
+        return {**self.autotune.status(), "thermal": self.guard.status()}
 
     async def set_autotune_keep(self, pct: float) -> dict:
         """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,

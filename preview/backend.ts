@@ -43,6 +43,7 @@ const done = (what: string, wanted: any, read: any, unit = "") => {
 };
 // what autotune uses under the limit in this example: 2 W less, never below its floor
 const atW = () => Math.max(state.floor ?? 8, state.tdp - 2);
+const thermal = () => ({ sensor: "x86_pkg_temp", temp_c: scenario.game ? 78 : 52, tripped: false, stepped_w: null, line: null, stepped_s: null });
 const limit = (name: string, w: number) => {
   state.tdp = w;
   const running = scenario.game && state.autotune;
@@ -121,7 +122,7 @@ export const backend = {
     hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "rapl", tdp_w: scenario.game && state.autotune ? atW() : state.tdp,
     firmware_tdp: { pl1_w: 0, pl2_w: 0 },
     limits: { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 }, range: { min: 8, max: 35 },
-    custom_tdp: state.customTdp, autotune_floor: state.floor, autotune_keep: state.keep,
+    custom_tdp: state.customTdp, autotune_floor: state.floor, autotune_keep: state.keep, thermal: thermal(),
   }),
   apply_profile: (name: string) => {
     const p = PROFILE_TABLE[name];
@@ -145,8 +146,9 @@ export const backend = {
         bound: "cpu", max_fps: 31.0, avg_fps: 30.2, low_fps: 28.4, pct_of_max: 97, fps_per_w: +(30.2 / (atW() + 0.4)).toFixed(2),
         source: "rendered", multiplier: 2, window_s: 10,
         last: { fps: 30.2, shown_fps: 60.4, pkg_w: atW() + 0.4 },
-        last_action: "raised CPU ceiling to 100 %: 29 → 31 fps, kept", last_delta: "CPU ceiling 100 %", last_change_s: 12 }
-    : { running: false, enabled: state.autotune }),
+        last_action: "raised CPU ceiling to 100 %: 29 → 31 fps, kept", last_delta: "CPU ceiling 100 %", last_change_s: 12,
+        thermal_cap: null, thermal: thermal() }
+    : { running: false, enabled: state.autotune, thermal: thermal() }),
   game_started: () => ({}), game_stopped: () => ({}), power_source_changed: () => ({}), resumed: () => ({}),
 
   // ---- per game ----

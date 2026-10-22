@@ -26,6 +26,7 @@ py_modules/clawdeck/
                 + the four profiles (hw.PROFILES)
    battery.py   plugged detection only (profiles differ on battery / charger)
    profiles.py  per-game JSON: base profile, what autotune found, launch settings
+   thermal.py   temperature guard while thermald is paused: >95 °C → TDP −2 W / 10 s until <90 °C (§21)
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
    xess.py      xess-xmx-linux: fork-first install (asset sha256 checked) with upstream fallback, state, per-game XeLL
                 mode from the shim's logs, OptiScaler-present detection (read-only)
@@ -72,13 +73,26 @@ tools/
 The backend never polls. The frontend registers Steam's own notifications and forwards them:
 `GameSessions.RegisterForAppLifetimeNotifications` (game start/stop), `System.RegisterForBatteryStateChanges`
 (the running game switches profile slot), `System.RegisterForOnResumeFromSuspend` (re-apply the running game).
-Timers exist only while autotune runs for a game.
+Timers exist only while autotune runs for a game, and the temperature guard's 10 s check while thermald is paused.
 
 ## Who sets the TDP
 On the Claw 8 EX the MSI firmware attributes are accepted but ignored (docs/HARDWARE-FINDINGS.md §12); the SoC
 enforces `intel-rapl-mmio:0`, so ClawDeck writes RAPL (PL2 before PL1 when raising, PL1 first when lowering). HHD's
 TDP when HHD runs; the MSI attributes only where RAPL is absent. Steam's own slider may do nothing on this chip.
 Every write answers with the value read back (§14).
+
+thermald (Bazzite, polling mode) re-applies the platform's DPTF table to that RAPL domain every few seconds (§21), so
+`power._set_rapl` stops it (never disables it) the first time ClawDeck sets a TDP and `revert_all` starts it again.
+
+## Temperature guard (§21)
+While thermald is stopped, `thermal.Guard` takes over its temperature job for ClawDeck's own TDP. main.py runs it
+every 10 s, only while `power.thermald_paused()`; it reads the package temperature (`x86_pkg_temp` thermal zone,
+coretemp's "Package id 0" as the fallback; `hw.find_pkg_temp`). Above 95 °C it trips and steps the TDP −2 W per
+check until the package is under 90 °C, never below the floor (autotune's, else the user's, else the model's). With
+autotune running the step is `Autotune.thermal_step`: it becomes a cap autotune works under (a re-measure goes to
+the cap, a lever on trial is undone). The step stays until the user picks a profile or moves the slider (both reset
+the guard) or the power is reverted. The status line reads "thermal: stepped to N W". The SoC's TCC limit and the EC
+fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
 
 ## Autotune controller (v3, HARDWARE-FINDINGS §22)
 No target fps. Every decision uses a 10 s window of **rendered** fps that restarts after every change, one change per

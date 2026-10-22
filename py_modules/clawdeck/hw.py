@@ -98,6 +98,9 @@ class Paths:
     # battery
     battery: str | None = None
     charge_limit: str | None = None
+    # package temperature (m°C), for the temperature guard while thermald is paused (thermal.py)
+    pkg_temp: str | None = None
+    pkg_temp_sensor: str | None = None   # "x86_pkg_temp" (thermal zone) or "coretemp" (hwmon)
 
 
 @dataclass
@@ -203,7 +206,27 @@ def discover_paths() -> Paths:
         if os.path.exists(f"{bat}/charge_control_end_threshold"):
             p.charge_limit = f"{bat}/charge_control_end_threshold"
         break
+    p.pkg_temp, p.pkg_temp_sensor = find_pkg_temp()
     return p
+
+
+def find_pkg_temp(sys_root: str = "/sys") -> tuple[str | None, str | None]:
+    """The CPU package temperature: the x86_pkg_temp thermal zone (what thermald reads), else coretemp's
+    "Package id 0" (its temp1 when no label says so)."""
+    for z in sorted(glob.glob(f"{sys_root}/class/thermal/thermal_zone[0-9]*")):
+        if sysfs.read(f"{z}/type") == "x86_pkg_temp" and os.path.exists(f"{z}/temp"):
+            return f"{z}/temp", "x86_pkg_temp"
+    for h in sorted(glob.glob(f"{sys_root}/class/hwmon/hwmon[0-9]*")):
+        if sysfs.read(f"{h}/name") != "coretemp":
+            continue
+        for lab in sorted(glob.glob(f"{h}/temp[0-9]*_label")):
+            if (sysfs.read(lab) or "").startswith("Package"):
+                inp = lab[: -len("_label")] + "_input"
+                if os.path.exists(inp):
+                    return inp, "coretemp"
+        if os.path.exists(f"{h}/temp1_input"):
+            return f"{h}/temp1_input", "coretemp"
+    return None, None
 
 
 def match_model(board: str, product: str) -> tuple[str, dict | None]:
