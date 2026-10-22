@@ -108,6 +108,20 @@ def main() -> int:
     else:
         check("GPU window", False, "no xe/i915 frequency files")
 
+    # ---- GPU efficiency mode (xe power_profile, findings §22.3) --------------------------------------------------
+    if p.gpu_power_profile:
+        orig, offered = pw.gpu_power_profile()
+        for v in offered:
+            try:
+                ok = pw.set_gpu_power_profile(v)
+            except ValueError:
+                ok = False
+            check(f"GPU efficiency mode {v}", ok and pw.gpu_power_profile()[0] == v, f"asked {v}, reads {pw.gpu_power_profile()[0]}")
+        pw.revert_all()
+        check("GPU efficiency mode revert", pw.gpu_power_profile()[0] == orig, f"back to {orig}")
+    else:
+        check("GPU efficiency mode", True, "no power_profile on this kernel (skipped)")
+
     # ---- charge limit ------------------------------------------------------------------------------------------
     if p.charge_limit:
         orig = read_int(p.charge_limit)

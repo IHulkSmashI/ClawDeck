@@ -53,7 +53,8 @@ tools/
   that enforces them), Autotune with the set TDP, the TDP it uses, rendered fps against the most the set TDP gives,
   frames per watt, the bottleneck, its phase and the last action.
   Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
-  (one lock). Under an Advanced expander: CPU boost, CPU ceiling, GPU floor/ceiling, EPP, autotune floor (§19).
+  (one lock). Under an Advanced expander: CPU boost, CPU ceiling, GPU floor/ceiling, GPU efficiency mode (xe
+  `power_profile`, §22.3), EPP, autotune floor (§19).
 - **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
   for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` / `igdext_xell.log` in
   the prefix, rotated per launch by the wrapper), and a line saying whether OptiScaler (Bazzite's Decky Framegen) is
@@ -112,6 +113,11 @@ frame-generation multiplier. No XeLL line = no XeSS frame generation, and MangoH
    watts drop);
 4. **hold**: below the line twice → +1 W; a sustained ±15 % shift, a frame-generation multiplier change or 5 min →
    measure again.
+GPU efficiency mode (§22.3): xe's `power_profile` (`base` / `power_saving`). Saver and Battery set power_saving, the
+other profiles base. In autotune it is the first GPU-bound lever (off before any CPU trade or GPU floor, and before
++1 W when short in hold), and at the TDP floor on the line it is tried on for one window and kept only if the game
+stays on the line. The file reads "[base] power_saving" and takes one word, so `sysfs.write(original=)` records the
+active word for the revert.
 PL1 window (§22.2): RAPL averages PL1 over tau (56 s on the EX), so for most of a minute after a change the package
 can still boost and a 10 s window would judge the boost. While learning (any phase but hold, or fewer than 3 quiet
 windows in hold) autotune sets tau to 8 s; once settled the firmware's tau comes back so play keeps its bursts.

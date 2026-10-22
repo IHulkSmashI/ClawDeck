@@ -4,7 +4,7 @@ import { callable } from "@decky/api";
 
 export type Health = { id: string; title: string; ok: boolean; detail: string; fix: string | null; optional?: boolean };
 export type PowerStatus = {
-  gpu: { available: boolean; min_mhz: number | null; max_mhz: number | null; cur_mhz: number | null; hw_min_mhz: number | null; hw_max_mhz: number | null; efficient_mhz: number | null };
+  gpu: { available: boolean; min_mhz: number | null; max_mhz: number | null; cur_mhz: number | null; hw_min_mhz: number | null; hw_max_mhz: number | null; efficient_mhz: number | null; power_profile?: string | null; power_profiles?: string[] };
   cpu: { available: boolean; max_perf_pct: number | null; min_perf_pct: number | null; no_turbo: number | null; epp?: string | null; epp_available?: boolean };
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null; max_w?: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
@@ -50,6 +50,7 @@ export const setCpuTurbo = callable<[on: boolean], WriteResult>("set_cpu_turbo")
 export const setCpuMaxPct = callable<[pct: number], WriteResult>("set_cpu_max_pct");
 export const setGpuWindow = callable<[min: number | null, max: number | null], WriteResult>("set_gpu_window");
 export const setEpp = callable<[value: string], WriteResult>("set_epp");
+export const setGpuPowerProfile = callable<[saving: boolean], WriteResult>("set_gpu_power_profile");
 export const setAutotuneFloor = callable<[watts: number | null], WriteResult & { floor_w: number }>("set_autotune_floor");
 export const setAutotuneKeep = callable<[pct: number], WriteResult & { keep_pct: number }>("set_autotune_keep");
 export const listProfiles = callable<[], Record<string, { tdp?: number; cpu_max_pct?: number; note?: string }>>("list_profiles");

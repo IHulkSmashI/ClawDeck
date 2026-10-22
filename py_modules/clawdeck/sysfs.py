@@ -51,16 +51,17 @@ def read_int(path: str, default: int | None = None) -> int | None:
         return default
 
 
-def write(path: str, value: str | int, persist: bool = False) -> bool:
+def write(path: str, value: str | int, persist: bool = False, original: str | None = None) -> bool:
     """Write value to path. Remembers the original value for revert. Returns True on success.
     persist=True is for the one setting that must survive revert_all (the charge limit): it is not recorded, so
-    closing a game or reverting power never undoes it."""
+    closing a game or reverting power never undoes it. original: what to restore, for files that read back more than
+    they accept (xe's power_profile reads "[base] power_saving" and takes one word)."""
     value = str(value)
     with _lock:
         if persist:
             _originals.pop(path, None)
         elif path not in _originals:
-            _originals[path] = read(path)
+            _originals[path] = original if original is not None else read(path)
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(value + "\n")

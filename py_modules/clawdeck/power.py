@@ -67,6 +67,8 @@ class Power:
             "hw_min_mhz": sysfs.read_int(p.gpu_rpn_freq) if p.gpu_rpn_freq else None,
             "hw_max_mhz": sysfs.read_int(p.gpu_rp0_freq) if p.gpu_rp0_freq else None,
             "efficient_mhz": sysfs.read_int(p.gpu_rpe_freq) if p.gpu_rpe_freq else None,
+            "power_profile": self.gpu_power_profile()[0],
+            "power_profiles": self.gpu_power_profile()[1],
         }
         cpu = {
             "available": p.cpu_max_perf_pct is not None,
@@ -253,6 +255,31 @@ class Power:
             ok = sysfs.write(self.p.gpu_max_freq, new_max) and ok
         return ok
 
+    # ---- GPU efficiency mode (xe power_profile, findings §22.3) ----------------------------------------------------
+    def gpu_power_profile(self) -> tuple[str | None, list[str]]:
+        """(active, offered) from xe's power_profile, which reads like "[base] power_saving"."""
+        txt = sysfs.read(self.p.gpu_power_profile) if self.p.gpu_power_profile else None
+        active, offered = None, []
+        for tok in (txt or "").split():
+            if tok.startswith("[") and tok.endswith("]"):
+                tok = tok[1:-1]
+                active = tok
+            offered.append(tok)
+        return active, offered
+
+    def set_gpu_power_profile(self, value: str) -> bool:
+        """base or power_saving (SLPC prefers the efficient clock and ramps up slower). Revertible: the active value
+        is what a revert writes back. Raises ValueError for a value this kernel does not offer."""
+        if not self.p.gpu_power_profile:
+            return False
+        active, offered = self.gpu_power_profile()
+        if value not in offered:
+            raise ValueError(f"GPU efficiency mode: this kernel offers {', '.join(offered) or 'nothing'}, not {value}")
+        if value == active:
+            return True
+        ok = sysfs.write(self.p.gpu_power_profile, value, original=active)
+        return ok and self.gpu_power_profile()[0] == value
+
     def reset_gpu_floor(self) -> bool:
         """Only the floor back to what it was before ClawDeck; a ceiling the user set stays."""
         return sysfs.revert(self.p.gpu_min_freq) if self.p.gpu_min_freq else False
@@ -295,6 +322,13 @@ class Power:
                 result["failed"].append("cpu_max_pct")
                 if self.p.cpu_max_perf_pct:
                     sysfs.revert(self.p.cpu_max_perf_pct)
+        gp = prof.get("gpu_power_profile")
+        if gp and self.p.gpu_power_profile and gp in self.gpu_power_profile()[1]:   # an older kernel may offer less
+            if self.set_gpu_power_profile(gp):
+                result["applied"]["gpu_power_profile"] = gp
+            else:
+                result["failed"].append("gpu_power_profile")
+                sysfs.revert(self.p.gpu_power_profile)
         if prof.get("gpu_min_mhz") is not None or prof.get("gpu_max_mhz") is not None:
             if self.set_gpu_window(prof.get("gpu_min_mhz"), prof.get("gpu_max_mhz")):
                 result["applied"]["gpu_window"] = [prof.get("gpu_min_mhz"), prof.get("gpu_max_mhz")]

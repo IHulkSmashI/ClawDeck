@@ -670,3 +670,110 @@ def test_a_saved_result_starts_settled_with_the_firmwares_window(fake_hw, monkey
     assert at.session.phase == "measure" and sysfs.read_int(t) == 8_000_000
     at.stop()
     assert sysfs.read_int(t) == TAU_FW
+
+
+# ---- GPU efficiency mode: xe power_profile (findings §22.3) --------------------------------------------------------
+def _with_power_profile(fake_hw, monkeypatch, active="base", offered=("base", "power_saving")):
+    """A power_profile file that behaves like xe's: reads "[base] power_saving", takes one word."""
+    path = os.path.join(os.path.dirname(fake_hw.paths.gpu_min_freq), "power_profile")
+    _w(path, active)
+    fake_hw.paths.gpu_power_profile = path
+    real_read = sysfs.read
+
+    def read(p, default=None):
+        if p != path:
+            return real_read(p, default)
+        word = real_read(p)
+        return " ".join(f"[{o}]" if o == word else o for o in offered)
+    monkeypatch.setattr(sysfs, "read", read)
+    return path
+
+
+def test_gpu_power_profile_is_discovered_with_the_clock_files(tmp_path, monkeypatch):
+    card = tmp_path / "card0"
+    f0 = card / "device/tile0/gt0/freq0"
+    for n in ("min_freq", "max_freq", "power_profile"):
+        _w(f0 / n, "1")
+    _w(card / "device/vendor", "0x8086")
+    real_glob, real_isdir = hw.glob.glob, hw.os.path.isdir
+    monkeypatch.setattr(hw.glob, "glob", lambda pat: [str(card)] if pat == "/sys/class/drm/card[0-9]" else
+                        ([] if pat.startswith("/sys/") else real_glob(pat)))
+    assert hw.discover_paths().gpu_power_profile == str(f0 / "power_profile")
+    assert real_isdir(f0)
+
+
+def test_gpu_power_profile_set_revert_and_the_profiles(fake_hw, monkeypatch):
+    path = _with_power_profile(fake_hw, monkeypatch)
+    pw = power.Power(fake_hw)
+    assert pw.gpu_power_profile() == ("base", ["base", "power_saving"])
+    assert pw.set_gpu_power_profile("power_saving") and pw.status()["gpu"]["power_profile"] == "power_saving"
+    pw.revert_all()
+    assert open(path).read().strip() == "base"                      # the active word goes back, not "[base] ..."
+    with pytest.raises(ValueError):
+        pw.set_gpu_power_profile("turbo")
+    for name, want in (("saver", "power_saving"), ("battery", "power_saving"), ("balanced", "base"),
+                       ("performance", "base"), ("max", "base")):
+        r = pw.apply_profile(name, plugged=True)
+        assert r["applied"].get("gpu_power_profile") == want and pw.gpu_power_profile()[0] == want, name
+    pw.revert_all()
+    assert pw.gpu_power_profile()[0] == "base"
+
+
+def test_a_kernel_without_power_saving_is_left_alone(fake_hw, monkeypatch):
+    _with_power_profile(fake_hw, monkeypatch, offered=("base",))
+    r = power.Power(fake_hw).apply_profile("saver", plugged=False)
+    assert "gpu_power_profile" not in r["applied"] and "gpu_power_profile" not in r["failed"]
+
+
+def test_autotune_gpu_bound_turns_efficiency_mode_off_before_any_floor(fake_hw, monkeypatch):
+    _with_power_profile(fake_hw, monkeypatch, active="power_saving")
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda *_: 40.0, gpu_mhz=2400, gpu_max_mhz=2400, gpu_busy=98)     # GPU-bound
+    s.learned.bound = "gpu"
+    assert at._levers(s)[0][0] == "gpu_base"
+    for _ in range(4):
+        at._step()
+    assert "gpu_base" in s.balance_tried and at.power.gpu_power_profile()[0] == "base"    # tried first
+    assert s.last_delta == "GPU efficiency off"
+    at.session = None
+
+
+def test_autotune_tries_efficiency_mode_at_the_floor_and_keeps_it_only_on_the_line(fake_hw, monkeypatch):
+    _with_power_profile(fake_hw, monkeypatch)
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=9)
+    fps = {"v": 60.0}
+    _Game(at, lambda *_: fps["v"])
+    for _ in range(3):
+        at._step()                                                   # measured: 60 at 9 W
+    for _ in range(2):
+        at._step()                                                   # lowered to the 8 W floor, still on the line
+    assert s.learned.tdp == 8 and s.phase == "hold" and s.eff_trial
+    assert at.power.gpu_power_profile()[0] == "power_saving" and s.last_delta == "GPU efficiency on"
+    at._step()                                                       # 60 fps held: kept
+    assert at.power.gpu_power_profile()[0] == "power_saving" and s.learned.gpu_profile == "power_saving"
+    assert "kept" in s.last_action
+    for _ in range(3):
+        at._step()
+    assert not s.eff_trial and at.power.gpu_power_profile()[0] == "power_saving"   # tried once, not every window
+    at.session = None
+    # a game that loses frames with it: undone after one window
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=9)
+    at.power.set_gpu_power_profile("base")
+    seq = iter([60.0] * 5 + [50.0])
+    _Game(at, lambda *_: next(seq))
+    for _ in range(6):
+        at._step()
+    assert at.power.gpu_power_profile()[0] == "base" and "undone" in s.last_action
+    at.session = None
+
+
+def test_autotune_short_in_hold_and_gpu_bound_turns_efficiency_off_before_adding_watts(fake_hw, monkeypatch):
+    _with_power_profile(fake_hw, monkeypatch, active="power_saving")
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=20)
+    s.phase, s.learned.max_fps, s.learned.fps, s.learned.tdp = "hold", 60.0, 58.0, 15
+    s.learned.bound = "gpu"
+    s.measured_at = time.monotonic()
+    _Game(at, lambda *_: 54.0, gpu_mhz=2400, gpu_max_mhz=2400, gpu_busy=98)
+    at._step(); at._step()
+    assert at.power.gpu_power_profile()[0] == "base" and s.learned.tdp == 15 and s.last_delta == "GPU efficiency off"
+    at.session = None

@@ -352,6 +352,18 @@ class Plugin:
                     "summary": f"CPU energy mode: {e}", "error": str(e)}
         return self._done(ok, "CPU energy mode", str(value), self.power.epp())
 
+    async def set_gpu_power_profile(self, saving: bool) -> dict:
+        """GPU efficiency mode (xe power_profile, findings §22.3): power_saving prefers the efficient clock."""
+        sysfs.clear_error()
+        self.autotune.pause("manual GPU efficiency mode")
+        want = "power_saving" if saving else "base"
+        try:
+            ok = self.power.set_gpu_power_profile(want)
+        except ValueError as e:
+            return {"ok": False, "what": "GPU efficiency mode", "wanted": want, "read": self.power.gpu_power_profile()[0],
+                    "unit": "", "summary": str(e), "error": str(e)}
+        return self._done(ok, "GPU efficiency mode", want, self.power.gpu_power_profile()[0])
+
     async def set_autotune_floor(self, watts: int | None) -> dict:
         """The lowest TDP autotune may use; None = the model minimum."""
         lo, hi = hw.tdp_range(self.hw.model, True)

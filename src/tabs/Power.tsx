@@ -4,7 +4,7 @@ import { FC, useEffect, useRef, useState } from "react";
 
 import {
   applyProfile, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
-  setEpp, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
+  setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
@@ -141,7 +141,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {app && autotune && !quick && <LaunchWrapper appid={app.appid} name={app.name} />}
       {st && (
         <Advanced id="power" label="Advanced"
-          description={quick ? undefined : explain("CPU boost, CPU ceiling, GPU clocks, CPU energy mode and Autotune's floor. Steam has none of these for this chip.", undefined, "a change here pauses Autotune for this game.")}>
+          description={quick ? undefined : explain("CPU boost, CPU ceiling, GPU clocks, GPU efficiency mode, CPU energy mode and Autotune's floor. Steam has none of these for this chip.", undefined, "a change here pauses Autotune for this game.")}>
           {st.tdp_backend === "rapl" && st.rapl.pl2_w ? (
             <PanelSectionRow>
               <Status ok={null} label={`Boost limit ${st.rapl.pl2_w} W`} detail="Short bursts (seconds) may draw this much; set from the TDP, read back from RAPL." />
@@ -171,6 +171,15 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
               description={explain(`The GPU never clocks above this. Reads ${st.gpu.max_mhz ?? "?"} MHz of ${st.gpu.hw_max_mhz ?? "?"}.`,
                 quick ? undefined : "hands power back to the CPU in CPU-heavy games.", "lower peak fps.")} />
           </PanelSectionRow>
+          {st.gpu.power_profiles?.includes("power_saving") ? (
+            <PanelSectionRow>
+              <ToggleField label="GPU efficiency mode" checked={st.gpu.power_profile === "power_saving"}
+                onChange={(v) => setGpuPowerProfile(v).then(onLever)}
+                description={explain(`The GPU prefers its most efficient clock and ramps up more slowly. Reads ${st.gpu.power_profile ?? "?"}.`,
+                  quick ? undefined : "a few % more play time in light games; Battery saver and Battery turn it on.",
+                  "slower to clock up, can add a stutter at scene changes.")} />
+            </PanelSectionRow>
+          ) : null}
           <PanelSectionRow>
             <DropdownItem label="CPU energy mode" disabled={!st.cpu.epp_available} rgOptions={EPP} selectedOption={st.cpu.epp ?? "balance_performance"}
               onChange={(o) => setEpp(o.data).then(onLever)}

@@ -18,6 +18,7 @@ export const scenario = {
 
 const hhd = () => scenario.controller === "hhd";
 const state = {
+  gpuSaving: false,
   wideVrr: false,
   buttonsFixed: true,
   autotune: true,
@@ -115,7 +116,7 @@ export const backend = {
 
   // ---- power ----
   get_power: () => ({
-    gpu: { available: true, min_mhz: state.gpuMin, max_mhz: state.gpuMax, cur_mhz: scenario.game ? 1950 : 450, hw_min_mhz: 100, hw_max_mhz: 2300, efficient_mhz: 1000 },
+    gpu: { available: true, min_mhz: state.gpuMin, max_mhz: state.gpuMax, cur_mhz: scenario.game ? 1950 : 450, hw_min_mhz: 100, hw_max_mhz: 2300, efficient_mhz: 1000, power_profile: state.gpuSaving ? "power_saving" : "base", power_profiles: ["base", "power_saving"] },
     cpu: { available: true, max_perf_pct: state.cpu, min_perf_pct: 10, no_turbo: state.boost ? 0 : 1, epp: state.epp, epp_available: true },
     rapl: { available: true, pl1_w: scenario.game && state.autotune ? atW() : state.tdp, pl2_w: (scenario.game && state.autotune ? atW() : state.tdp) + 7, max_w: 25 },
     tdp: hhd() ? { mode: "custom", custom_tdp: state.tdp, boost: true, ready: true } : null,
@@ -126,7 +127,7 @@ export const backend = {
   }),
   apply_profile: (name: string) => {
     const p = PROFILE_TABLE[name];
-    state.profile = name; state.cpu = p[1];
+    state.profile = name; state.cpu = p[1]; state.gpuSaving = name === "saver" || name === "battery";
     return limit(name[0].toUpperCase() + name.slice(1), p[0]);
   },
   set_tdp: (w: number) => { state.profile = "custom"; state.customTdp = w; return { ...limit("Custom", w), profile: "custom" }; },
@@ -137,6 +138,7 @@ export const backend = {
     return lo != null ? done("GPU floor", lo, state.gpuMin, "MHz") : done("GPU ceiling", hi, state.gpuMax, "MHz");
   },
   set_epp: (v: string) => { state.epp = v; return done("CPU energy mode", v, v); },
+  set_gpu_power_profile: (v: boolean) => { state.gpuSaving = v; const p = v ? "power_saving" : "base"; return done("GPU efficiency mode", p, p); },
   set_autotune_floor: (w: number | null) => { state.floor = w; return { ok: true, floor_w: w ?? 8, summary: `Autotune floor ${w ?? 8} W`, error: null }; },
   list_profiles: () => Object.fromEntries(Object.entries(PROFILE_TABLE).map(([k, v]) => [k, { tdp: v[0], cpu_max_pct: v[1] }])),
   set_autotune_keep: (v: number) => { state.keep = v; return { ok: true, keep_pct: v, summary: `Autotune keeps within ${v} % of the most the TDP gives`, error: null }; },

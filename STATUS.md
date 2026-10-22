@@ -66,6 +66,11 @@ The four-panel UI has not been on the device yet.
   stepped to 33 W", then 31, 29… every 10 s until under 90 °C, never below the floor; the TDP read back must
   follow. Moving the slider afterwards should clear it. Does 95 °C come before the chip's own throttle (TCC)? If TCC
   always wins first, note the temperature it settles at.
+- **GPU efficiency mode (§22.3), on the Claw:** Setup → Run self-test: "GPU efficiency mode base / power_saving"
+  and its revert must PASS. Pick Battery: `cat /sys/class/drm/card0/device/tile0/gt0/freq0/power_profile` reads
+  `base [power_saving]`; pick Balanced: `[base] power_saving`. The Advanced toggle follows and reads back. In a light
+  game at the TDP floor with Autotune on, the status should say "trying GPU efficiency mode", then "kept" or
+  "undone"; watch for a stutter at scene changes with it on.
 - **PL1 window (§22.2), on the Claw:** with Autotune on, start a game and read
   `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_time_window_us` while it measures: 8000000 (or the
   firmware's nearest step). Once the status says "holding" for ~30 s it must read 55970000 again, and after closing
