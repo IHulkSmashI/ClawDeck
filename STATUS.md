@@ -45,6 +45,10 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- Efficiency session (findings §22.1 + §22.4), with Black Myth: Wukong's benchmark: TDP sweep 8→35 W with
+  `tools/efficiency-sweep.sh`, then the same at 10/12/17 W with GPU `power_saving`; watch intel_lpmd and per-core load
+  during the run. Same session as the XeLL Windows-vs-Bazzite latency comparison.
+
 - **Power (§17–§19), on the Claw:** move the TDP slider: the profile turns Custom and "RAPL reads N W" follows; pick
   Max 35 W and check whether PL1 above the chip's `max_power_uw` (25 W) takes effect (busy loop or
   `tools/selftest.py`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound and the GPU
