@@ -28,8 +28,9 @@ const EPP: { data: string; label: string }[] = [
 ];
 
 const backendName = (b: string | null | undefined) => (b === "rapl" ? "RAPL" : b === "hhd" ? "Handheld Daemon" : b === "msi-firmware" ? "MSI firmware" : "hardware");
-const reads = (st: PowerStatus | null) =>
-  `${backendName(st?.tdp_backend)} reads ${st?.tdp_w ?? "?"} W${st?.tdp_backend === "rapl" && st.rapl.pl2_w ? ` / ${st.rapl.pl2_w} W` : ""}`;
+// one number in the main view: the sustained TDP the hardware reports back. The short boost limit (PL2) is shown
+// only under Advanced, so the line never reads like two different TDPs (maintainer, 2026-10-22).
+const reads = (st: PowerStatus | null) => `TDP ${st?.tdp_w ?? "?"} W (read back from ${backendName(st?.tdp_backend)})`;
 const ago = (s: number | null | undefined) => (s == null ? "" : s < 90 ? `${s} s ago` : `${Math.round(s / 60)} min ago`);
 
 /** Writes that follow a slider or a quick flick through a list: wait for the last value, write once, and let only the
@@ -84,7 +85,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
-    setLine(`${backendName(r.read?.backend)} reads ${r.read?.tdp_w ?? "?"} W${r.read?.pl2_w ? ` / ${r.read.pl2_w} W` : ""}`);
+    setLine(`TDP ${r.read?.tdp_w ?? "?"} W (read back from ${backendName(r.read?.backend)})`);
     refresh();
   };
   const pick = (id: string) => {
@@ -112,9 +113,10 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   return (
     <PanelSection title="Power">
       <PanelSectionRow>
-        <DropdownItem label="Profile" selectedOption={profile} onChange={(o) => pick(o.data)}
-          rgOptions={[...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} ${wattsOf(p.id)} W` : p.short })),
-            ...(custom ? [{ data: "custom", label: `Custom ${tdp} W` }] : [])]}
+        {/* no side label: in the Quick Access column a label takes half the width and cuts the option text off */}
+        <DropdownItem menuLabel="Power profile" selectedOption={profile} onChange={(o) => pick(o.data)}
+          rgOptions={[...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} · ${wattsOf(p.id)} W` : p.short })),
+            ...(custom ? [{ data: "custom", label: `Custom · ${tdp} W` }] : [])]}
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
             quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} />
         <SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={slide}
@@ -142,6 +144,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {st && (
         <Advanced id="power" label="Advanced"
           description={quick ? undefined : explain("CPU boost, CPU ceiling, GPU clocks, CPU energy mode and Autotune's floor. Steam has none of these for this chip.", undefined, "a change here pauses Autotune for this game.")}>
+          {st.tdp_backend === "rapl" && st.rapl.pl2_w ? (
+            <PanelSectionRow>
+              <Status ok={null} label={`Boost limit ${st.rapl.pl2_w} W`} detail="Short bursts (seconds) may draw this much; set from the TDP, read back from RAPL." />
+            </PanelSectionRow>
+          ) : null}
           <PanelSectionRow>
             <ToggleField label="CPU boost" checked={st.cpu.no_turbo === 0} disabled={st.cpu.no_turbo == null}
               onChange={(v) => setCpuTurbo(v).then(onLever)}
