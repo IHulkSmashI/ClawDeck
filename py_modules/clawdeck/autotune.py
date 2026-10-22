@@ -244,6 +244,7 @@ class Learned:
     cpu_max_pct: int = 100
     gpu_min_mhz: int | None = None
     boost: bool = True              # CPU boost (intel_pstate no_turbo = 0)
+    gpu_profile: str | None = None  # xe power_profile autotune chose (base / power_saving); None = left as it was
     bound: str = "balanced"
     max_fps: float | None = None    # the most the ceiling gave, rendered fps
     fps: float | None = None        # what the chosen TDP gives
@@ -281,6 +282,8 @@ class Session:
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
     short_tau: bool = False             # the PL1 time window is LEARN_TAU_US right now (findings §22.2)
     tau_refused: bool = False           # the firmware refused it once: don't retry every window
+    eff_trial: bool = False             # GPU efficiency mode on trial at the TDP floor (judged on the next window)
+    eff_tried: bool = False             # tried once this measurement
     history: list[Sample] = field(default_factory=list)
 
 
@@ -394,6 +397,8 @@ class Autotune:
             self.power.set_cpu_turbo(l.boost)
         if l.gpu_min_mhz:
             self.power.set_gpu_window(l.gpu_min_mhz, None)
+        if l.gpu_profile:
+            self._gpu_profile(l, l.gpu_profile, force=True)
 
     # ---- the loop ----------------------------------------------------------------------------------------------------
     async def _loop(self) -> None:
@@ -474,7 +479,7 @@ class Autotune:
     def _remeasure(self, s: Session, why: str) -> None:
         l = s.learned
         s.phase, s.max_runs, s.misses, s.balance_undo = "measure", [], 0, None
-        s.balance_tried = set()
+        s.balance_tried, s.eff_trial, s.eff_tried = set(), False, False
         s.window, s.watts, s.shown = [], [], []
         top = self._top(s)
         if l.tdp != top:
@@ -500,6 +505,10 @@ class Autotune:
         l, p = s.learned, self.hw.paths
         out = []
         if l.bound == "gpu":
+            # first: let the GPU clock up as eagerly as it can (efficiency mode off) - before any floor or CPU trade
+            if self._gpu_active() == "power_saving":
+                out.append(("gpu_base", lambda: self._gpu_profile(l, "base"), lambda: self._gpu_profile(l, "power_saving"),
+                            "turned GPU efficiency mode off (clocks up faster)", "GPU efficiency off"))
             if p.cpu_max_perf_pct and l.cpu_max_pct - 10 >= CPU_MIN_PCT:
                 was = l.cpu_max_pct
                 out.append(("cpu_down", lambda w=was: self._cpu(l, w - 10), lambda w=was: self._cpu(l, w),
@@ -556,6 +565,7 @@ class Autotune:
             s.misses, l.fps = 0, fps
             if l.tdp <= s.floor_tdp:
                 s.phase = "hold"
+                self._try_efficiency(s)                    # on the line at the floor: the GPU's efficiency mode next
                 return
             w = l.tdp - 1
             if self._tdp(l, w):
@@ -574,8 +584,28 @@ class Autotune:
             self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: back up to {w} W, holding", "+1 W")
         s.phase = "hold"
 
+    def _try_efficiency(self, s: Session) -> None:
+        """At the TDP floor and still within keep %: GPU efficiency mode (power_saving) for one window, kept only if
+        the game stays on the line. It saves a little more where watts can't go lower."""
+        l = s.learned
+        if s.eff_tried or self._gpu_active() != "base" or "power_saving" not in self.power.gpu_power_profile()[1]:
+            return
+        s.eff_tried = True
+        if self._gpu_profile(l, "power_saving"):
+            s.eff_trial = True
+            s.window, s.watts, s.shown = [], [], []
+            self._did(s, f"at the {s.floor_tdp} W floor: trying GPU efficiency mode", "GPU efficiency on")
+
     def _hold(self, s: Session, fps: float) -> None:
         l = s.learned
+        if s.eff_trial:                                  # judge GPU efficiency mode at the floor
+            s.eff_trial = False
+            if fps < self._line(s):
+                self._gpu_profile(l, "base")
+                self._did(s, f"GPU efficiency mode cost frames ({fps:.0f} fps, under {self._line(s):.0f}), undone", "undone")
+            else:
+                self._did(s, f"GPU efficiency mode kept ({fps:.0f} fps)", "kept")
+            return
         ref = l.fps or l.max_fps or fps
         shifted = abs(fps - ref) / ref >= SHIFT if ref else False
         if shifted:
@@ -588,6 +618,11 @@ class Autotune:
             return
         if l.max_fps and fps < self._line(s):
             s.misses += 1
+            if s.misses >= 2 and l.bound == "gpu" and self._gpu_active() == "power_saving":
+                s.misses = 0                             # short and GPU-bound: the GPU's full clock ramp before watts
+                if self._gpu_profile(l, "base"):
+                    self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: GPU efficiency mode off", "GPU efficiency off")
+                return
             if s.misses >= 2 and l.tdp < self._top(s):
                 s.misses = 0
                 if self._tdp(l, l.tdp + 1):
@@ -636,6 +671,20 @@ class Autotune:
         ok = self.power.reset_gpu_floor() if mhz is None else self.power.set_gpu_window(mhz, None)
         if ok:
             l.gpu_min_mhz = mhz
+        return ok
+
+    def _gpu_active(self) -> str | None:
+        return self.power.gpu_power_profile()[0] if self.hw.paths.gpu_power_profile else None
+
+    def _gpu_profile(self, l: Learned, value: str, force: bool = False) -> bool:
+        if not self.hw.paths.gpu_power_profile or (not force and self._gpu_active() == value):
+            return False
+        try:
+            ok = self.power.set_gpu_power_profile(value)
+        except ValueError:
+            return False
+        if ok:
+            l.gpu_profile = value
         return ok
 
     def _cpu(self, l: Learned, pct: int) -> bool:
