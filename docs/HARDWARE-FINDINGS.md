@@ -166,6 +166,11 @@ Wanted:
   runs re-clamps immediately.
 - Boost (PL2) stays derived as today (`_sppt_for`), no separate control.
 
+Done in code (2026-10-22): `hw.PROFILES` has the six steps (`dock` saved by earlier versions maps to `max`); the
+slider spans `hw.tdp_range` (8–35 W on the EX) and the chip's PL1 `max_power_uw` is read and named in the Hint when
+it is lower (25 W on the EX); `set_tdp` stores it as the Custom profile; `Autotune.set_ceiling` re-clamps and writes
+at once and `set_floor` takes the user's floor (Advanced). Still to see on the device: PL1 above 25 W.
+
 ## 18. Autotune must say *what* is short and act on it (maintainer, 2026-10-22) — for Claude Code
 
 Autotune today only moves the TDP. It already classifies frames as CPU- or GPU-bound (`autotune.classify`:
@@ -179,6 +184,10 @@ frame time vs GPU busy % from PowerStation / RAPL power). Use that:
   Every learned per-game result keeps TDP, GPU floor, CPU ceiling and boost together.
 - Hysteresis as today; never more than one change per sampling window; all writes revertible.
 
+Done in code (2026-10-22): `Autotune._raise` / `_lower` follow these rules exactly (plus: CPU-bound drops a GPU floor
+autotune set before asking for watts); `Learned` keeps `boost`; status carries `bound`, `last_action`, `last_delta`,
+`last_change_s` and `limited` (short at the ceiling). Tests cover each path and the revert of every lever.
+
 ## 19. Advanced power controls, because Bazzite has none for this chip (maintainer, 2026-10-22) — for Claude Code
 
 Steam's Performance panel offers no CPU boost, CPU ceiling, GPU clock window or EPP on the Claw 8 EX
@@ -189,6 +198,10 @@ back — but under an **"Advanced" expander** in the Power panel, off the main v
   power).
 - Each with the what/why/cost Hint and the read-back value; profiles may set them; autotune (§18) may move them.
 - The main view keeps only: profile, TDP slider (§17), autotune, read-back line.
+
+Done in code (2026-10-22): Power → Advanced (folded, remembered per device) with CPU boost, CPU ceiling, GPU floor,
+GPU ceiling, CPU energy mode and Autotune's floor; each answers with the hardware's read-back and pauses autotune;
+dropping a GPU floor reverts only the floor (`power.reset_gpu_floor`), so a user's GPU ceiling stays.
 
 ## 20. VRR fix wrote the EDID but never set the kernel arguments: Decky's LD_LIBRARY_PATH (2026-10-22, fixed)
 

@@ -152,7 +152,7 @@ def install(home: str, entry: dict, allow_unpinned: bool = False, dry_run: bool 
         return {"ok": False, "error": f"preparing {pkg}: {e}"}
     r = userexec.run(["bash", os.path.join(pkg, "install.sh")], home, timeout=900, cwd=pkg)
     out = {"ok": r["rc"] == 0, "tag": got["tag"], "repo": got["repo"], "package_dir": pkg, "log": r["out"], "note": note,
-           "next": "log out of Game Mode and back in (or reboot) so the session picks up the driver"}
+           "next": "log out of Game Mode and back in once: from then every game's XeSS runs on XMX (Per-game turns it off for one)"}
     if r["rc"] != 0:
         tail = [ln for ln in r["out"].strip().splitlines() if ln.strip()][-3:]
         out["error"] = f"install.sh exited {r['rc']}: " + (" · ".join(tail) or "no output")

@@ -34,7 +34,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const noXmx = hw?.known && !hw.model.xmx;
   const xessLine = !x ? "XeSS XMX driver: …" : !x.installed ? "XeSS XMX driver: not installed"
     : `XeSS XMX ${x.version ?? ""}: ${x.status.state === "ok" ? "driver loads" : x.status.state === "failed" ? "driver failed, DP4a fallback" : "no check yet (log out and in)"}`;
-  const xessDetail = x?.installed ? `${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"} · ${x.xell_capable ? "XeLL driver mode available" : "no XeLL driver mode (upstream build)"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows.";
+  const xessDetail = x?.installed ? `On for every game; Per-game turns it off for one. ${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"} · ${x.xell_capable ? "XeLL driver mode available" : "no XeLL driver mode (upstream build)"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows, on for every game once installed.";
 
   return (
     <PanelSection title="Setup">
