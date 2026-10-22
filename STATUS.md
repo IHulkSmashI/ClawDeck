@@ -62,6 +62,10 @@ The four-panel UI has not been on the device yet.
   stepped to 33 W", then 31, 29… every 10 s until under 90 °C, never below the floor; the TDP read back must
   follow. Moving the slider afterwards should clear it. Does 95 °C come before the chip's own throttle (TCC)? If TCC
   always wins first, note the temperature it settles at.
+- **XeSS install / update (§20), on the Claw:** tap Install XeSS XMX (or Update): when it finishes the Setup line
+  must say "driver loads" straight away, without a log-out (the toast still asks for one so games pick it up). Tap
+  Update again: the toast says "XeSS XMX 20261018: up to date", no red row, nothing downloaded (the log says so).
+  Check the driver check ran as you: `ls -l ~/.cache/xess-xmx/driver-status` is owned by your user and fresh.
 - **XeSS XMX default:** after Install XeSS XMX and one log-out, Per-game should say "XeSS on XMX (default)" for any
   game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
   driver"; the game's XeSS then runs as DP4a.
