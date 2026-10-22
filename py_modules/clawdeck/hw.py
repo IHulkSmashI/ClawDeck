@@ -44,12 +44,13 @@ MODELS: dict[str, dict] = {
 # 2 h 20 min at 25 W), so battery play belongs at 10-17 W and 25 W+ is for the charger. Starting points until
 # measurements from a Claw replace them; set_tdp clamps each to the model's own limits.
 _SIX_STEPS = {
-    "saver":       {"tdp": 10, "cpu_max_pct": 60,  "gpu_min_mhz": None, "epp": "power", "note": "2D, indie and old games; the longest play time"},
-    "battery":     {"tdp": 12, "cpu_max_pct": 70,  "gpu_min_mhz": None, "epp": "balance_power", "note": "light games, long trips"},
-    "balanced":    {"tdp": 17, "cpu_max_pct": 85,  "gpu_min_mhz": None, "epp": "balance_power", "note": "heavier games, still on battery"},
-    "performance": {"tdp": 25, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "plugged in, handheld"},
-    "plugged":     {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "note": "heavy games on the charger; warm"},
-    "max":         {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "note": "the firmware ceiling, docked; fans audible"},
+    # gpu_power_profile: xe's efficiency hint (§22.3); power_saving prefers the efficient clock and ramps up slower
+    "saver":       {"tdp": 10, "cpu_max_pct": 60,  "gpu_min_mhz": None, "epp": "power", "gpu_power_profile": "power_saving", "note": "2D, indie and old games; the longest play time"},
+    "battery":     {"tdp": 12, "cpu_max_pct": 70,  "gpu_min_mhz": None, "epp": "balance_power", "gpu_power_profile": "power_saving", "note": "light games, long trips"},
+    "balanced":    {"tdp": 17, "cpu_max_pct": 85,  "gpu_min_mhz": None, "epp": "balance_power", "gpu_power_profile": "base", "note": "heavier games, still on battery"},
+    "performance": {"tdp": 25, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "gpu_power_profile": "base", "note": "plugged in, handheld"},
+    "plugged":     {"tdp": 30, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "balance_performance", "gpu_power_profile": "base", "note": "heavy games on the charger; warm"},
+    "max":         {"tdp": 35, "cpu_max_pct": 100, "gpu_min_mhz": None, "epp": "performance", "gpu_power_profile": "base", "note": "the firmware ceiling, docked; fans audible"},
 }
 PROFILES: dict[str, dict[str, dict]] = {
     "default": _SIX_STEPS,
@@ -75,6 +76,7 @@ class Paths:
     gpu_rp0_freq: str | None = None      # hardware maximum
     gpu_rpe_freq: str | None = None      # efficient frequency
     gpu_rpn_freq: str | None = None      # hardware minimum
+    gpu_power_profile: str | None = None # xe SLPC efficiency hint: "[base] power_saving" (findings §22.3)
     gpu_busy: str | None = None          # not exposed by xe; PowerStation's GpuBusyPercent is read instead (shadowblip.py)
     # CPU
     cpu_max_perf_pct: str | None = None
@@ -142,7 +144,7 @@ def discover_paths() -> Paths:
             _first(f"{card}/device/tile0/gt*/freq0")
         if xe:
             p.gpu_card = card
-            for name in ("min_freq", "max_freq", "cur_freq", "rp0_freq", "rpe_freq", "rpn_freq"):
+            for name in ("min_freq", "max_freq", "cur_freq", "rp0_freq", "rpe_freq", "rpn_freq", "power_profile"):
                 fp = f"{xe}/{name}"
                 if os.path.exists(fp):
                     setattr(p, f"gpu_{name}", fp)

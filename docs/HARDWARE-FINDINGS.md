@@ -314,6 +314,13 @@ hint: prefers the efficient frequency, slower ramp). Not touched today.
 - discover_paths: `gpu_power_profile`; health/selftest: write each value, read back, revert. 22.1's sweep repeats
   the 10/12/17 W points with `power_saving` to measure the gain.
 
+Done in code (2026-10-22): `hw.Paths.gpu_power_profile` (found with the other freq0 files), `power.gpu_power_profile`
+/ `set_gpu_power_profile` (the revert writes the active word back, not the bracketed line), the profiles (saver and
+battery → power_saving, the rest base; skipped on a kernel that offers only base), Power → Advanced → "GPU
+efficiency mode" with its Hint, autotune (GPU-bound: off first; short in hold and GPU-bound: off before +1 W; at the
+floor on the line: on for one window, kept only on the line; saved per game), and the self-test (each value written,
+read back, reverted). The sweep (22.1) measures the gain.
+
 ### 22.4 intel_lpmd must release the game to all cores — check in game (maintainer + me), small code after
 lpmd config for this CPU (`/etc/intel_lpmd/intel_lpmd_config_F6_M204.xml`): Mode 0 (auto), WLTHintEnable 1, no
 `lp_mode_cpus` (auto). Its per-SKU table has entries for `4P0E4L-25W` only — the Claw's 2P8E4L falls through to the
