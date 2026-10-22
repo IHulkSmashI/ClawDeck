@@ -777,3 +777,63 @@ def test_autotune_short_in_hold_and_gpu_bound_turns_efficiency_off_before_adding
     at._step(); at._step()
     assert at.power.gpu_power_profile()[0] == "base" and s.learned.tdp == 15 and s.last_delta == "GPU efficiency off"
     at.session = None
+
+
+# ---- efficiency sweep tool (findings §22.1): TDP stepping + CSV; the run itself is manual -------------------------
+def _sweep_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("efficiency_sweep", os.path.join(os.path.dirname(__file__), "..", "tools", "efficiency_sweep.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_efficiency_sweep_steps_the_tdp_writes_a_row_per_step_and_reverts(fake_hw, monkeypatch, tmp_path):
+    import csv as _csv
+    es = _sweep_module()
+    _with_power_profile(fake_hw, monkeypatch)
+    energy = tmp_path / "energy_uj"
+    _w(energy, 0)
+    temp = tmp_path / "pkg_temp"
+    _w(temp, 71000)
+    fake_hw.paths.rapl_energy, fake_hw.paths.pkg_temp = str(energy), str(temp)
+    logs = tmp_path / "mangohud"
+    log = logs / "game_2026.csv"
+    _w(log, "os,cpu,gpu\nfps,frametime,cpu_load\n")
+    pw = power.Power(fake_hw)
+    held = {"w": None}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: held.update(w=w) or True)
+    curve = {8: 30.0, 12: 42.0, 17: 50.0, 20: 50.5}                 # flattens past 17 W
+    clock = {"t": 0.0}
+    monkeypatch.setattr(es.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+
+    def tick(_s):                                                   # one second of game: a MangoHud row, energy at TDP
+        clock["t"] += 1.0
+        w = held["w"]
+        with open(log, "a") as f:
+            f.write(f"{curve[w]},{1000 / curve[w]:.2f},50\n")
+        _w(energy, sysfs.read_int(str(energy)) + int(w * 0.9 * 1e6))
+    smp = autotune.Sampler(fake_hw, str(logs))
+    out = tmp_path / "out/ptl-efficiency-test.csv"
+    said, asked = [], []
+    rows = es.sweep(fake_hw, pw, smp, [8, 12, 17, 20], 5, "test", str(out), power_saving_points=[12],
+                    ask=asked.append, say=said.append, sleep=tick)
+    assert [(r["tdp_w"], r["gpu_profile"]) for r in rows] == [(8, "base"), (12, "base"), (17, "base"), (20, "base"), (12, "power_saving")]
+    assert rows[0]["avg_fps"] == 30.0 and rows[0]["samples"] == 5 and rows[0]["pkg_w"] == 7.2 and rows[0]["pkg_temp_c"] == 71.0
+    assert rows[0]["fps_per_w"] == round(30 / 7.2, 2) and len(asked) == 10                 # warm-up + measured per step
+    with open(out) as f:
+        got = list(_csv.DictReader(f))
+    assert len(got) == 5 and list(got[0]) == es.COLUMNS and got[4]["gpu_profile"] == "power_saving"
+    assert any(s.startswith("\nknee: 17 W") for s in said)                                  # +3 W past 17 buys 1 %
+    pw.revert_all()
+    assert pw.gpu_power_profile()[0] == "base"
+
+
+def test_efficiency_sweep_knee_and_percentile():
+    es = _sweep_module()
+    assert es.percentile([10, 20, 30, 40, 50], 0) == 10 and es.percentile([], 1) is None
+    rows = [{"tdp_w": 10, "avg_fps": 40}, {"tdp_w": 12, "avg_fps": 48}, {"tdp_w": 14, "avg_fps": 49}]
+    assert es.knee(rows)["tdp_w"] == 12
+    assert es.knee([{"tdp_w": 10, "avg_fps": 40}, {"tdp_w": 12, "avg_fps": 50}])["tdp_w"] == 12   # never flattens: the top
+    assert es.knee([]) is None

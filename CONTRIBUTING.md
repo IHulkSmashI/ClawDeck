@@ -38,6 +38,7 @@ Tools in `tools/`. The release zip carries only the three the plugin runs (`claw
 |---|---|
 | `clawdeck-launch.sh` | The per-game launch wrapper (MangoHud frame times for autotune, XeSS XMX / XeLL environment). |
 | `sysfs-survey.sh` | Read-only survey of a new machine: what the kernel exposes, which services run. |
+| `efficiency-sweep.sh` | The efficiency curve (findings §22.1): TDP steps, a measured benchmark run at each, one CSV row per step; you start the benchmark by hand. |
 | `soak.py` | CPU %, peak memory and memory growth of the backend against the budget above. |
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |

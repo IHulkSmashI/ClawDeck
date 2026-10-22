@@ -286,6 +286,15 @@ measured on Panther Lake. Plan, one session, Black Myth: Wukong's built-in bench
 Code side (Claude Code, now): add `tools/efficiency-sweep.sh` that does the TDP stepping, waits for the benchmark
 log, and writes the CSV — the run itself is manual (the game's benchmark is started by hand).
 
+Done in code (2026-10-22): `sudo tools/efficiency-sweep.sh --label wukong` (`tools/efficiency_sweep.py`; replaces the
+removed `tools/power-profile.sh` for this). At each TDP it sets the limit through ClawDeck's backend (thermald paused
+as in play), asks for a warm-up run and then the measured run (Enter as it begins), samples it once a second for
+`--seconds` (60), and writes a row: avg fps, 1st percentile of the 1 s fps samples, package watts from the RAPL
+energy delta, fps/W, CPU and GPU busy, GPU clock, package temperature, PL1/PL2 read back. `--power-saving-points`
+(10 12 17 by default) repeats those steps with the GPU efficiency mode (22.3). It prints the knee (first step where +1
+W buys < 2 % fps) and reverts everything at the end or on Ctrl+C. `--auto` measures without prompts for a looping
+benchmark. The chart and the profile wattages come from the CSV once the run is done.
+
 ### 22.2 Autotune is fooled by the 56 s boost window — code change (Claude Code, now)
 RAPL enforces PL1 as an average over tau = 56 s; for most of a minute after a change, or after a light scene, the
 package can run up to PL2. Autotune decides on a 10 s window, so it partly measures boosted performance and can

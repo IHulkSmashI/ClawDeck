@@ -48,6 +48,10 @@ The four-panel UI has not been on the device yet.
 - Efficiency session (findings §22.1 + §22.4), with Black Myth: Wukong's benchmark: TDP sweep 8→35 W with
   `tools/efficiency-sweep.sh`, then the same at 10/12/17 W with GPU `power_saving`; watch intel_lpmd and per-core load
   during the run. Same session as the XeLL Windows-vs-Bazzite latency comparison.
+  How to run it: from a ClawDeck checkout, `sudo tools/efficiency-sweep.sh --label wukong` (1080p preset fixed, XeSS
+  on XMX, frame generation off, frame limit off, Autotune off, game started through the launch wrapper); start the
+  benchmark at each prompt. It repeats 10/12/17 W with `power_saving` by itself. Commit
+  `docs/measurements/ptl-efficiency-wukong.csv`; the knee it prints and the CSV set the six profile wattages.
 
 - **Power (§17–§19), on the Claw:** move the TDP slider: the profile turns Custom and "RAPL reads N W" follows; pick
   Max 35 W and check whether PL1 above the chip's `max_power_uw` (25 W) takes effect (busy loop or
