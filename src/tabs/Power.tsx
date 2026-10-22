@@ -1,6 +1,6 @@
 import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import { toaster } from "@decky/api";
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   applyProfile, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
@@ -81,6 +81,13 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const lo = st?.range?.min ?? st?.limits.min ?? 8, hi = st?.range?.max ?? st?.limits.plugged_max ?? 35;
   const wattsOf = (id: string) => (table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
   const picked = PROFILES.find((p) => p.id === profile);
+  // one options array per change of the table/Custom watts: Steam's dropdown keeps the option it matched on the first
+  // render, so a fresh array every poll (and labels that change after the first load) left it showing the old pick
+  const profileOptions = useMemo(() => [
+    ...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} · ${wattsOf(p.id)} W` : p.short })),
+    ...(profile === "custom" ? [{ data: "custom", label: `Custom · ${tdp} W` }] : [])],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [table, lo, hi, profile === "custom", tdp]);
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
@@ -117,10 +124,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   return (
     <PanelSection title="Power">
       <PanelSectionRow>
-        {/* no side label: in the Quick Access column a label takes half the width and cuts the option text off */}
-        <DropdownItem menuLabel="Power profile" selectedOption={profile} onChange={(o) => pick(o.data)}
-          rgOptions={[...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} · ${wattsOf(p.id)} W` : p.short })),
-            ...(custom ? [{ data: "custom", label: `Custom · ${tdp} W` }] : [])]}
+        {/* layout below + full width: inline, the description takes half the Quick Access column and cuts the option
+            text off ("Max · 3..."). Rendered only once the saved profile is loaded (key), so it never mounts on the
+            placeholder and keeps showing that (maintainer report 2026-10-22: "has to be selected twice"). */}
+        <DropdownItem key={st ? "loaded" : "loading"} menuLabel="Power profile" layout="below" childrenContainerWidth="max"
+          selectedOption={profile} onChange={(o) => pick(o.data)} rgOptions={profileOptions}
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
             quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} />
         <SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={slide}
@@ -181,7 +189,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
             </PanelSectionRow>
           ) : null}
           <PanelSectionRow>
-            <DropdownItem label="CPU energy mode" disabled={!st.cpu.epp_available} rgOptions={EPP} selectedOption={st.cpu.epp ?? "balance_performance"}
+            <DropdownItem label="CPU energy mode" layout="below" childrenContainerWidth="max" disabled={!st.cpu.epp_available} rgOptions={EPP} selectedOption={st.cpu.epp ?? "balance_performance"}
               onChange={(o) => setEpp(o.data).then(onLever)}
               description={explain(`How eagerly the CPU clocks up, like Windows' power mode. Reads ${EPP.find((e) => e.data === st.cpu.epp)?.label ?? st.cpu.epp ?? "?"}.`,
                 quick ? undefined : "profiles set it for you.", "Fastest uses more battery at idle.")} />
