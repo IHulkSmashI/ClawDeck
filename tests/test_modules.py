@@ -11,8 +11,8 @@ import pytest
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.join(ROOT, "py_modules"))
 
-from clawdeck import (autotune, benchmark, controller, display, downloads, fans, hhd, hw, injector,  # noqa: E402
-                      launchenv, power, profiles, proton, sleep, sysfs, xess)
+from clawdeck import (autotune, downloads, hhd, hw, injector, health,  # noqa: E402
+                      launchenv, power, profiles, sysfs, xess)
 
 
 def _w(path, value):
@@ -110,73 +110,14 @@ def test_hhd_set_values_dry_run_sends_nothing(monkeypatch):
     assert st["a.b"] == 2 and all(m == "GET" for m, _, _ in sent)
 
 
-# ---- controller ------------------------------------------------------------------------------------------------------
-def test_controller_lists_claw_and_rgb_and_sets(monkeypatch):
-    fake = FakeHHD(monkeypatch, {"controllers.claw.swap_guide": False, "rgb.handheld.mode.mode": "solid"})
-    c = controller.Controller()
-    st = c.settings()
-    keys = {s["key"]: s for s in st["settings"]}
-    assert st["available"]
-    assert keys["controllers.claw.controller_mode.dualsense.gyro"]["group"] == "gyro"
-    assert keys["rgb.handheld.mode.mode"]["group"] == "rgb" and keys["rgb.handheld.mode.mode"]["value"] == "solid"
-    assert keys["controllers.claw.main_chords"]["advanced"]
-    assert "controllers.claw.hidden" not in keys and not any(k.startswith("tdp.") for k in keys)
-    assert c.set("controllers.claw.swap_guide", True)["ok"]
-    assert fake.posts[-1] == {"controllers.claw.swap_guide": True}
-    with pytest.raises(ValueError):
-        c.set("tdp.msi.tdp.custom.tdp", 50)       # not a controller key: refused
-
-
-# ---- fans ------------------------------------------------------------------------------------------------------------
-def test_fan_curve_interpolation_and_presets(monkeypatch):
-    assert fans.curve_at(fans.PRESETS["quiet"], 45) == 12
-    assert fans.curve_at(fans.PRESETS["cool"], 100) == 100
-    pts = fans.point_keys(SCHEMA)
-    assert [p["temp"] for p in pts] == [40, 50, 90]
-    vals = fans.preset_values("balanced", pts)
-    assert vals == {"tdp.msi.fan.mode": "manual", "tdp.msi.fan.manual.st0": 0, "tdp.msi.fan.manual.st50": 40,
-                    "tdp.msi.fan.manual.st88": 76}           # 75 rounded to HHD's step of 2
-    assert fans.preset_values("auto", pts) == {"tdp.msi.fan.mode": "disabled"}
-    fake = FakeHHD(monkeypatch, {"tdp.msi.fan.mode": "disabled"})
-    f = fans.Fans(_hardware())
-    assert f.status()["preset"] == "auto"
-    assert f.apply_preset("cool")["ok"]
-    assert f.status()["preset"] == "cool"
-    assert fake.state["tdp.msi.fan.manual.st0"] == 30
-    with pytest.raises(ValueError):
-        f.apply_preset("turbo")
-
-
-# ---- display ---------------------------------------------------------------------------------------------------------
-def test_display_save_read_reset(tmp_path):
-    d = display.Display(_hardware(), str(tmp_path))
-    assert not d.read()["saved"]
-    r = d.save({"vrr": True, "vrr_min": 10, "vrr_max": 200, "hdr": True, "hdr_nits": 5000})
-    assert r["ok"]
-    txt = open(d.conf).read()
-    assert "ADAPTIVE_SYNC=1" in txt and "ENABLE_GAMESCOPE_HDR=1" in txt and "GAMESCOPE_HDR_NITS=1000" in txt
-    assert "CUSTOM_REFRESH_RATES=30,31," in txt and txt.strip().split("\n")[3].endswith(",120")   # clamped to the EX's VRR range
-    s = d.read()
-    assert s["saved"] and s["settings"]["vrr"] and s["settings"]["vrr_min"] == 30 and s["settings"]["hdr_nits"] == 1000
-    assert d.reset()["ok"] and not os.path.exists(d.conf)
-
-
-def test_display_dry_run_writes_nothing(tmp_path):
-    d = display.Display(_hardware(), str(tmp_path))
-    assert d.save({"vrr": True}, dry_run=True)["dry_run"]
-    assert not os.path.exists(d.conf)
-
-
-def test_display_reports_competing_overrides(tmp_path):
-    _w(tmp_path / ".config/environment.d/10-other.conf", "ADAPTIVE_SYNC=1")
-    assert display.Display(_hardware(), str(tmp_path)).read()["other_overrides"]
-
-
 # ---- launch environment / injector -----------------------------------------------------------------------------------
 def test_launch_env_compose_and_write(tmp_path):
-    env = launchenv.compose({"inject": "lsfg", "lsfg": {"multiplier": 9, "flow_scale": 0.1}, "hdr": True, "mesa": "26.1"})
+    env = launchenv.compose({"inject": "lsfg", "lsfg": {"multiplier": 9, "flow_scale": 0.1}, "mesa": "26.1", "xell": True})
     assert env == {"LSFGVK_ENV": "1", "LSFGVK_MULTIPLIER": "4", "LSFGVK_FLOW_SCALE": "0.25",
-                   "LSFGVK_PERFORMANCE_MODE": "1", "DXVK_HDR": "1", "MESA": "26.1"}
+                   "LSFGVK_PERFORMANCE_MODE": "1", "MESA": "26.1", **xess.XELL_ENV}
+    off = launchenv.compose({"xmx": False})
+    assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
+    assert launchenv.compose({"xmx": True, "xell": False}) == {}
     r = launchenv.write(str(tmp_path), "1234", {"inject": "optiscaler"})
     assert open(r["path"]).read().splitlines()[1] == "WINEDLLOVERRIDES=dxgi=n,b"
     assert launchenv.write(str(tmp_path), "1234", {"inject": "none"})["path"] is None
@@ -225,15 +166,6 @@ def test_steam_install_dir(tmp_path):
     assert injector.steam_install_dir(str(tmp_path), "../x") is None
 
 
-# ---- sleep -----------------------------------------------------------------------------------------------------------
-def test_sleep_parsers():
-    assert sleep.selected_mem_sleep("[s2idle] deep") == "s2idle"
-    assert sleep.selected_mem_sleep(None) is None
-    w = sleep.wake_sources("Device\tS-state\t  Status   Sysfs node\nXHCI\t  S3\t*enabled   pci:0000:00:14.0\nLID0\t  S4\t*disabled\n")
-    assert w[0] == {"device": "XHCI", "state": "enabled", "sysfs": "pci:0000:00:14.0"} and w[1]["state"] == "disabled"
-    assert {c["id"] for c in sleep.checks()} == {"sleep_mode", "sleep_failures", "s0ix"}
-
-
 # ---- xess ------------------------------------------------------------------------------------------------------------
 def test_xess_state_from_package_layout(tmp_path):
     home = tmp_path
@@ -256,30 +188,6 @@ def test_xess_state_from_package_layout(tmp_path):
 def test_xess_install_dry_run(tmp_path):
     r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"}, dry_run=True)
     assert r["dry_run"] and not os.path.exists(tmp_path / ".local")
-
-
-# ---- proton ----------------------------------------------------------------------------------------------------------
-def test_proton_listing(tmp_path):
-    ct = tmp_path / ".local/share/Steam/compatibilitytools.d"
-    for v in ("GE-Proton10-3", "GE-Proton11-6"):
-        _w(ct / v / "compatibilitytool.vdf", f'"compatibilitytools"\n{{\n "compat_tools"\n {{\n  "{v}"\n  {{\n   "display_name" "{v}"\n  }}\n }}\n}}')
-    _w(tmp_path / ".local/share/Steam/steamapps/common/Proton 10.0/proton", "")
-    _w(tmp_path / ".local/share/Steam/steamapps/common/Proton - Experimental/proton", "")
-    tools = proton.installed(str(tmp_path))
-    assert [t["name"] for t in tools] == ["GE-Proton11-6", "GE-Proton10-3", "proton_experimental", "proton_10"]
-
-
-# ---- benchmark -------------------------------------------------------------------------------------------------------
-def test_benchmark_summary_and_storage(tmp_path):
-    s = benchmark.summarise([60] * 99 + [30], [20.0] * 100)
-    assert s == {"samples": 100, "avg_fps": 59.7, "low1_fps": 30.0, "avg_w": 20.0, "fps_per_w": 2.99}
-    assert benchmark.summarise([], [])["samples"] == 0
-    b = benchmark.Benchmark(_hardware(), str(tmp_path / "mh"), str(tmp_path / "b.json"))
-    b.run = {"appid": "1", "name": "G", "label": "battery", "settings": {"tdp": 20}, "started": 0, "duration_s": 60,
-             "fps": [50, 60], "w": [18, 22]}
-    r = b.stop()
-    assert r["avg_fps"] == 55.0 and b.results()[0]["label"] == "battery"
-    assert b.export_csv().splitlines()[0].startswith("time,model,name")
 
 
 # ---- downloads -------------------------------------------------------------------------------------------------------
@@ -431,7 +339,7 @@ def test_stack_detection(monkeypatch):
 
 
 def test_health_never_offers_hhd_next_to_inputplumber(monkeypatch, tmp_path):
-    from clawdeck import health, stack
+    from clawdeck import stack
     monkeypatch.setattr(stack, "detect", lambda: {"hhd": False, "inputplumber": True, "powerstation": True,
                                                   "controller": "inputplumber", "tdp_owner": "steam", "conflict": False})
     monkeypatch.setattr(hhd, "available", lambda: False)
@@ -455,3 +363,76 @@ def test_chown_tree_handles_a_single_file(tmp_path, monkeypatch):
     (tmp_path / "d").mkdir(); (tmp_path / "d" / "x").write_text("1")
     userexec.chown_tree(str(tmp_path / "d"), str(tmp_path))
     assert sorted(calls) == sorted([str(tmp_path / "d"), str(tmp_path / "d" / "x")])
+
+
+# ---- scope reset (2026-10-21): XeSS from the fork, XeLL per game, the one-line health summary ---------------------
+def test_xess_install_falls_back_to_upstream_when_the_fork_has_no_release(tmp_path, monkeypatch):
+    import urllib.error
+    asked = []
+
+    def fake_fetch(entry, workdir, allow_unpinned=False):
+        asked.append(entry["repo"])
+        if entry["repo"].startswith("IHulkSmashI/"):
+            raise urllib.error.HTTPError("https://api.github.com/x", 404, "Not Found", {}, None)
+        pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-20261018"
+        _w(pkg / "install.sh", "echo hi"); _w(pkg / "uninstall.sh", "")
+        return {"tag": "20261018", "archive": str(tmp_path / "a.zip"), "dir": str(pkg), "repo": entry["repo"]}
+    monkeypatch.setattr(downloads, "fetch", fake_fetch)
+    monkeypatch.setattr(xess.userexec, "run", lambda *a, **k: {"rc": 0, "out": "done"})
+    entry = {"repo": "HHHHanasak1/xess-xmx-linux", "fork": "IHulkSmashI/xess-xmx-linux", "use_fork": True, "tag": "pending-verification"}
+    r = xess.install(str(tmp_path), entry, allow_unpinned=True)
+    assert r["ok"] and asked == ["IHulkSmashI/xess-xmx-linux", "HHHHanasak1/xess-xmx-linux"]
+    assert "no release yet" in r["note"] and r["repo"] == "HHHHanasak1/xess-xmx-linux"
+    assert xess.source_of(r["package_dir"]) == {"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261018"}
+    # any other failure names the step and the real reason, never a bare "file not found"
+    monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no asset matching x in y")))
+    assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: FileNotFoundError: no asset matching x in y"
+    monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(urllib.error.HTTPError("https://u", 403, "rate limited", {}, None)))
+    assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: https://u answered 403 rate limited"
+
+
+def test_xess_install_reports_the_script_failure(tmp_path, monkeypatch):
+    pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-1"
+    _w(pkg / "install.sh", ""); _w(pkg / "uninstall.sh", "")
+    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": "1", "archive": "a.zip", "dir": str(pkg), "repo": e["repo"]})
+    monkeypatch.setattr(xess.userexec, "run", lambda *a, **k: {"rc": 1, "out": "== fetching\nmissing igdext64.dll - run this from the unpacked package\n"})
+    r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "1"})
+    assert not r["ok"] and r["error"].startswith("install.sh exited 1: == fetching · missing igdext64.dll")
+
+
+def test_xess_state_knows_a_fork_build_and_game_xell(tmp_path):
+    home = tmp_path
+    pkg = home / ".local/share/clawdeck/xess-xmx-linux-fork1"
+    _w(pkg / "lib/mesa-26.3.0-rc1/libvulkan_intel.so", "x"); _w(pkg / "lib/active", "26.3.0-rc1")
+    _w(pkg / "tools/xell-probe.sh", "")
+    _w(pkg / xess.SOURCE_FILE, '{"repo": "IHulkSmashI/xess-xmx-linux", "tag": "fork1"}')
+    _w(home / ".config/environment.d/50-xess-xmx.conf", f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
+    st = xess.state(str(home))
+    assert st["xell_capable"] and st["source"]["repo"].startswith("IHulkSmashI") and st["version"] == "fork1"
+    pfx = home / xess.COMPATDATA / "42/pfx/drive_c"
+    assert xess.game_xell(str(home), "42", False)["mode"] == "off"
+    assert xess.game_xell(str(home), "42", True)["mode"] == "none"
+    _w(pfx / "igdext_xell.log", "xellSetSleepMode ctx=1 game: minimumIntervalUs=0 lowLatency=1 boost=0")
+    assert xess.game_xell(str(home), "42", True)["mode"] == "cross-vendor"
+    _w(pfx / "igdext_trace.log", "XELLPROBE LatencyReductionExt(version 1, enabled 1, timings 1, slots 8)\nXELLPROBE RenderSubmitStart(frame 3)")
+    assert xess.game_xell(str(home), "42", True)["mode"] == "driver"
+
+
+def test_health_summary_one_line():
+    checks = [{"id": "a", "title": "A", "ok": True}, {"id": "b", "title": "XeSS XMX driver", "ok": False},
+              {"id": "c", "title": "lsfg", "ok": False, "optional": True}]
+    s = health.summary(checks)
+    assert s == {"ok": False, "total": 3, "problems": 1, "line": "1 to fix: XeSS XMX driver"}
+    assert health.summary([checks[0]])["line"] == "All checks pass"
+
+
+def test_launch_wrapper_rotates_xell_logs_for_one_launch(tmp_path):
+    import subprocess
+    (tmp_path / "launch").mkdir()
+    (tmp_path / "launch" / "7.env").write_text("IGDEXT_XELL_PROBE=1\n")
+    pfx = tmp_path / "compat/pfx/drive_c"
+    _w(pfx / "igdext_trace.log", "old")
+    subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "true"], check=True,
+                   env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "7",
+                        "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"})
+    assert not (pfx / "igdext_trace.log").exists() and (pfx / "igdext_trace.log.prev").read_text().strip() == "old"

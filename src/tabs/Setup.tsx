@@ -2,116 +2,91 @@ import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/u
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, getHealth, getSetting, getSleep, runFix, setDryRun, setSetting, Hardware, Health, SleepState } from "../api";
-import { Advanced } from "../components/Advanced";
+import { collectLogs, getHardware, getSetting, getUpdates, optiscalerDownload, selfTest, setDryRun, setSetting, xessInstall, xessState, Hardware, SelfTest, Updates, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status } from "../components/Hint";
 
-const FIX_LABEL: Record<string, string> = {
-  enable_hhd: "Turn on Handheld Daemon",
-  install_xess: "Install the XeSS XMX driver",
-  report_unknown_model: "Save a hardware survey for an issue",
-  fix_face_buttons: "Map the face buttons (InputPlumber override for the EX)",
-};
+const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
-export const SetupTab: FC = () => {
+/** Installs (XeSS XMX from the fork, OptiScaler), the self-test, Dry run and the log export. */
+export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [hw, setHw] = useState<Hardware | null>(null);
-  const [health, setHealth] = useState<Health[]>([]);
-  const [sleep, setSleep] = useState<SleepState | null>(null);
+  const [x, setX] = useState<XessState | null>(null);
+  const [u, setU] = useState<Updates | null>(null);
   const [dry, setDry] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [test, setTest] = useState<SelfTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
-
-  const refresh = async (force = false) => {
-    setBusy(true);
-    try {
-      setHw(await getHardware());
-      setHealth(await getHealth(force));
-      setDry(!!(await getSetting("dry_run")));
-      setSleep(await getSleep());
-    } finally { setBusy(false); }
+  const refresh = async () => {
+    const [h, xs, d, up] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), getSetting("dry_run"), getUpdates(false)]);
+    setHw(h); setX(xs); setDry(!!d); setU(up);
   };
   useEffect(() => { refresh(); }, []);
-  const problems = health.filter((h) => !h.ok && !h.optional);
-  const optional = health.filter((h) => !h.ok && h.optional);
-  const passing = health.filter((h) => h.ok);
 
-  const fix = async (id: string, allowUnpinned = false) => {
-    setBusy(true);
+  const installXess = async (allow = false) => {
+    setBusy("xess");
     try {
-      const r = await runFix(id, allowUnpinned);
-      if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("this component", () => fix(id, true)); return; }
-      toaster.toast({ title: "ClawDeck", body: r.ok ? (r.would ?? r.next ?? r.path ?? "Done") : `${FIX_LABEL[id] ?? id}: failed (${r.error ?? r.log ?? "see log"})` });
-      setErr(r.ok ? null : (r.error ?? (r.log ? r.log.trim().split("\n").slice(-3).join(" · ") : "see the log")));
-    } finally { setBusy(false); refresh(); }
+      const r = await xessInstall(allow);
+      if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("xess-xmx-linux", () => installXess(true)); return; }
+      toast(r.ok ? (r.would ?? `${r.repo ?? "xess-xmx-linux"} ${r.tag ?? ""} installed. ${r.note ?? r.next ?? ""}`) : `XeSS XMX: not installed (${r.error})`);
+      setErr(r.ok ? null : (r.error ?? "unknown error"));
+    } finally { setBusy(null); refresh(); }
   };
+  const noXmx = hw?.known && !hw.model.xmx;
+  const xessLine = !x ? "XeSS XMX driver: …" : !x.installed ? "XeSS XMX driver: not installed"
+    : `XeSS XMX ${x.version ?? ""}: ${x.status.state === "ok" ? "driver loads" : x.status.state === "failed" ? "driver failed, DP4a fallback" : "no check yet (log out and in)"}`;
+  const xessDetail = x?.installed ? `${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"} · ${x.xell_capable ? "XeLL driver mode available" : "no XeLL driver mode (upstream build)"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows.";
 
   return (
-    <>
-      <PanelSection title="This device">
-        <PanelSectionRow>
-          <Status ok={hw ? hw.known : null} label={hw?.model.name ?? "…"}
-            detail={hw ? `${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel}` : undefined} />
-        </PanelSectionRow>
-      </PanelSection>
-      <PanelSection title="Health check">
-        <PanelSectionRow>
-          <Status ok={health.length === 0 ? null : problems.length === 0}
-            label={health.length === 0 ? "Checking…" : problems.length === 0 ? "Everything ClawDeck needs is ready" : `${problems.length} to fix`}
-            detail={health.length ? `${passing.length} of ${health.length} checks pass` : undefined} />
-        </PanelSectionRow>
-        {[...problems, ...optional, ...(showAll ? passing : [])].map((h) => (
-          <PanelSectionRow key={h.id}>
-            <Status ok={h.ok ? true : h.optional ? null : false} label={h.title} detail={h.detail} />
-            {h.fix && !h.ok && (
-              <ButtonItem layout="below" disabled={busy} onClick={() => fix(h.fix!)}>{FIX_LABEL[h.fix] ?? h.fix}</ButtonItem>
-            )}
-          </PanelSectionRow>
-        ))}
-        <PanelSectionRow><Problem error={err} what="The fix" /></PanelSectionRow>
-        {passing.length > 0 && (
-          <PanelSectionRow>
-            <ToggleField label={`Show the ${passing.length} passing checks`} checked={showAll} onChange={setShowAll} />
-          </PanelSectionRow>
+    <PanelSection title="Setup">
+      <PanelSectionRow>
+        <Status ok={x ? x.installed && x.status.state === "ok" : null} label={xessLine} detail={quick ? undefined : xessDetail} />
+        {!noXmx && (
+          <ButtonItem layout="below" disabled={!!busy} onClick={() => installXess(false)}
+            description={explain("Downloads the fork's release (XeLL driver mode) and runs its installer; while the fork has no release, upstream's.", undefined, "about 230 MB; log out and in once after. Each game's first launch compiles for a minute or two, once.")}>
+            {busy === "xess" ? "Installing…" : x?.installed ? "Update XeSS XMX" : "Install XeSS XMX"}
+          </ButtonItem>
         )}
+        {noXmx && <Note>No XMX cores on the {hw?.model.name}: games use XeSS on the regular graphics cores.</Note>}
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <Status ok={u?.optiscaler?.installed ? true : null} label={u?.optiscaler?.installed ? `OptiScaler ${u.optiscaler.installed} downloaded${u.optiscaler.update ? ` (${u.optiscaler.latest} is out)` : ""}` : "OptiScaler: not downloaded yet"}
+          detail={quick ? undefined : "Per game it goes in from the Per-game panel; this only fetches the newest release so that takes no time."} />
+        <ButtonItem layout="below" disabled={!!busy} onClick={async () => {
+          setBusy("opti");
+          try {
+            const r = await optiscalerDownload();
+            toast(r.ok ? (r.would ?? `OptiScaler ${r.versions?.optiscaler ?? ""} ready${r.error ? ` (${r.error})` : ""}`) : `OptiScaler: not downloaded (${r.error})`);
+            setErr(r.ok ? null : r.error);
+          } finally { setBusy(null); refresh(); }
+        }} description={quick ? undefined : explain("The newest OptiScaler, OptiPatcher and REFramework from their releases, checked against a published checksum where there is one.")}>
+          {busy === "opti" ? "Downloading…" : u?.optiscaler?.installed ? "Update OptiScaler" : "Install OptiScaler"}
+        </ButtonItem>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={!!busy} onClick={async () => {
+          setBusy("test");
+          try { const r = await selfTest(); setTest(r); toast(r.ok ? `Self-test: ${r.summary}` : `Self-test: ${r.error}`); } finally { setBusy(null); }
+        }} description={explain("Writes each control, reads it back, measures it and reverts (tools/selftest.py).", undefined, "about 40 s with fans; no game may run.")}>
+          {busy === "test" ? "Testing…" : "Run self-test"}
+        </ButtonItem>
+        {test && <Status ok={test.ok} label={`Self-test: ${test.summary ?? (test.ok ? "PASS" : "FAIL")}`} detail={quick ? test.error ?? undefined : (test.lines ?? []).join(" · ") || test.error || undefined} />}
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }}
+          description={explain("ClawDeck only logs what it would change, and changes nothing.")} />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" onClick={async () => { const p = await collectLogs(); toast(`Report saved: ${p}`); }}
+          description={quick ? undefined : explain("One file on the Desktop with your hardware, the checks and what ClawDeck changed. Attach it to a GitHub issue.")}>Export log to Desktop</ButtonItem>
+        <Problem error={err} what="Setup" />
+      </PanelSectionRow>
+      {!quick && hw && (
         <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={() => refresh(true)}>Re-check</ButtonItem>
+          <Status ok={hw.known} label={hw.model.name} detail={`${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel} · ${hw.stack.controller ?? "no controller service"}`} />
+          <Note label="Free and open source (MIT)">github.com/IHulkSmashI/ClawDeck. Built on many projects (CREDITS.md). Not affiliated with MSI, Valve or Intel. ko-fi.com/gamervault if it helps; never a nag.</Note>
         </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" description={explain("Saves one file with your hardware and the checks above. Attach it to a GitHub issue.")} onClick={async () => {
-            const p = await collectLogs();
-            toaster.toast({ title: "ClawDeck", body: `Report saved: ${p}` });
-          }}>Save a bug report to Desktop</ButtonItem>
-        </PanelSectionRow>
-      </PanelSection>
-      <PanelSection title="Safety">
-        <PanelSectionRow>
-          <ToggleField label="Dry run" checked={dry} onChange={async (v) => { setDry(v); await setDryRun(v); await setSetting("dry_run", v); }}
-            description={explain("ClawDeck only logs what it would change, and changes nothing. For trying things safely.")} />
-        </PanelSectionRow>
-        <Advanced id="setup" label="Show sleep details">
-          {sleep && (
-            <PanelSectionRow>
-              <Note label={`Sleep: ${sleep.mem_sleep ?? "?"} · ${sleep.stats.success ?? 0} ok / ${sleep.stats.fail ?? 0} failed since boot`}>
-                {sleep.s0ix_supported && <>Deep idle (S0ix): {Math.round((sleep.s0ix_residency_us ?? 0) / 1e6)} s. </>}
-                {sleep.wake_enabled.length > 0 && <>Can wake the Claw: {sleep.wake_enabled.join(", ")}. </>}
-                {sleep.kernel_params.length > 0 && <>Sleep parameters: {sleep.kernel_params.join(" ")}. </>}
-                {sleep.fixes.map((f) => <div key={f.id}>• {f.symptom}: {f.fix}</div>)}
-                If the Claw is warm after sleeping, deep idle is not being reached.
-              </Note>
-            </PanelSectionRow>
-          )}
-        </Advanced>
-      </PanelSection>
-      <PanelSection title="About">
-        <PanelSectionRow>
-          <Note label="Free and open source (MIT)">
-            github.com/IHulkSmashI/ClawDeck. Built on the work of many projects; the full list is in CREDITS.md. Not affiliated
-            with MSI, Valve or Intel. If it saves you battery or time: ko-fi.com/gamervault. Never a paywall, never a nag.
-          </Note>
-        </PanelSectionRow>
-      </PanelSection>
-    </>
+      )}
+    </PanelSection>
   );
 };

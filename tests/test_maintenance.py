@@ -1,4 +1,4 @@
-"""Streaming (Moonlight VRR), checksum-verified updates with rollback, the system-change check, and the ClawTweaks
+"""Checksum-verified updates with rollback, the system-change check, and the ClawTweaks
 extras (CPU energy mode, TDP boost)."""
 import json
 import os
@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules"))
 
-from clawdeck import changes, downloads, hhd, hw, power, streaming, sysfs, updates  # noqa: E402
+from clawdeck import changes, downloads, hhd, hw, power, sysfs, updates  # noqa: E402
 
 
 def _w(path, value="x"):
@@ -25,36 +25,6 @@ def _clean():
     sysfs._originals.clear()
 
 
-# ---- Moonlight VRR -------------------------------------------------------------------------------------------------
-def test_moonlight_install_unpacks_and_keeps_one_launcher(tmp_path, monkeypatch):
-    home = tmp_path / "home"
-    home.mkdir()
-
-    def fake_run(cmd, h, timeout=600, cwd=None, env=None):      # what `Moonlight.AppImage --appimage-extract` leaves
-        _w(os.path.join(cwd, "squashfs-root", "AppRun"), "#!/bin/sh")
-        return {"rc": 0, "out": ""}
-    monkeypatch.setattr(streaming.userexec, "run", fake_run)
-    staged = tmp_path / "assets" / "moonlight"
-    _w(staged / "Moonlight.AppImage", "ELF")
-    r = streaming.install(str(home), str(staged), "v6.2.0-daily.190")
-    assert r["previous"] is None and streaming.current(str(home)) == "v6.2.0-daily.190"
-    launcher = open(streaming.launcher(str(home))).read()
-    assert 'cat "$D/CURRENT"' in launcher and os.access(streaming.launcher(str(home)), os.X_OK)
-    streaming.install(str(home), str(staged), "v6.2.0-daily.191")
-    streaming.install(str(home), str(staged), "v6.2.0-daily.192")
-    kept = sorted(d for d in os.listdir(streaming.root(str(home))) if d.startswith("v"))
-    assert kept == ["v6.2.0-daily.191", "v6.2.0-daily.192"]          # current + previous only
-    with pytest.raises(ValueError):
-        streaming.install(str(home), str(staged), "../evil")
-
-
-def test_stream_args_validates_host():
-    assert streaming.stream_args("192.168.1.20", "Steam Big Picture") == 'stream 192.168.1.20 "Steam Big Picture"'
-    assert streaming.stream_args("gaming-pc.local", "") == 'stream gaming-pc.local "Desktop"'
-    with pytest.raises(ValueError):
-        streaming.stream_args("pc; rm -rf ~", "Desktop")
-
-
 # ---- updates: checksum, prerelease, rollback -----------------------------------------------------------------------
 def _fake_dl(monkeypatch, content):
     def download(url, dest, timeout=60):
@@ -66,18 +36,18 @@ def _fake_dl(monkeypatch, content):
 
 def test_update_refused_when_checksum_does_not_match(tmp_path, monkeypatch):
     up = updates.Updates(str(tmp_path / "a"), str(tmp_path / "u.json"))
-    monkeypatch.setattr(up, "latest", lambda c: {"version": "v2", "url": "u", "name": "Moonlight-v2-x86_64.AppImage", "sha256": "0" * 64})
+    monkeypatch.setattr(up, "latest", lambda c: {"version": "v2", "url": "u", "name": "OptiPatcher.asi", "sha256": "0" * 64})
     _fake_dl(monkeypatch, "tampered")
     with pytest.raises(ValueError, match="checksum"):
-        up.ensure("moonlight")
-    assert up.installed("moonlight") is None
+        up.ensure("optipatcher")
+    assert up.installed("optipatcher") is None
 
 
 def test_update_with_matching_checksum_then_rollback_and_hold(tmp_path, monkeypatch):
     up = updates.Updates(str(tmp_path / "a"), str(tmp_path / "u.json"))
     import hashlib
     ver = {"v": "v1"}
-    monkeypatch.setattr(up, "latest", lambda c: {"version": ver["v"], "url": "u", "name": "Moonlight.AppImage",
+    monkeypatch.setattr(up, "latest", lambda c: {"version": ver["v"], "url": "u", "name": "OptiPatcher.asi",
                                                  "sha256": hashlib.sha256(f"build {ver['v']}\n".encode()).hexdigest()})
 
     def dl(url, dest, timeout=60):
@@ -85,17 +55,17 @@ def test_update_with_matching_checksum_then_rollback_and_hold(tmp_path, monkeypa
         open(dest, "w").write(f"build {ver['v']}\n")
         return dest
     monkeypatch.setattr(updates.downloads, "download", dl)
-    up.ensure("moonlight")
+    up.ensure("optipatcher")
     ver["v"] = "v2"
     up.check(force=True)
-    assert up.ensure("moonlight")["updated"] and up.installed("moonlight") == "v2" and up.previous("moonlight") == "v1"
-    r = up.rollback("moonlight")
+    assert up.ensure("optipatcher")["updated"] and up.installed("optipatcher") == "v2" and up.previous("optipatcher") == "v1"
+    r = up.rollback("optipatcher")
     assert r["version"] == "v1" and r["previous"] == "v2"
     st = up.check(force=True)
-    assert not st["moonlight"]["update"]                       # v2 is the one rolled away from: not offered again
-    assert not up.ensure("moonlight")["updated"]
+    assert not st["optipatcher"]["update"]                       # v2 is the one rolled away from: not offered again
+    assert not up.ensure("optipatcher")["updated"]
     ver["v"] = "v3"
-    assert up.check(force=True)["moonlight"]["update"]          # a newer build is offered again
+    assert up.check(force=True)["optipatcher"]["update"]          # a newer build is offered again
 
 
 def test_newest_with_asset_takes_prereleases(monkeypatch):

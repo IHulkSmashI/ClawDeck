@@ -1,5 +1,5 @@
 {
-  "_comment": "xess_xmx_linux is pinned on purpose (a system driver: tested version first; 'pending-verification' asks before installing the latest). OptiScaler, OptiPatcher, REFramework and lsfg-vk always track their newest release (updates.py).",
+  "_comment": "xess_xmx_linux is pinned on purpose (a system driver: tested version first; 'pending-verification' asks before installing the latest). use_fork: the installer tries the fork's release first (XeLL driver mode, PRs #23/#24) and, while the fork has published none, falls back to upstream's and says so. OptiScaler, OptiPatcher, REFramework and lsfg-vk always track their newest release (updates.py).",
   "optiscaler": {
     "repo": "optiscaler/OptiScaler",
     "track": "latest",
@@ -12,10 +12,10 @@
   "xess_xmx_linux": {
     "repo": "HHHHanasak1/xess-xmx-linux",
     "fork": "IHulkSmashI/xess-xmx-linux",
-    "use_fork": false,
+    "use_fork": true,
     "tag": "pending-verification",
     "asset_glob": "xess-xmx-linux-*.zip",
-    "note": "the fork carries PRs #23/#24 work but publishes no releases; set use_fork true once it does"
+    "note": "the fork carries PRs #23/#24 (XeLL driver mode) but publishes no release yet: until it does, upstream's 20261018 is installed; switch back to upstream once HHHHanasak1 merges"
   },
   "optipatcher": {
     "repo": "optiscaler/OptiPatcher",

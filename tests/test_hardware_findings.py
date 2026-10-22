@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules"))
 
-from clawdeck import autotune, battery, controller, hhd, hw, power, shadowblip, sysfs  # noqa: E402
+from clawdeck import autotune, hhd, hw, power, shadowblip, sysfs  # noqa: E402
 
 
 def _w(path, value):
@@ -56,44 +56,6 @@ def test_intel_vulkan_lib_from_icd_json_and_version(tmp_path, monkeypatch):
 
 
 # 6. Battery: uAh + uV, no energy_*, no power_now, current_now not credible
-@pytest.fixture
-def ex_battery(tmp_path):
-    b = tmp_path / "BAT1"
-    for n, v in (("charge_now", 4952000), ("charge_full", 5176000), ("charge_full_design", 5000000),
-                 ("voltage_now", 17472000), ("current_now", -65026000), ("capacity", 95), ("status", "Discharging"),
-                 ("charge_control_end_threshold", 0)):
-        _w(b / n, v)
-    return _hw(hw.Paths(battery=str(b), charge_limit=str(b / "charge_control_end_threshold"))), b
-
-
-def test_ex_battery_units(ex_battery):
-    h, _ = ex_battery
-    st = battery.Battery(h).status()
-    assert st["energy_wh"] == pytest.approx(86.52, abs=0.01)       # 4.952 Ah x 17.472 V
-    assert st["energy_full_wh"] == pytest.approx(90.43, abs=0.01)
-    assert st["health_pct"] == 100.0                               # 103.5 % on a new pack, shown as 100
-    assert st["power_w"] is None                                   # -65 A x 17 V is not believed; no second point yet
-    assert st["charge_limit"] == 100                               # 0 = never set
-
-
-def test_ex_battery_power_from_charge_change(ex_battery, monkeypatch):
-    h, b = ex_battery
-    bat = battery.Battery(h)
-    t = [1000.0]
-    monkeypatch.setattr(battery.time, "monotonic", lambda: t[0])
-    assert bat.status()["power_w"] is None
-    t[0] += 60
-    _w(b / "charge_now", 4952000 - 10000)          # 10 mAh in 60 s = 0.6 A at 17.47 V
-    assert bat.status()["power_w"] == pytest.approx(10.48, abs=0.01)
-
-
-def test_plausible_current_now_is_used(ex_battery):
-    h, b = ex_battery
-    _w(b / "current_now", -800000)                 # 0.8 A
-    assert battery.Battery(h).status()["power_w"] == pytest.approx(13.98, abs=0.01)
-
-
-# 1. TDP through MSI firmware: no PL3 on the EX, values clamped to the attribute's own range
 def test_firmware_tdp_without_pl3_and_clamped(tmp_path):
     base = tmp_path / "fw"
     for a, cur, lo, hi in (("ppt_pl1_spl", 0, 8, 35), ("ppt_pl2_sppt", 0, 9, 45)):
@@ -137,20 +99,3 @@ def test_sampler_stops_asking_after_a_miss(monkeypatch):
 
 
 # 1. Controller: InputPlumber's composite device instead of Handheld Daemon
-def test_controller_reports_inputplumber_without_hhd(monkeypatch):
-    out = {
-        ("--list", "tree", shadowblip.INPUTPLUMBER): "/\n/org\n/org/shadowblip/InputPlumber\n"
-            "/org/shadowblip/InputPlumber/CompositeDevice0\n/org/shadowblip/InputPlumber/devices/source/event4\n",
-    }
-
-    def fake(*args):
-        if args[0] == "get-property":
-            return 's "MSI Claw 8 EX AI+ CG3EM"' if args[-1] == "Name" else 's "OpenGamepadUI Default"'
-        return out.get(args)
-    monkeypatch.setattr(shadowblip, "_busctl", fake)
-    monkeypatch.setattr(hhd, "get_settings", lambda: None)
-    monkeypatch.setattr(hhd, "get_state", lambda: None)
-    st = controller.Controller().settings()
-    assert st["available"] is False
-    assert st["inputplumber"] == [{"path": "/org/shadowblip/InputPlumber/CompositeDevice0",
-                                   "name": "MSI Claw 8 EX AI+ CG3EM", "profile": "OpenGamepadUI Default"}]

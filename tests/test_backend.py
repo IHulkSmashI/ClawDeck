@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules"))
 
-from clawdeck import autotune, battery, hw, power, profiles, sysfs  # noqa: E402
+from clawdeck import autotune, hw, power, profiles, sysfs  # noqa: E402
 
 
 def _w(path, value):
@@ -89,15 +89,6 @@ def test_cpu_pct_never_below_min(fake_hw):
 def test_tdp_without_hhd_or_rapl_fails_cleanly(fake_hw):
     pw = power.Power(fake_hw)
     assert pw.set_tdp(25) is False
-
-
-def test_charge_limit_choices_and_write(fake_hw):
-    b = battery.Battery(fake_hw)
-    with pytest.raises(ValueError):
-        b.set_charge_limit(75)
-    assert b.set_charge_limit(60)
-    assert sysfs.read_int(fake_hw.paths.charge_limit) == 60
-    assert b.status()["capacity_pct"] == 77
 
 
 def test_profiles_roundtrip(tmp_path):
@@ -264,7 +255,6 @@ def test_face_buttons_override(tmp_path, monkeypatch):
     assert r["ok"] and len(r["removed"]) == 2 and not buttons.status("MS-1T91")["installed"]
 
 
-
 def test_picked_power_is_autotunes_ceiling(fake_hw, monkeypatch):
     at = autotune.Autotune(fake_hw, power.Power(fake_hw), "/nonexistent")
     monkeypatch.setattr(at, "_apply", lambda l: None)
@@ -312,15 +302,6 @@ def test_sampler_caches_the_dear_reads(fake_hw, tmp_path, monkeypatch):
         smp.frametime()
         smp.gpu_busy()
     assert len(globs) == 1 and len(busy) == 1        # one directory listing, one D-Bus call, not 20 of each
-
-
-def test_charge_limit_survives_closing_a_game(fake_hw):
-    pw = power.Power(fake_hw)
-    assert battery.Battery(fake_hw).set_charge_limit(80)
-    pw.set_cpu_max_pct(50)
-    pw.revert_all()                                   # what closing a game does
-    assert sysfs.read_int(fake_hw.paths.charge_limit) == 80
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 100
 
 
 def test_dry_run_keeps_the_revert_record(fake_hw):
@@ -395,3 +376,18 @@ def test_tdp_reads_back_from_rapl_and_failures_are_explained(fake_hw, tmp_path):
     assert sysfs.last_error() is None
     assert not sysfs.write(str(tmp_path / "missing/dir/file"), 1)      # a refused write says why
     assert "writing 1 to" in (sysfs.last_error() or "") and "file" in sysfs.last_error()
+
+
+def test_autotune_status_says_what_it_last_did(fake_hw, monkeypatch):
+    pw = power.Power(fake_hw)
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    at.session = autotune.Session(appid="1", target_fps=60, floor_tdp=8, ceiling_tdp=17,
+                                  learned=autotune.Learned(tdp=17, cpu_max_pct=100, gpu_min_mhz=None))
+    s = at.session
+    smp = lambda: autotune.Sample(t=0, frametime_ms=15.0, fps=66.0, gpu_mhz=1500, gpu_max_mhz=2400, cpu_pct=30, pkg_w=15, gpu_busy=95)
+    monkeypatch.setattr(at.sampler, "sample", smp)
+    for _ in range(s.settle):
+        at._step()
+    st = at.status()
+    assert st["last_action"] and "fps for a 60 target" in st["last_action"] and st["ceiling_tdp"] == 17

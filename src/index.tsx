@@ -57,7 +57,7 @@ export default definePlugin(() => {
   getChanges().then((c) => {
     if (!c?.changed?.length) return;
     const what = c.changed.map((x) => `${x.what} ${x.to ?? "removed"}`).join(", ");
-    toaster.toast({ title: "ClawDeck: system updated", body: c.failing?.length ? `${what}. Needs a look: ${c.failing.map((f) => f.title).join(", ")} (All settings → Setup)` : `${what}. All checks still pass.` });
+    toaster.toast({ title: "ClawDeck: system updated", body: c.failing?.length ? `${what}. Needs a look: ${c.failing.map((f) => f.title).join(", ")} (Fixes)` : `${what}. All checks still pass.` });
   }).catch(() => { /* backend logs it */ });
 
   return {

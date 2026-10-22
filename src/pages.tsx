@@ -1,17 +1,14 @@
 import { ButtonItem, Navigation, PanelSection, PanelSectionRow, SidebarNavigation } from "@decky/ui";
-import { FC, useEffect, useState } from "react";
-import { MdBatteryChargingFull, MdBolt, MdDisplaySettings, MdGamepad, MdMonitorHeart, MdTune } from "react-icons/md";
+import { FC } from "react";
+import { MdBolt, MdBuild, MdSportsEsports, MdTune } from "react-icons/md";
 
-import { getHealth, Health } from "./api";
-import { Status } from "./components/Hint";
-import { SetupTab } from "./tabs/Setup";
+import { FixesTab } from "./tabs/Fixes";
+import { PerGameTab } from "./tabs/PerGame";
 import { PowerTab } from "./tabs/Power";
-import { GraphicsTab } from "./tabs/Graphics";
-import { BatteryTab } from "./tabs/Battery";
-import { DisplayTab } from "./tabs/Display";
-import { ControllerTab } from "./tabs/Controller";
+import { SetupTab } from "./tabs/Setup";
 
 export const ROUTE = "/clawdeck";
+export const PAGES = ["power", "game", "fixes", "setup"] as const;
 
 /** Opens the full-screen ClawDeck page (optionally on one section) and closes the Quick Access menu. */
 export const openPage = (page = "power") => {
@@ -20,45 +17,30 @@ export const openPage = (page = "power") => {
 };
 
 /**
- * The Quick Access panel is narrow (about 300 px), so it holds only what people change while playing: the power
- * profile and Autotune, plus a health line. Everything else lives on the full-screen page below, where a sidebar
- * replaces the tab strip that didn't fit.
+ * The Quick Access panel holds the four panels (Power, Per-game, Fixes, Setup) in their short form: short labels,
+ * the read-back line after every change, nothing that needs a settings page. The full-screen page below has the
+ * same four with the longer explanations and the health check's details.
  */
-export const QuickPanel: FC = () => {
-  const [health, setHealth] = useState<Health[] | null>(null);
-  useEffect(() => { getHealth().then(setHealth).catch(() => setHealth([])); }, []);
-  const problems = (health ?? []).filter((h) => !h.ok && !h.optional);
-  return (
-    <>
-      <PowerTab quick />
-      <PanelSection title="ClawDeck">
-        <PanelSectionRow>
-          <ButtonItem layout="below" onClick={() => openPage("power")}>All settings</ButtonItem>
-        </PanelSectionRow>
-        {health && problems.length > 0 && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" onClick={() => openPage("setup")}
-              description={problems.map((p) => p.title).join(" · ")}>{`${problems.length} to fix: open Setup`}</ButtonItem>
-          </PanelSectionRow>
-        )}
-        {health && problems.length === 0 && (
-          <PanelSectionRow>
-            <Status ok={true} label="Everything is ready" />
-          </PanelSectionRow>
-        )}
-      </PanelSection>
-    </>
-  );
-};
+export const QuickPanel: FC = () => (
+  <>
+    <PowerTab quick />
+    <PerGameTab quick />
+    <FixesTab quick />
+    <SetupTab quick />
+    <PanelSection>
+      <PanelSectionRow>
+        <ButtonItem layout="below" onClick={() => openPage("power")}>More details</ButtonItem>
+      </PanelSectionRow>
+    </PanelSection>
+  </>
+);
 
-/** One page per area, navigated with the D-pad on the left like Steam's own settings. */
+/** The same four, one page each, navigated with the D-pad on the left like Steam's own settings. */
 export const FullPage: FC<{ page?: string }> = ({ page }) => (
   <SidebarNavigation title="ClawDeck" showTitle page={page} pages={[
     { title: "Power", icon: <MdBolt />, route: `${ROUTE}/power`, content: <PowerTab /> },
-    { title: "Graphics", icon: <MdTune />, route: `${ROUTE}/graphics`, content: <GraphicsTab /> },
-    { title: "Display & streaming", icon: <MdDisplaySettings />, route: `${ROUTE}/display`, content: <DisplayTab /> },
-    { title: "Controller", icon: <MdGamepad />, route: `${ROUTE}/controller`, content: <ControllerTab /> },
-    { title: "Battery & fans", icon: <MdBatteryChargingFull />, route: `${ROUTE}/battery`, content: <BatteryTab /> },
-    { title: "Setup", icon: <MdMonitorHeart />, route: `${ROUTE}/setup`, content: <SetupTab /> },
+    { title: "Per-game", icon: <MdSportsEsports />, route: `${ROUTE}/game`, content: <PerGameTab /> },
+    { title: "Fixes", icon: <MdBuild />, route: `${ROUTE}/fixes`, content: <FixesTab /> },
+    { title: "Setup", icon: <MdTune />, route: `${ROUTE}/setup`, content: <SetupTab /> },
   ]} />
 );

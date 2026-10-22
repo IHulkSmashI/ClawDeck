@@ -3,8 +3,8 @@
 ClawDeck orchestrates other people's work. Read, learned from, and called — not copied wholesale:
 
 - **[Handheld Daemon](https://github.com/hhd-dev/hhd)** (LGPL-2.1) — MSI buttons, TDP through MSI firmware,
-  fan curves, charge limit, controller and RGB. ClawDeck talks to its local API and reads its settings schema; the
-  Claw model ids (MS-1T41/42/52/91/8K), the EX's 35/45 W limits and the fan curve points come from its source.
+  fan curves, controller and RGB. ClawDeck sets TDP through its local API when it runs; the Claw model ids
+  (MS-1T41/42/52/91/8K) and the EX's 35/45 W limits come from its source.
 - **[InputPlumber](https://github.com/ShadowBlip/InputPlumber)** and **[PowerStation](https://github.com/ShadowBlip/PowerStation)**
   by ShadowBlip — the controller and power services on current Bazzite. ClawDeck detects them, works alongside them
   instead of replacing them, and reads PowerStation's GPU load and InputPlumber's controller status over D-Bus.
@@ -15,7 +15,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   suspend/resume) and Decky patterns.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
 - **[xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)** — XeSS super resolution and frame generation on
-  XMX under Proton; ClawDeck installs, probes and switches its drivers.
+  XMX under Proton; ClawDeck installs it (from our fork while the XeLL driver-mode PRs #23/#24 wait upstream),
+  probes it, and reads the shim's logs to show XeLL's mode per game.
 - **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — DLSS/FSR → XeSS and XeSS frame generation injection.
   ClawDeck installs it the way its `setup_linux.sh` does and reads its community
   [compatibility list](https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List) for per-game notes and fixes.
@@ -27,24 +28,18 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[lsfg-vk](https://lsfg-vk.dev)** — Lossless Scaling frame generation as a Vulkan layer on Linux.
 - **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** by THS — the frame generation
   lsfg-vk runs. Users need their own copy; ClawDeck checks for it and never bundles it.
-- **[gamescope-session](https://github.com/ChimeraOS/gamescope-session)** — the environment variables the Display
-  tab writes (`ADAPTIVE_SYNC`, `CUSTOM_REFRESH_RATES`, `ENABLE_GAMESCOPE_HDR`, `GAMESCOPE_HDR_NITS`).
+
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
 - **Decky Framerate** — an early reference for reading frame times in Game Mode.
 
-- **[Moonlight](https://github.com/moonlight-stream/moonlight-qt)** (GPL-3.0) — the game streaming client.
-- **[Moonlight with VRR](https://github.com/Nonary/moonlight-qt)** by Nonary — the Moonlight fork ClawDeck installs
-  and keeps updated: VRR-aware frame pacing on Linux.
-- **[Vibepollo](https://github.com/Nonary/Vibepollo)** by Nonary, built on **[Apollo](https://github.com/ClassicOldSong/Apollo)**
-  and **[Sunshine](https://github.com/LizardByte/Sunshine)** — the streaming host on the PC.
+
+
 - **[ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks)** and **[GoTweaks](https://github.com/corando98/GoTweaks)**
-  — the Windows tools whose feature list (single TDP slider with optional boost, per-game AC/DC profiles, energy
-  mode, charge limiter, fan presets, Lossless Scaling integration) shaped what ClawDeck offers on Linux. No code is
-  shared.
+  — the Windows tools whose feature list shaped ClawDeck's first version. No code is shared.
 - **[ClawLab Intel VRR Range Fix](https://github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory)** (MIT) — the
   30–120 Hz VRR fix for the Claw's screens on Windows. ClawDeck's Linux version uses ClawLab's list of validated
   panels, their factory EDID checksums and the exact bytes ClawLab changes, and the daily watch checks that list.
-- **[MangoHud](https://github.com/flightlessmango/MangoHud)** — frame-time logging for autotune and the benchmark.
+- **[MangoHud](https://github.com/flightlessmango/MangoHud)** — frame-time logging for autotune.
 
 ClawDeck checks every project above for new releases every day (`.github/workflows/upstream-watch.yml`) and updates
 the ones it installs for you; see CONTRIBUTING.md → Keeping up with upstream.

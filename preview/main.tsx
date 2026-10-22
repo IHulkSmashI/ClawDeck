@@ -9,31 +9,20 @@ import { FullPage, QuickPanel } from "../src/pages";
 
 let launchOptions = "";   // the example game starts without ClawDeck in its launch options
 let losslessInstalled = false;
-const shortcutIds: number[] = [];
 (window as any).appStore = {
   // the example user owns Lossless Scaling but has not installed it yet
-  GetAppOverviewByAppID: (id: number) => (id === 993090 ? { BIsOwned: () => true, installed: losslessInstalled }
-    : shortcutIds.includes(id) ? { appid: id, installed: true } : null),
+  GetAppOverviewByAppID: (id: number) => (id === 993090 ? { BIsOwned: () => true, installed: losslessInstalled } : null),
 };
 (window as any).SteamClient = {
   Installs: { OpenInstallWizard: () => { losslessInstalled = true; } },
   Apps: {
-    AddShortcut: async () => { shortcutIds.push(1000 + shortcutIds.length); return shortcutIds[shortcutIds.length - 1]; },
-    SetShortcutName: () => undefined,
-    SetShortcutLaunchOptions: () => undefined,
     ShowStore: () => undefined,
     RegisterForAppDetails: (_id: number, cb: (d: any) => void) => { setTimeout(() => cb({ strLaunchOptions: launchOptions })); return { unregister() {} }; },
     SetAppLaunchOptions: (_id: number, opts: string) => { launchOptions = opts; },
-    SpecifyCompatTool: () => undefined,
-    GetAvailableCompatTools: async () => [
-      { strToolName: "GE-Proton11-6", strDisplayName: "GE-Proton11-6" },
-      { strToolName: "proton_experimental", strDisplayName: "Proton Experimental" },
-      { strToolName: "proton_10", strDisplayName: "Proton 10.0-3" },
-    ],
   },
 };
 
-const PAGES = ["power", "graphics", "display", "controller", "battery", "setup"];
+const PAGES = ["power", "game", "fixes", "setup"];
 
 /** Quick Access panel on the left, the full-screen page (Steam's sidebar layout) on the right. */
 const Panels = () => {

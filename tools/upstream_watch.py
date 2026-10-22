@@ -8,10 +8,10 @@
 Two kinds of checks:
   versions  the newest release / commit of each upstream, compared with assets/upstream.lock.json (the versions last
             tested with ClawDeck). New ones are listed so they get tested; ClawDeck's runtime updater already
-            fetches OptiScaler, OptiPatcher, REFramework, lsfg-vk and Moonlight VRR for users.
+            fetches OptiScaler, OptiPatcher, REFramework and lsfg-vk for users.
   canaries  the formats ClawDeck reads from upstream, read live with ClawDeck's own parsers: OptiScaler's
             compatibility list, OptiPatcher's executable list, the lsfg-vk builds page, Handheld Daemon's MSI keys,
-            Bazzite's Claw hardware handling, Moonlight VRR's checksums. A failed canary means a ClawDeck parser needs
+            Bazzite's Claw hardware handling, ClawLab's panel list. A failed canary means a ClawDeck parser needs
             fixing before users notice.
 Only the standard library; GITHUB_TOKEN (set in CI) raises the API limit.
 """
@@ -36,8 +36,6 @@ UPSTREAMS = {
     "OptiPatcher": ("release:rolling", "optiscaler/OptiPatcher", "DLSS inputs without spoofing (auto-updated)"),
     "REFramework": ("release", "praydog/reframework-nightly", "RE Engine games (auto-updated)"),
     "lsfg-vk": ("page", "https://builds.lsfg-vk.dev/", "Lossless Scaling frame generation (auto-updated)"),
-    "Moonlight VRR": ("prerelease", "Nonary/moonlight-qt", "streaming client (auto-updated)"),
-    "Vibepollo": ("prerelease", "Nonary/Vibepollo", "streaming host on the PC"),
     "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                               "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
@@ -47,7 +45,6 @@ UPSTREAMS = {
     "PowerStation": ("release", "ShadowBlip/PowerStation", "power on current Bazzite"),
     "Decky Loader": ("release", "SteamDeckHomebrew/decky-loader", "plugin host"),
     "@decky/ui": ("npm", "@decky/ui", "Steam UI components and typings"),
-    "gamescope-session": ("commit", "ChimeraOS/gamescope-session", "Game Mode display variables"),
     "Bazzite": ("commit", "ublue-os/bazzite", "the OS"),
 }
 
@@ -123,14 +120,6 @@ def canaries() -> list[tuple[str, bool, str]]:
         return ok, ", ".join(names[:3])
     check("OptiScaler release still ships Optiscaler_*.7z", optiscaler_asset)
 
-    def moonlight():
-        rels = _json("https://api.github.com/repos/Nonary/moonlight-qt/releases?per_page=5")
-        rel = next(r for r in rels if not r.get("draft"))
-        names = [a["name"] for a in rel.get("assets", [])]
-        ok = any(n.endswith("-x86_64.AppImage") for n in names) and "SHA256SUMS" in names
-        return ok, f"{rel['tag_name']}: AppImage + SHA256SUMS" if ok else f"{rel['tag_name']}: {names}"
-    check("Moonlight VRR ships an AppImage and SHA256SUMS", moonlight)
-
     def clawlab_panels():
         from clawdeck import edid
         src = raw("Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
@@ -153,12 +142,6 @@ def canaries() -> list[tuple[str, bool, str]]:
         return "Claw" in s, "Claws still use steamos-manager TDP" if "Claw" in s else "Claw handling changed"
     check("Bazzite's Claw hardware handling", bazzite)
 
-    def gamescope():
-        s = raw("ChimeraOS/gamescope-session", "usr/share/gamescope-session-plus/gamescope-session-plus")
-        keys = ("ADAPTIVE_SYNC", "CUSTOM_REFRESH_RATES", "ENABLE_GAMESCOPE_HDR", "GAMESCOPE_HDR_NITS")
-        missing = [k for k in keys if k not in s]
-        return not missing, "all Display tab variables present" if not missing else f"missing: {missing}"
-    check("gamescope-session reads the Display tab's variables", gamescope)
     return out
 
 
