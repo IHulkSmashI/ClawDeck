@@ -23,7 +23,6 @@ def _hw(paths, model_id="MS-1T91"):
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    sysfs.set_dry_run(False)
     sysfs._originals.clear()
     monkeypatch.setattr(hhd, "available", lambda: False)
 

@@ -20,7 +20,6 @@ const hhd = () => scenario.controller === "hhd";
 const state = {
   wideVrr: false,
   buttonsFixed: true,
-  dry: false,
   autotune: true,
   profile: "balanced",
   tdp: 17,
@@ -101,12 +100,11 @@ export const backend = {
     buttons: { applies: true, ok: state.buttonsFixed, installed: state.buttonsFixed, stock_map: "claw2", upstream_fixed: false, legacy_hwdb: [] },
     health: healthSummary(),
   }),
-  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "dry_run" ? state.dry : k === "last_profile" ? state.profile : null),
+  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : null),
   set_setting: (k: string, v: any) => {
-    if (k === "autotune") state.autotune = v; if (k === "dry_run") state.dry = v;
+    if (k === "autotune") state.autotune = v;
     return true;
   },
-  set_dry_run: (v: boolean) => { state.dry = v; return v; },
   self_test: () => (scenario.game
     ? { ok: false, error: "close the game first: the self-test changes and reverts the power limits" }
     : { ok: true, passed: 12, failed: 0, summary: "12 passed, 0 failed", error: null,

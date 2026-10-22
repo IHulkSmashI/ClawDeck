@@ -205,10 +205,7 @@ def status() -> dict:
             "rpm_ostree": shutil.which("rpm-ostree") is not None}
 
 
-def _run(cmd: list[str], dry_run: bool) -> tuple[bool, str]:
-    if dry_run:
-        log.info("dry-run: would run %s", " ".join(cmd))
-        return True, ""
+def _run(cmd: list[str]) -> tuple[bool, str]:
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False, env=sysfs.clean_env())
     except (OSError, subprocess.SubprocessError) as e:
@@ -218,7 +215,7 @@ def _run(cmd: list[str], dry_run: bool) -> tuple[bool, str]:
     return r.returncode == 0, (r.stderr or r.stdout).strip()[-400:]
 
 
-def enable(dry_run: bool = False) -> dict:
+def enable() -> dict:
     """Write the patched EDID and point the kernel at it. Slow (rebuilds the initramfs); needs a restart."""
     raw = _read_bytes(panel_edid_path())
     key = panel_id(raw)
@@ -243,24 +240,21 @@ def enable(dry_run: bool = False) -> dict:
             data = patch(raw, key)
         except ValueError as e:
             return {"ok": False, "error": str(e)}
-    if dry_run:
-        log.info("dry-run: would write %s (%d bytes, sha256 %s)", dest, len(data), sha256(data))
-    else:
-        os.makedirs(EDID_DIR, exist_ok=True)
-        with open(dest, "wb") as f:
-            f.write(data)
-    ok, out = _run(["rpm-ostree", "initramfs-etc", f"--track={dest}"], dry_run)
+    os.makedirs(EDID_DIR, exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(data)
+    ok, out = _run(["rpm-ostree", "initramfs-etc", f"--track={dest}"])
     if not ok:
         return {"ok": False, "error": f"initramfs: {out}"}
     ok, out = _run(["rpm-ostree", "kargs", f"--append-if-missing=firmware_class.path={FW_DIR}",
-                    f"--append-if-missing=drm.edid_firmware={CONNECTOR}:edid/{name}"], dry_run)
+                    f"--append-if-missing=drm.edid_firmware={CONNECTOR}:edid/{name}"])
     if not ok:
-        _run(["rpm-ostree", "initramfs-etc", f"--untrack={dest}"], dry_run)
+        _run(["rpm-ostree", "initramfs-etc", f"--untrack={dest}"])
         return {"ok": False, "error": f"kernel arguments: {out}"}
     return {"ok": True, "restart": True, "file": dest, "sha256": sha256(data)}
 
 
-def disable(dry_run: bool = False) -> dict:
+def disable() -> dict:
     """Undo enable(): kernel arguments, initramfs tracking and the file. Takes effect at the next restart."""
     pending = _kargs_pending() or _cmdline()
     cur = _arg(pending, "drm.edid_firmware") or ""
@@ -272,14 +266,13 @@ def disable(dry_run: bool = False) -> dict:
     if _arg(pending, "firmware_class.path") == FW_DIR:
         args.append(f"--delete-if-present=firmware_class.path={FW_DIR}")
     if args:
-        ok, out = _run(["rpm-ostree", "kargs", *args], dry_run)
+        ok, out = _run(["rpm-ostree", "kargs", *args])
         if not ok:
             return {"ok": False, "error": f"kernel arguments: {out}"}
     for f in sorted(glob.glob(f"{EDID_DIR}/clawdeck-*.bin")):
-        _run(["rpm-ostree", "initramfs-etc", f"--untrack={f}"], dry_run)
-        if not dry_run:
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+        _run(["rpm-ostree", "initramfs-etc", f"--untrack={f}"])
+        try:
+            os.remove(f)
+        except OSError:
+            pass
     return {"ok": True, "restart": True}

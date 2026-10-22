@@ -24,7 +24,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
     setBusy(true);
     try {
       const r = await setWideVrr(on);
-      toast(r.ok ? (r.dry_run ? `Dry run: ${r.would}` : `${on ? "VRR fix installed: 30–120 Hz" : "VRR fix removed: factory range"} after the next restart`) : `VRR fix: not changed (${r.error})`);
+      toast(r.ok ? `${on ? "VRR fix installed: 30–120 Hz" : "VRR fix removed: factory range"} after the next restart` : `VRR fix: not changed (${r.error})`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(); }
   };
@@ -32,7 +32,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
     setBusy(true);
     try {
       const r = await runFix(id, false);
-      toast(r.ok ? (r.would ?? r.next ?? (r.removed ? "Face-button fix removed; InputPlumber restarted" : "Done")) : `Not done: ${r.error ?? r.log ?? "see the log"}`);
+      toast(r.ok ? (r.next ?? (r.removed ? "Face-button fix removed; InputPlumber restarted" : "Done")) : `Not done: ${r.error ?? r.log ?? "see the log"}`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(true); }
   };

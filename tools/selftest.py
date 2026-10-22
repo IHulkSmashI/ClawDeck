@@ -60,7 +60,6 @@ def main() -> int:
     if os.geteuid() != 0:
         print("run as root (sudo): the controls are sysfs writes")
         return 1
-    sysfs.set_dry_run(False)
     h = hw.detect()
     p = h.paths
     print(f"ClawDeck self-test on {h.model['name']} ({h.model_id}), kernel {h.kernel}\n")

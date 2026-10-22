@@ -18,7 +18,6 @@ def _w(path, value="x"):
 
 @pytest.fixture(autouse=True)
 def _clean():
-    sysfs.set_dry_run(False)
     sysfs._originals.clear()
     yield
     sysfs._originals.clear()
