@@ -41,7 +41,7 @@ LOG_DIR = decky.DECKY_PLUGIN_LOG_DIR
 HOME = decky.DECKY_USER_HOME
 DESKTOP = os.path.join(HOME, "Desktop")
 VERSIONS = os.path.join(PLUGIN_DIR, "assets", "versions.json")
-POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz")
+POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz", "boost")
 # The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
 # deletes the plugin, so it must stay there (as a pass-through) or those games would no longer start.
 WRAPPER = os.path.join(HOME, ".local", "share", "clawdeck", "clawdeck-launch.sh")
@@ -224,12 +224,73 @@ class Plugin:
                 "error": None if r.returncode == 0 and not failed else (" · ".join(failed) or out.strip()[-300:] or f"exit {r.returncode}")}
 
     # ---- power -------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _done(ok: bool, what: str, wanted, read, unit: str = "") -> dict:
+        """What every single-lever write answers (HARDWARE-FINDINGS §14): the value asked for, the value read back
+        from the hardware afterwards, and on failure the reason. The UI shows `summary` in its toast, `error` in red."""
+        u = f" {unit}" if unit else ""
+        fmt = lambda v: "?" if v is None else (("on" if v else "off") if isinstance(v, bool) else f"{v}{u}")
+        err = None
+        if sysfs.dry_run():
+            summary = f"dry run: would set {what} to {fmt(wanted)} (hardware still reads {fmt(read)})"
+        elif not ok:
+            err = sysfs.last_error() or f"{what} could not be set"
+            summary = f"{what}: not set ({err})"
+        elif read is not None and read != wanted:
+            err = f"asked for {fmt(wanted)}, hardware reads {fmt(read)}"
+            summary, ok = f"{what}: {err}", False
+        else:
+            summary = f"{what} set to {fmt(wanted)} → hardware reads {fmt(read)}"
+        return {"ok": ok, "what": what, "wanted": wanted, "read": read, "unit": unit, "summary": summary, "error": err}
+
     async def get_power(self) -> dict:
-        return self.power.status()
+        st = self.power.status()
+        st["custom_tdp"] = self.settings.get("custom_tdp")
+        st["autotune_floor"] = self.settings.get("autotune_floor")
+        return st
+
+    def _limit_result(self, name: str, applied: dict, failed: list, plugged) -> dict:
+        """Read back after a profile or a TDP-slider change. With autotune running the limit is its ceiling and the
+        hardware reads what autotune uses under it, so that is what is checked."""
+        want = applied.get("tdp")
+        at_w = self.autotune.set_ceiling(want) if want is not None and self.autotune.running() else None
+        expect = at_w if at_w is not None else want
+        st = self.power.status()
+        r = {"profile": name, "applied": applied, "failed": failed, "limit_w": want, "autotune_w": at_w,
+             "read": {"tdp_w": st["tdp_w"], "pl2_w": st["rapl"]["pl2_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"],
+                      "epp": st["cpu"]["epp"], "backend": st["tdp_backend"]}}
+        r["ok"] = not failed
+        if r["ok"] and expect is not None and st["tdp_w"] is not None and st["tdp_w"] != expect:
+            r["ok"], r["error"] = False, f"asked for {expect} W, hardware reads {st['tdp_w']} W"
+        elif not r["ok"]:
+            r["error"] = sysfs.last_error() or f"could not set: {', '.join(failed)}"
+        else:
+            r["error"] = None
+        tail = f" (Autotune uses {at_w} W of it)" if at_w is not None and at_w != want else ""
+        r["summary"] = f"{name} {want} W → {self._reads(st)}{tail}" if r["ok"] else f"{name}: {r['error']}"
+        if sysfs.dry_run():
+            r["summary"] = f"dry run: would set {name} {want} W (hardware unchanged, {self._reads(st)})"
+            r["ok"], r["error"] = True, None
+        return r
+
+    async def set_tdp(self, watts: int) -> dict:
+        """The TDP slider (§17): a custom limit anywhere in the model's range, kept as the "custom" profile and used as
+        autotune's ceiling."""
+        async with self._power_lock:
+            plugged = self.battery.plugged()
+            want = self.power.clamp_tdp(int(watts), plugged)
+            self.settings["last_profile"], self.settings["custom_tdp"] = "custom", want
+            self._save_settings()
+            sysfs.clear_error()
+            ok = self.power.set_tdp(want, plugged)
+            return self._limit_result("Custom", {"tdp": want} if ok else {}, [] if ok else ["tdp"], plugged)
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
         """Apply a profile and read the limits back (HARDWARE-FINDINGS §14): the UI shows `summary` in its toast
         and `error` in red; `read` is what the hardware reports after the write."""
+        name = hw.profile_name(name)
+        if name == "custom":
+            return await self.set_tdp(int(self.settings.get("custom_tdp") or self.power.read_tdp() or 17))
         async with self._power_lock:
             plugged = self.battery.plugged()
             prof = self.profiles.get(appid, bool(plugged)) if appid else {}
@@ -239,25 +300,53 @@ class Plugin:
             self._save_settings()
             sysfs.clear_error()
             r = self.power.apply_profile(name, overrides, plugged)
-            if "tdp" in r["applied"]:
-                self.autotune.set_ceiling(r["applied"]["tdp"])   # autotune now works under this profile's power
-            st = self.power.status()
-        r["read"] = {"tdp_w": st["tdp_w"], "pl2_w": st["rapl"]["pl2_w"], "cpu_max_pct": st["cpu"]["max_perf_pct"],
-                     "epp": st["cpu"]["epp"], "backend": st["tdp_backend"]}
-        r["ok"] = not r["failed"]
-        want = r["applied"].get("tdp")
-        if r["ok"] and want is not None and st["tdp_w"] is not None and st["tdp_w"] != want:
-            r["ok"] = False
-            r["error"] = f"asked for {want} W, hardware reads {st['tdp_w']} W"
-        elif not r["ok"]:
-            r["error"] = sysfs.last_error() or f"could not set: {', '.join(r['failed'])}"
-        else:
-            r["error"] = None
-        r["summary"] = (f"{name} set → {self._reads(st)}" if r["ok"] else f"{name}: {r['error']}")
-        if sysfs.dry_run():
-            r["summary"] = f"dry run: would apply {name} (hardware unchanged, {self._reads(st)})"
-            r["ok"], r["error"] = True, None
-        return r
+            out = self._limit_result(name.capitalize(), r["applied"], r["failed"], plugged)
+        return {**out, "profile": name}
+
+    # ---- advanced levers (§19): Steam has none of these for this chip; each pauses autotune, never fights the user --
+    async def set_cpu_turbo(self, on: bool) -> dict:
+        sysfs.clear_error()
+        self.autotune.pause("manual CPU boost")
+        ok = self.power.set_cpu_turbo(bool(on))
+        return self._done(ok, "CPU boost", bool(on), self.power.turbo())
+
+    async def set_cpu_max_pct(self, pct: int) -> dict:
+        sysfs.clear_error()
+        self.autotune.pause("manual CPU ceiling")
+        ok = self.power.set_cpu_max_pct(int(pct))
+        return self._done(ok, "CPU ceiling", int(pct), self.power.status()["cpu"]["max_perf_pct"], "%")
+
+    async def set_gpu_window(self, min_mhz, max_mhz) -> dict:
+        sysfs.clear_error()
+        self.autotune.pause("manual GPU clocks")
+        lo = None if min_mhz is None else int(min_mhz)
+        hi = None if max_mhz is None else int(max_mhz)
+        ok = self.power.set_gpu_window(lo, hi)
+        g = self.power.status()["gpu"]
+        if hi is None:
+            return self._done(ok, "GPU floor", lo, g["min_mhz"], "MHz")
+        if lo is None:
+            return self._done(ok, "GPU ceiling", hi, g["max_mhz"], "MHz")
+        return self._done(ok, "GPU clocks", f"{lo}–{hi}", f"{g['min_mhz']}–{g['max_mhz']}", "MHz")
+
+    async def set_epp(self, value: str) -> dict:
+        sysfs.clear_error()
+        self.autotune.pause("manual CPU energy mode")
+        try:
+            ok = self.power.set_epp(str(value))
+        except ValueError as e:
+            return {"ok": False, "what": "CPU energy mode", "wanted": value, "read": self.power.epp(), "unit": "",
+                    "summary": f"CPU energy mode: {e}", "error": str(e)}
+        return self._done(ok, "CPU energy mode", str(value), self.power.epp())
+
+    async def set_autotune_floor(self, watts: int | None) -> dict:
+        """The lowest TDP autotune may use; None = the model minimum."""
+        lo, hi = hw.tdp_range(self.hw.model, True)
+        w = None if watts is None else max(lo, min(int(watts), hi))
+        self.settings["autotune_floor"] = w
+        self._save_settings()
+        self.autotune.set_floor(w if w is not None else lo)
+        return {"ok": True, "floor_w": w if w is not None else lo, "summary": f"Autotune floor {w if w is not None else lo} W", "error": None}
 
     @staticmethod
     def _reads(st: dict) -> str:
@@ -274,14 +363,17 @@ class Plugin:
     # ---- game lifecycle (called by the frontend's Steam hooks) ------------------------------------------------------
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         prof = self.profiles.get(appid, plugged)
-        base = prof.get("base") or self.settings.get("last_profile") or ("performance" if plugged else "battery")
+        base = hw.profile_name(prof.get("base") or self.settings.get("last_profile") or ("performance" if plugged else "battery"))
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
+        if base == "custom":     # the TDP slider's value is the limit; the rest of the levers stay as they are
+            base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
         result = self.power.apply_profile(base, overrides, plugged)
         if self.settings.get("autotune") and prof.get("autotune", True) and prof.get("target_fps"):
-            # the profile's power limit is autotune's ceiling: it only ever lowers power below what the user picked
-            lim = self.hw.model["tdp"]
-            ceiling = result["applied"].get("tdp") or (lim["plugged_max"] if plugged else lim["battery_max"])
-            self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), lim["min"], int(ceiling), plugged)
+            # the picked limit (profile or slider) is autotune's ceiling; its floor is the model minimum or the user's
+            lo, hi = hw.tdp_range(self.hw.model, plugged)
+            ceiling = result["applied"].get("tdp") or hi
+            floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
+            self.autotune.start(appid, int(prof["target_fps"]), prof.get("learned"), floor, int(ceiling), plugged)
             result["autotune"] = "started"
         return result
 

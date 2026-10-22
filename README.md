@@ -36,16 +36,17 @@ right MSI button) on the MSI Claw running [Bazzite](https://bazzite.gg). It does
 Quick Access do **not** already do:
 
 - **XeSS on the XMX cores, with XeLL.** Installs the [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)
-  driver in one tap, so games with XeSS get the same full-quality upscaling and 2–4x frame generation as on
-  Windows. Per game it shows whether the driver loads and what XeLL (Intel's latency reduction) is doing, and lets
+  driver in one tap; from then every game's XeSS (or OptiScaler's) gets the same full-quality upscaling and 2–4x
+  frame generation as on Windows, and Per-game turns it off for one game if it misbehaves. Per game it shows whether the driver loads and what XeLL (Intel's latency reduction) is doing, and lets
   you turn XeLL's driver mode on through [our fork](https://github.com/IHulkSmashI/xess-xmx-linux) once it ships.
 - **VRR fix 30–120 Hz.** The Claw's screen can run VRR from 30 Hz, but tells the system 48, so games below 48 fps
   judder. One tap installs ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
 - **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode. One tap
   gives InputPlumber the right map for the EX: left = Steam menu, right = Quick Access.
-- **Power profiles and Autotune.** Battery 12 W, Balanced 17 W, Performance 25 W, Dock 35 W, set directly through
-  the chip's own limit (Steam's slider may do nothing on the Claw 8 EX), with the value read back after every
-  change. Autotune holds your target fps with the least power under that profile and balances CPU and graphics.
+- **Power profiles, a real TDP slider and Autotune.** Six profiles from Battery saver 10 W to Max 35 W and a slider
+  over the chip's whole 8–35 W range, set through the chip's own limit (Steam's TDP slider does nothing on the Claw
+  8 EX), read back after every change. Autotune holds your target fps with the least power under that limit and
+  fixes what is short first: the GPU clock floor when graphics hold the game back, CPU boost when the CPU does.
 - **Every change reads back.** Each control shows what the hardware reports after the write; a failed write is red
   text with the reason, never a silent "applied".
 
@@ -72,17 +73,21 @@ with the longer explanations. Every explanation sits under its control, so the D
 ### Power
 | Control | What it does |
 |---|---|
-| **Profile** | Battery 12 W, Balanced 17 W, Performance 25 W or Dock 35 W (the full name and what it's for is under the control). The profile is the most power the game may use. Under it, after every change: **"RAPL reads 17 W / 24 W"**, the limits the hardware reports. |
-| **Autotune** | Green when it runs, red when off. Holds the target fps for the running game with the least power, never more than the profile, and moves power between CPU and graphics to where the game needs it. The line under it says what it is doing: target fps, current watts, last adjustment. |
+| **Profile** | Battery saver 10 W, Battery 12 W, Balanced 17 W, Performance 25 W, Plugged 30 W or Max 35 W (what each is for, and what it costs, is under the control). The most power the game may use. |
+| **TDP slider** | The same limit, anywhere from 8 to 35 W in 1 W steps. Moving it makes a *Custom* profile; picking a profile moves it. Under it, after every change: **"RAPL reads 17 W / 24 W"**, the limits the hardware reports. Why ClawDeck sets TDP at all: Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip). |
+| **Autotune** | Holds the target fps for the running game with the least power, between its floor (8 W) and the slider. When the game is short it fixes the bottleneck first: GPU-bound → a higher GPU clock floor; CPU-bound → CPU boost on and the CPU ceiling back to 100 %; only then more watts. On target it lowers the watts first. The status line says "Autotune on: 8–25 W, now 19 W, target 60 fps, last change −1 W 12 s ago", and under it what holds the game back and the last action ("GPU-bound · 52/60 fps · raised GPU floor to 1300 MHz"). |
+| **Advanced** | Folded away: CPU boost, CPU ceiling %, GPU floor and ceiling MHz, CPU energy mode, and Autotune's floor. Steam has none of these for this chip. Each shows what the hardware reads; a change here pauses Autotune for the game. |
 
-**The four profiles** (Claw 8 EX values; other Claws are capped at their own maximum):
+**The six profiles** (Claw 8 EX values; other Claws are capped at their own maximum):
 
 | Profile | Power limit | CPU | Use it for |
 |---|---|---|---|
-| **Battery** | 12 W | up to 70 %, energy-saving mode | Indie, older and lighter games, long trips. Longest play time. |
+| **Battery saver** | 10 W | up to 60 %, most-battery mode | 2D, indie and old games. Longest play time. |
+| **Battery** | 12 W | up to 70 %, energy-saving mode | Light games, long trips. |
 | **Balanced** | 17 W | up to 85 %, energy-saving mode | Newer, heavier games when you're not near a charger. |
 | **Performance** | 25 W | full speed, balanced mode | Plugged in, playing handheld. |
-| **Dock** | 35 W, boost to 45 W | full speed, performance mode | On a dock with a TV. Fans get audible. |
+| **Plugged** | 30 W | full speed, balanced mode | Heavy games on the charger. Warm. |
+| **Max** | 35 W, boost to 45 W | full speed, performance mode | On a dock with a TV. Fans get audible. |
 
 Why so low on battery? The Claw's Intel chip gets most of its frames by about 12–17 W; above that, each extra watt
 buys few frames and a lot of battery. For a frame limit, use Steam's own and set Autotune's target to the same

@@ -11,7 +11,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | 1 | **XeSS XMX + XeLL** from the fork (PRs #23/#24) | done: fork-first install with upstream fallback and a note; Setup shows version, driver mode and source; Per-game shows XeSS on/off, XeLL driver / cross-vendor / off per launch | the fork has no release yet (below); a game with XeSS frame generation to confirm the XeLL log markers |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
 | 3 | ~~OptiScaler injection per game~~ | dropped 2026-10-22: Bazzite ships Decky Framegen (OptiScaler) and decky-lsfg-vk in the Portal | nothing |
-| 4 | **Power + autotune** | done: profile dropdown + Autotune switch, read-back line, debounced | pick profiles fast: the toast and the line show the last pick only |
+| 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune acts on the bottleneck (§18); Advanced expander (§19) | see Needs the maintainer → Power |
 
 ## Done (code, tests)
 
@@ -21,7 +21,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Revertible sysfs + dry run | `sysfs.py` | Setup → Dry run | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
-| Autotune | `autotune.py` | Power | profile = ceiling; 10 s window; CPU/GPU balance; `last_action` for the status line |
+| Autotune | `autotune.py` | Power | slider/profile = ceiling, model min or user floor; 10 s window; GPU-bound → GPU floor, CPU-bound → boost + ceiling, then watts; on target → watts first |
 | XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
@@ -44,6 +44,16 @@ fixed the same day: backend not root (§13), MSI firmware TDP attributes ignored
 The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
+
+- **Power (§17–§19), on the Claw:** move the TDP slider: the profile turns Custom and "RAPL reads N W" follows; pick
+  Max 35 W and check whether PL1 above the chip's `max_power_uw` (25 W) takes effect (busy loop or
+  `tools/power-profile.sh`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound and the GPU
+  floor should climb before the watts; in a CPU-heavy one (Dragon's Dogma 2 town), CPU boost / ceiling first. Open
+  Advanced, change CPU boost, the CPU ceiling, both GPU clocks and the energy mode: each toast reads back, and
+  Autotune shows "paused".
+- **XeSS XMX default:** after Install XeSS XMX and one log-out, Per-game should say "XeSS on XMX (default)" for any
+  game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
+  driver"; the game's XeSS then runs as DP4a.
 
 - **Publish a release on the fork** (IHulkSmashI/xess-xmx-linux) so the installer can deliver XeLL driver mode: merge
   `xell-driver-mode-probe` (5 commits, PR #23) and `review-fixes` (PR #24) into one branch, build the binaries

@@ -54,6 +54,7 @@ def test_launch_env_compose_and_write(tmp_path):
     off = launchenv.compose({"xmx": False})
     assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
     assert launchenv.compose({"xmx": True, "xell": False}) == {}
+    assert launchenv.compose({}) == {}            # a game nobody touched: the session's driver, i.e. XMX on (the default)
     r = launchenv.write(str(tmp_path), "1234", {"xell": True})
     assert open(r["path"]).read().splitlines()[1] == "IGDEXT_TRACE=1"
     assert launchenv.write(str(tmp_path), "1234", {"xell": False})["path"] is None
