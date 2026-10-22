@@ -8,12 +8,11 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
 - **Battery first.** No timers unless autotune is on for a running game or a benchmark is recording; then one
   asyncio task at 1 Hz. Budget: under 0.5 % CPU and under 30 MB RSS over a 2-hour run, flat RSS over a 4-hour soak
   (`tools/soak.py`), measured before every release.
-- **Fail safe.** Every sysfs write goes through `clawdeck.sysfs.write`, so it is recorded, revertible and dry-run
-  aware. A failed write reverts. Everything reverts when the game closes. Nothing persists across reboot except the
+- **Fail safe.** Every sysfs write goes through `clawdeck.sysfs.write`, so it is recorded and revertible. A failed
+  write reverts. Everything reverts when the game closes. Nothing persists across reboot except the
   charge limit and, when the user turns them on, the 30–120 Hz VRR range (an EDID override with its own Undo) and
   the Claw 8 EX face-button override for InputPlumber (kept on uninstall, so the buttons keep working; the health
   check says when InputPlumber's own config makes it unnecessary).
-- **Dry run.** `CLAWDECK_DRY_RUN=1` or the Setup toggle logs what would be written (sysfs and Handheld Daemon).
 - **No duplication, no fights.** Buttons and gyro: InputPlumber or Handheld Daemon, whichever the system runs, never
   both. TDP: Handheld Daemon when present, else the MSI firmware limits Steam's slider also uses. Clock paths:
   PowerControl's discovery. XeSS: xess-xmx-linux. Fix things upstream and call them from here. Another plugin that
@@ -32,13 +31,13 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
     python3 -m pytest -q tests       # the backend, against a fake sysfs tree
     pnpm preview                     # the panel in a browser with example data: preview/dist/ClawDeck-preview.html
 
-Tools in `tools/`:
+Tools in `tools/`. The release zip carries only the three the plugin runs (`clawdeck-launch.sh`, `selftest.py`,
+`sysfs-survey.sh`) and `assets/versions.json`; the rest are for development.
 
 | Tool | What it's for |
 |---|---|
 | `clawdeck-launch.sh` | The per-game launch wrapper (MangoHud frame times for autotune, XeSS XMX / XeLL environment). |
 | `sysfs-survey.sh` | Read-only survey of a new machine: what the kernel exposes, which services run. |
-| `power-profile.sh` | Battery / performance / dock profiles from a terminal, without the plugin (`--dry-run`). |
 | `soak.py` | CPU %, peak memory and memory growth of the backend against the budget above. |
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |

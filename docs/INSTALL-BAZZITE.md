@@ -83,8 +83,3 @@ Games with kernel-level anti-cheat (most competitive shooters) don't run on Linu
 [Are We Anti-Cheat Yet?](https://areweanticheatyet.com) lists them. In some games, the frame rate is a few percent
 lower than with Intel's Windows driver.
 
-## For testers: power profiles from a terminal
-
-Without the plugin, from the unpacked ClawDeck folder in Konsole: `sudo tools/power-profile.sh battery` (or
-`performance`, `dock`, `reset`; `status` shows what's set; add `--dry-run` to only show what it would change).
-Nothing survives a restart.

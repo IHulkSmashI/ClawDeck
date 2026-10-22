@@ -1,11 +1,9 @@
-"""Safe access to sysfs: every write is remembered so it can be reverted, and a global dry-run mode prints instead of
-writing. Nothing here persists across reboots; sysfs resets at boot, and so does this module's memory.
+"""Safe access to sysfs: every write is remembered so it can be reverted. Nothing here persists across reboots; sysfs resets at boot, and so does this module's memory.
 
 Rules (from the project's engineering requirements):
 - every write goes through write(): it records the previous value the first time a path is touched;
 - revert_all() restores every touched path to the value it had before ClawDeck touched it (the firmware default
   if nothing else changed it) - called on plugin unload and after any write error;
-- dry_run=True (CLAWDECK_DRY_RUN=1 or set_dry_run) logs the write and does nothing;
 - files are opened in 'with' blocks and closed immediately; no handles are kept open.
 """
 from __future__ import annotations
@@ -18,7 +16,6 @@ log = logging.getLogger("clawdeck.sysfs")
 
 _lock = threading.Lock()
 _originals: dict[str, str | None] = {}   # path -> value before our first write (None: could not read)
-_dry_run = os.environ.get("CLAWDECK_DRY_RUN", "0") not in ("", "0")
 _last_error: str | None = None   # the most recent failed write or revert, for the UI ("Permission denied: ...")
 
 
@@ -29,15 +26,6 @@ def last_error() -> str | None:
 def clear_error() -> None:
     global _last_error
     _last_error = None
-
-
-def set_dry_run(on: bool) -> None:
-    global _dry_run
-    _dry_run = on
-
-
-def dry_run() -> bool:
-    return _dry_run
 
 
 def exists(path: str) -> bool:
@@ -64,7 +52,7 @@ def read_int(path: str, default: int | None = None) -> int | None:
 
 
 def write(path: str, value: str | int, persist: bool = False) -> bool:
-    """Write value to path. Remembers the original value for revert. Returns True on success (or in dry-run).
+    """Write value to path. Remembers the original value for revert. Returns True on success.
     persist=True is for the one setting that must survive revert_all (the charge limit): it is not recorded, so
     closing a game or reverting power never undoes it."""
     value = str(value)
@@ -73,9 +61,6 @@ def write(path: str, value: str | int, persist: bool = False) -> bool:
             _originals.pop(path, None)
         elif path not in _originals:
             _originals[path] = read(path)
-    if _dry_run:
-        log.info("dry-run: would write %r to %s (was %r)", value, path, _originals.get(path))
-        return True
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(value + "\n")
@@ -90,10 +75,6 @@ def write(path: str, value: str | int, persist: bool = False) -> bool:
 def revert(path: str) -> bool:
     with _lock:
         orig = _originals.get(path)
-        if _dry_run:
-            # keep the record: the real write it would undo may have happened before dry-run was switched on
-            log.info("dry-run: would revert %s to %r", path, orig)
-            return True
         _originals.pop(path, None)
     if orig is None:
         return True

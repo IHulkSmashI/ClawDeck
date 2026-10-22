@@ -28,8 +28,11 @@ jobs:
       - run: pnpm build
       - name: package (Decky zip layout)
         run: |
-          mkdir -p out/ClawDeck
-          cp -r dist plugin.json package.json main.py py_modules tools assets LICENSE README.md out/ClawDeck/
+          # only what runs on the Claw: dev tools, the preview and the image sources stay in the repository
+          mkdir -p out/ClawDeck/tools out/ClawDeck/assets
+          cp -r dist plugin.json package.json main.py py_modules LICENSE README.md out/ClawDeck/
+          cp tools/clawdeck-launch.sh tools/selftest.py tools/sysfs-survey.sh out/ClawDeck/tools/
+          cp assets/versions.json out/ClawDeck/assets/
           rm -rf out/ClawDeck/py_modules/clawdeck/__pycache__
           (cd out && zip -qr ../ClawDeck.zip ClawDeck)
       - uses: actions/upload-artifact@v7
