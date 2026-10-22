@@ -4,15 +4,12 @@ PowerStation (org.shadowblip.PowerStation): GpuBusyPercent on /org/shadowblip/Pe
 org.shadowblip.GPU.Card (PowerStation src/performance/gpu/dbus/gpu.rs). The xe driver has no gpu_busy_percent file,
 so this is the only GPU load figure on the Claw 8 EX.
 
-InputPlumber (org.shadowblip.InputPlumber): one /org/shadowblip/InputPlumber/CompositeDevice<N> per controller, with
-Name and ProfileName on org.shadowblip.Input.CompositeDevice (InputPlumber src/dbus/interface/composite_device.rs).
 
 Through `busctl`, as PowerControl does: no D-Bus library is bundled with Decky's Python. Nothing here writes.
 """
 from __future__ import annotations
 
 import logging
-import re
 import shutil
 import subprocess
 
@@ -21,9 +18,6 @@ log = logging.getLogger("clawdeck.shadowblip")
 POWERSTATION = "org.shadowblip.PowerStation"
 GPU_PATH = "/org/shadowblip/Performance/GPU/card0"
 GPU_IFACE = "org.shadowblip.GPU.Card"
-INPUTPLUMBER = "org.shadowblip.InputPlumber"
-COMPOSITE_IFACE = "org.shadowblip.Input.CompositeDevice"
-COMPOSITE_RE = re.compile(r"^/org/shadowblip/InputPlumber/CompositeDevice\d+$")
 
 
 def _busctl(*args: str) -> str | None:
@@ -65,16 +59,3 @@ def get(service: str, path: str, iface: str, prop: str):
 def gpu_busy_percent() -> int | None:
     v = get(POWERSTATION, GPU_PATH, GPU_IFACE, "GpuBusyPercent")
     return v if isinstance(v, int) and 0 <= v <= 100 else None
-
-
-def composite_devices() -> list[dict]:
-    """InputPlumber's controllers: [{path, name, profile}]. Empty when InputPlumber isn't running."""
-    tree = _busctl("--list", "tree", INPUTPLUMBER)
-    if not tree:
-        return []
-    out = []
-    for path in (ln.strip() for ln in tree.splitlines()):
-        if COMPOSITE_RE.match(path):
-            out.append({"path": path, "name": get(INPUTPLUMBER, path, COMPOSITE_IFACE, "Name"),
-                        "profile": get(INPUTPLUMBER, path, COMPOSITE_IFACE, "ProfileName")})
-    return out

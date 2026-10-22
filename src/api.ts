@@ -47,19 +47,19 @@ export const resumed = callable<[], any>("resumed");
 export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 
 // ---- per game ------------------------------------------------------------------------------------------------------
-export type Launch = { mesa?: string; xmx?: boolean; xell?: boolean };
+export type Launch = { xmx?: boolean; xell?: boolean };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
   default_driver: string | null; status: { state: string; line: string | null; mode?: string }; xell_capable: boolean; official_proton: string[] };
 export type XellState = { mode: "driver" | "cross-vendor" | "none" | "off"; shim: boolean; detail: string };
-export type GameStatus = { launch: Launch; xess: XessState; xell: XellState; wrapper: string };
+export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
+export type GameStatus = { launch: Launch; xess: XessState; xell: XellState; optiscaler: OptiScalerIn; wrapper: string };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------
 export const xessState = callable<[], XessState>("xess_state");
 export const xessInstall = callable<[allowUnpinned: boolean], Fix & { tag?: string; repo?: string }>("xess_install");
-export const xessProbe = callable<[], Fix & { state?: XessState }>("xess_probe");
 
 // ---- fixes -----------------------------------------------------------------------------------------------------------
 export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;

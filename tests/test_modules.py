@@ -20,43 +20,10 @@ def _w(path, value):
         f.write(f"{value}\n")
 
 
-# a cut-down copy of what HHD's /api/v1/settings returns for a Claw (structure from hhd/device/claw/controllers.yml,
-# hhd/plugins/rgb/settings.yml, adjustor/drivers/msi/settings.yml)
-SCHEMA = {
-    "controllers": {"claw": {"type": "container", "children": {
-        "controller_mode": {"type": "mode", "title": "Emulation Mode", "default": "dualsense", "modes": {
-            "dualsense": {"type": "container", "title": "Dualsense", "children": {
-                "gyro": {"type": "bool", "title": "Gyro", "default": True},
-                "gyro_scaling": {"type": "int", "title": "Gyro scale", "min": 1, "max": 100, "default": 40}}},
-            "xbox": {"type": "container", "title": "Xbox", "children": {}},
-        }},
-        "swap_guide": {"type": "bool", "title": "Swap guide", "default": False},
-        "main_chords": {"type": "multiple", "title": "Chords", "options": {"disabled": "Off", "qam": "QAM"},
-                        "default": "disabled", "tags": ["advanced"]},
-        "hidden": {"type": "bool", "title": "x", "tags": ["hide"]},
-        "note": {"type": "display", "title": "info"},
-    }}},
-    "rgb": {"handheld": {"type": "container", "children": {
-        "mode": {"type": "mode", "title": "RGB Mode", "modes": {
-            "disabled": {"type": "container", "title": "Off"},
-            "solid": {"type": "container", "title": "Solid", "children": {
-                "hue": {"type": "int", "min": 0, "max": 359, "title": "Hue"}}}}}}}},
-    "tdp": {"msi": {"type": "container", "children": {
-        "fan": {"type": "mode", "title": "Custom Fan Curve", "default": "disabled", "modes": {
-            "disabled": {"type": "container", "title": "Disabled"},
-            "manual": {"type": "container", "title": "Manual", "children": {
-                "st0": {"type": "int", "title": "40C", "min": 0, "max": 100, "step": 2},
-                "st50": {"type": "int", "title": "50C", "min": 0, "max": 100, "step": 2},
-                "st88": {"type": "int", "title": "90C", "min": 0, "max": 100, "step": 2},
-                "reset": {"type": "action", "title": "Restore"}}}}}}}},
-}
-
-
 class FakeHHD:
     def __init__(self, monkeypatch, state=None):
         self.state = dict(state or {})
         self.posts = []
-        monkeypatch.setattr(hhd, "get_settings", lambda: SCHEMA)
         monkeypatch.setattr(hhd, "get_state", lambda flat=True: dict(self.state))
         monkeypatch.setattr(hhd, "available", lambda: True)
 
@@ -81,38 +48,9 @@ def _hardware(paths=None, product="MS-1T91"):
                        gpu_driver="xe", paths=paths or hw.Paths())
 
 
-# ---- HHD schema ------------------------------------------------------------------------------------------------------
-def test_describe_flattens_modes_and_skips_non_settings():
-    d = {x["key"]: x for x in hhd.describe(SCHEMA)}
-    assert d["controllers.claw.controller_mode.mode"]["options"][0]["value"] == "dualsense"
-    assert d["controllers.claw.controller_mode.dualsense.gyro"]["mode_of"] == {
-        "key": "controllers.claw.controller_mode.mode", "mode": "dualsense"}
-    assert d["tdp.msi.fan.manual.st50"]["max"] == 100
-    assert "controllers.claw.note" not in d and "tdp.msi.fan.manual.reset" not in d
-
-
-def test_validate():
-    d = {x["key"]: x for x in hhd.describe(SCHEMA)}
-    assert hhd.validate(d["controllers.claw.swap_guide"], 1) is True
-    assert hhd.validate(d["rgb.handheld.mode.solid.hue"], "120") == 120
-    with pytest.raises(ValueError):
-        hhd.validate(d["rgb.handheld.mode.solid.hue"], 400)
-    with pytest.raises(ValueError):
-        hhd.validate(d["rgb.handheld.mode.mode"], "disco")
-
-
-def test_hhd_set_values_dry_run_sends_nothing(monkeypatch):
-    sent = []
-    monkeypatch.setattr(hhd, "_request", lambda m, u, b=None: sent.append((m, u, b)) or {"a": {"b": 1}})
-    sysfs.set_dry_run(True)
-    st = hhd.set_values({"a.b": 2})
-    assert st["a.b"] == 2 and all(m == "GET" for m, _, _ in sent)
-
-
 # ---- launch environment -----------------------------------------------------------------------------------------------
 def test_launch_env_compose_and_write(tmp_path):
-    env = launchenv.compose({"mesa": "26.1", "xell": True})
-    assert env == {"MESA": "26.1", **xess.XELL_ENV}
+    assert launchenv.compose({"xell": True}) == xess.XELL_ENV
     off = launchenv.compose({"xmx": False})
     assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
     assert launchenv.compose({"xmx": True, "xell": False}) == {}
@@ -122,28 +60,25 @@ def test_launch_env_compose_and_write(tmp_path):
     assert not os.path.exists(os.path.join(tmp_path, "launch", "1234.env"))
     with pytest.raises(ValueError):
         launchenv.write(str(tmp_path), "../x", {"xell": True})
-    with pytest.raises(ValueError):
-        launchenv.compose({"mesa": "1; rm -rf"})
 
 
 def test_launch_wrapper_reads_env_file(tmp_path):
     import subprocess
     (tmp_path / "launch").mkdir()
-    (tmp_path / "launch" / "42.env").write_text("# c\nWINEDLLOVERRIDES=dxgi=n,b\nMESA=26.1\n")
+    (tmp_path / "launch" / "42.env").write_text("# c\nWINEDLLOVERRIDES=dxgi=n,b\nIGDEXT_TRACE=1\n")
     out = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], capture_output=True, text=True,
                          env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path),
                               "SteamAppId": "42", "WINEDLLOVERRIDES": "foo=n", "CLAWDECK_NO_MANGOHUD": "1"}).stdout
-    assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "MESA=26.1" in out   # the user's own overrides are kept
+    assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "IGDEXT_TRACE=1" in out   # the user's own overrides are kept
 
 
-def test_profiles_launch_slot_and_export(tmp_path):
+def test_profiles_launch_slot(tmp_path):
     p = profiles.Profiles(str(tmp_path / "p.json"))
-    p.set_launch("7", {"mesa": "26.1", "xell": True})
+    p.set_launch("7", {"xmx": False, "xell": True})
     p.set_launch("7", {"xell": None})
-    assert p.get_launch("7") == {"mesa": "26.1"}
-    q = profiles.Profiles(str(tmp_path / "q.json"))
-    q.import_json(p.export_json("7"))
-    assert q.get_launch("7") == {"mesa": "26.1"} and q.games() == ["7"]
+    assert p.get_launch("7") == {"xmx": False}
+    q = profiles.Profiles(str(tmp_path / "p.json"))
+    assert q.get_launch("7") == {"xmx": False} and q.games() == ["7"]
 
 
 # ---- xess ------------------------------------------------------------------------------------------------------------
@@ -161,8 +96,6 @@ def test_xess_state_from_package_layout(tmp_path):
     assert st["drivers"] == ["26.1.2", "26.3.0-rc1"] and st["status"]["state"] == "ok"
     assert xess.parse_status("FAILED 2026 x: no device")["state"] == "failed"
     assert not xess.state(str(tmp_path / "nobody"))["installed"]
-    with pytest.raises(ValueError):
-        xess.switch_driver(str(home), "26.1; reboot")
 
 
 def test_xess_install_dry_run(tmp_path):
@@ -414,3 +347,18 @@ def test_launch_wrapper_rotates_xell_logs_for_one_launch(tmp_path):
                    env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "7",
                         "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"})
     assert not (pfx / "igdext_trace.log").exists() and (pfx / "igdext_trace.log.prev").read_text().strip() == "old"
+
+
+def test_optiscaler_from_decky_framegen_is_seen_read_only(tmp_path):
+    home = tmp_path
+    steam = home / xess.STEAM
+    _w(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1"\n {{\n  "path"  "{tmp_path}/sd"\n }}\n}}')
+    _w(home / "sd/steamapps/appmanifest_2054970.acf", '"AppState"\n{\n\t"appid"\t\t"2054970"\n\t"installdir"\t\t"Dragons Dogma 2"\n}')
+    game = home / "sd/steamapps/common/Dragons Dogma 2"
+    game.mkdir(parents=True)
+    assert xess.optiscaler_in(str(home), "2054970") == {"present": False, "dir": str(game)}
+    _w(game / "OptiScaler.ini", "[FrameGen]\nFGOutput=xefg\n")
+    _w(game / "OptiScaler.log", "OptiScaler v0.9.4-final loaded")
+    r = xess.optiscaler_in(str(home), "2054970")
+    assert r["present"] and r["version"] == "v0.9.4-final" and r["xess_fg"]
+    assert xess.optiscaler_in(str(home), "1")["present"] is False and xess.steam_install_dir(str(home), "../x") is None

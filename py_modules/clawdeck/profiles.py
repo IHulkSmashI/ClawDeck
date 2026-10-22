@@ -5,7 +5,7 @@ A profile is a dict of overrides on top of a base profile name:
    "target_fps": 60, "autotune": true, "learned": {...}}
 Keys are Steam app ids as strings; "default" is the fallback. Two slots per game: "battery" and "plugged", so the
 right one follows the power source automatically. A third, game-wide key "launch" holds what goes into the game's
-environment (launchenv.py): XeSS XMX on/off, XeLL driver mode, Mesa driver choice.
+environment (launchenv.py): XeSS XMX on/off, XeLL driver mode.
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ class Profiles:
         return self.get(appid, plugged)
 
     def get_launch(self, appid: str | int) -> dict:
-        """Game-wide launch settings (XeSS XMX, XeLL, Mesa choice): the same plugged in or on battery."""
+        """Game-wide launch settings (XeSS XMX, XeLL): the same plugged in or on battery."""
         return dict(self.data["games"].get(str(appid), {}).get("launch", {}))
 
     def set_launch(self, appid: str | int, values: dict) -> dict:
@@ -91,23 +91,3 @@ class Profiles:
         self.data["games"].pop(str(appid), None)
         self.save()
 
-    def export_json(self, appid: str | int | None = None) -> str:
-        if appid is None:
-            return json.dumps(self.data, indent=2, sort_keys=True)
-        return json.dumps({"version": FORMAT_VERSION, "games": {str(appid): self.data["games"].get(str(appid), {})}},
-                          indent=2, sort_keys=True)
-
-    def import_json(self, text: str, overwrite: bool = False) -> int:
-        d = json.loads(text)
-        if not isinstance(d, dict) or d.get("version") != FORMAT_VERSION:
-            raise ValueError("not a ClawDeck profile file")
-        n = 0
-        for appid, g in d.get("games", {}).items():
-            if not isinstance(g, dict):
-                continue
-            if overwrite or appid not in self.data["games"]:
-                self.data["games"][appid] = g
-                n += 1
-        if n:
-            self.save()
-        return n

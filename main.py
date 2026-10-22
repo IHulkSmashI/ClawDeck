@@ -335,7 +335,7 @@ class Plugin:
         return {"battery": self.profiles.get(appid, False), "plugged": self.profiles.get(appid, True),
                 "launch": self.profiles.get_launch(appid)}
 
-    # ---- per-game launch environment (XeSS XMX, XeLL, Mesa) --------------------------------------------------------
+    # ---- per-game launch environment (XeSS XMX, XeLL) --------------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:
         try:
             return launchenv.write(RUNTIME_DIR, appid, self.profiles.get_launch(appid))
@@ -351,7 +351,7 @@ class Plugin:
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
-        allowed = {"mesa", "xmx", "xell"}
+        allowed = {"xmx", "xell"}
         clean = {k: v for k, v in values.items() if k in allowed}
         try:   # a value the launch wrapper can't use must be refused here, not break get_launch later
             launchenv.compose({**self.profiles.get_launch(appid), **clean})
@@ -363,8 +363,9 @@ class Plugin:
     async def game_status(self, appid: str) -> dict:
         """The Per-game panel in one call: the XeSS driver and what XeLL did in this game's last launch."""
         launch = self.profiles.get_launch(appid)
-        xs, xl = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))))
-        return {"launch": launch, "xess": xs, "xell": xl, "wrapper": WRAPPER + " %command%"}
+        xs, xl, op = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))),
+                                          self._bg(xess.optiscaler_in, HOME, appid))
+        return {"launch": launch, "xess": xs, "xell": xl, "optiscaler": op, "wrapper": WRAPPER + " %command%"}
 
     # ---- what changed since last start --------------------------------------------------------------------------
     async def get_changes(self) -> dict:
@@ -390,9 +391,6 @@ class Plugin:
         if not r.get("ok"):
             decky.logger.warning("XeSS XMX install failed: %s", r.get("error"))
         return r
-
-    async def xess_probe(self) -> dict:
-        return await self._bg(xess.probe, HOME)
 
     async def xess_uninstall(self) -> dict:
         self._health = None

@@ -27,8 +27,9 @@ py_modules/clawdeck/
    battery.py   plugged detection only (profiles differ on battery / charger)
    profiles.py  per-game JSON: base profile, target fps, what autotune learned, launch settings
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
-   xess.py      xess-xmx-linux: fork-first install with upstream fallback, state, per-game XeLL mode from the shim's logs
-   launchenv.py per-game <runtime>/launch/<appid>.env: XeSS XMX off, XeLL driver mode, MESA= (read by the wrapper)
+   xess.py      xess-xmx-linux: fork-first install (asset sha256 checked) with upstream fallback, state, per-game XeLL
+                mode from the shim's logs, OptiScaler-present detection (read-only)
+   launchenv.py per-game <runtime>/launch/<appid>.env: XeSS XMX off, XeLL driver mode (read by the wrapper)
    edid.py      ClawLab's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
    buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91
    health.py    checks + one-line summary + the bug report
@@ -42,7 +43,7 @@ tools/
    clawdeck-launch.sh   %command% wrapper: MangoHud log for autotune + per-game env file + XeLL log rotation
    selftest.py          every control written, read back, measured, reverted (Setup → Run self-test)
    sysfs-survey.sh      read-only survey for a new model;  power-profile.sh  profiles from a terminal
-   suspend-cycle.sh, soak.py   device tests the maintainer runs
+   soak.py              CPU % / RSS of the backend against the battery budget (maintainer)
 ```
 
 ## The four panels
@@ -53,7 +54,9 @@ tools/
   the list never shows a stale value.
 - **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
   for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` / `igdext_xell.log` in
-  the prefix, rotated per launch by the wrapper). DLSS/FSR games point at Bazzite's Decky Framegen.
+  the prefix, rotated per launch by the wrapper), and a line saying whether OptiScaler (Bazzite's Decky Framegen) is
+  in the game: its bundled XeSS runs on XMX through the same shim, so the two compose without ClawDeck injecting
+  anything.
 - **Fixes**: VRR fix install / remove, face-button fix install / remove, the health check in one line (the full list
   on the page).
 - **Setup**: install / update XeSS XMX, run the self-test (PASS/FAIL), Dry run, export the log.

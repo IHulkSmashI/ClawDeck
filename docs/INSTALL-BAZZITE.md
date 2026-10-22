@@ -87,5 +87,4 @@ lower than with Intel's Windows driver.
 
 Without the plugin, from the unpacked ClawDeck folder in Konsole: `sudo tools/power-profile.sh battery` (or
 `performance`, `dock`, `reset`; `status` shows what's set; add `--dry-run` to only show what it would change).
-Nothing survives a restart. To test sleep, run `sudo ~/homebrew/plugins/ClawDeck/tools/suspend-cycle.sh 20` and
-attach `~/clawdeck-suspend.csv` to an issue.
+Nothing survives a restart.

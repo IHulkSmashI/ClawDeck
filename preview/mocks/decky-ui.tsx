@@ -108,34 +108,11 @@ export const DropdownItem: FC<{ label: ReactNode; description?: ReactNode; rgOpt
     );
   };
 
-export const TextField: FC<{ label?: ReactNode; value?: string; onChange?: (e: any) => void; disabled?: boolean }> =
-  ({ label, value, onChange, disabled }) => {
-    const id = useId();
-    return (
-      <div className={`qam-field${disabled ? " is-disabled" : ""}`}>
-        {label && <label className="qam-label" htmlFor={id}>{label}</label>}
-        <input id={id} className="qam-text" type="text" value={value ?? ""} disabled={disabled} onChange={onChange} />
-      </div>
-    );
-  };
-
 export const ButtonItem: FC<{ layout?: string; description?: ReactNode; disabled?: boolean; onClick?: () => void; children?: ReactNode }> =
   ({ description, disabled, onClick, children }) => (
     <div className="qam-field">
       <button type="button" className="qam-button" disabled={disabled} onClick={onClick}>{children}</button>
       <Desc d={description} />
-    </div>
-  );
-
-export const Tabs: FC<{ activeTab: string; onShowTab: (id: string) => void; tabs: { id: string; title: string; content: ReactNode }[]; autoFocusContents?: boolean }> =
-  ({ activeTab, onShowTab, tabs }) => (
-    <div className="qam-tabs">
-      <div className="qam-tabstrip" role="tablist">
-        {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={t.id === activeTab} className="qam-tab" onClick={() => onShowTab(t.id)}>{t.title}</button>
-        ))}
-      </div>
-      <div className="qam-tabpanel" role="tabpanel">{tabs.find((t) => t.id === activeTab)?.content}</div>
     </div>
   );
 

@@ -183,13 +183,6 @@ class Power:
     def epp(self) -> str | None:
         return sysfs.read(self.p.cpu_epp[0]) if self.p.cpu_epp else None
 
-    def set_cpu_turbo(self, on: bool) -> bool:
-        if self.p.cpu_no_turbo:
-            return sysfs.write(self.p.cpu_no_turbo, 0 if on else 1)
-        if self.p.cpu_boost:
-            return sysfs.write(self.p.cpu_boost, 1 if on else 0)
-        return False
-
     def set_gpu_window(self, min_mhz: int | None, max_mhz: int | None) -> bool:
         """GPU clock floor and ceiling. Order matters: when raising, max first; when lowering, min first, so that
         min <= max holds at every step (the kernel rejects a floor above the ceiling)."""

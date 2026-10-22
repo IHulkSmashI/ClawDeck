@@ -112,9 +112,8 @@ def canaries() -> list[tuple[str, bool, str]]:
 
     def hhd_keys():
         msi = raw("hhd-dev/hhd", "src/adjustor/drivers/msi/settings.yml")
-        bat = raw("hhd-dev/hhd", "src/adjustor/drivers/battery/battery.yml")
-        ok = all(k in msi for k in ("custom:", "st0:", "st88:", "fan:")) and all(k in bat for k in ("charge_limit:", "p80:"))
-        return ok, "tdp.msi.*, fan points, charge_limit present" if ok else "a key ClawDeck uses is gone"
+        ok = all(k in msi for k in ("custom:", "tdp:", "boost:"))
+        return ok, "tdp.msi.tdp.custom keys present" if ok else "a key ClawDeck uses is gone"
     check("Handheld Daemon keys ClawDeck uses", hhd_keys)
 
     def bazzite():

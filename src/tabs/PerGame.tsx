@@ -60,9 +60,13 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
           detail={xell?.detail} />
         <Problem error={err} />
       </PanelSectionRow>
-      {!quick && (
+      {(gs?.optiscaler.present || !quick) && (
         <PanelSectionRow>
-          <Note label="DLSS or FSR game? Use Bazzite's own plugins">Decky Framegen (OptiScaler) turns a game's DLSS/FSR into XeSS, which then runs on the XMX cores with the driver above; decky-lsfg-vk is Lossless Scaling for games with no upscaler. Both are in the Bazzite Portal.</Note>
+          <Status ok={gs?.optiscaler.present ? (xmxOn && xessOk ? true : null) : null}
+            label={gs?.optiscaler.present ? `OptiScaler ${gs.optiscaler.version ?? ""} in this game${xmxOn && xessOk ? ": its XeSS runs on XMX" : ""}` : "No OptiScaler in this game"}
+            detail={gs?.optiscaler.present
+              ? (gs.optiscaler.xess_fg ? "XeSS frame generation is its output (FGOutput=xefg), so the generated frames run on XMX too." : "In OptiScaler's overlay (Insert) pick XeSS as the upscaler and XeFG as the frame-generation output; otherwise it falls back to FSR, which never touches XMX.")
+              : "DLSS or FSR game? Bazzite's Decky Framegen (Portal) puts OptiScaler in; its XeSS then runs on XMX through the driver above. No upscaler at all? Bazzite's decky-lsfg-vk."} />
         </PanelSectionRow>
       )}
       {!quick && <LaunchWrapper appid={app.appid} name={app.name} />}

@@ -1,7 +1,7 @@
 {
   "name": "clawdeck",
   "version": "0.1.0",
-  "description": "ClawDeck - the MSI Claw on Bazzite / SteamOS: power, autotune, XeSS XMX, battery and health in one Decky plugin",
+  "description": "ClawDeck - what Bazzite does not do for the MSI Claw: XeSS on XMX with XeLL, the VRR and face-button fixes, power profiles with autotune",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
