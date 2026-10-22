@@ -255,3 +255,70 @@ Done in code (2026-10-22): `autotune.py` v3 (measure → balance → lower → h
 status line ("25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W", "rendered, 2x shown"), Advanced → "keep
 within %" (2-15, default 5). The target-fps slider and endpoint are gone; §17's ceiling and §18's levers stay, §18's
 "below target / above target" rules are replaced by the phases above.
+
+## 22. Getting the most out of Panther Lake at every TDP (2026-10-22) — four gaps, ranked
+
+What ClawDeck already controls, verified on the Claw 8 EX tonight (selftest sweep, all six profiles + slider held
+6 s each): sustained/boost power (RAPL PL1/PL2), CPU boost, CPU ceiling, EPP on every core, the GPU clock window,
+and thermald kept out of the way (§21). Autotune moves power to whichever side is short (§18). What is *not* yet
+done, measured on this unit:
+
+**The chip.** `lscpu`/sysfs on MS-1T91: 14 cores, no SMT —
+| cpus | type | max clock |
+|---|---|---|
+| 0–1 | P-core (`cpu_core`) | 4.7 GHz |
+| 2–9 | E-core (`cpu_atom`) | 3.6 GHz |
+| 10–13 | LP E-core (`cpu_atom`, low-power island) | 3.1 GHz |
+GPU: Arc B390 (Xe3) on `xe`, gt0 100–2300 MHz, `power_profile` = `[base] power_saving`. RAPL MMIO: PL1 time
+window (tau) **55.97 s**, PL2 window **0.98 ms**. thermald and intel_lpmd both run by default.
+
+### 22.1 Measure the efficiency curve and set the profiles from it — needs the Claw (maintainer + me)
+The six profile wattages (10/12/17/25/30/35 W) are carried over from Lunar Lake results (hw.py comment), not
+measured on Panther Lake. Plan, one session, Black Myth: Wukong's built-in benchmark (fixed scene, has XeSS FG):
+- 1080p native-render preset fixed for the whole sweep; XeSS on XMX; frame generation **off** for this sweep (FG
+  hides the curve); VRR on; frame limit off.
+- TDP at 8, 10, 12, 14, 17, 20, 25, 30, 35 W through `tools/power-profile.sh` (or the slider), boost on. At each:
+  one warm-up run, then one measured run; log avg fps, 1 % low, package watts (RAPL energy delta over the run),
+  CPU/GPU busy, GPU clock, package temperature.
+- Output `docs/measurements/ptl-efficiency-wukong.csv` + a chart; fps/W and the knee (where +1 W gives < 2 % fps).
+- Then set the profiles from data: saver = lowest TDP holding 30 fps, battery = knee − 3 W, balanced = knee,
+  performance = where 1 % low stops improving, plugged/max unchanged. Repeat on a CPU-heavy game later.
+Code side (Claude Code, now): add `tools/efficiency-sweep.sh` that does the TDP stepping, waits for the benchmark
+log, and writes the CSV — the run itself is manual (the game's benchmark is started by hand).
+
+### 22.2 Autotune is fooled by the 56 s boost window — code change (Claude Code, now)
+RAPL enforces PL1 as an average over tau = 56 s; for most of a minute after a change, or after a light scene, the
+package can run up to PL2. Autotune decides on a 10 s window, so it partly measures boosted performance and can
+settle a few watts too low (fps falls once the average catches up). On this unit the file is root-writable
+(`-rw-r--r-- root`); the first hardware run confirms the firmware accepts a new value. Change:
+- While autotune is **learning** a game, set `constraint_0_time_window_us` to **8 s** (shorter than its 10 s
+  window, so each decision sees sustained behaviour) — through sysfs.write so it reverts with everything else.
+- Once a game's setting is learned (no change for 3 windows), restore the original tau (56 s) so short bursts in
+  play still get the boost.
+- Profile writes outside autotune leave tau alone. Test: fake tau file, learn → 8 s, settle → original, revert.
+
+### 22.3 GPU efficiency mode `power_profile` — code change (Claude Code, now)
+`/sys/class/drm/card0/device/tile0/gt0/freq0/power_profile` offers `base` and `power_saving` (xe SLPC efficiency
+hint: prefers the efficient frequency, slower ramp). Not touched today.
+- Profiles: `saver` and `battery` → `power_saving`; the rest `base`. Revertible via sysfs.write.
+- Advanced: a toggle "GPU efficiency mode" with Hint (what: GPU prefers its most efficient clock / why: a few
+  % more play time in light games / cost: slower to clock up, can add a stutter at scene changes).
+- Autotune: when GPU-bound and missing the target, set `base` first (before raising the GPU floor); when on target
+  at the TDP floor, try `power_saving`.
+- discover_paths: `gpu_power_profile`; health/selftest: write each value, read back, revert. 22.1's sweep repeats
+  the 10/12/17 W points with `power_saving` to measure the gain.
+
+### 22.4 intel_lpmd must release the game to all cores — check in game (maintainer + me), small code after
+lpmd config for this CPU (`/etc/intel_lpmd/intel_lpmd_config_F6_M204.xml`): Mode 0 (auto), WLTHintEnable 1, no
+`lp_mode_cpus` (auto). Its per-SKU table has entries for `4P0E4L-25W` only — the Claw's 2P8E4L falls through to the
+generic `*` entry: idle → LP E-cores only, sustained/bursty → all cores. That is right *if* the workload hints flip to
+sustained/bursty when a game runs. To confirm in the Wukong session: `journalctl -u intel_lpmd -f` and per-core load
+(`mpstat -P ALL 1`) during the benchmark; P-cores 0–1 must carry the game's main thread. If lpmd keeps work on
+10–13 while a game runs: ClawDeck sets lpmd to force-off (`Mode -1`) through its D-Bus interface
+(`org.freedesktop.intel_lpmd`, `LPM_FORCE_OFF`) at game start and back to auto at game end — revertible, no file
+edits. If it behaves, document it and leave it alone (it saves real battery at idle).
+
+### Not available on this chip
+Undervolt / voltage offsets (locked on Intel since the Plundervolt fixes), memory or ring clock control, per-core
+power limits. EPP is per core but ClawDeck sets all cores alike — per-core-type EPP (performance on P-cores,
+balance_power on LP-E) is possible and goes into 22.1's sweep as an experiment, not a default.
