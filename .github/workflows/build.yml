@@ -48,7 +48,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: ClawDeck }
       - uses: softprops/action-gh-release@v3
         with: { files: ClawDeck.zip }
@@ -61,7 +61,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: ClawDeck }
       - name: publish the main build on the sideload branch (for testing on a Claw before a release)
         run: |
