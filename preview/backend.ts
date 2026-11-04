@@ -115,6 +115,7 @@ export const backend = {
     if (fix === "install_xess" && !allow) return { ok: false, error: "xess-xmx-linux has no tested version pinned yet; allow 'latest (untested)' to continue" };
     if (fix === "install_xess") { state.xessInstalled = true; return ok({ next: "log out of Game Mode and back in (or reboot) so the session picks up the driver" }); }
     if (fix === "fix_face_buttons") { state.buttonsFixed = true; return ok({ next: "press the buttons in Game Mode: left = Steam menu, right = Quick Access" }); }
+    if (fix === "overlay_power_on" || fix === "overlay_power_off") { (state as any).overlayPower = fix.endsWith("_on"); return ok(); }
     if (fix === "undo_face_buttons") { state.buttonsFixed = false; return ok({ removed: ["/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"] }); }
     return ok();
   },
@@ -122,6 +123,7 @@ export const backend = {
     vrr: { panel: "CSW0801", panel_name: "PN8007QB1-2", range: state.wideVrr ? [30, 120] : [48, 120], wide: state.wideVrr, supported: true, reason: null, pending: null, rpm_ostree: true },
     buttons: { applies: true, ok: state.buttonsFixed, installed: state.buttonsFixed, stock_map: "claw2", upstream_fixed: false, legacy_hwdb: [] },
     health: healthSummary(),
+    overlay_power: { available: true, on: !!(state as any).overlayPower, files: [], battery_w: -9.9 },
   }),
   get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : k === "autotune_plugged" ? !!(state as any).autotune_plugged : null),
   set_setting: (k: string, v: any) => {

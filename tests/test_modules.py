@@ -456,3 +456,40 @@ def test_launch_wrapper_asks_the_shim_for_its_xell_log(tmp_path):
     # always: autotune counts rendered frames from it, Per-game reads what the low latency did
     assert "IGDEXT_XELL_LOG=1" in run()
     assert not (pfx / "igdext_xell.log").exists() and (pfx / "igdext_xell.log.prev").exists()   # one launch per log
+
+
+# ---- watts in the overlay (telemetry.py) ----------------------------------------------------------------------------
+def test_overlay_power_opens_and_closes_only_the_package_counters(tmp_path):
+    from clawdeck import telemetry
+    for d in ("intel-rapl:0", "intel-rapl:0:0", "intel-rapl-mmio:0"):
+        (tmp_path / d).mkdir()
+        f = tmp_path / d / "energy_uj"
+        f.write_text("123\n")
+        f.chmod(0o400)
+    st = telemetry.status(str(tmp_path))
+    assert st["available"] and not st["on"] and len(st["files"]) == 2   # the core sub-domain isn't touched
+    r = telemetry.apply(True, str(tmp_path))
+    assert r["ok"] and r["on"]
+    assert oct((tmp_path / "intel-rapl:0:0" / "energy_uj").stat().st_mode & 0o777) == "0o400"
+    r = telemetry.apply(False, str(tmp_path))
+    assert r["ok"] and not r["on"]
+    assert oct((tmp_path / "intel-rapl-mmio:0" / "energy_uj").stat().st_mode & 0o777) == "0o400"
+
+
+def test_overlay_power_without_counters_says_so(tmp_path):
+    from clawdeck import telemetry
+    r = telemetry.apply(True, str(tmp_path))
+    assert not r["ok"] and "no RAPL" in r["error"]
+
+
+def test_battery_watts_corrects_the_ex_100x_current(tmp_path):
+    from clawdeck import telemetry
+    b = tmp_path / "BAT1"
+    b.mkdir()
+    (b / "current_now").write_text("-64580000\n")     # what the Claw 8 EX reports at about 10 W
+    (b / "voltage_now").write_text("15400000\n")
+    (b / "status").write_text("Discharging\n")
+    assert telemetry.battery_watts(str(b)) == -9.9
+    (b / "current_now").write_text("645800\n")        # a correctly scaled battery stays as it is
+    (b / "status").write_text("Charging\n")
+    assert telemetry.battery_watts(str(b)) == 9.9
