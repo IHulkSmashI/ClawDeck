@@ -57,6 +57,8 @@ mkdir -p "$LOGDIR" 2>/dev/null
 appid="${SteamAppId:-${SteamGameId:-0}}"
 # per-game settings saved by the plugin (plain file: <runtime>/launch/<appid>.env, KEY=VALUE lines)
 envfile="$RUNTIME/launch/$appid.env"
+# when this game last started: Per-game compares the XMX driver's self-test with it ("XMX cores used in the last launch")
+mkdir -p "$RUNTIME/launch" 2>/dev/null && : > "$RUNTIME/launch/$appid.started" 2>/dev/null
 if [ -f "$envfile" ]; then
   while IFS='=' read -r k v; do
     [ -n "$k" ] && [ "${k#\#}" = "$k" ] || continue
