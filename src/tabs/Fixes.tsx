@@ -79,7 +79,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <Status ok={b.ok} label={b.installed ? "Face buttons: fix installed" : b.upstream_fixed ? "Face buttons: InputPlumber maps them itself" : "Face buttons: dead in Game Mode"}
             detail={b.installed ? "left = Steam menu, right = Quick Access (InputPlumber override)" : b.upstream_fixed ? `map ${b.stock_map}; ClawDeck's override isn't needed` : "the EX sends Win+G and F15; InputPlumber's stock map waits for other keys"} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(b.installed ? "undo_face_buttons" : "fix_face_buttons")}
-            description={explain(b.installed ? "Deletes ClawDeck's InputPlumber override and restarts InputPlumber." : "Gives InputPlumber the right button map for the EX and restarts it.", undefined, "none; takes effect at once.")}>
+            description={explain(b.installed ? "Deletes ClawDeck's InputPlumber override and restarts InputPlumber." : "Gives InputPlumber the right button map for the EX and restarts it. ClawDeck installs this by itself on a Claw 8 EX; once you remove it, it stays removed.", undefined, "none; takes effect at once.")}>
             {b.installed ? "Remove face-button fix" : "Install face-button fix"}
           </ButtonItem>
         </PanelSectionRow>
@@ -104,7 +104,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
             detail={f.quiet_log.per_minute != null ? `${f.quiet_log.per_minute} split-lock lines in the last minute` : undefined} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.quiet_log!.installed ? "undo_quiet_split_lock_log" : "quiet_split_lock_log")}
             description={explain(f.quiet_log.installed ? "Lets steamos-manager log split-lock hits again (removes ClawDeck's one-line setting)."
-              : "steamos-manager writes every split-lock hit from Steam into the system log, thousands a minute, for a crash reporter Bazzite doesn't have. It costs CPU and battery, and the log then erases earlier boots within minutes, so a crash or a failed wake leaves no trace. This silences only that part.",
+              : "steamos-manager writes every split-lock hit from Steam into the system log, thousands a minute, for a crash reporter Bazzite doesn't have. It costs CPU and battery, and the log then erases earlier boots within minutes, so a crash or a failed wake leaves no trace. This silences only that part. ClawDeck does this by itself on Bazzite; once you undo it, it stays undone.",
               undefined, "steamos-manager restarts once (a second; Steam reconnects by itself).")}>
             {f.quiet_log.installed ? "Log split-lock hits again" : "Silence the split-lock flood"}
           </ButtonItem>

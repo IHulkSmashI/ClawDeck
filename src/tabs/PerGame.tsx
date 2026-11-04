@@ -2,7 +2,8 @@ import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } 
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { gameStatus, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset } from "../api";
+import { gameApplyRecommended, gameRecommend, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset, Recommendation } from "../api";
+import { confirmUntested } from "../components/confirm";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
@@ -73,6 +74,27 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
     }
     load();
   };
+  const [rec, setRec] = useState<Recommendation | null>(null);
+  useEffect(() => { gameRecommend(app.appid).then(setRec).catch(() => setRec(null)); }, [app.appid, gs]);
+  const applyRec = async (allow = false) => {
+    if (!rec) return;
+    if (rec.optiscaler && !fg?.fgmod_ready) { toast("Install Decky Framegen in Setup first (OptiScaler comes with it)"); return; }
+    const r = await gameApplyRecommended(app.appid, allow);
+    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => applyRec(true)); return; }
+    if (!r.ok) { setErr(r.error ?? "not applied"); toast(`Recommended setup: not applied (${r.error})`); return; }
+    let next = opts ?? "";
+    if (rec.optiscaler && fg?.fgmod) next = withFgmod(next, fg.fgmod);
+    if (Object.keys(r.env ?? {}).length && !hasWrapper(next) && gs?.wrapper) next = withWrapper(next, gs.wrapper.replace(/ %command%$/, ""));
+    const ok = next === (opts ?? "") || setLaunchOptions(app.appid, next);
+    toast(ok ? `${app.name}: recommended setup saved. ${r.next ?? ""} Restart the game.` : "Saved, but Steam refused the launch options");
+    setErr(null); load();
+  };
+  const undoRec = async () => {
+    const r = await gameUndoRecommended(app.appid);
+    if (opts !== null && fgmodHere) setLaunchOptions(app.appid, withoutFgmod(opts));
+    toast(r.ok ? `${app.name}: back to how it was (REFramework removed if ClawDeck put it there)` : `Not undone: ${r.error}`);
+    load();
+  };
   const setFgmod = (on: boolean) => {
     if (opts === null || !fg?.fgmod) return;
     let next = on ? withFgmod(opts, fg.fgmod) : withoutFgmod(opts);
@@ -84,6 +106,22 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   return (
     <PanelSection title={`Per-game: ${app.name}`}>
+      {rec && (
+        <PanelSectionRow>
+          <Status ok={rec.applied ? true : null}
+            label={rec.applied ? "Recommended setup: in use" : rec.route === "own_xess" ? "Recommended: the game's own XeSS"
+              : rec.route === "re_engine" ? "Recommended: OptiScaler + REFramework (Capcom)" : rec.route === "fsr_on_xess" ? "Recommended: FSR on XeSS (XMX)"
+              : "Recommended: OptiScaler with XeSS on XMX"}
+            detail={explain(rec.reasons.join(" · ") + (rec.known ? "" : " (not in the per-game list: ClawDeck's Intel default)"))} />
+          {rec.route !== "own_xess" && (
+            <ButtonItem layout="below" onClick={() => (rec.applied ? undoRec() : applyRec(false))}
+              description={explain(rec.applied ? "Removes what the recommended setup added (launch settings, OptiScaler from the launch options, ClawDeck's REFramework)." : "One tap: the settings above, from OptiScaler's own per-game list and what was tested on the Claw.",
+                undefined, quick ? undefined : rec.re_engine ? "REFramework (dinput8.dll) is copied next to the game's exe; undo deletes exactly that file." : "takes effect from the next launch.")}>
+              {rec.applied ? "Undo the recommended setup" : "Use the recommended setup"}
+            </ButtonItem>
+          )}
+        </PanelSectionRow>
+      )}
       {gs?.drive?.slow && (
         <PanelSectionRow>
           <Status ok={false} label={`Installed on ${gs.drive.kind}${gs.drive.sd ? " (SD card)" : ""}: expect slower loads and pop-in`}

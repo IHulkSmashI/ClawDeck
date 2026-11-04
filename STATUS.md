@@ -46,6 +46,14 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Recommended setup per game (writes into game folders):** Onimusha → "Use the recommended setup" → REFramework
+  (`dinput8.dll` + `.clawdeck-reframework.json`) next to `OnimushaWotS.exe`, OptiScaler through fgmod with
+  `Hotfix_RestoreComputeSignature=true` and `Spoofing_Dxgi=false`; the game starts (no Capcom DRM stop), DLSS in its
+  menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
+  `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
+  removes exactly those files. CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
+- **First-run fixes:** on a fresh install the face-button fix and the split-lock log fix apply by themselves once;
+  removing one in Fixes keeps it removed after a restart.
 - **Before the next release, on the Claw (2026-11-04 build):** per-game XMX (Setup moves the session file aside; Game
   Mode comes up; CONTROL logs `clawdeck: XeSS XMX driver for this game`), "VRR only in games" (menus 120 Hz, games
   30–120, stands aside with the monitor on USB-C), "Silence the split-lock flood" (Fixes; `journalctl -u

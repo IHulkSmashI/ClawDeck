@@ -56,6 +56,10 @@ What it does today:
   [Decky Framegen](https://github.com/xXJSONDeruloXx/Decky-Framegen), adds it to the running game in one tap and
   sets OptiScaler to XeSS on XMX (or FSR 4 INT8, experimental) with XeSS frame generation. The same thing OptiClick
   does on Windows, without a second copy of OptiScaler.
+- **Recommended setup per game.** Per-game names the best route for the game in front of you and sets it up in one
+  tap: the game's own XeSS, FSR 3.1 on XeSS, or OptiScaler with the fixes OptiScaler's developers ship for that game
+  (98 games, `assets/games.json`, built from OptiScaler's source). Capcom RE Engine games also get REFramework, which
+  keeps Capcom's anti-tamper from stopping the game. Undo removes exactly what it added.
 - **VRR fix 30–120 Hz.** The Claw's screen can run VRR from 30 Hz, but tells the system 48, so games below 48 fps
   judder. One tap installs ClawLab's fix (the one Windows users install) for the exact screens ClawLab tested.
 - **MSI buttons fixed on the Claw 8 EX.** On current Bazzite the two face buttons do nothing in Game Mode. One tap
