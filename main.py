@@ -725,6 +725,50 @@ class Plugin:
         r = await self.set_launch(appid, clean)
         return {**r, "recommended": rec, "next": rec["reasons"][0]}
 
+    async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False) -> dict:
+        """Per-game's two choices, as plain as OptiClick's: the upscaler (the game's own, or XeSS / FSR 4.1.1 /
+        FSR 4.1.1 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
+        generation on XMX at 2x-4x, fed from the game's own frame generation when it has one). Everything they need
+        (OptiScaler, REFramework for Capcom games, the game's fixes) is put in or taken out here."""
+        if upscaler not in ("own", "xess", "fsr4_xmx", "fsr4_xmx_lite"):
+            return {"ok": False, "error": f"unknown upscaler {upscaler!r}"}
+        fg = int(fg or 0)
+        if fg and not 2 <= fg <= 4:
+            return {"ok": False, "error": "frame generation is 2x, 3x or 4x"}
+        rec, d, folder = await self._bg(self._rec, appid)
+        if not d or not folder:
+            return {"ok": False, "error": "can't find this game's install folder or its exe"}
+        if upscaler.startswith("fsr4_xmx") and not self._fsr4_xmx_files()["ready"]:
+            f = self._fsr4_xmx_files()
+            return {"ok": False, "error": f"FSR 4.1.1 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
+        if upscaler == "own":
+            out = await self._bg(optiscaler.unpatch, folder)
+            await self._bg(reframework.remove, folder)
+            self.settings.setdefault("opti_games", {}).pop(str(appid), None)
+            self._save_settings()
+            r = await self.set_launch(appid, {**{k: None for k in self.REC_KEYS}, "fg": fg or None})
+            return {**r, "optiscaler": out}
+        who = optiscaler.owner(folder)
+        if who["owner"] in ("decky-framegen", "other"):
+            return {"ok": False, "owner": who["owner"], "error": "this game has OptiScaler from " + (
+                "Decky Framegen: remove it there (Decky Framegen → Unpatch), then pick again" if who["owner"] == "decky-framegen"
+                else "somewhere else (OptiClick's files from Windows, or by hand): remove OptiScaler.ini and its DLL, then pick again")}
+        launch = {"opti": upscaler, "opti_fg": rec["fg_source"] if fg else "off", "opti_ini": rec["ini"] if rec["optiscaler"] else {},
+                  "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None}
+        r = await self._opti_into(appid, folder, {k: v for k, v in launch.items() if v is not None})
+        if not r.get("ok"):
+            return r
+        launch["opti_dll"] = r["dll_override"]
+        if rec["re_engine"]:
+            if self._install_lock.locked():
+                return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
+            async with self._install_lock:
+                rf = await self._bg(reframework.install, HOME, folder, self._versions()["reframework"], bool(allow_unpinned))
+            if not rf.get("ok"):
+                return rf
+        r = await self.set_launch(appid, launch)
+        return {**r, "next": rec["reasons"][0]}
+
     async def game_set_opti(self, appid: str, values: dict) -> dict:
         """Per-game's OptiScaler upscaler / XeSS-FG choice for a game with ClawDeck's OptiScaler: saved, and the
         game's OptiScaler.ini (and FSR 4 XMX files) rewritten at once; takes effect from the next launch."""

@@ -638,7 +638,7 @@ def test_gamedb_recommends_by_engine_and_list(tmp_path):
     assert oni["route"] == "re_engine" and oni["launch"]["reframework"] is True
     assert oni["ini"] == {"Hotfix_RestoreComputeSignature": "true", "Spoofing_Dxgi": "false"}   # OptiScaler main, not 0.9.4
     control = gamedb.recommend(doc, _game(tmp_path, "control", ["CONTROLResonant.exe", "amd_fidelityfx_upscaler_dx12.dll"]))
-    assert control["route"] == "fsr_on_xess" and control["launch"] == {"fsr": "xess"} and not control["optiscaler"]
+    assert control["route"] == "optiscaler" and control["optiscaler"] and "Pick FSR" in control["reasons"][0]
     own = gamedb.recommend(doc, _game(tmp_path, "x", ["game.exe", "bin/libxess.dll"]))
     assert own["route"] == "own_xess" and own["launch"] == {}
     ue = gamedb.recommend(doc, _game(tmp_path, "shf", ["SHf/Binaries/Win64/SHf-Win64-Shipping.exe"]))
