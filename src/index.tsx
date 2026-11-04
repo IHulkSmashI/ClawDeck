@@ -2,7 +2,7 @@ import { DialogButton, Focusable, staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
 import { MdSettings } from "react-icons/md";
 
-import { gameStarted, gameStopped, getChanges, getFixes, getSetting, powerSourceChanged, resumed } from "./api";
+import { displayExternal, gameStarted, gameStopped, getChanges, getFixes, getSetting, powerSourceChanged, resumed } from "./api";
 import { startVrrScope, VrrScope } from "./vrr";
 import { LogoIcon } from "./components/LogoIcon";
 import { FullPage, openPage, QuickPanel, ROUTE } from "./pages";
@@ -57,11 +57,16 @@ export default definePlugin(() => {
   // VRR only while a game runs (Fixes): with the 30–120 Hz fix the menus otherwise follow a game's low frame rate.
   // On by default once the VRR fix is installed; Fixes turns it off (Steam's own VRR switch is then in charge).
   let vrrScope: VrrScope | null = null;
+  let external = false;                         // a dock / monitor: stand aside (its VRR is the user's choice)
+  const ext = () => displayExternal().then((r) => { external = !!r?.connected; }).catch(() => { /* keep the last answer */ });
+  ext();
+  const extTimer = setInterval(ext, 5000);
+  unregisters.push(() => clearInterval(extTimer));
   const vrrScopeSync = async () => {
     try {
       const [pref, f] = await Promise.all([getSetting("vrr_menus_fixed"), getFixes()]);
       const want = pref === null || pref === undefined ? !!f?.vrr?.wide : !!pref;
-      if (want && !vrrScope) vrrScope = startVrrScope((m) => console.log("ClawDeck:", m));
+      if (want && !vrrScope) vrrScope = startVrrScope((m) => console.log("ClawDeck:", m), () => external);
       if (!want && vrrScope) { vrrScope.stop(); vrrScope = null; }
     } catch (err) { console.warn("ClawDeck: VRR scope", err); }
   };

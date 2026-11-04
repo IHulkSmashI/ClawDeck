@@ -88,3 +88,20 @@ def battery_watts(bat: str | None = None, scale_fix: bool = True) -> float | Non
             w = -w
         return round(w, 1)
     return None
+
+
+def external_display(drm: str = "/sys/class/drm") -> dict:
+    """Is a display other than the Claw's own screen connected (DP/HDMI, a dock or USB-C monitor)? Then gamescope
+    shows the picture there, and its VRR is the user's choice: ClawDeck's "VRR only in games" stands aside."""
+    found = []
+    for st in sorted(glob.glob(os.path.join(drm, "card*-*", "status"))):
+        conn = os.path.basename(os.path.dirname(st)).split("-", 1)[1]
+        if conn.startswith(("eDP", "LVDS", "DSI")) or conn.startswith("Writeback"):
+            continue
+        try:
+            with open(st, "r", encoding="utf-8") as f:
+                if f.read().strip() == "connected":
+                    found.append(conn)
+        except OSError:
+            continue
+    return {"connected": bool(found), "connectors": found}

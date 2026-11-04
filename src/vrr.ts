@@ -6,7 +6,8 @@
  * Steam keeps VRR in its own performance settings (CMsgSystemPerfSettingsPerApp.is_vrr_enabled = 20) and takes
  * changes through SteamClient.System.Perf.UpdateSettings(base64 CMsgSystemPerfUpdateSettings). Field numbers from
  * SteamDatabase/Protobufs (webui/common.proto). ClawDeck writes with skip_storage_update, so the saved profiles never
- * change: turning this off (Fixes) leaves Steam's own VRR switch in charge again.
+ * change: turning this off (Fixes) leaves Steam's own VRR switch in charge again. With an external display connected
+ * (dock, USB-C or HDMI monitor) it stands aside entirely: that display's VRR stays whatever the user sets in Steam.
  */
 declare const SteamClient: any;
 
@@ -78,7 +79,7 @@ export type VrrScope = { stop: () => void; status: () => { active: boolean; game
  * Keep VRR on while a game runs and off otherwise. Reacts to Steam's own state changes, so a profile Steam applies
  * at game start is corrected too; writes only when VRR differs from what it should be, at most once a second.
  */
-export const startVrrScope = (log: (m: string) => void = () => {}): VrrScope | null => {
+export const startVrrScope = (log: (m: string) => void = () => {}, standAside: () => boolean = () => false): VrrScope | null => {
   const perf = SteamClient?.System?.Perf;
   if (!perf?.UpdateSettings || !perf?.RegisterForStateChanges) { log("Steam has no Perf.UpdateSettings here"); return null; }
   let last = 0, writes = 0, error: string | null = null;
@@ -87,6 +88,7 @@ export const startVrrScope = (log: (m: string) => void = () => {}): VrrScope | n
     const b = toBuf(raw);
     if (!b) return;
     try { seen = readState(b); } catch (e) { error = `could not read Steam's state: ${e}`; return; }
+    if (standAside()) return;                   // an external display: its VRR is the user's (Steam's switch)
     const want = seen.game !== 0n;              // a game is running: VRR on; Steam's menus: off
     if (seen.vrr === null || seen.vrr === want || Date.now() - last < 1000) return;   // null: no settings in this update
     last = Date.now();
@@ -98,6 +100,6 @@ export const startVrrScope = (log: (m: string) => void = () => {}): VrrScope | n
   });
   return {
     stop: () => { try { reg?.unregister?.(); } catch { /* gone */ } },
-    status: () => ({ active: true, game: String(seen.game), vrr: seen.vrr, writes, error }),
+    status: () => ({ active: !standAside(), game: String(seen.game), vrr: seen.vrr, writes, error }),
   };
 };

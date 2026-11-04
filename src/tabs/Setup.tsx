@@ -46,7 +46,11 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const noXmx = hw?.known && !hw.model.xmx;
   const xessLine = !x ? "XeSS XMX driver: …" : !x.installed ? "XeSS XMX driver: not installed"
     : `XeSS XMX ${x.version ?? ""}: ${x.status.state === "ok" ? "driver loads" : x.status.state === "failed" ? "driver failed, DP4a fallback" : "no check yet (log out and in)"}`;
-  const xessDetail = x?.installed ? `On for every game; Per-game sets frame generation, FSR games and low latency per game. ${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"}${x.low_latency ? " · low latency with frame generation" : " · update for low latency and FSR on XeSS"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows (up to 8x experimental), with low latency, on for every game once installed.";
+  const sc = x?.scope;
+  const scopeText = !sc ? "" : sc.session_wide ? "Session-wide (older install): restart ClawDeck to make it per game. "
+    : sc.per_game ? `Per game: games that ship XeSS or OptiScaler (${sc.scoped.length} Proton${sc.scoped.length === 1 ? "" : "s"} covered${sc.unscoped.length ? `; not yet: ${sc.unscoped.map((p: string) => p.split("/").pop()).join(", ")}` : ""}). `
+    : "No Proton covered yet: start a game once, then re-open Setup. ";
+  const xessDetail = x?.installed ? `${scopeText}Per-game sets frame generation, FSR games and low latency. ${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"}${x.low_latency ? " · low latency with frame generation" : " · update for low latency and FSR on XeSS"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows (up to 8x experimental), with low latency. It loads only in games that ship XeSS or OptiScaler, never for Steam's own screen.";
   const fgLine = !fg ? "Decky Framegen: …" : !fg.installed ? "Decky Framegen (OptiScaler): not installed"
     : fg.fgmod_ready ? `Decky Framegen ${fg.version ?? ""}: OptiScaler ${fg.optiscaler ?? ""} ready` : `Decky Framegen ${fg.version ?? ""}: open it once and tap Setup OptiScaler Mod`;
 
