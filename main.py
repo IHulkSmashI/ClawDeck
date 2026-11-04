@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      power, profiles, quietlog, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
+                      gamedb, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -43,6 +43,7 @@ LOG_DIR = decky.DECKY_PLUGIN_LOG_DIR
 HOME = decky.DECKY_USER_HOME
 DESKTOP = os.path.join(HOME, "Desktop")
 VERSIONS = os.path.join(PLUGIN_DIR, "assets", "versions.json")
+GAMES = os.path.join(PLUGIN_DIR, "assets", "games.json")
 POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz", "boost")
 # The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
 # deletes the plugin, so it must stay there (as a pass-through) or those games would no longer start.
@@ -98,9 +99,33 @@ class Plugin:
                 xmxscope.install_scope(HOME)
         except OSError as e:
             decky.logger.warning("XeSS XMX per game: %s", e)
+        await self._first_fixes()
         if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
             r = telemetry.apply(True)
             decky.logger.info("watts in the overlay: %s", "on" if r["ok"] else r["error"])
+
+    async def _first_fixes(self) -> None:
+        """Fixes every Claw of that model needs, applied by themselves once (on install, and again after a system
+        update undid them), unless the user removed them in Fixes: the face buttons on the Claw 8 EX, and the
+        split-lock log flood where steamos-manager has no crash reporter. Each stays one tap to remove in Fixes."""
+        auto = self.settings.setdefault("auto_fixes", {})
+        jobs = []
+        bs = buttons.status(self.hw.model_id)
+        if bs["applies"] and not bs["ok"] and not bs["installed"] and auto.get("face_buttons") != "removed":
+            jobs.append(("face_buttons", buttons.apply))
+        ql = quietlog.status()
+        if ql["applies"] and not ql["installed"] and auto.get("quiet_log") != "removed":
+            jobs.append(("quiet_log", quietlog.apply))
+        for key, fn in jobs:
+            try:
+                r = await self._bg(fn)
+                auto[key] = "applied" if r.get("ok") else f"failed: {r.get('error') or r.get('log')}"
+                decky.logger.info("first-run fix %s: %s", key, auto[key])
+            except Exception as e:
+                auto[key] = f"failed: {e}"
+                decky.logger.warning("first-run fix %s: %s", key, e)
+        if jobs:
+            self._save_settings()
 
     async def _unload(self):
         self.autotune.stop()
@@ -191,10 +216,16 @@ class Plugin:
             return {"ok": r.returncode == 0, "log": (r.stdout + r.stderr)[-2000:]}
         if fix == "install_xess":
             return await self.xess_install(allow_unpinned)
-        if fix == "fix_face_buttons":
-            return await self._bg(buttons.apply)
-        if fix == "undo_face_buttons":
-            return await self._bg(buttons.remove)
+        if fix in ("fix_face_buttons", "undo_face_buttons", "quiet_split_lock_log", "undo_quiet_split_lock_log"):
+            undo = fix.startswith("undo_")
+            key = "face_buttons" if "face" in fix else "quiet_log"
+            fn = {("face_buttons", False): buttons.apply, ("face_buttons", True): buttons.remove,
+                  ("quiet_log", False): quietlog.apply, ("quiet_log", True): quietlog.remove}[(key, undo)]
+            r = await self._bg(fn)
+            if r.get("ok"):
+                self.settings.setdefault("auto_fixes", {})[key] = "removed" if undo else "applied"
+                self._save_settings()
+            return r
         if fix in ("overlay_power_on", "overlay_power_off"):
             on = fix.endswith("_on")
             r = await self._bg(lambda: telemetry.apply(on))
@@ -202,10 +233,6 @@ class Plugin:
                 self.settings["overlay_power"] = on
                 self._save_settings()
             return r
-        if fix == "quiet_split_lock_log":
-            return await self._bg(quietlog.apply)
-        if fix == "undo_quiet_split_lock_log":
-            return await self._bg(quietlog.remove)
         if fix == "report_unknown_model":
             r = await self._bg(lambda: subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")],
                                                       capture_output=True, text=True, timeout=60, check=False))
@@ -579,6 +606,44 @@ class Plugin:
         auto = detected or launchenv.compose({**launch, "xmx": None}).get("CLAWDECK_XMX") == "1"
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d)}
+
+    # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
+    REC_KEYS = ("opti", "opti_xefg", "opti_ini", "reframework", "fsr")
+
+    def _rec(self, appid: str) -> tuple[dict, str | None, str | None]:
+        d = xess.steam_install_dir(HOME, appid)
+        rec = gamedb.recommend(gamedb.load(GAMES), d)
+        folder = reframework.exe_dir(d, rec["exes"]) if d and rec["re_engine"] else None
+        return rec, d, folder
+
+    async def game_recommend(self, appid: str) -> dict:
+        rec, d, folder = await self._bg(self._rec, appid)
+        launch = self.profiles.get_launch(appid)
+        applied = all(launch.get(k) == v for k, v in rec["launch"].items()) and bool(rec["launch"])
+        return {**rec, "dir": d, "applied": applied, "reframework_state": reframework.status(folder) if folder else None}
+
+    async def game_apply_recommended(self, appid: str, allow_unpinned: bool = False) -> dict:
+        """Write the recommended launch settings (and REFramework for an RE Engine game). The panel then adds
+        OptiScaler (Decky Framegen's fgmod) and ClawDeck's wrapper to the launch options when the setup needs them."""
+        rec, d, folder = await self._bg(self._rec, appid)
+        if not d:
+            return {"ok": False, "error": "can't find this game's install folder"}
+        if rec["re_engine"]:
+            if not folder:
+                return {"ok": False, "error": "can't find the game's exe for REFramework"}
+            r = await self._bg(reframework.install, HOME, folder, self._versions()["reframework"], bool(allow_unpinned))
+            if not r.get("ok"):
+                return r
+        clean = {k: None for k in self.REC_KEYS}
+        clean.update(rec["launch"])
+        r = await self.set_launch(appid, clean)
+        return {**r, "recommended": rec, "next": rec["reasons"][0]}
+
+    async def game_undo_recommended(self, appid: str) -> dict:
+        rec, d, folder = await self._bg(self._rec, appid)
+        removed = await self._bg(reframework.remove, folder) if folder else {"ok": True}
+        r = await self.set_launch(appid, {k: None for k in self.REC_KEYS})
+        return {**r, "reframework": removed}
 
     # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
     async def framegen_state(self) -> dict:

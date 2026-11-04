@@ -23,7 +23,12 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — the upscaler / frame generation swap that Decky
   Framegen sets up.
 - **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows tool whose one-tap, per-game OptiScaler setup
-  ClawDeck's Per-game OptiScaler row follows. No code is shared.
+  ClawDeck's "Use the recommended setup" follows (match by exe, REFramework for RE Engine games, per-game ini
+  values). OptiClick's own game data is private; no code or data is shared.
+- **OptiScaler's per-game settings** (`OptiScaler/misc/GameConfigs.cpp`, `Config.cpp`) — the source of
+  `assets/games.json` (`tools/gen_games.py`), which is therefore GPL-3.0 like OptiScaler.
+- **[REFramework](https://github.com/praydog/REFramework)** by praydog (MIT) — installed next to Capcom RE Engine
+  games, as OptiClick does; downloaded from its nightly release, not shipped with ClawDeck.
 - **[wimlib](https://wimlib.net)** by Eric Biggers (LGPL-2.1+) — its LZMS decoder is inside `tools/cabinet-lzms`, the
   open `cabinet.dll` that lets the FSR 4 on XMX builds unpack their kernels under Proton without Windows' copy.
 - **FSR 4 on XMX** by nitec and the OptiScaler community — the upscaler build ClawDeck sets up; not shipped with ClawDeck.

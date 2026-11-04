@@ -11,5 +11,11 @@
     "tag": "pending-verification",
     "asset_glob": "*.zip",
     "note": "OptiScaler per game (Bazzite ships it in the Portal); ClawDeck installs it only where it is missing, and passes Intel presets to it through its environment variables"
+  },
+  "reframework": {
+    "repo": "praydog/REFramework-nightly",
+    "tag": "pending-verification",
+    "asset_glob": "REFramework.zip",
+    "note": "Capcom RE Engine games: dinput8.dll next to the game's exe (one zip for every game). Pinned after the Onimusha test on a Claw."
   }
 }

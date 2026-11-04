@@ -1,0 +1,8 @@
+{
+  "_comment": "ClawDeck's additions to assets/games.json (tools/gen_games.py merges them). re_engine_exes: Capcom RE Engine games, which need REFramework (dinput8.dll) next to OptiScaler or Capcom's anti-tamper stops the game (seen with Onimusha on the Claw 8 EX, 2026-11-04). games: by id, wins over OptiScaler's entry.",
+  "re_engine_exes": ["re2.exe", "re3.exe", "re4.exe", "re7.exe", "re8.exe", "re9.exe", "re9demo.exe", "devilmaycry5.exe",
+                     "streetfighter6.exe", "dd2.exe", "dd2ccs.exe", "monsterhunterwilds.exe", "monsterhunterrise.exe",
+                     "onimushawots.exe", "onimushawots_demo.exe", "kunitsugami.exe", "kunitsugamidemo.exe", "drdr.exe",
+                     "pragmata.exe", "pragmata_sketchbook.exe", "monster_hunter_stories_3_twisted_reflection.exe"],
+  "games": {}
+}
