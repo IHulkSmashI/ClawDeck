@@ -802,6 +802,10 @@ class Plugin:
         if not r.get("ok"):
             return r
         launch["opti_dll"] = r["dll_override"]
+        # XeSS and FSR 4.1.2 reach the XMX cores only through the shim in the prefix's driver store, which Valve's
+        # Proton 11.0 doesn't make (the scope script does the same at every launch)
+        shim = await self._bg(xmxscope.prefix_shim, HOME, appid, xess.package_dir(HOME))
+        decky.logger.info("game %s: XMX shim in the prefix: %s", appid, "put there" if shim.get("placed") else shim.get("why") or "already there")
         if rec["re_engine"]:
             if self._install_lock.locked():
                 return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
