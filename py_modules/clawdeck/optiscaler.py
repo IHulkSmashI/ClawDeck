@@ -256,12 +256,12 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
             f.write(set_ini(ini_text, {**BASE_INI, **ini}))
         if "OptiScaler.ini" not in added:
             added.append("OptiScaler.ini")
-        # with frame generation, low latency always on: the game's Reflex becomes XeLL through fakenvapi, forced on
-        # even where the game's menu leaves Reflex off (xess-xmx-linux's shim then runs XeLL on the frames)
+        # low latency always on: the game's Reflex becomes XeLL through fakenvapi, forced on even where the game's
+        # menu leaves Reflex off (xess-xmx-linux's shim then runs XeLL on the frames)
         fk = os.path.join(folder, "fakenvapi.ini")
         if os.path.isfile(fk) and "fakenvapi.ini" in added:
             t = open(fk, "r", encoding="utf-8", errors="replace").read()
-            want = "2" if ini.get("FrameGen_Enabled") == "true" else "0"
+            want = "2"                                 # always: XeLL in every game (maintainer, 2026-11-04)
             t = re.sub(r"(?m)^force_reflex=.*$", f"force_reflex={want}", t) if re.search(r"(?m)^force_reflex=", t) else t + f"\nforce_reflex={want}\n"
             with open(fk, "w", encoding="utf-8") as f:
                 f.write(t)
