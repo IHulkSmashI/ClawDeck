@@ -73,7 +73,8 @@ export type LatencyState = { mode: "pacing" | "idle" | "no-fg" | "off" | "none";
 export type FramegenState = { installed: boolean; dir: string | null; version: string | null; fgmod_ready: boolean; fgmod: string | null; optiscaler: string | null };
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
 export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
-export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope };
+export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
+  drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------
@@ -88,7 +89,8 @@ export type WideVrr = { panel: string | null; panel_name: string | null; range: 
   reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean };
 export type ButtonsState = { applies: boolean; ok: boolean; installed: boolean; stock_map: string | null; upstream_fixed?: boolean; legacy_hwdb: string[] };
 export type OverlayPower = { available: boolean; on: boolean; files: { path: string; mode: string; readable: boolean }[]; battery_w: number | null };
-export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower };
+export type QuietLog = { applies: boolean; installed: boolean; per_minute: number | null };
+export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower; quiet_log?: QuietLog };
 export const getFixes = callable<[], Fixes>("get_fixes");
 export const displayExternal = callable<[], { connected: boolean; connectors: string[] }>("display_external");
 export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");

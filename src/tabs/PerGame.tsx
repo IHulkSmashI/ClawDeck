@@ -84,6 +84,12 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   return (
     <PanelSection title={`Per-game: ${app.name}`}>
+      {gs?.drive?.slow && (
+        <PanelSectionRow>
+          <Status ok={false} label={`Installed on ${gs.drive.kind}${gs.drive.sd ? " (SD card)" : ""}: expect slower loads and pop-in`}
+            detail={explain(`Linux reads ${gs.drive.kind} through a slower driver, so this game streams its textures and shaders slower than on Windows. For the best result, move it to a Linux-formatted drive: Steam → game → Properties → Installed Files → Move install folder. An SD card formatted by Steam in Game Mode works.`)} />
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <ToggleField label="XeSS on XMX" checked={xmxOn} disabled={!installed}
           description={explain(installed ? (perGame ? `Automatic: the XMX driver loads only in games that ship XeSS or OptiScaler (${scope?.auto ? "this one does" : "this one doesn't"}); Steam's own screen and other games keep Bazzite's driver. Switch it to force it on or off for this game.`
