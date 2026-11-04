@@ -45,7 +45,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const problems = health.filter((h) => !h.ok && !h.optional);
 
   return (
-    <PanelSection title="Fixes">
+    <PanelSection title={quick ? undefined : "Fixes"}>
       <PanelSectionRow>
         <Group title="Screen (VRR)" first />
         <Status ok={vrr ? (vrr.wide ? true : vrr.supported ? false : null) : null}
