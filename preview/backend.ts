@@ -186,7 +186,7 @@ export const backend = {
   },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
-    opti_owner: "clawdeck", fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
+    opti_owner: "clawdeck", files: { owner: "clawdeck", dll: "dxgi.dll", preset: "xess", folder: "/x", reframework: true, install_dir: "/x" }, fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
     xmx_scope: { session_wide: false, per_game: true, auto: true, protons: ["Proton 11.0"], scoped: ["Proton 11.0"], unscoped: [] },
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
