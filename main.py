@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
+                      fan, gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -101,6 +101,8 @@ class Plugin:
         except OSError as e:
             decky.logger.warning("XeSS XMX per game: %s", e)
         await self._first_fixes()
+        self.fan_hw = fan.find_hwmon()
+        self._reapply_fan_charge("start")
         if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
             r = telemetry.apply(True)
             decky.logger.info("watts in the overlay: %s", "on" if r["ok"] else r["error"])
@@ -562,8 +564,52 @@ class Plugin:
         self.running_plugged = plugged
         return {"changed": True, **self._start_game_power(appid, plugged)}
 
+    # ---- fan and charge limit (Power) ---------------------------------------------------------------------------------
+    def _reapply_fan_charge(self, why: str) -> None:
+        """The saved fan preset and charge limit, at every start and resume (sysfs and the EC may reset)."""
+        try:
+            p = self.settings.get("fan_preset")
+            if p and p != "auto" and getattr(self, "fan_hw", None):
+                r = fan.apply(self.fan_hw, p, self.settings.get("fan_custom"))
+                decky.logger.info("fan (%s): %s", why, r["summary"] if r["ok"] else r["error"])
+            lim = self.settings.get("charge_limit")
+            if lim and self.hw.paths.charge_limit:
+                r = fan.set_charge(self.hw.paths.charge_limit, int(lim), self.settings.get("charge_original"))
+                decky.logger.info("charge limit (%s): %s", why, r["summary"] if r["ok"] else r["error"])
+        except Exception as e:                          # never stop the plugin over this
+            decky.logger.warning("fan/charge reapply (%s): %s", why, e)
+
+    async def get_fan(self) -> dict:
+        return {**fan.status(self.fan_hw), "preset": self.settings.get("fan_preset") or "auto",
+                "custom": self.settings.get("fan_custom") or fan.PRESETS["quiet"]}
+
+    async def set_fan(self, preset: str, custom: list | None = None) -> dict:
+        r = await asyncio.get_event_loop().run_in_executor(None, fan.apply, self.fan_hw, preset, custom)
+        if r["ok"]:
+            self.settings["fan_preset"] = preset
+            if preset == "custom":
+                self.settings["fan_custom"] = [fan.snap(x) for x in custom or []]
+            self._save_settings()
+        decky.logger.info("fan: %s", r["summary"] if r["ok"] else r["error"])
+        return r
+
+    async def get_charge(self) -> dict:
+        return {**fan.charge_status(self.hw.paths.charge_limit), "setting": self.settings.get("charge_limit")}
+
+    async def set_charge_limit(self, limit: int | None) -> dict:
+        path = self.hw.paths.charge_limit
+        if path and "charge_original" not in self.settings:   # what the battery had before ClawDeck: Off restores it
+            self.settings["charge_original"] = sysfs.read_int(path)
+        r = fan.set_charge(path, limit, self.settings.get("charge_original"))
+        if r["ok"]:
+            self.settings["charge_limit"] = None if limit is None else r["wanted"]
+            self._save_settings()
+        decky.logger.info("charge limit: %s", r["summary"] if r["ok"] else r["error"])
+        return r
+
     async def resumed(self) -> dict:
         """After resume from suspend: firmware may have reset limits; re-apply the running game."""
+        self._reapply_fan_charge("resume")
         if self.running_appid is None:
             return {"reapplied": False}
         plugged = bool(self.battery.plugged())

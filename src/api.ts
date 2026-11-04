@@ -115,3 +115,12 @@ export const displayExternal = callable<[], { connected: boolean; connectors: st
 export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");
 export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };
 export const getChanges = callable<[], Changes>("get_changes");
+
+// fan presets and the battery charge limit (fan.py)
+export type FanState = { supported: boolean; preset?: string; custom?: number[];
+  fans?: { fan: number; rpm: number | null; enable: number | null; temps: (number | null)[]; duties: (number | null)[] }[] };
+export type ChargeState = { supported: boolean; limit?: number | null; setting?: number | null };
+export const getFan = callable<[], FanState>("get_fan");
+export const setFan = callable<[preset: string, custom?: number[] | null], WriteResult>("set_fan");
+export const getCharge = callable<[], ChargeState>("get_charge");
+export const setChargeLimit = callable<[limit: number | null], WriteResult>("set_charge_limit");
