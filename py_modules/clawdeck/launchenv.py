@@ -17,8 +17,10 @@ game's OptiScaler.ini at each launch (its README, "Configuring OptiScaler via En
                                               FSR frame generation
   xess_latest  bool                 XESS=latest: Intel's current XeSS libraries instead of the game's older ones
   low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
-  opti         off | xess | fsr4    OptiScaler (Decky Framegen) upscaler for this game: XeSS on XMX, or FSR 4 INT8
-                                    (experimental on Intel); only takes effect when the game runs through fgmod
+  opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
+                                    OptiScaler (Decky Framegen) upscaler for this game: XeSS on XMX, FSR 4 INT8
+                                    (experimental on Intel), or FSR 4.1.1 on XMX (nitec's build, regular or lite);
+                                    only takes effect when the game runs through fgmod
   opti_xefg    bool                 OptiScaler's frame-generation output = XeSS-FG (on XMX through the shim)
 
 The plugin never edits Steam's launch options itself; the user adds the wrapper once per game (Per-game does it on
@@ -45,7 +47,15 @@ OPTI_PRESETS = {
     "xess": {"Dx12Upscaler": "xess"},
     # OptiScaler 0.9.4+: FSR 4 on GPUs without official support, INT8 model (Decky Framegen README)
     "fsr4": {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"},
+    # FSR 4.1.1 on the XMX cores: nitec's "B Boost" build of AMD's upscaler (OptiScaler Discord). The user puts its
+    # files in ~/fsr4-xmx; clawdeck-launch.sh copies them over fgmod's FSR 4 after fgmod ran (CLAWDECK_FSR4_XMX).
+    # OptiScaler: the FSR 3.1 path with the FSR 4 provider (UpscalerIndex 0 is FSR 4 only by default on RDNA 4).
+    "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "0", "FSR_Fsr4Update": "true",
+                 "CLAWDECK_FSR4_XMX": "regular", "FSR4_XMX_NO_DIALOG": "1"},
+    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "0", "FSR_Fsr4Update": "true",
+                      "CLAWDECK_FSR4_XMX": "lite", "FSR4_XMX_LITE": "1", "FSR4_XMX_NO_DIALOG": "1"},
 }
+FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")
 OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
 KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_ini", "reframework"}
 INI_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")     # Decky Framegen's Section_Key form
@@ -66,7 +76,8 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     # automatic + something that runs through xess-xmx-linux's hook (an FSR game on XeSS, frame generation, the
     # latest XeSS): that game needs the XMX driver even though it ships no XeSS of its own (CONTROL Resonant: FSR
     # only). OptiScaler games are found by the scope itself (optiscaler.ini).
-    if per_game and x is None and (fg or (launch.get("fsr") or "off") != "off" or launch.get("xess_latest")):
+    if per_game and x is None and (fg or (launch.get("fsr") or "off") != "off" or launch.get("xess_latest")
+                                   or launch.get("opti") in FSR4_XMX):
         env["CLAWDECK_XMX"] = "1"
     if not isinstance(fg, int) or isinstance(fg, bool) or not (fg == 0 or 2 <= fg <= 8):
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
@@ -94,10 +105,12 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
         if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or k in env:
             raise ValueError(f"bad OptiScaler setting {k}={v}")
         env[k] = v
-    if launch.get("reframework"):
-        # REFramework's dinput8.dll instead of Wine's own. Ends in ";" because Decky Framegen's fgmod appends its
-        # proxy as ",dxgi=n,b"; Wine splits entries at ";", so the result still reads as two entries.
-        env["WINEDLLOVERRIDES"] = "dinput8=n,b;"
+    # native DLLs instead of Wine's own: REFramework's dinput8.dll; the LZMS-capable cabinet.dll the FSR 4 XMX build
+    # needs (tools/cabinet-lzms). Ends in ";" because Decky Framegen's fgmod appends its proxy as ",dxgi=n,b"; Wine
+    # splits entries at ";", so the result still reads as separate entries.
+    dlls = (["dinput8"] if launch.get("reframework") else []) + (["cabinet"] if opti in FSR4_XMX else [])
+    if dlls:
+        env["WINEDLLOVERRIDES"] = "".join(f"{d}=n,b;" for d in dlls)
     return env
 
 

@@ -62,7 +62,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 
 // ---- per game ------------------------------------------------------------------------------------------------------
 export type FsrRoute = "off" | "xess" | "fg" | "inject";
-export type OptiPreset = "off" | "xess" | "fsr4";
+export type OptiPreset = "off" | "xess" | "fsr4" | "fsr4_xmx" | "fsr4_xmx_lite";
 export type Launch = { opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
@@ -74,7 +74,8 @@ export type FramegenState = { installed: boolean; dir: string | null; version: s
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
 export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
 export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
-  drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null };
+  drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null;
+  fsr4_xmx?: { dir: string; ready: boolean; missing: string[] } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
@@ -98,6 +99,7 @@ export type OverlayPower = { available: boolean; on: boolean; files: { path: str
 export type QuietLog = { applies: boolean; installed: boolean; per_minute: number | null };
 export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower; quiet_log?: QuietLog };
 export const getFixes = callable<[], Fixes>("get_fixes");
+export const uiLog = callable<[msg: string], void>("ui_log");
 export const displayExternal = callable<[], { connected: boolean; connectors: string[] }>("display_external");
 export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");
 export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };

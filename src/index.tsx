@@ -1,8 +1,8 @@
-import { DialogButton, Focusable, staticClasses } from "@decky/ui";
+import { DialogButton, Focusable, Router, staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
 import { MdSettings } from "react-icons/md";
 
-import { displayExternal, gameStarted, gameStopped, getChanges, getFixes, getSetting, powerSourceChanged, resumed } from "./api";
+import { uiLog, displayExternal, gameStarted, gameStopped, getChanges, getFixes, getSetting, powerSourceChanged, resumed } from "./api";
 import { startVrrScope, VrrScope } from "./vrr";
 import { LogoIcon } from "./components/LogoIcon";
 import { FullPage, openPage, QuickPanel, ROUTE } from "./pages";
@@ -13,9 +13,11 @@ export default definePlugin(() => {
   routerHook.addRoute(ROUTE, FullPage, { exact: false });
   // Game lifecycle: apply the per-game profile at start, revert and save what autotune learned at stop.
   const unregisters: (() => void)[] = [];
+  const vrrScopeRef: { current: VrrScope | null } = { current: null };
   try {
     const hook = SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.((e: { unAppID: number; bRunning: boolean }) => {
       const appid = String(e.unAppID);
+      setTimeout(() => vrrScopeRef.current?.poke(), 500);   // menus ↔ game: VRR follows without waiting for Steam
       if (e.bRunning) {
         gameStarted(appid).then((r: any) => {
           if (r?.failed?.length) toaster.toast({ title: "ClawDeck", body: `Profile applied, but ${r.failed.join(", ")} failed` });
@@ -71,10 +73,12 @@ export default definePlugin(() => {
       const want = !disposed && (pref === null || pref === undefined ? !!f?.vrr?.wide : !!pref);
       if (want && !vrrScope) {
         await ext();
-        vrrScope = startVrrScope((m) => console.log("ClawDeck:", m), () => external);
+        vrrScope = startVrrScope((m) => { console.log("ClawDeck:", m); uiLog(`vrr: ${m}`).catch(() => undefined); },
+          () => external, () => { try { return !!Router?.MainRunningApp; } catch { return null; } });
+        vrrScopeRef.current = vrrScope;
         if (!extTimer) extTimer = setInterval(ext, 5000);   // polled only while the switch is on
       }
-      if (!want && vrrScope) { vrrScope.stop(); vrrScope = null; }
+      if (!want && vrrScope) { vrrScope.stop(); vrrScope = null; vrrScopeRef.current = null; }
       if (!want && extTimer) { clearInterval(extTimer); extTimer = null; }
     } catch (err) { console.warn("ClawDeck: VRR scope", err); }
   }));

@@ -80,20 +80,26 @@ export type VrrScope = {
 };
 
 /**
- * Keep VRR on while a game runs and off otherwise. Reacts to Steam's own state changes, so a profile Steam applies
- * at game start is corrected too; writes only when VRR differs from what it should be, at most once a second (a
- * change inside that second is retried when it ends). The value Steam had for each profile before ClawDeck's first
- * write is kept and put back when this stops or stands aside (an external display), so the user's setting returns.
- * If Steam doesn't take a write (three in a row for the same state), ClawDeck stops writing and says so.
+ * Steam's menus at a fixed refresh, games as the user set them. In the menus (no game running) VRR is switched off,
+ * so the menus don't follow a slow frame rate; the value it had is kept per Steam profile. When a game runs, that
+ * value is put back once (if the game uses the same profile) and then Steam's own VRR switch is left alone, so the
+ * user can still turn VRR off for a game. Writes at most once a second (a change inside that second is retried when
+ * it ends). Everything kept is put back when this stops or stands aside (an external display). If Steam doesn't take
+ * a write (three in a row for the same state), ClawDeck stops writing and says so.
+ *
+ * "A game runs" comes from the caller (Decky's Router.MainRunningApp): Steam's perf state can carry a game id in
+ * the menus too (seen on the Claw 8 EX, 2026-11-04: menus stayed on VRR and the user couldn't switch it off).
  */
-export const startVrrScope = (log: (m: string) => void = () => {}, standAside: () => boolean = () => false): VrrScope | null => {
+export const startVrrScope = (log: (m: string) => void = () => {}, standAside: () => boolean = () => false,
+                              inGame: () => boolean | null = () => null): VrrScope | null => {
   const perf = SteamClient?.System?.Perf;
   if (!perf?.UpdateSettings || !perf?.RegisterForStateChanges) { log("Steam has no Perf.UpdateSettings here"); return null; }
   let last = 0, writes = 0, error: string | null = null, stopped = false, aside = false, refused = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let seen: { game: bigint; profile: bigint; vrr: boolean | null } = { game: 0n, profile: 0n, vrr: null };
-  const orig = new Map<string, boolean>();       // profile -> VRR before ClawDeck's first write
+  const orig = new Map<string, boolean>();       // profile -> VRR before ClawDeck switched it off for the menus
   let lastWrite: { key: string; want: boolean } | null = null;
+  let playing = false;
 
   const write = (profile: bigint, on: boolean) => {
     perf.UpdateSettings(b64(encodeVrrUpdate(profile, on)));
@@ -106,28 +112,42 @@ export const startVrrScope = (log: (m: string) => void = () => {}, standAside: (
     if (orig.size) log(`VRR: your setting back (${why})`);
     orig.clear();
   };
+  const throttled = (): boolean => {
+    const wait = 1000 - (Date.now() - last);
+    if (wait > 0) { if (!timer) timer = setTimeout(() => { timer = null; check(); }, wait); return true; }
+    return false;
+  };
   const check = () => {
     if (stopped) return;
     if (standAside()) { if (!aside) { aside = true; restore("external display"); } return; }
     aside = false;
-    const want = seen.game !== 0n;              // a game is running: VRR on; Steam's menus: off
-    if (seen.vrr === null || seen.vrr === want) { refused = 0; return; }   // null: no settings in this update
-    const wait = 1000 - (Date.now() - last);
-    if (wait > 0) {                             // inside the 1 s window: try again when it ends
-      if (!timer) timer = setTimeout(() => { timer = null; check(); }, wait);
+    const g = inGame();
+    playing = g ?? seen.game !== 0n;
+    if (seen.vrr === null) return;              // no settings in this update
+    const pk = String(seen.profile);
+    if (playing) {                              // the game's VRR is the user's: only undo what the menus changed
+      if (!orig.has(pk)) { refused = 0; return; }
+      if (throttled()) return;
+      const v = orig.get(pk)!;
+      orig.delete(pk);
+      last = Date.now();
+      if (seen.vrr !== v) {
+        try { write(seen.profile, v); log(`VRR back to ${v ? "on" : "off"} for the game`); } catch (e) { error = `Steam refused the VRR change: ${e}`; }
+      }
       return;
     }
-    const key = `${seen.game}/${seen.profile}`;
-    refused = lastWrite && lastWrite.key === key && lastWrite.want === want ? refused + 1 : 0;
+    if (!seen.vrr) { refused = 0; return; }     // menus, already off
+    if (throttled()) return;
+    const key = `menus/${pk}`;
+    refused = lastWrite && lastWrite.key === key ? refused + 1 : 0;
     if (refused >= 3) { error = "Steam doesn't take the VRR change; Steam's own switch is in charge"; return; }
     last = Date.now();
-    const pk = String(seen.profile);
-    if (!orig.has(pk)) orig.set(pk, seen.vrr);
+    if (!orig.has(pk)) orig.set(pk, true);
     try {
-      write(seen.profile, want);
-      lastWrite = { key, want };
+      write(seen.profile, false);
+      lastWrite = { key, want: false };
       error = null;
-      log(`VRR ${want ? "on (game " + seen.game + ")" : "off (Steam's menus)"}`);
+      log("VRR off in Steam's menus (fixed 120 Hz)");
     } catch (e) { error = `Steam refused the VRR change: ${e}`; }
   };
   const reg = perf.RegisterForStateChanges((raw: any) => {
@@ -145,6 +165,6 @@ export const startVrrScope = (log: (m: string) => void = () => {}, standAside: (
       if (!aside) restore("switched off");
     },
     poke: check,
-    status: () => ({ active: !standAside(), game: String(seen.game), vrr: seen.vrr, writes, error }),
+    status: () => ({ active: !standAside(), game: playing ? String(seen.game || "1") : "0", vrr: seen.vrr, writes, error }),
   };
 };

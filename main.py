@@ -85,6 +85,7 @@ class Plugin:
         self.running_appid: str | None = None
         self._health: tuple[float, list] | None = None
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
+        self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
         self._guard_task: asyncio.Task | None = None
         self.running_plugged: bool | None = None
@@ -247,6 +248,10 @@ class Plugin:
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
                 "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()},
                 "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)}}
+
+    async def ui_log(self, msg: str) -> None:
+        """A line from the panel (VRR switching), so it shows in ClawDeck's log next to the backend's."""
+        decky.logger.info("ui: %s", str(msg)[:300])
 
     async def display_external(self) -> dict:
         """An external display connected? Read by the "VRR only in games" switch every few seconds (src/vrr.ts)."""
@@ -605,7 +610,16 @@ class Plugin:
         detected = await self._bg(xmxscope.ships_xess, d)
         auto = detected or launchenv.compose({**launch, "xmx": None}).get("CLAWDECK_XMX") == "1"
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
-                "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d)}
+                "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files()}
+
+    @staticmethod
+    def _fsr4_xmx_files() -> dict:
+        """nitec's FSR 4.1.1 XMX build, where the launch wrapper takes it from (~/fsr4-xmx). Not downloaded by
+        ClawDeck: it is shared in the OptiScaler Discord, and the user places it."""
+        d = os.path.join(HOME, "fsr4-xmx")
+        missing = [f for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll")
+                   if not os.path.isfile(os.path.join(d, f))]
+        return {"dir": d, "ready": not missing, "missing": missing}
 
     # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
     REC_KEYS = ("opti", "opti_xefg", "opti_ini", "reframework", "fsr")
@@ -631,7 +645,10 @@ class Plugin:
         if rec["re_engine"]:
             if not folder:
                 return {"ok": False, "error": "can't find the game's exe for REFramework"}
-            r = await self._bg(reframework.install, HOME, folder, self._versions()["reframework"], bool(allow_unpinned))
+            if self._install_lock.locked():
+                return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
+            async with self._install_lock:
+                r = await self._bg(reframework.install, HOME, folder, self._versions()["reframework"], bool(allow_unpinned))
             if not r.get("ok"):
                 return r
         clean = {k: None for k in self.REC_KEYS}
@@ -650,10 +667,13 @@ class Plugin:
         return await self._bg(framegen.state, HOME)
 
     async def framegen_install(self, allow_unpinned: bool = False) -> dict:
-        try:
-            r = await self._bg(framegen.install, HOME, self._versions()["decky_framegen"], bool(allow_unpinned))
-        except Exception as e:
-            r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        if self._install_lock.locked():      # a second tap while the first download runs (seen 2026-11-04: they broke each other)
+            return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
+        async with self._install_lock:
+            try:
+                r = await self._bg(framegen.install, HOME, self._versions()["decky_framegen"], bool(allow_unpinned))
+            except Exception as e:
+                r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if not r.get("ok"):
             decky.logger.warning("Decky Framegen install failed: %s", r.get("error"))
         return r
@@ -682,10 +702,13 @@ class Plugin:
 
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
         self._health = None
-        try:
-            r = await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned))
-        except Exception as e:
-            r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        if self._install_lock.locked():
+            return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
+        async with self._install_lock:
+            try:
+                r = await self._bg(xess.install, HOME, self._versions()["xess_xmx_linux"], bool(allow_unpinned))
+            except Exception as e:
+                r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if not r.get("ok"):
             decky.logger.warning("XeSS XMX install failed: %s", r.get("error"))
         return r
