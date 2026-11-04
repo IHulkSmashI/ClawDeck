@@ -31,10 +31,10 @@ R5 setup (by hand for now; ClawDeck will do it per game once tested):
 1. In OptiScaler's folder in the game (where `OptiScaler.ini` is, after one R2 launch): put the B Boost build there as
    `amd_fidelityfx_upscaler_dx12.dll` (keep any original as `.orig`), and `fsr-original.dll` = xess-xmx-linux's
    `ffx/amd_fidelityfx_upscaler_dx12.dll`, renamed.
-2. `cabinet.dll` from Windows (until our open replacement is ready). Your Windows drive, read-only:
-   `lsblk -f` → the large `ntfs` partition on the internal drive, then
-   `sudo mkdir -p /mnt/win && sudo mount -o ro /dev/<that partition> /mnt/win && cp /mnt/win/Windows/System32/cabinet.dll <OptiScaler's folder>/ && sudo umount /mnt/win`.
-   If it asks for a BitLocker key, stop: copy it from Windows to a USB stick instead.
+2. ClawDeck's open `cabinet.dll` (`tools/cabinet-lzms`, no Windows file needed) into the same folder, and the
+   Proton's own one next to it as `cabinet_wine.dll`:
+   `cp "<Proton>/files/lib/wine/x86_64-windows/cabinet.dll" <OptiScaler's folder>/cabinet_wine.dll`
+   (`<Proton>` = the one the benchmark runs with, e.g. `~/.local/share/Steam/steamapps/common/Proton - Experimental`).
 3. Launch options: `WINEDLLOVERRIDES=cabinet=n,b FSR4_XMX_NO_DIALOG=1 IGDEXT_XELL_LOG=1 Dx12Upscaler=fsr31 FrameGen_FGOutput=xefg ~/fgmod/fgmod %command%`
    (add `FSR4_XMX_LITE=1` for the Lite model).
 4. In OptiScaler's overlay (Insert key or a keyboard on the Claw): the upscaler must read FSR 4, frame generation XeFG.
