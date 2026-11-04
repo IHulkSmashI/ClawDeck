@@ -65,7 +65,11 @@ OPTI_FG = {
     "fsrfg": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "fsrfg", "FrameGen_FGOutput": "xefg"},      # the game's FSR FG
     "upscaler": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "upscaler", "FrameGen_FGOutput": "xefg"},  # any game
 }
-KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll"}
+KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll",
+        "opti_overlay"}
+# OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
+# generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
+OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
 # OptiScaler.ini sections (0.9.4), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
 INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
                 "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
@@ -117,6 +121,9 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
         if ofg not in OPTI_FG:
             raise ValueError(f"unknown OptiScaler frame generation {ofg!r}")
         env.update(OPTI_FG[ofg])
+    ov = launch.get("opti_overlay")
+    if ov is not None and (isinstance(ov, bool) or ov not in OVERLAYS):
+        raise ValueError(f"unknown OptiScaler overlay {ov!r}")
     ini = launch.get("opti_ini") or {}
     if not isinstance(ini, dict):
         raise ValueError("opti_ini must be a map of Section_Key to value")
@@ -179,6 +186,9 @@ def opti_ini(launch: dict) -> dict[str, str]:
     fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
     if fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):
         env["XeFG_InterpolationCount"] = str(min(max(fg - 1, 1), 3))
+    ov = launch.get("opti_overlay")
+    if isinstance(ov, int) and not isinstance(ov, bool) and ov in OVERLAYS:
+        env.update({"Menu_ShowFps": "true", "Menu_FpsOverlayType": str(ov), "Menu_FpsOverlayPos": "1"})
     out = {}
     for k, v in env.items():
         if k in UNPREFIXED:
