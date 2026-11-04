@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getFixes, setSetting, setWideVrr, xessInstall, xessState, Fixes, XessState } from "../api";
 import { confirmUntested } from "./confirm";
-import { Note, Status } from "./Hint";
+import { Group, Note, Status } from "./Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
@@ -45,7 +45,8 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
         <Note>Two steps, once. After that this panel shows Power and your games.</Note>
       </PanelSectionRow>
       <PanelSectionRow>
-        <Status ok={driverOk ? true : null} label={`1. XeSS XMX driver: ${driverOk ? "installed" : "not installed"}`}
+        <Group title="Step 1 of 2" first />
+        <Status ok={driverOk ? true : null} label={`XeSS XMX driver: ${driverOk ? "installed" : "not installed"}`}
           detail="Runs XeSS, FSR 4.1.1, frame generation and XeLL on the XMX cores, per game (never for Steam's own screen)." />
         {!driverOk && (
           <ButtonItem layout="below" disabled={!!busy || !x} onClick={() => installDriver(false)}>
@@ -55,7 +56,8 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
       </PanelSectionRow>
       {vrr?.supported && (
         <PanelSectionRow>
-          <Status ok={vrrDone ? true : null} label={`2. VRR 30–120 Hz: ${vrr.wide ? "installed" : vrr.pending === "on" ? "installed, restart to use it" : "not installed"}`}
+          <Group title="Step 2 of 2" />
+          <Status ok={vrrDone ? true : null} label={`VRR 30–120 Hz: ${vrr.wide ? "installed" : vrr.pending === "on" ? "installed, restart to use it" : "not installed"}`}
             detail="The screen can do VRR from 30 Hz but says 48, so games below 48 fps judder. ClawLab's fix, the one Windows users install. Needs one restart." />
           {!vrrDone && (
             <ButtonItem layout="below" disabled={!!busy} onClick={installVrr}>

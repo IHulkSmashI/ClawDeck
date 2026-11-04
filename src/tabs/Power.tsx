@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Problem, Status, useExplanations } from "../components/Hint";
+import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -173,6 +173,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Problem error={err} what="Power limit" />
       </PanelSectionRow>
       <PanelSectionRow>
+        <Group title="Autotune" />
         <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
           description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within ${st?.autotune_keep ?? 5} % of them. On battery only (Advanced turns it on plugged in). Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />

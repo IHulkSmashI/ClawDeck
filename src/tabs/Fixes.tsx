@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getFixes, getHealth, getSetting, runFix, setSetting, setWideVrr, Fixes, Health } from "../api";
 import { confirmRestart } from "../components/confirm";
-import { explain, Problem, Status, useExplanations } from "../components/Hint";
+import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
@@ -47,6 +47,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
   return (
     <PanelSection title="Fixes">
       <PanelSectionRow>
+        <Group title="Screen (VRR)" first />
         <Status ok={vrr ? (vrr.wide ? true : vrr.supported ? false : null) : null}
           label={vrr?.range ? `VRR range: ${vrr.range[0]}–${vrr.range[1]} Hz` : "VRR range unknown"}
           detail={vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, ClawLab-validated` : undefined)} />
@@ -76,6 +77,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       )}
       {b?.applies && (
         <PanelSectionRow>
+          <Group title="Face buttons" />
           <Status ok={b.ok} label={b.installed ? "Face buttons: fix installed" : b.upstream_fixed ? "Face buttons: InputPlumber maps them itself" : "Face buttons: dead in Game Mode"}
             detail={b.installed ? "left = Steam menu, right = Quick Access (InputPlumber override)" : b.upstream_fixed ? `map ${b.stock_map}; ClawDeck's override isn't needed` : "the EX sends Win+G and F15; InputPlumber's stock map waits for other keys"} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(b.installed ? "undo_face_buttons" : "fix_face_buttons")}
@@ -86,6 +88,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       )}
       {f?.overlay_power?.available && (
         <PanelSectionRow>
+          <Group title="Performance overlay" />
           <Status ok={f.overlay_power.on ? true : null}
             label={f.overlay_power.on ? "Watts in the overlay: on (shows after a restart)" : "Watts in the overlay: off (shows 0.0 W)"}
             detail={f.overlay_power.battery_w != null ? `Battery now: ${f.overlay_power.battery_w} W (ClawDeck corrects the EX's 100x battery reading)` : undefined} />
@@ -99,6 +102,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       )}
       {f?.quiet_log?.applies && (
         <PanelSectionRow>
+          <Group title="System log" />
           <Status ok={f.quiet_log.installed}
             label={f.quiet_log.installed ? "System log: split-lock flood silenced" : "System log: flooded by split-lock lines"}
             detail={f.quiet_log.per_minute != null ? `${f.quiet_log.per_minute} split-lock lines in the last minute` : undefined} />
@@ -111,6 +115,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
         </PanelSectionRow>
       )}
       <PanelSectionRow>
+        <Group title="Health check" />
         <Status ok={f ? f.health.ok : null} label={f ? `Health: ${f.health.line}` : "Health: checking…"} detail={f ? `${f.health.total - f.health.problems} of ${f.health.total} checks pass` : undefined} />
         <Problem error={err} what="Fix" />
       </PanelSectionRow>

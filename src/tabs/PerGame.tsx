@@ -1,4 +1,4 @@
-import { ButtonItem, DropdownItem, Field, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
@@ -6,7 +6,7 @@ import { gameChoose, gameRecommend, gameStatus, setLaunch, FsrRoute, GameStatus,
 import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
+import { explain, Group, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -130,7 +130,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   return (
     <PanelSection title={embedded ? undefined : `Per-game: ${app.name}`}>
       <PanelSectionRow>
-        <Field label="In this game now" bottomSeparator="none" />
+        <Group title="In this game now" first />
         <div style={{ fontSize: 12, lineHeight: "18px", color: "#b8bcbf", padding: "0 0 4px" }}>
           <div>{ours ? "✓" : "–"} OptiScaler: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
             : fgmodHere || gs?.opti_owner === "decky-framegen" ? "Decky Framegen's (ClawDeck leaves it alone)" : gs?.opti_owner === "other" ? "put there by another tool or by hand" : "not in the game"}</div>
@@ -143,7 +143,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       </PanelSectionRow>
       {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
-          <DropdownItem label="Upscaler (runs on the XMX cores)" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
+          <Group title="Upscaling and frame generation (XMX cores)" />
+          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
             onChange={(o) => setPickUp(String(o.data))}
             description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
@@ -152,6 +153,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             selectedOption={wantFg} onChange={(o) => setPickFg(Number(o.data))}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
+          <div style={{ height: 8 }} />
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
@@ -179,7 +181,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
         </PanelSectionRow>
       )}
       {(ours || fgmodHere) && (quick ? <Advanced id="ingame" label="How to use it in the game">{<PanelSectionRow>
-          <Field label="In the game" bottomSeparator="none" />
+          <Group title="In the game" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
             <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
@@ -188,7 +190,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
           </ol>
         </PanelSectionRow>}</Advanced> : <PanelSectionRow>
-          <Field label="In the game" bottomSeparator="none" />
+          <Group title="In the game" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
             <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
@@ -204,6 +206,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
         </PanelSectionRow>
       )}
       <PanelSectionRow>
+        <Group title="Driver and low latency" />
         {!quick && <ToggleField label="XeSS on XMX (switch off only to troubleshoot)" checked={xmxOn} disabled={!installed}
           description={explain(installed ? (perGame ? (scope?.every_game ? "Setup has the XMX driver on for every game: whatever XeSS, XeSS frame generation or XeLL this game has runs on the XMX cores. Switch it off here only if this game misbehaves or loses speed." : `Automatic: the XMX driver loads in games that ship XeSS or OptiScaler, or are set up for FSR on XeSS (${scope?.auto ? "this one is" : "this one isn't"}); Steam's own screen keeps Bazzite's driver. Setup can turn it on for every game.`)
               : "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves.")

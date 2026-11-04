@@ -42,3 +42,10 @@ export const Problem: FC<{ error: string | null | undefined; what?: string }> = 
 export const Note: FC<{ children: ReactNode; label?: ReactNode }> = ({ children, label }) => (
   <Field focusable bottomSeparator="none" label={label} description={children} />
 );
+
+/** A heading inside a panel section: Steam's blue, bold, small caps, with space above and a thin rule, so blocks of
+ * settings read as separate groups instead of one long list (maintainer, 2026-11-04). */
+export const Group: FC<{ title: ReactNode; first?: boolean }> = ({ title, first }) => (
+  <div style={{ margin: first ? "2px 0 6px" : "14px 0 6px", paddingBottom: 4, borderBottom: "1px solid rgba(26,159,255,0.35)",
+    color: "#1a9fff", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</div>
+);
