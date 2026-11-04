@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { gameStatus, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset } from "../api";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Note, Problem, Status } from "../components/Hint";
+import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -33,6 +33,7 @@ const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
  * (an environment file per game), so the first change adds the wrapper to the game's launch options.
  */
 export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
+  useExplanations();
   const app = runningApp();
   const [gs, setGs] = useState<GameStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
           onChange={(v) => save({ xmx: perGame && v === !!scope?.auto ? null : v } as any)} />
         <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && installed) || (!xmxOn && !wrapped) ? false : null) : null}
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
-            : xmxOn ? (xessOk ? `XeSS on XMX (${perGame ? (launch.xmx == null ? "automatic" : "on for this game") : "default"}): ${gs.xess.status.mode ?? "patched driver"}`
+            : xmxOn ? (xessOk ? `XeSS runs on XMX (${perGame ? (launch.xmx == null ? "automatic" : "switched on for this game") : "default"})`
               : gs.xess.status.state === "unknown" ? "XeSS on XMX from your next log-in (the session check hasn't run yet)" : "XeSS: patched driver not loading, DP4a fallback")
             : perGame ? (launch.xmx === false ? "XeSS: Bazzite's driver for this game (switched off)" : "Bazzite's driver: this game ships no XeSS or OptiScaler")
               : wrapped ? "XeSS: stock driver for this game (DP4a)" : "XMX off is saved, but ClawDeck isn't in this game's launch options yet, so the game still uses XMX"}
