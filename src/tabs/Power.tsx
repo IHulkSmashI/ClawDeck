@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Problem, Status } from "../components/Hint";
+import { explain, Problem, Status, useExplanations } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -30,7 +30,7 @@ const EPP: { data: string; label: string }[] = [
 const backendName = (b: string | null | undefined) => (b === "rapl" ? "RAPL" : b === "hhd" ? "Handheld Daemon" : b === "msi-firmware" ? "MSI firmware" : "hardware");
 // one number in the main view: the sustained TDP the hardware reports back. The short boost limit (PL2) is shown
 // only under Advanced, so the line never reads like two different TDPs (maintainer, 2026-10-22).
-const reads = (st: PowerStatus | null) => `TDP ${st?.tdp_w ?? "?"} W (read back from ${backendName(st?.tdp_backend)})`;
+const reads = (st: PowerStatus | null) => `Chip now: ${st?.tdp_w ?? "?"} W (read back from ${backendName(st?.tdp_backend)})`;
 const ago = (s: number | null | undefined) => (s == null ? "" : s < 90 ? `${s} s ago` : `${Math.round(s / 60)} min ago`);
 
 /** Writes that follow a slider or a quick flick through a list: wait for the last value, write once, and let only the
@@ -47,6 +47,7 @@ const useLatest = () => {
 
 /** The Power panel: profile, TDP slider, Autotune and the read-back line; everything else under Advanced (§19). */
 export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
+  useExplanations();
   const [st, setSt] = useState<PowerStatus | null>(null);
   const [at, setAt] = useState<AutotuneStatus | null>(null);
   const [autotune, setAutotune] = useState(false);
@@ -93,7 +94,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
-    setLine(`TDP ${r.read?.tdp_w ?? "?"} W (read back from ${backendName(r.read?.backend)})`);
+    setLine(`Chip now: ${r.read?.tdp_w ?? "?"} W (read back from ${backendName(r.read?.backend)})`);
     refresh();
   };
   const pick = (id: string) => {
@@ -137,7 +138,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
             quick ? undefined : "each watt more buys fps with play time and heat.")} />
-        <Status ok={err ? false : null} label={(line ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
+        <Status ok={err ? false : null} label={(running && st?.tdp_w != null && st.tdp_w !== tdp
+            ? `Chip now: ${st.tdp_w} W (Autotune, below your ${tdp} W)` : (line ?? reads(st))) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`
             : app ? app.name : "No game running: the profile applies when one starts"} />
         <Problem error={err} what="Power limit" />

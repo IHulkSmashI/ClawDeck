@@ -4,12 +4,13 @@ import { FC, useEffect, useState } from "react";
 
 import { collectLogs, framegenInstall, framegenState, getHardware, selfTest, xessInstall, xessState, FramegenState, Hardware, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
-import { explain, Note, Problem, Status } from "../components/Hint";
+import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
 /** The XeSS XMX driver and Decky Framegen installs, the self-test and the log export. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
+  useExplanations();
   const [hw, setHw] = useState<Hardware | null>(null);
   const [x, setX] = useState<XessState | null>(null);
   const [fg, setFg] = useState<FramegenState | null>(null);
