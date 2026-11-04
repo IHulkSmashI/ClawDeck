@@ -43,7 +43,11 @@ LOW_LATENCY_SINCE = "20261104"
 
 
 def package_dir(home: str) -> str | None:
-    txt = sysfs.read(os.path.join(home, ENV_CONF)) or ""
+    """The installed package, from its driver variables: the session file install.sh writes, or, once ClawDeck has
+    made XMX per game (xmxscope.py), the copy ClawDeck keeps."""
+    from . import xmxscope
+    txt = "\n".join(sysfs.read(os.path.join(home, f)) or "" for f in
+                    (ENV_CONF, xmxscope.XMX_ENV, xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX))
     for line in txt.splitlines():
         k, _, v = line.partition("=")
         if k.strip() == "VK_DRIVER_FILES":
@@ -177,12 +181,18 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
         return {"ok": False, "error": f"preparing {pkg}: {e}"}
     r = userexec.run(["bash", os.path.join(pkg, "install.sh")], home, timeout=900, cwd=pkg)
     out = {"ok": r["rc"] == 0, "tag": got["tag"], "repo": got["repo"], "package_dir": pkg, "log": r["out"], "note": note,
-           "next": "log out of Game Mode and back in once: from then every game's XeSS runs on XMX (Per-game turns it off for one)"}
+           "next": "XeSS on XMX is ready: it loads in games that ship XeSS (or OptiScaler), never for Steam's own screen"}
     if r["rc"] != 0:
         tail = [ln for ln in r["out"].strip().splitlines() if ln.strip()][-3:]
         out["error"] = f"install.sh exited {r['rc']}: " + (" · ".join(tail) or "no output")
         return out
     out["check"] = chk = session_check(home, pkg)
+    from . import xmxscope       # per game, never the whole session (xmxscope.py says why)
+    iso = xmxscope.isolate_session(home)
+    sc = xmxscope.install_scope(home) if iso.get("ok") else {"ok": False, "error": iso.get("error")}
+    out["scope"] = {"isolated": iso, "scope": sc}
+    if not (iso.get("ok") and sc.get("ok")):
+        out["next"] = f"installed, but per-game XMX could not be set up: {iso.get('error') or sc.get('error')}"
     if chk["ran"] and not chk["ok"]:
         out["next"] = f"installed, but the driver check failed: {chk['status'].get('line') or chk.get('log', '')[-200:]}"
     return out

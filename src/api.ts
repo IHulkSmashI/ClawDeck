@@ -63,7 +63,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 // ---- per game ------------------------------------------------------------------------------------------------------
 export type FsrRoute = "off" | "xess" | "fg" | "inject";
 export type OptiPreset = "off" | "xess" | "fsr4";
-export type Launch = { xmx?: boolean; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
+export type Launch = { xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
@@ -71,7 +71,8 @@ export type XessState = { installed: boolean; package_dir: string | null; versio
 export type LatencyState = { mode: "pacing" | "idle" | "no-fg" | "off" | "none"; detail: string };
 export type FramegenState = { installed: boolean; dir: string | null; version: string | null; fgmod_ready: boolean; fgmod: string | null; optiscaler: string | null };
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
-export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string };
+export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
+export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------

@@ -185,6 +185,7 @@ export const backend = {
   },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
+    xmx_scope: { session_wide: false, per_game: true, auto: true, protons: ["Proton 11.0"], scoped: ["Proton 11.0"], unscoped: [] },
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
       : { present: false, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Hollow Knight" },
