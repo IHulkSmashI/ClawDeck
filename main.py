@@ -708,7 +708,10 @@ class Plugin:
         launch = self.profiles.get_launch(appid)
         applied = bool(rec["launch"]) and all(launch.get(k) == v for k, v in rec["launch"].items())
         who = optiscaler.owner(folder)
+        fsr4 = self._fsr4_xmx_files()
+        dx12 = await self._bg(gamedb.is_dx12, d, rec["main_exes"]) if d else False
         return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": who["owner"],
+                "fsr4": {"dx12": dx12, "files": fsr4["ready"], "missing": fsr4["missing"], "dir": fsr4["dir"]},
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
 
     async def _opti_into(self, appid: str, folder: str, launch: dict) -> dict:

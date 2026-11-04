@@ -140,3 +140,29 @@ def support(doc: dict, game_dir: str | None) -> dict:
     if match(doc, exes_in(game_dir)):
         via.append("list")
     return {"ok": bool(via), "via": via}
+
+
+def is_dx12(game_dir: str | None, exes: list[str] | None = None) -> bool:
+    """FSR 4 through OptiScaler needs a DirectX 12 game. True when the game ships a DX12-only library (FSR 3.1's
+    dx12 DLLs, D3D12 Agility SDK, Streamline) or its main exe imports d3d12.dll (looked for in its first 32 MB)."""
+    if not game_dir or not os.path.isdir(game_dir):
+        return False
+    if _has(game_dir, ("amd_fidelityfx_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll", "d3d12core.dll", "sl.interposer.dll",
+                       "ffx_fsr2_api_dx12_x64.dll")):
+        return True
+    base = game_dir.rstrip(os.sep).count(os.sep)
+    want = {e.lower() for e in exes or []}
+    for r, d, f in os.walk(game_dir):
+        if r.count(os.sep) - base >= DEPTH:
+            d[:] = []
+        for x in f:
+            lo = x.lower()
+            if not lo.endswith(".exe") or not (lo in want or lo.endswith("-shipping.exe")):
+                continue
+            try:
+                with open(os.path.join(r, x), "rb") as fh:
+                    if b"d3d12.dll" in fh.read(32 << 20).lower():
+                        return True
+            except OSError:
+                continue
+    return False

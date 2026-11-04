@@ -83,7 +83,8 @@ export type GameEntry = { appid: string; name: string; dir: string; setup: "opti
 export const gamesList = callable<[], GameEntry[]>("games_list");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
-  ini_version: string | null; opti_owner?: string | null; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
+  ini_version: string | null; opti_owner?: string | null; frame_gen?: string | null;
+  fsr4?: { dx12: boolean; files: boolean; missing: string[]; dir: string }; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
 export const gameRecommend = callable<[appid: string], Recommendation>("game_recommend");
 export const gameApplyRecommended = callable<[appid: string, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_apply_recommended");
 export const gameChoose = callable<[appid: string, upscaler: string, fg: number, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_choose");
