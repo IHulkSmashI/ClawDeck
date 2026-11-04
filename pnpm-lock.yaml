@@ -19,8 +19,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@decky/ui':
-        specifier: ^4.11.0
-        version: 4.16.0
+        specifier: ^4.16.4
+        version: 4.16.4
       '@rollup/rollup-linux-x64-musl':
         specifier: ^4.53.3
         version: 4.64.12
@@ -51,8 +51,8 @@ packages:
   '@decky/rollup@1.0.2':
     resolution: {integrity: sha512-ixuHH3msw156ACbgWZi4hgccdzDBIuqYGOVja8sLX4lHFgaWUKji1vomDi7Dk1CamgjmKt+Dqf75Pezv2FB6Bw==}
 
-  '@decky/ui@4.16.0':
-    resolution: {integrity: sha512-yvgwpDSr2tdPrpR1BPc8RvCDtmGbZ/pTULxm6jvwEoWhgxk8v1K0Y3ilpAd+aBYrDQa2fZbnqkKS6ZZTwsmz6A==}
+  '@decky/ui@4.16.4':
+    resolution: {integrity: sha512-XvnLXa0RcffsIMkl82s2puWQjgSYMnZj9C6N/xoL+9SmJ53V/65HPXU6Yw840hky6784Llc1sVRb5z/jByhB+A==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -1260,7 +1260,7 @@ snapshots:
       tslib: 2.8.1
       typescript: 5.9.3
 
-  '@decky/ui@4.16.0': {}
+  '@decky/ui@4.16.4': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
