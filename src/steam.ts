@@ -39,12 +39,31 @@ export const hasWrapper = (opts: string | null) => !!opts && opts.includes(WRAPP
 export const withWrapper = (opts: string, wrapper: string): string => {
   const o = opts.trim();
   if (hasWrapper(o)) return o;
+  // in front of Decky Framegen's fgmod, so the presets ClawDeck exports are there when fgmod writes OptiScaler.ini
+  const fg = o.match(/\S*fgmod\/fgmod(?=\s)/);
+  if (fg) return o.replace(fg[0], `${wrapper} ${fg[0]}`);
   if (o.includes("%command%")) return o.replace("%command%", `${wrapper} %command%`);
   return o ? `${wrapper} %command% ${o}` : `${wrapper} %command%`;
 };
 
 export const withoutWrapper = (opts: string): string => {
   const o = opts.replace(/\S*clawdeck-launch\.sh\s+/g, "").trim();
+  return o === "%command%" ? "" : o;
+};
+
+/** Decky Framegen's fgmod (OptiScaler) in the launch options: "~/fgmod/fgmod %command%". */
+export const hasFgmod = (opts: string | null) => !!opts && /fgmod\/fgmod(\s|$)/.test(opts);
+
+/** Put fgmod right before %command%: after ClawDeck's wrapper, so ClawDeck's presets are in its environment. */
+export const withFgmod = (opts: string, fgmod: string): string => {
+  const o = opts.trim();
+  if (hasFgmod(o)) return o;
+  if (o.includes("%command%")) return o.replace("%command%", `${fgmod} %command%`);
+  return o ? `${fgmod} %command% ${o}` : `${fgmod} %command%`;
+};
+
+export const withoutFgmod = (opts: string): string => {
+  const o = opts.replace(/\S*fgmod\/fgmod\s+/g, "").trim();
   return o === "%command%" ? "" : o;
 };
 

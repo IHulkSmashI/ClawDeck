@@ -32,7 +32,8 @@ const state = {
   floor: null as null | number,
   customTdp: null as null | number,
   keep: 5,
-  launch: { xmx: true, xell: false } as any,
+  launch: { xmx: true } as any,
+  framegen: true,
   xessInstalled: true,
 };
 
@@ -55,10 +56,30 @@ const limit = (name: string, w: number) => {
 };
 
 const xessState = () => (state.xessInstalled
-  ? { installed: true, package_dir: "/home/bazzite/.local/share/clawdeck/xess-xmx-linux-20261018", version: "20261018",
-      source: { repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018" }, drivers: ["26.1.2", "26.3.0-rc1"], default_driver: "26.3.0-rc1",
-      status: { state: "ok", line: "ok 2026-10-21 18:02:11 /x Mesa 26.3.0-rc1", mode: "XMX (patched driver)" }, xell_capable: false, official_proton: [] }
-  : { installed: false, package_dir: null, version: null, source: null, drivers: [], default_driver: null, status: { state: "unknown", line: null }, xell_capable: false, official_proton: [] });
+  ? { installed: true, package_dir: "/home/bazzite/.local/share/clawdeck/xess-xmx-linux-20261104", version: "20261104",
+      source: { repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104" }, drivers: ["26.1.2", "26.3.0-rc3"], default_driver: "26.3.0-rc3",
+      status: { state: "ok", line: "ok 2026-11-04 18:02:11 /x Mesa 26.3.0-rc3", mode: "XMX (patched driver)" }, low_latency: true, official_proton: [] }
+  : { installed: false, package_dir: null, version: null, source: null, drivers: [], default_driver: null, status: { state: "unknown", line: null }, low_latency: false, official_proton: [] });
+
+const framegenState = () => (state.framegen
+  ? { installed: true, dir: "/home/bazzite/homebrew/plugins/Decky-Framegen", version: "0.17", fgmod_ready: true, fgmod: "/home/bazzite/fgmod/fgmod", optiscaler: "0.9.4-final.20260718" }
+  : { installed: false, dir: null, version: null, fgmod_ready: false, fgmod: null, optiscaler: null });
+
+// what the launch wrapper would export for the example game (mirrors launchenv.compose)
+const envOf = (l: any) => {
+  const e: Record<string, string> = {};
+  if (l.xmx === false) e.VK_DRIVER_FILES = "/usr/share/vulkan/icd.d/intel_icd.x86_64.json";
+  if (l.fg) e.XESS_FG = String(l.fg);
+  if (l.fsr === "xess") e.FSR = "xess";
+  if (l.fsr === "fg") e.FSR_FG = "xess";
+  if (l.fsr === "inject") { e.FSR = "xess"; e.FSR_FG = "inject"; }
+  if (l.xess_latest) e.XESS = "latest";
+  if (l.low_latency === false) e.IGDEXT_XELL_CAP = "off";
+  if (l.opti === "xess") e.Dx12Upscaler = "xess";
+  if (l.opti === "fsr4") { e.Dx12Upscaler = "fsr31"; e.FSR_Fsr4ForceEnableInt8 = "true"; }
+  if (l.opti_xefg) { e.FrameGen_Enabled = "true"; e.FrameGen_FGOutput = "xefg"; }
+  return e;
+};
 
 const health = () => [
   { id: "model", title: "Claw model recognised", ok: true, detail: "MSI Claw 8 EX AI+ (MS-1T91), Panther Lake", fix: null },
@@ -102,9 +123,10 @@ export const backend = {
     buttons: { applies: true, ok: state.buttonsFixed, installed: state.buttonsFixed, stock_map: "claw2", upstream_fixed: false, legacy_hwdb: [] },
     health: healthSummary(),
   }),
-  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : null),
+  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : k === "autotune_plugged" ? !!(state as any).autotune_plugged : null),
   set_setting: (k: string, v: any) => {
     if (k === "autotune") state.autotune = v;
+    if (k === "autotune_plugged") (state as any).autotune_plugged = v;
     return true;
   },
   self_test: () => (scenario.game
@@ -154,24 +176,31 @@ export const backend = {
   game_started: () => ({}), game_stopped: () => ({}), power_source_changed: () => ({}), resumed: () => ({}),
 
   // ---- per game ----
-  get_launch: () => ({ launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }),
-  set_launch: (_a: string, v: any) => { Object.assign(state.launch, v); return { ok: true, launch: state.launch, env: {}, wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }; },
+  get_launch: () => ({ launch: state.launch, env: envOf(state.launch), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" }),
+  set_launch: (_a: string, v: any) => {
+    for (const [k, val] of Object.entries(v)) { if (val === null) delete state.launch[k]; else state.launch[k] = val; }
+    return { ok: true, launch: state.launch, env: envOf(state.launch), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" };
+  },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
       : { present: false, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Hollow Knight" },
-    xell: state.launch.xell
-      ? { mode: "cross-vendor", shim: true, detail: "XeLL is used, in its built-in cross-vendor mode (the upstream build has no driver mode)" }
-      : { mode: "off", shim: true, detail: "XeLL driver mode is off for this game" },
+    framegen: framegenState(),
+    latency: state.launch.low_latency === false
+      ? { mode: "off", detail: "Turned off for this game: frames may queue in front of the GPU (more input lag)" }
+      : { mode: "pacing", detail: "Holding frames back so they don't queue: waited in 87 of the last 100 frames, 6.4 ms each" },
   }),
 
   // ---- setup: installs ----
   xess_state: () => xessState(),
-  xess_install: (allow: boolean) => (state.xessInstalled
-    ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", summary: "XeSS XMX 20261018 is up to date" })
-    : allow ? (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261018", note: "IHulkSmashI/xess-xmx-linux has no release yet; installed HHHHanasak1/xess-xmx-linux's instead (no XeLL driver mode)" }))
-    : { ok: false, error: "xess-xmx-linux has no tested version pinned yet; allow 'latest (untested)' to continue" }),
+  xess_install: () => (state.xessInstalled
+    ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", summary: "XeSS XMX 20261104 is up to date" })
+    : (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", next: "log out of Game Mode and back in once" }))),
+  framegen_state: () => framegenState(),
+  framegen_install: (allow: boolean) => (state.framegen ? ok({ already: true, summary: "Decky Framegen 0.17 is installed" })
+    : allow ? (state.framegen = true, ok({ tag: "v0.17", restarting: true, next: "Decky restarts in a few seconds. Then open Decky Framegen once and tap \"Setup OptiScaler Mod\"." }))
+    : { ok: false, error: "xXJSONDeruloXx/Decky-Framegen has no tested version pinned yet; allow 'latest (untested)' to continue" }),
 
   // ---- fixes ----
   set_wide_vrr: (on: boolean) => { state.wideVrr = on; return { ok: true, restart: true }; },

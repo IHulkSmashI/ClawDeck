@@ -5,9 +5,10 @@ need it. Battery rule: nothing here runs on a timer unless autotune is on for a 
 task) or thermald is paused while ClawDeck holds a TDP (the temperature guard: one file read every 10 s, §21).
 Power-source changes and resume arrive as events from Steam (frontend listeners).
 
-Scope (2026-10-21 reset): only what Bazzite and Steam's Quick Access do not already do. Four panels: Power
-(profile + autotune), Per-game (XeSS XMX, XeLL), Fixes (VRR range, face buttons, health), Setup (the XeSS driver,
-self-test, log export). OptiScaler and Lossless Scaling per game are Bazzite's own Decky plugins.
+Scope: only what Bazzite and Steam's Quick Access do not already do. Four panels: Power (profile + autotune),
+Per-game (XeSS on XMX: frame generation multiplier, FSR on XeSS, latest XeSS, low latency; OptiScaler presets for
+Decky Framegen), Fixes (VRR range, face buttons, health), Setup (the XeSS driver, Decky Framegen, self-test, log
+export). OptiScaler itself stays Decky Framegen's (Bazzite's Portal); ClawDeck installs it where it is missing.
 """
 import asyncio
 import glob
@@ -32,8 +33,8 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, buttons, changes, downloads, edid, health, hw, launchenv, power,  # noqa: E402
-                      profiles, stack, sysfs, thermal, userexec, xess)
+from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+                      power, profiles, stack, sysfs, thermal, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -394,7 +395,8 @@ class Plugin:
             base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
         self.guard.reset()
         result = self.power.apply_profile(base, overrides, plugged)
-        if self.settings.get("autotune") and prof.get("autotune", True):
+        # autotune is for battery: plugged in it only runs when the user asked for that too (Advanced)
+        if self.settings.get("autotune") and prof.get("autotune", True) and (not plugged or self.settings.get("autotune_plugged")):
             # the picked limit (profile or slider) is the set TDP autotune measures at and works under; its floor is
             # the model minimum or the user's
             lo, hi = hw.tdp_range(self.hw.model, plugged)
@@ -517,7 +519,7 @@ class Plugin:
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
     async def set_launch(self, appid: str, values: dict) -> dict:
-        allowed = {"xmx", "xell"}
+        allowed = launchenv.KEYS
         clean = {k: v for k, v in values.items() if k in allowed}
         try:   # a value the launch wrapper can't use must be refused here, not break get_launch later
             launchenv.compose({**self.profiles.get_launch(appid), **clean})
@@ -527,11 +529,26 @@ class Plugin:
         return {"ok": True, **(await self.get_launch(appid)), "file": self._write_launch(appid)}
 
     async def game_status(self, appid: str) -> dict:
-        """The Per-game panel in one call: the XeSS driver and what XeLL did in this game's last launch."""
+        """The Per-game panel in one call: the XeSS driver, what its low latency did in this game's last launch,
+        OptiScaler in the game, and Decky Framegen."""
         launch = self.profiles.get_launch(appid)
-        xs, xl, op = await asyncio.gather(self._bg(xess.state, HOME), self._bg(xess.game_xell, HOME, appid, bool(launch.get("xell"))),
-                                          self._bg(xess.optiscaler_in, HOME, appid))
-        return {"launch": launch, "xess": xs, "xell": xl, "optiscaler": op, "wrapper": WRAPPER + " %command%"}
+        xs, lat, op, fg = await asyncio.gather(
+            self._bg(xess.state, HOME), self._bg(xess.game_latency, HOME, appid, launch.get("low_latency") is not False),
+            self._bg(xess.optiscaler_in, HOME, appid), self._bg(framegen.state, HOME))
+        return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%"}
+
+    # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
+    async def framegen_state(self) -> dict:
+        return await self._bg(framegen.state, HOME)
+
+    async def framegen_install(self, allow_unpinned: bool = False) -> dict:
+        try:
+            r = await self._bg(framegen.install, HOME, self._versions()["decky_framegen"], bool(allow_unpinned))
+        except Exception as e:
+            r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        if not r.get("ok"):
+            decky.logger.warning("Decky Framegen install failed: %s", r.get("error"))
+        return r
 
     # ---- what changed since last start --------------------------------------------------------------------------
     async def get_changes(self) -> dict:

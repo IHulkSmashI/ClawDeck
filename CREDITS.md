@@ -15,8 +15,15 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   suspend/resume) and Decky patterns.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
 - **[xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)** — XeSS super resolution and frame generation on
-  XMX under Proton; ClawDeck installs it (from our fork while the XeLL driver-mode PRs #23/#24 wait upstream),
-  probes it, and reads the shim's logs to show XeLL's mode per game.
+  XMX under Proton, with low latency; ClawDeck installs it, probes it, sets its per-game launch options and reads the
+  shim's logs (low latency per game, rendered frames for Autotune).
+- **[Decky Framegen](https://github.com/xXJSONDeruloXx/Decky-Framegen)** by xXJSONDeruloXx — OptiScaler per game on
+  SteamOS / Bazzite. ClawDeck installs its release when missing and passes Intel presets through its fgmod
+  environment variables; nothing of it is copied.
+- **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — the upscaler / frame generation swap that Decky
+  Framegen sets up.
+- **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows tool whose one-tap, per-game OptiScaler setup
+  ClawDeck's Per-game OptiScaler row follows. No code is shared.
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
 - **Decky Framerate** — an early reference for reading frame times in Game Mode.
 
