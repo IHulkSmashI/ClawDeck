@@ -47,7 +47,7 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
       <PanelSectionRow>
         <Group title="Step 1 of 2" first />
         <Status ok={driverOk ? true : null} label={`XeSS XMX driver: ${driverOk ? "installed" : "not installed"}`}
-          detail="Runs XeSS, FSR 4.1.1, frame generation and XeLL on the XMX cores, per game (never for Steam's own screen)." />
+          detail="Runs XeSS, FSR 4.1.2, frame generation and XeLL on the XMX cores, per game (never for Steam's own screen)." />
         {!driverOk && (
           <ButtonItem layout="below" disabled={!!busy || !x} onClick={() => installDriver(false)}>
             {busy === "xess" ? "Installing… (a minute or two)" : "Install the XeSS XMX driver"}

@@ -114,7 +114,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     else:
         # DLSS and FSR games alike, as OptiClick does: OptiScaler takes the game's DLSS or FSR and runs XeSS (or FSR
         # 4.1.1) on the XMX cores. FSR-only games used xess-xmx-linux's own FSR route before; OptiScaler offers the
-        # same XeSS plus FSR 4.1.1, with one set of choices for every game (maintainer, 2026-11-04).
+        # same XeSS plus FSR 4.1.2, with one set of choices for every game (maintainer, 2026-11-04).
         route, opti = "optiscaler", True
         launch = {"opti": "xess", "opti_fg": ofg, "opti_ini": ini}
         menu = "DLSS" if dlss else "FSR" if fsr31 else "DLSS (or FSR)"

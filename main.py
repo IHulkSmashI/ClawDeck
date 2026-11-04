@@ -647,7 +647,7 @@ class Plugin:
 
     @staticmethod
     def _fsr4_xmx_files() -> dict:
-        """nitec's FSR 4.1.1 XMX build, where the launch wrapper takes it from (~/fsr4-xmx). Not downloaded by
+        """nitec's FSR 4.1.2 XMX build, where the launch wrapper takes it from (~/fsr4-xmx). Not downloaded by
         ClawDeck: it is shared in the OptiScaler Discord, and the user places it."""
         d = os.path.join(HOME, "fsr4-xmx")
         missing = [f for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll")
@@ -769,8 +769,8 @@ class Plugin:
         return {**r, "recommended": rec, "next": rec["reasons"][0]}
 
     async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False) -> dict:
-        """Per-game's two choices, as plain as OptiClick's: the upscaler (the game's own, or XeSS / FSR 4.1.1 /
-        FSR 4.1.1 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
+        """Per-game's two choices, as plain as OptiClick's: the upscaler (the game's own, or XeSS / FSR 4.1.2 /
+        FSR 4.1.2 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
         generation on XMX at 2x-4x, fed from the game's own frame generation when it has one). Everything they need
         (OptiScaler, REFramework for Capcom games, the game's fixes) is put in or taken out here."""
         if upscaler not in ("own", "xess", "fsr4_xmx", "fsr4_xmx_lite"):
@@ -783,7 +783,7 @@ class Plugin:
             return {"ok": False, "error": "can't find this game's install folder or its exe"}
         if upscaler.startswith("fsr4_xmx") and not self._fsr4_xmx_files()["ready"]:
             f = self._fsr4_xmx_files()
-            return {"ok": False, "error": f"FSR 4.1.1 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
+            return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
         if upscaler == "own":
             out = await self._bg(optiscaler.unpatch, folder)
             await self._bg(reframework.remove, folder)

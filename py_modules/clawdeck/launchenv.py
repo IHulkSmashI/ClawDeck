@@ -19,7 +19,7 @@ game's OptiScaler.ini at each launch (its README, "Configuring OptiScaler via En
   low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
   opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
                                     OptiScaler (Decky Framegen) upscaler for this game: XeSS on XMX, FSR 4 INT8
-                                    (experimental on Intel), or FSR 4.1.1 on XMX (nitec's build, regular or lite);
+                                    (experimental on Intel), or FSR 4.1.2 on XMX (nitec's build, regular or lite);
                                     only takes effect when the game runs through fgmod
   opti_xefg    bool                 OptiScaler's frame-generation output = XeSS-FG (on XMX through the shim)
 
@@ -47,12 +47,13 @@ OPTI_PRESETS = {
     "xess": {"Dx12Upscaler": "xess"},
     # OptiScaler 0.9.4+: FSR 4 on GPUs without official support, INT8 model (Decky Framegen README)
     "fsr4": {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"},
-    # FSR 4.1.1 on the XMX cores: nitec's "B Boost" build of AMD's upscaler (OptiScaler Discord). The user puts its
+    # FSR 4.1.2 on the XMX cores: nitec's "B Boost" build of AMD's upscaler (OptiScaler Discord). The user puts its
     # files in ~/fsr4-xmx; clawdeck-launch.sh copies them over fgmod's FSR 4 after fgmod ran (CLAWDECK_FSR4_XMX).
-    # OptiScaler: the FSR 3.1 path with the FSR 4 provider (UpscalerIndex 0 is FSR 4 only by default on RDNA 4).
-    "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "0", "FSR_Fsr4Update": "true",
+    # OptiScaler: the FSR 3.1 path with the FSR 4 provider. With the B Boost files OptiScaler lists 4.0.2 first (AMD's
+    # original, kept as fsr-original.dll) and 4.1.2 (the XMX build) at index 6 (CONTROL, Claw 8 EX, 2026-11-04).
+    "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
                  "CLAWDECK_FSR4_XMX": "regular", "FSR4_XMX_NO_DIALOG": "1"},
-    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "0", "FSR_Fsr4Update": "true",
+    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
                       "CLAWDECK_FSR4_XMX": "lite", "FSR4_XMX_LITE": "1", "FSR4_XMX_NO_DIALOG": "1"},
 }
 FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")

@@ -142,7 +142,7 @@ def fetch(entry: dict, workdir: str, allow_unpinned: bool = False, rel: dict | N
         raise FileNotFoundError(f"no asset matching {entry.get('asset_glob')} in {repo} {rel.get('tag_name')}")
     tag = rel.get("tag_name", "unknown")
     archive = download(asset["browser_download_url"], os.path.join(workdir, "downloads", asset["name"]))
-    want = asset_digest(asset)
+    want = entry.get("sha256") if entry.get("tag") == tag and entry.get("sha256") else asset_digest(asset)
     if want and sha256_of(archive) != want:
         os.remove(archive)
         raise ValueError(f"{asset['name']} does not match the sha256 GitHub publishes for it; not installed")
