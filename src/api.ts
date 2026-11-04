@@ -72,7 +72,7 @@ export type XessState = { installed: boolean; package_dir: string | null; versio
 export type LatencyState = { mode: "pacing" | "idle" | "no-fg" | "off" | "none"; detail: string };
 export type FramegenState = { installed: boolean; dir: string | null; version: string | null; fgmod_ready: boolean; fgmod: string | null; optiscaler: string | null };
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
-export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
+export type XmxScope = { session_wide: boolean; per_game: boolean; every_game?: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
 export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
   drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null;
   fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null };
@@ -92,6 +92,7 @@ export const xessState = callable<[], XessState>("xess_state");
 export type DriverCheck = { ok: boolean; ran: boolean; error?: string; status: { state: string; line: string | null; mode?: string }; rc?: number; log?: string };
 export const xessInstall = callable<[allowUnpinned: boolean], Fix & { tag?: string; repo?: string; up_to_date?: boolean; summary?: string; check?: DriverCheck }>("xess_install");
 export type OptiState = { version: string; installed: boolean; games: number; framegen: boolean; framegen_version: string | null };
+export const setXmxEveryGame = callable<[on: boolean], { ok: boolean; error?: string; every_game: boolean }>("set_xmx_every_game");
 export const optiscalerState = callable<[], OptiState>("optiscaler_state");
 export const optiscalerInstall = callable<[], { ok: boolean; error?: string; already?: boolean; version?: string }>("optiscaler_install");
 export const framegenState = callable<[], FramegenState>("framegen_state");

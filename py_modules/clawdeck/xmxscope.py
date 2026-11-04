@@ -29,6 +29,7 @@ log = logging.getLogger("clawdeck.xmxscope")
 SESSION_CONF = ".config/environment.d/50-xess-xmx.conf"
 PARKED_SUFFIX = ".clawdeck-per-game"
 XMX_ENV = ".local/share/clawdeck/xmx.env"
+ALL_FLAG = ".local/share/clawdeck/xmx-every-game"     # present: every Proton game gets the XMX driver
 MARK = "# clawdeck xmx scope"
 USER_PY = "user_settings.user.py"
 PREV_PY = "user_settings.clawdeck-prev.py"
@@ -54,6 +55,8 @@ try:
         for _l in open(_lf):
             if _l.startswith("CLAWDECK_XMX="):
                 _want = _l.split("=", 1)[1].strip()
+    if not _want and _o.path.isfile(_o.path.join(_home, "%(all_flag)s")):
+        _want = "1"                      # Setup: the XMX driver for every game (a game set to off stays off)
     if not _want:
         _game = _o.environ.get("STEAM_COMPAT_INSTALL_PATH", "")
         _found = False
@@ -161,7 +164,7 @@ def protons(home: str) -> list[str]:
 
 
 def install_scope(home: str) -> dict:
-    text = SCOPE_PY % {"prev": PREV_PY, "xmx_env": XMX_ENV, "depth": DEPTH}
+    text = SCOPE_PY % {"prev": PREV_PY, "xmx_env": XMX_ENV, "depth": DEPTH, "all_flag": ALL_FLAG}
     done, errors = [], []
     for p in protons(home):
         u, prev = os.path.join(p, USER_PY), os.path.join(p, PREV_PY)
@@ -210,8 +213,27 @@ def restore_session(home: str) -> dict:
     return {"ok": True, "restored": False}
 
 
+def every_game(home: str) -> bool:
+    return os.path.isfile(os.path.join(home, ALL_FLAG))
+
+
+def set_every_game(home: str, on: bool) -> dict:
+    p = os.path.join(home, ALL_FLAG)
+    try:
+        if on:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("# ClawDeck Setup: the XeSS XMX driver for every game (Per-game can still switch one off)\n")
+            userexec.chown_tree(p, home)
+        elif os.path.exists(p):
+            os.remove(p)
+    except OSError as e:
+        return {"ok": False, "error": str(e), "every_game": every_game(home)}
+    return {"ok": True, "every_game": every_game(home)}
+
+
 def state(home: str) -> dict:
     ps = protons(home)
     scoped = [p for p in ps if MARK in (sysfs.read(os.path.join(p, USER_PY)) or "")]
-    return {"session_wide": session_active(home), "per_game": bool(xmx_env(home)) and bool(scoped),
+    return {"session_wide": session_active(home), "per_game": bool(xmx_env(home)) and bool(scoped), "every_game": every_game(home),
             "protons": ps, "scoped": scoped, "unscoped": [p for p in ps if p not in scoped]}
