@@ -6,11 +6,14 @@ refresh rate, HDR, per-game performance settings, fan presets, GPU clock windows
 sleep, dock readouts, benchmark, Proton picker, streaming (Steam's own panels, InputPlumber and PowerStation cover
 them). Priority, in order; nothing lower starts until the line above works on the maintainer's Claw:
 
-1. **XeSS XMX + XeLL** — the one thing missing from Bazzite. Installed from our fork (PRs #23/#24: XeLL driver
-   mode, GPU timestamps, review fixes), upstream's release as the fallback while the fork has none.
+1. **XeSS XMX + low latency** — the one thing missing from Bazzite. Installed from upstream's release (20261104+:
+   low latency with frame generation, 2–8x, FSR on XeSS); its per-game launch options are one tap each. Our fork's
+   XeLL driver mode is retired: upstream's low latency (#41) does the same job.
 2. **Controller and VRR fixes** — face buttons (InputPlumber override), the 30–120 Hz EDID fix (install / remove).
-3. ~~OptiScaler injection per game~~ — Bazzite already ships it (Decky Framegen in the Portal, `ujust get-framegen`)
-   and Lossless Scaling (decky-lsfg-vk, `ujust get-lsfg`), so ClawDeck does not. Dropped 2026-10-22.
+3. **OptiScaler through Decky Framegen** — Bazzite ships it (Portal, `ujust get-framegen`), so ClawDeck has no
+   injector: it installs Decky Framegen when missing, adds its `~/fgmod/fgmod` to a game's launch options (after
+   ClawDeck's wrapper) and passes Intel presets as the env vars fgmod writes into OptiScaler.ini (2026-11-04).
+   Lossless Scaling stays decky-lsfg-vk's.
 4. **Power + autotune** — profiles through RAPL-MMIO, as a dropdown plus the Autotune switch.
 
 ## Architecture
@@ -28,9 +31,11 @@ py_modules/clawdeck/
    profiles.py  per-game JSON: base profile, what autotune found, launch settings
    thermal.py   temperature guard while thermald is paused: >95 °C → TDP −2 W / 10 s until <90 °C (§21)
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
-   xess.py      xess-xmx-linux: fork-first install (asset sha256 checked) with upstream fallback, state, per-game XeLL
-                mode from the shim's logs, OptiScaler-present detection (read-only)
-   launchenv.py per-game <runtime>/launch/<appid>.env: XeSS XMX off, XeLL driver mode (read by the wrapper)
+   xess.py      xess-xmx-linux: install (asset sha256 checked), state, per-game low latency from the shim's log,
+                OptiScaler-present detection (read-only)
+   framegen.py  Decky Framegen: detect, install from its release zip when missing (never overwrite), fgmod state
+   launchenv.py per-game <runtime>/launch/<appid>.env: XMX off, XESS_FG, IGDEXT_XELL_CAP=off, XESS=latest, FSR routes,
+                OptiScaler presets (read by the wrapper)
    edid.py      ClawLab's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
    buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91
    health.py    checks + one-line summary + the bug report
@@ -55,11 +60,11 @@ tools/
   Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
   (one lock). Under an Advanced expander: CPU boost, CPU ceiling, GPU floor/ceiling, GPU efficiency mode (xe
   `power_profile`, §22.3), EPP, autotune floor (§19).
-- **Per-game**: for the running game, two switches with a status line each: XeSS on XMX (off = the stock driver
-  for this game), XeLL driver mode (the fork's shim; status read from `igdext_trace.log` / `igdext_xell.log` in
-  the prefix, rotated per launch by the wrapper), and a line saying whether OptiScaler (Bazzite's Decky Framegen) is
-  in the game: its bundled XeSS runs on XMX through the same shim, so the two compose without ClawDeck injecting
-  anything.
+- **Per-game**: for the running game: XeSS on XMX (off = the stock driver for this game), frame generation
+  multiplier, low latency (status from `igdext_xell.log` in the prefix, rotated per launch by the wrapper), latest
+  XeSS libraries, FSR games on XeSS; then OptiScaler: Decky Framegen's state, "Use OptiScaler in this game" (edits the
+  launch options) and, when in use, its upscaler preset and XeSS frame generation. OptiScaler's XeSS runs on XMX
+  through the same shim.
 - **Fixes**: VRR fix install / remove, face-button fix install / remove, the health check in one line (the full list
   on the page).
 - **Setup**: install / update XeSS XMX (then the package's driver check, `session-check.sh --dry-run`, so the line is
@@ -128,9 +133,8 @@ shown, never chased: it keeps improving down to the minimum TDP. A manual change
 profile or moving the slider measures again and hands control back. ~70 µs of CPU per step.
 
 ## Open items (need the device)
-- The fork publishes no release: `tools/make-release.py` there needs the CI-built binaries (its Mesa 26.3 matrix job
-  currently fails on a Mesa tag that no longer exists, see PR #24). Until a release exists the installer uses
-  upstream's 20261018 and XeLL stays in cross-vendor mode.
-- XeLL log markers (`XELLPROBE LatencyReductionExt`, `RenderSubmitStart`, `xellSetSleepMode`) come from the fork's
-  shim source; confirm on the Claw with a game that uses XeSS frame generation.
+- Low latency log lines ("low latency: on", "auto: waited in N of 100 frames") come from upstream's
+  `shim/src/dll/XellHook.cpp`; confirm on the Claw with a game that uses XeSS frame generation.
+- Decky Framegen: the install-and-restart path, and whether `FrameGen_FGOutput=xefg` generates frames with its
+  default frame generation input.
 - Steam's refresh / VRR panel after the EDID fix: the 120 Hz mode still offered, 30–120 shown by `edid-decode`.

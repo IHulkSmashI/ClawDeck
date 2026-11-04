@@ -33,7 +33,7 @@ UPSTREAMS = {
     "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                               "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
-    "xess-xmx-linux fork": ("commit", "IHulkSmashI/xess-xmx-linux", "our fork"),
+    "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "OptiScaler per game (framegen.py installs it, pinned)"),
     "Handheld Daemon": ("release", "hhd-dev/hhd", "TDP, fans, controller when installed"),
     "InputPlumber": ("release", "ShadowBlip/InputPlumber", "controller on current Bazzite"),
     "PowerStation": ("release", "ShadowBlip/PowerStation", "power on current Bazzite"),

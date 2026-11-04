@@ -1,6 +1,6 @@
 # ClawDeck status
 
-Updated 2026-10-22 (scope reset). The plugin does only what Bazzite and Steam's Quick Access do not already do, in
+Updated 2026-11-04 (0.2: xess-xmx-linux 20261104 options, Decky Framegen presets, battery-only Autotune). The plugin does only what Bazzite and Steam's Quick Access do not already do, in
 four panels: **Power**, **Per-game**, **Fixes**, **Setup**. Everything below passes the backend tests against fake
 sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the browser preview.
 
@@ -8,9 +8,9 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 
 | # | What | Code | Needs the Claw |
 |---|---|---|---|
-| 1 | **XeSS XMX + XeLL** from the fork (PRs #23/#24) | done: fork-first install with upstream fallback and a note; Setup shows version, driver mode and source; Per-game shows XeSS on/off, XeLL driver / cross-vendor / off per launch | the fork has no release yet (below); a game with XeSS frame generation to confirm the XeLL log markers |
+| 1 | **XeSS XMX + low latency** (upstream 20261104) | done: upstream install (the fork and its XeLL driver mode are retired: upstream shipped low latency in #41); Per-game: XMX on/off, frame generation 2–8x, low latency, latest XeSS libraries, FSR games on XeSS, each with a read-back line | see Needs the maintainer → 0.2 |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
-| 3 | ~~OptiScaler injection per game~~ | dropped 2026-10-22: Bazzite ships Decky Framegen (OptiScaler) and decky-lsfg-vk in the Portal | nothing |
+| 3 | **OptiScaler through Decky Framegen** | done 2026-11-04: no injector of our own; Setup detects / installs Decky Framegen, Per-game adds its fgmod to the game and passes Intel presets (XeSS on XMX, FSR 4 INT8 experimental, XeSS frame generation) as fgmod env vars | see Needs the maintainer → 0.2 |
 | 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune acts on the bottleneck (§18); Advanced expander (§19) | see Needs the maintainer → Power |
 
 ## Done (code, tests)
@@ -21,8 +21,9 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Revertible sysfs | `sysfs.py` | every write | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
-| Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames |
-| XeSS XMX + XeLL | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | fork → upstream fallback; `xmx` / `xell` per game; shim logs read per launch |
+| Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames; battery only unless "Autotune when plugged in" |
+| XeSS XMX | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | upstream release; `xmx` / `fg` / `low_latency` / `xess_latest` / `fsr` per game; shim log read per launch |
+| Decky Framegen | `framegen.py`, `launchenv.py` (`opti`, `opti_xefg`), `steam.ts` (fgmod in launch options) | Setup, Per-game | install from its release zip only when missing, never overwrites; Decky restart scheduled through systemd-run |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
@@ -87,18 +88,21 @@ The four-panel UI has not been on the device yet.
   game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
   driver"; the game's XeSS then runs as DP4a.
 
-- **Publish a release on the fork** (IHulkSmashI/xess-xmx-linux) so the installer can deliver XeLL driver mode: merge
-  `xell-driver-mode-probe` (5 commits, PR #23) and `review-fixes` (PR #24) into one branch, build the binaries
-  (its CI builds the shim, the ICD and the Mesa 26.1.2 driver; the Mesa 26.3 job fails on the vanished
-  `mesa-26.3.0-rc1` tag, see PR #24's notes), run `tools/make-release.py <version>` there, attach the zip to a
-  release. Until then `assets/versions.json` has `use_fork: true` and the installer falls back to upstream's
-  20261018, saying so in Setup. Once HHHHanasak1 merges, set `use_fork` back to false.
+- **0.2 on the Claw (none of this has run on hardware yet):**
+  - Setup → Update XeSS XMX to 20261104, log out and in: "XeSS XMX 20261104: driver loads".
+  - Per-game in a game with XeSS frame generation (Cyberpunk 2077): Frame generation 3x, restart the game, 3x on
+    screen; Low latency line says "working" after a minute of play (`drive_c/igdext_xell.log` has "auto: waited in"
+    lines); turn it off: the line says "off" next launch. Feel the difference.
+  - Latest XeSS libraries in a game with an old XeSS; FSR games → "FSR on XeSS" in an FSR 3.1 game without XeSS.
+  - Setup → Install Decky Framegen on a Claw without it: Decky restarts by itself and Decky Framegen shows up; tap its
+    Setup OptiScaler Mod, then Setup shows "OptiScaler … ready". With it already installed: the button isn't offered.
+  - In a DLSS game: Use OptiScaler in this game → launch options read `…clawdeck-launch.sh ~/fgmod/fgmod %command%`;
+    OptiScaler upscaler = XeSS on XMX → OptiScaler's overlay (Insert) shows XeSS; FSR 4 INT8 → shows FSR 4, note the
+    cost. OptiScaler frame generation: XeSS → frames generated? If not, which FG input does Decky Framegen set?
+  - Autotune: on the charger it no longer starts unless "Autotune when plugged in" (Advanced) is on.
 - **XeSS install "file not found"** (brief): the backend now reports the exact step and reason (download: URL and
   HTTP code; archive: what it unpacked where; install.sh: exit code and its last lines) in the toast and the red
   row, and logs it. Tap Install XeSS XMX once more and post the red line if it still fails.
-- **XeLL markers**: with the fork build installed and "XeLL driver mode" on for a game that uses XeSS frame
-  generation, the Per-game line should say "driver mode" after a launch (from `igdext_trace.log` in the prefix).
-  With upstream's build it says "cross-vendor mode".
 - **Quick Access**: the four panels with the D-pad at 1280×800: nothing truncated in the profile picker, the read-back
   line changes after every pick, a fast flick through the profiles toasts the last one only.
 - **VRR fix**: Fixes → Install, restart, `edid-decode` 30–120, 120 Hz mode still offered, games at 35–45 fps no
