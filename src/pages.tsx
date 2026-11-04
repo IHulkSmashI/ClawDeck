@@ -3,6 +3,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getSetting, setSetting, uiLog, xessState } from "./api";
 import { FirstRun } from "./components/FirstRun";
+import { LastMessage } from "./components/LastMessage";
 import { Fold, HelpContext } from "./components/Hint";
 import { MdBolt, MdBuild, MdSportsEsports } from "react-icons/md";
 
@@ -41,6 +42,7 @@ export const QuickPanel: FC = () => {
           onChange={(v) => { setHelp(v); setSetting("quick_help", v); }} />
       </PanelSectionRow>
     </PanelSection>
+    <LastMessage />
     {setupDone === false && <FirstRun onDone={() => setSetupDone(true)} />}
     <Fold id="power" title="Power" open summary="Profile, TDP and Autotune"><PowerTab quick /></Fold>
     {setupDone && <Fold id="game" title="Upscaling and frame generation" open summary="Game, upscaler, frame generation"><GameSection quick /></Fold>}

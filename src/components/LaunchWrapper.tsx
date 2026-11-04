@@ -1,5 +1,5 @@
 import { ButtonItem, PanelSectionRow } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "./notify";
 import { FC, useEffect, useState } from "react";
 
 import { getLaunch } from "../api";
@@ -26,7 +26,7 @@ export const LaunchWrapper: FC<{ appid: string; name: string }> = ({ appid, name
         <ButtonItem layout="below" description={explain("Needed once per game: Autotune and the Per-game settings reach the game through it. Your own launch options are kept; works from the next launch.")} onClick={() => {
           const next = on ? withoutWrapper(opts!) : withWrapper(opts!, wrapper);
           const ok = setLaunchOptions(appid, next);
-          toaster.toast({ title: "ClawDeck", body: ok ? (on ? `Removed from ${name}` : `Added to ${name}: restart the game to use it`) : "Steam refused; add it in the game's Properties → Launch options" });
+          notify(ok ? (on ? `Removed from ${name}` : `Added to ${name}: restart the game to use it`) : "Steam refused: add it in the game's Properties → Launch options");
           load();
         }}>{on ? "Remove from launch options" : "Add to launch options"}</ButtonItem>
       )}

@@ -1,5 +1,5 @@
 import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -11,7 +11,7 @@ import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Group, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
 import { runningApp } from "../steam";
 
-const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+const toast = (body: string) => notify(body);
 
 // short label in the control (nothing truncated at 1280x800); what it is for, and what it costs, under it (§17)
 const PROFILES: { id: string; short: string; does: string; cost: string }[] = [

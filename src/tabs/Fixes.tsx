@@ -1,12 +1,12 @@
 import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
 import { getFixes, getHealth, getSetting, runFix, setSetting, setWideVrr, Fixes, Health } from "../api";
 import { confirmRestart } from "../components/confirm";
 import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
 
-const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+const toast = (body: string) => notify(body);
 
 /** What the hardware gets wrong out of the box: the VRR range (ClawLab's EDID fix), the Claw 8 EX face buttons, and
  *  the health check in one line. Install / remove buttons, not toggles: each one is a change to the system. */
