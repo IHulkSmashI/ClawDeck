@@ -78,7 +78,7 @@ export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyStat
   fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null;
   files?: { owner: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
-export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null };
+export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[] };
 export const gamesList = callable<[], GameEntry[]>("games_list");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
