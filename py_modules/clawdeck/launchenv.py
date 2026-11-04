@@ -5,7 +5,9 @@ Every per-game choice that has to be in the game's environment lands here, compo
 (its docs/launch-options.md); the OptiScaler ones by Decky Framegen's fgmod wrapper, which writes them into the
 game's OptiScaler.ini at each launch (its README, "Configuring OptiScaler via Environment Variables").
 
-  xmx          bool (default on)    off -> the stock Vulkan drivers for this game (xess.stock_env)
+  xmx          bool | unset         per-game scope (xmxscope.py, the default since 0.2): unset = automatic (the XMX
+                                    driver only for a game that ships XeSS or OptiScaler), on/off = CLAWDECK_XMX=1/0.
+                                    With the package still session-wide: off -> the stock Vulkan drivers (stock_env)
   fg           0 | 2..8             XESS_FG=<n>: XeSS frame generation at n x whatever the game's menu offers
                                     (5..8 experimental upstream); 0 = the game decides
   fsr          off | xess | fg | inject
@@ -48,9 +50,15 @@ OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
 KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg"}
 
 
-def compose(launch: dict) -> dict[str, str]:
+def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     env: dict[str, str] = {}
-    if launch.get("xmx") is False:
+    x = launch.get("xmx")
+    if per_game:
+        if x is True:
+            env["CLAWDECK_XMX"] = "1"
+        elif x is False:
+            env["CLAWDECK_XMX"] = "0"
+    elif x is False:
         env.update(xess.stock_env())
     fg = launch.get("fg") or 0
     if not isinstance(fg, int) or isinstance(fg, bool) or not (fg == 0 or 2 <= fg <= 8):
@@ -89,8 +97,8 @@ def path_for(runtime_dir: str, appid: str) -> str:
     return os.path.join(runtime_dir, "launch", f"{appid}.env")
 
 
-def write(runtime_dir: str, appid: str, launch: dict) -> dict:
-    env = compose(launch)
+def write(runtime_dir: str, appid: str, launch: dict, per_game: bool = True) -> dict:
+    env = compose(launch, per_game)
     p = path_for(runtime_dir, appid)
     if not env:
         try:

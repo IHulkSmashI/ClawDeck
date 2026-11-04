@@ -49,10 +49,14 @@ def _hardware(paths=None, product="MS-1T91"):
 
 # ---- launch environment -----------------------------------------------------------------------------------------------
 def test_launch_env_compose_and_write(tmp_path):
-    off = launchenv.compose({"xmx": False})
-    assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
-    assert launchenv.compose({"xmx": True, "low_latency": True, "fg": 0, "fsr": "off", "opti": "off"}) == {}
-    assert launchenv.compose({}) == {}            # a game nobody touched: the session's driver, i.e. XMX on (the default)
+    # per game (the default): the XMX driver only where it helps; Per-game's switch forces it on or off
+    assert launchenv.compose({}) == {}            # a game nobody touched: automatic (XeSS / OptiScaler games only)
+    assert launchenv.compose({"xmx": False}) == {"CLAWDECK_XMX": "0"}
+    assert launchenv.compose({"xmx": True, "low_latency": True, "fg": 0, "fsr": "off", "opti": "off"}) == {"CLAWDECK_XMX": "1"}
+    # the package still session-wide (before ClawDeck moved its file): off = the stock drivers for this game
+    off = launchenv.compose({"xmx": False}, per_game=False)
+    assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off
+    assert launchenv.compose({"xmx": True}, per_game=False) == {}
     assert launchenv.compose({"xell": True}) == {}  # a 0.1 setting (XeLL driver mode) no longer does anything
     # the package's own launch options (xess-xmx-linux docs/launch-options.md)
     assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"XESS_FG": "4", "XESS": "latest", "IGDEXT_XELL_CAP": "off"}
@@ -295,6 +299,9 @@ def test_xess_install_names_the_failing_step(tmp_path, monkeypatch):
     # any failure names the step and the real reason, never a bare "file not found"
     monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no asset matching x in y")))
     _w(tmp_path / xess.ENV_CONF, "")                                   # nothing installed: no up-to-date shortcut
+    from clawdeck import xmxscope
+    for f in (xmxscope.XMX_ENV, xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX):   # nor ClawDeck's per-game copy
+        (tmp_path / f).unlink(missing_ok=True)
     assert xess.install(str(tmp_path), entry)["error"] == "download: FileNotFoundError: no asset matching x in y"
     monkeypatch.setattr(downloads, "release", lambda *a: (_ for _ in ()).throw(urllib.error.HTTPError("https://u", 403, "rate limited", {}, None)))
     assert xess.install(str(tmp_path), entry)["error"] == "download: https://u answered 403 rate limited"
@@ -332,7 +339,8 @@ def test_xess_update_with_nothing_newer_says_up_to_date_and_reinstalls_nothing(t
     assert xess.install(str(tmp_path), {"repo": "a/b", "tag": "2"})["ok"] and fetched == ["a/b"]
     ran.clear()
     r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"})   # Update; no confirm needed
-    assert r["ok"] and r["up_to_date"] and r["summary"] == "XeSS XMX 2 is up to date" and "error" not in r
+    assert r["ok"] and r.get("up_to_date"), r
+    assert r["summary"] == "XeSS XMX 2 is up to date" and "error" not in r
     assert fetched == ["a/b"] and ran == ["session-check.sh --dry-run"]   # no download, no install.sh, line refreshed
     _xess_release(monkeypatch, {"a/b": "3"})                             # a newer release: a real update again
     r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "pending-verification"})
@@ -493,3 +501,59 @@ def test_battery_watts_corrects_the_ex_100x_current(tmp_path):
     (b / "current_now").write_text("645800\n")        # a correctly scaled battery stays as it is
     (b / "status").write_text("Charging\n")
     assert telemetry.battery_watts(str(b)) == 9.9
+
+
+# ---- XeSS on XMX per game (xmxscope.py) -----------------------------------------------------------------------------
+def _scope_home(tmp_path):
+    from clawdeck import xmxscope
+    _w(tmp_path / xmxscope.SESSION_CONF, "VK_DRIVER_FILES=/p/run/intel_icd.json:/usr/share/vulkan/icd.d/intel_icd.x86_64.json\n"
+       "VKD3D_DISABLE_EXTENSIONS=VK_EXT_descriptor_buffer,VK_KHR_present_wait2\nINTC_ALT_DRIVER_EXTENSIONS_PATH='C:\\\\x\\\\igd_faux.inf_1'\n")
+    proton = tmp_path / ".local/share/Steam/steamapps/common/Proton 11.0"
+    _w(proton / "proton", "")
+    _w(proton / "user_settings.py", "# xess-xmx proton hook - written by install.sh\n")
+    return xmxscope, proton
+
+
+def _run_scope(script, env, monkeypatch):
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    g = {"__file__": str(script)}
+    exec(compile(script.read_text(), str(script), "exec"), g)
+    return g["user_settings"]
+
+
+def test_xmx_scope_moves_the_session_file_and_keeps_its_variables(tmp_path):
+    xmxscope, proton = _scope_home(tmp_path)
+    r = xmxscope.isolate_session(str(tmp_path))
+    assert r["moved"] and not (tmp_path / xmxscope.SESSION_CONF).exists()
+    assert (tmp_path / (xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX)).exists()          # put back by restore_session
+    env = xmxscope.xmx_env(str(tmp_path))
+    assert env["VK_DRIVER_FILES"].startswith("/p/run/") and env["INTC_ALT_DRIVER_EXTENSIONS_PATH"] == "C:\\\\x\\\\igd_faux.inf_1"
+    assert xess.package_dir(str(tmp_path)) == "/p"                                           # still found after the move
+    assert xmxscope.restore_session(str(tmp_path))["restored"] and xmxscope.session_active(str(tmp_path))
+
+
+def test_xmx_scope_loads_the_driver_only_for_xess_games_or_when_forced(tmp_path, monkeypatch):
+    xmxscope, proton = _scope_home(tmp_path)
+    _w(proton / "user_settings.user.py", "user_settings = {'PROTON_LOG': '1'}\n")    # the user's own Proton settings
+    xmxscope.isolate_session(str(tmp_path))
+    r = xmxscope.install_scope(str(tmp_path))
+    assert r["ok"] and r["protons"] == [str(proton)]
+    assert (proton / xmxscope.PREV_PY).exists() and xmxscope.state(str(tmp_path))["per_game"]
+    script = proton / xmxscope.USER_PY
+    xess_game, plain_game = tmp_path / "games/Cp", tmp_path / "games/Oni"
+    _w(xess_game / "bin/x64/libxess.dll", "")
+    _w(plain_game / "amd_fidelityfx_dx12.dll", "")
+    base = {"HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path / "rt")}
+    s = _run_scope(script, {**base, "SteamAppId": "1091500", "STEAM_COMPAT_INSTALL_PATH": str(xess_game)}, monkeypatch)
+    assert s["VK_DRIVER_FILES"].startswith("/p/run/") and s["PROTON_LOG"] == "1"            # XeSS game: XMX; own settings kept
+    s = _run_scope(script, {**base, "SteamAppId": "2638890", "STEAM_COMPAT_INSTALL_PATH": str(plain_game)}, monkeypatch)
+    assert "VK_DRIVER_FILES" not in s                                                       # no XeSS: Bazzite's own driver
+    _w(tmp_path / "rt/launch/2638890.env", "CLAWDECK_XMX=1\n")                              # Per-game: on
+    s = _run_scope(script, {**base, "SteamAppId": "2638890", "STEAM_COMPAT_INSTALL_PATH": str(plain_game)}, monkeypatch)
+    assert "VK_DRIVER_FILES" in s
+    _w(tmp_path / "rt/launch/1091500.env", "CLAWDECK_XMX=0\n")                              # Per-game: off
+    s = _run_scope(script, {**base, "SteamAppId": "1091500", "STEAM_COMPAT_INSTALL_PATH": str(xess_game)}, monkeypatch)
+    assert "VK_DRIVER_FILES" not in s
+    assert xmxscope.remove_scope(str(tmp_path))["protons"] == [str(proton)]
+    assert (proton / "user_settings.user.py").read_text().startswith("user_settings = {'PROTON_LOG'")   # theirs is back

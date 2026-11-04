@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      power, profiles, stack, sysfs, thermal, telemetry, userexec, xess)
+                      power, profiles, stack, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -89,6 +89,15 @@ class Plugin:
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s", self.hw.model["name"], self.hw.product, self.hw.kernel)
         self._install_wrapper()
+        # XeSS on XMX per game: a session-wide driver file from an earlier install (ClawDeck 0.1, or install.sh run
+        # by hand into ClawDeck's folder) moves aside, and Protons added since get the per-game scope
+        try:
+            if xmxscope.session_active(HOME) and (xess.package_dir(HOME) or "").startswith(os.path.join(HOME, xess.INSTALL_ROOT)):
+                decky.logger.info("XeSS XMX per game: %s", xmxscope.isolate_session(HOME))
+            if xmxscope.xmx_env(HOME):
+                xmxscope.install_scope(HOME)
+        except OSError as e:
+            decky.logger.warning("XeSS XMX per game: %s", e)
         if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
             r = telemetry.apply(True)
             decky.logger.info("watts in the overlay: %s", "on" if r["ok"] else r["error"])
@@ -517,14 +526,14 @@ class Plugin:
     # ---- per-game launch environment (XeSS XMX, XeLL) --------------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:
         try:
-            return launchenv.write(RUNTIME_DIR, appid, self.profiles.get_launch(appid))
+            return launchenv.write(RUNTIME_DIR, appid, self.profiles.get_launch(appid), not xmxscope.session_active(HOME))
         except ValueError as e:
             return {"error": str(e)}
 
     async def get_launch(self, appid: str) -> dict:
         launch = self.profiles.get_launch(appid)
         try:
-            env, error = launchenv.compose(launch), None
+            env, error = launchenv.compose(launch, not xmxscope.session_active(HOME)), None
         except ValueError as e:      # e.g. an imported profile with a value this version doesn't know
             env, error = {}, str(e)
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
@@ -546,7 +555,11 @@ class Plugin:
         xs, lat, op, fg = await asyncio.gather(
             self._bg(xess.state, HOME), self._bg(xess.game_latency, HOME, appid, launch.get("low_latency") is not False),
             self._bg(xess.optiscaler_in, HOME, appid), self._bg(framegen.state, HOME))
-        return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%"}
+        scope = await self._bg(xmxscope.state, HOME)
+        d = op.get("dir")
+        auto = bool(op.get("present")) or bool(d and glob.glob(os.path.join(glob.escape(d), "**", "libxess*.dll"), recursive=True))
+        return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
+                "xmx_scope": {**scope, "auto": auto}}
 
     # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
     async def framegen_state(self) -> dict:
