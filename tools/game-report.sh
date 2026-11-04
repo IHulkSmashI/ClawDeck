@@ -3,6 +3,7 @@
 # Framegen did in that game's last launch. Changes nothing.
 #   tools/game-report.sh                 Black Myth: Wukong Benchmark Tool (3132990) or the game (2358720)
 #   tools/game-report.sh <appid>         any Steam game
+#   tools/game-report.sh onimusha        any installed game whose name contains this (case-insensitive)
 # Paste the output into the GitHub issue or the chat.
 set -u
 ids=("$@")
@@ -24,6 +25,19 @@ uname -r
 for d in ~/.local/share/xess-xmx-linux* ~/xess-xmx-linux*; do [ -d "$d" ] && echo "xess-xmx-linux: $d"; done
 [ -f ~/.cache/xess-xmx/driver-status ] && { echo "driver-status:"; sed 's/^/  /' ~/.cache/xess-xmx/driver-status | head -5; }
 [ -f ~/fgmod/install-manifest.json ] && echo "Decky Framegen OptiScaler: $(sed -n 's/.*"version"\s*:\s*"\([^"]*\)".*/\1/p' ~/fgmod/install-manifest.json | head -1)"
+
+# names -> app ids, from the installed games' manifests
+resolved=()
+for a in "${ids[@]}"; do
+    if [[ $a =~ ^[0-9]+$ ]]; then resolved+=("$a"); continue; fi
+    for l in "${libs[@]}"; do
+        for m in "$l"/steamapps/appmanifest_*.acf; do
+            [ -f "$m" ] || continue
+            grep -qiE "^\s*\"name\"\s*\".*$a" "$m" && resolved+=("$(basename "$m" .acf | sed 's/appmanifest_//')")
+        done
+    done
+done
+mapfile -t ids < <(printf '%s\n' "${resolved[@]}" | awk 'NF && !seen[$0]++')
 
 for id in "${ids[@]}"; do
     pfx=""; game=""
