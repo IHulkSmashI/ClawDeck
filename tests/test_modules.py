@@ -703,3 +703,87 @@ def test_launch_wrapper_puts_fsr4_xmx_in_after_fgmod_and_takes_it_out_again(tmp_
     subprocess.run(["bash", wrapper, str(fgmod), "bash", "-c", "true", "x", str(game / "Game.exe")], check=True, env=base)
     assert not (game / "cabinet.dll").exists() and not (game / ".clawdeck-fsr4xmx").exists()
     assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "fgmod-fsr4"
+
+
+def _opti_pkg(home, ver="0.9.4"):
+    from clawdeck import optiscaler
+    d = os.path.join(home, optiscaler.ROOT, ver)
+    for f, t in (("OptiScaler.dll", "opti"), ("OptiScaler.ini", "[Upscalers]\nDx12Upscaler=auto\n\n[Menu]\nUseHQFont=auto\n\n[Plugins]\nLoadAsiPlugins=auto\n"),
+                 ("libxess.dll", "xess-opti"), ("amd_fidelityfx_upscaler_dx12.dll", "amd-fsr4"), ("D3D12_Optiscaler/D3D12Core.dll", "core"),
+                 ("plugins/OptiPatcher.asi", "op"), ("setup_linux.sh", "x"), ("Licenses/x.txt", "l")):
+        _w(os.path.join(d, f), t)
+    return d
+
+
+def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeypatch):
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game" / "bin"
+    _w(g / "Game.exe", "x" * 100)
+    _w(g / "libxess.dll", "game-own-xess")          # the game's own file: backed up, put back
+    _w(g / "dxgi.dll", "reshade")                    # a proxy name already taken: next one is used
+    r = optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess", "Hotfix_RestoreComputeSignature": "true"})
+    assert r["ok"] and r["dll"] == "winmm.dll" and r["dll_override"] == "winmm"
+    assert (g / "winmm.dll").read_text().strip() == "opti" and (g / "dxgi.dll").read_text().strip() == "reshade"
+    ini = (g / "OptiScaler.ini").read_text()
+    assert "Dx12Upscaler=xess" in ini and "LoadAsiPlugins=true" in ini and "UseHQFont=false" in ini
+    assert "[Hotfix]\nRestoreComputeSignature=true" in ini                     # a missing section is added
+    assert (g / "plugins" / "OptiPatcher.asi").exists() and not (g / "setup_linux.sh").exists()
+    assert optiscaler.owner(str(g))["owner"] == "clawdeck"
+    # FSR 4 on XMX: nitec's files instead of AMD's upscaler; then back
+    x = tmp_path / "fsr4-xmx"
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+        _w(x / f, "nitec-" + f)
+    assert optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)["ok"]
+    assert (g / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "nitec-amd_fidelityfx_upscaler_dx12.dll"
+    assert (g / "cabinet.dll").exists() and (g / "cabinet_wine.dll").exists()
+    assert optiscaler.patch(home, str(g), "0.9.4", {}, "xess")["ok"]
+    assert not (g / "cabinet.dll").exists() and (g / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "amd-fsr4"
+    assert optiscaler.unpatch(str(g))["removed"]
+    assert sorted(p.name for p in g.iterdir()) == ["Game.exe", "dxgi.dll", "libxess.dll"]
+    assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
+
+
+def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):
+    from clawdeck import optiscaler
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "g"
+    _w(g / "Game.exe", "x")
+    _w(g / "OptiScaler.ini", "theirs")
+    r = optiscaler.patch(home, str(g), "0.9.4", {})
+    assert not r["ok"] and r["owner"] == "other" and (g / "OptiScaler.ini").read_text().strip() == "theirs"
+    _w(g / "dxgi.dll.b", "backup by fgmod")
+    assert optiscaler.owner(str(g))["owner"] == "decky-framegen"
+
+
+def test_main_exe_dir_finds_the_real_exe(tmp_path):
+    from clawdeck import optiscaler
+    _w(tmp_path / "Launcher.exe", "x" * 500)
+    _w(tmp_path / "Game" / "Binaries" / "Win64" / "Game-Win64-Shipping.exe", "x")
+    assert optiscaler.main_exe_dir(str(tmp_path)).endswith("Binaries/Win64")
+    t2 = tmp_path / "two"
+    _w(t2 / "unins000.exe", "x" * 900)
+    _w(t2 / "bin" / "big.exe", "x" * 300)
+    assert optiscaler.main_exe_dir(str(t2)).endswith("bin")
+
+
+def test_installed_games_from_steam_manifests(tmp_path):
+    lib2 = tmp_path / "sd" / "SteamLibrary"
+    _w(tmp_path / ".local/share/Steam/steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1" {{ "path" "{lib2}" }}\n}}\n')
+    for lib, appid, name, d in ((tmp_path / ".local/share/Steam", "3669870", "CONTROL Resonant", "CONTROL Resonant"),
+                                (lib2, "2358720", "Black Myth: Wukong", "blackmythwukong"),
+                                (tmp_path / ".local/share/Steam", "3658110", "Proton 11.0", "Proton 11.0")):
+        _w(lib / "steamapps" / f"appmanifest_{appid}.acf", f'"AppState"\n{{\n "appid" "{appid}"\n "name" "{name}"\n "installdir" "{d}"\n}}\n')
+        (lib / "steamapps" / "common" / d).mkdir(parents=True)
+    gs = xess.installed_games(str(tmp_path))
+    assert [g["name"] for g in gs] == ["Black Myth: Wukong", "CONTROL Resonant"]
+
+
+def test_opti_ini_follows_the_frame_generation_multiplier():
+    from clawdeck import launchenv
+    ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 3})
+    assert ini["XeFG_InterpolationCount"] == "2" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
+    assert "XeFG_InterpolationCount" not in launchenv.opti_ini({"opti": "xess", "opti_fg": "off", "fg": 3})

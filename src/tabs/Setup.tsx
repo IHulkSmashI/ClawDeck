@@ -2,7 +2,7 @@ import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, framegenInstall, framegenState, getHardware, selfTest, xessInstall, xessState, FramegenState, Hardware, SelfTest, XessState } from "../api";
+import { collectLogs, getHardware, optiscalerInstall, optiscalerState, selfTest, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
@@ -13,13 +13,13 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   useExplanations();
   const [hw, setHw] = useState<Hardware | null>(null);
   const [x, setX] = useState<XessState | null>(null);
-  const [fg, setFg] = useState<FramegenState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [op, setOp] = useState<OptiState | null>(null);
   const [test, setTest] = useState<SelfTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const refresh = async () => {
-    const [h, xs, f] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), framegenState()]);
-    setHw(h); setX(xs); setFg(f);
+    const [h, xs, o] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), optiscalerState()]);
+    setHw(h); setX(xs); setOp(o);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -34,15 +34,6 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(null); refresh(); }
   };
-  const installFramegen = async (allow = false) => {
-    setBusy("framegen");
-    try {
-      const r = await framegenInstall(allow);
-      if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("Decky Framegen", () => installFramegen(true)); return; }
-      toast(r.already ? (r.summary ?? "Decky Framegen is installed") : r.ok ? `Decky Framegen ${r.tag ?? ""} installed. ${r.next ?? ""}` : `Decky Framegen: not installed (${r.error})`);
-      setErr(r.ok ? null : (r.error ?? "unknown error"));
-    } finally { setBusy(null); refresh(); }
-  };
   const noXmx = hw?.known && !hw.model.xmx;
   const xessLine = !x ? "XeSS XMX driver: …" : !x.installed ? "XeSS XMX driver: not installed"
     : x.update ? `XeSS XMX ${x.version ?? ""}: update ${x.pinned} available (tested)`
@@ -52,8 +43,6 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
     : sc.per_game ? `Per game: games that ship XeSS or OptiScaler (${sc.scoped.length} Proton${sc.scoped.length === 1 ? "" : "s"} covered${sc.unscoped.length ? `; not yet: ${sc.unscoped.map((p: string) => p.split("/").pop()).join(", ")}` : ""}). `
     : "No Proton covered yet: start a game once, then re-open Setup. ";
   const xessDetail = x?.installed ? `${scopeText}Per-game sets frame generation, FSR games and low latency. ${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"}${x.low_latency ? " · low latency with frame generation" : " · update for low latency and FSR on XeSS"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows (up to 8x experimental), with low latency. It loads only in games that ship XeSS or OptiScaler, never for Steam's own screen.";
-  const fgLine = !fg ? "Decky Framegen: …" : !fg.installed ? "Decky Framegen (OptiScaler): not installed"
-    : fg.fgmod_ready ? `Decky Framegen ${fg.version ?? ""}: OptiScaler ${fg.optiscaler ?? ""} ready` : `Decky Framegen ${fg.version ?? ""} installed: one step left`;
 
   return (
     <PanelSection title="Setup">
@@ -68,13 +57,16 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {noXmx && <Note>No XMX cores on the {hw?.model.name}: games use XeSS on the regular graphics cores.</Note>}
       </PanelSectionRow>
       <PanelSectionRow>
-        <Status ok={!fg ? null : fg.fgmod_ready ? true : null} label={fgLine}
-          detail={fg?.installed && !fg.fgmod_ready ? "Open Decky Framegen in Quick Access and tap Setup OptiScaler Mod (it unpacks OptiScaler; ClawDeck can't do that step for it)."
-            : quick ? undefined : "OptiScaler for DLSS and FSR games (Bazzite's Portal ships it). Per-game adds it to a game and sets it to XeSS on XMX."} />
-        {fg && !fg.installed && (
-          <ButtonItem layout="below" disabled={!!busy} onClick={() => installFramegen(false)}
-            description={explain("Downloads Decky Framegen's release into Decky's plugins and restarts Decky. Then open Decky Framegen once and tap Setup OptiScaler Mod.", undefined, "Decky restarts (a few seconds); an installed copy is never replaced.")}>
-            {busy === "framegen" ? "Installing…" : "Install Decky Framegen"}
+        <Status ok={!op ? null : op.installed ? true : null}
+          label={!op ? "OptiScaler: …" : op.installed ? `OptiScaler ${op.version}: ready${op.games ? `, in ${op.games} game${op.games === 1 ? "" : "s"}` : ""}` : `OptiScaler ${op.version}: downloads with the first recommended setup`}
+          detail={quick ? undefined : `ClawDeck's own OptiScaler and OptiPatcher (pinned, checked), put into a game by Per-game's recommended setup and taken out again by Undo.${op?.framegen ? ` Decky Framegen ${op.framegen_version ?? ""} is installed too: games it set up stay its own, ClawDeck shows a warning there and doesn't touch them.` : ""}`} />
+        {op && !op.installed && !quick && (
+          <ButtonItem layout="below" disabled={!!busy} onClick={async () => {
+            setBusy("opti");
+            try { const r = await optiscalerInstall(); toast(r.ok ? `OptiScaler ${r.version ?? ""} downloaded` : `OptiScaler: not downloaded (${r.error})`); setErr(r.ok ? null : (r.error ?? "error")); }
+            finally { setBusy(null); refresh(); }
+          }} description={explain("Downloads OptiScaler now instead of with the first game (about 55 MB).")}>
+            {busy === "opti" ? "Downloading…" : "Download OptiScaler now"}
           </ButtonItem>
         )}
       </PanelSectionRow>

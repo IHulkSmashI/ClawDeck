@@ -63,9 +63,9 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 // ---- per game ------------------------------------------------------------------------------------------------------
 export type FsrRoute = "off" | "xess" | "fg" | "inject";
 export type OptiPreset = "off" | "xess" | "fsr4" | "fsr4_xmx" | "fsr4_xmx_lite";
-export type Launch = { opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
+export type Launch = { opti_fg?: string | null; opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
-export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
+export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch_any");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
   default_driver: string | null; status: { state: string; line: string | null; mode?: string }; low_latency: boolean; official_proton: string[];
   scope?: XmxScope | null; pinned?: string | null; update?: boolean };
@@ -75,19 +75,25 @@ export type OptiScalerIn = { present: boolean; dir: string | null; version?: str
 export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
 export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
   drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null;
-  fsr4_xmx?: { dir: string; ready: boolean; missing: string[] } };
+  fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
+export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null };
+export const gamesList = callable<[], GameEntry[]>("games_list");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
-  ini_version: string | null; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
+  ini_version: string | null; opti_owner?: string | null; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
 export const gameRecommend = callable<[appid: string], Recommendation>("game_recommend");
 export const gameApplyRecommended = callable<[appid: string, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_apply_recommended");
+export const gameSetOpti = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string }>("game_set_opti");
 export const gameUndoRecommended = callable<[appid: string], { ok: boolean; error?: string }>("game_undo_recommended");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------
 export const xessState = callable<[], XessState>("xess_state");
 export type DriverCheck = { ok: boolean; ran: boolean; error?: string; status: { state: string; line: string | null; mode?: string }; rc?: number; log?: string };
 export const xessInstall = callable<[allowUnpinned: boolean], Fix & { tag?: string; repo?: string; up_to_date?: boolean; summary?: string; check?: DriverCheck }>("xess_install");
+export type OptiState = { version: string; installed: boolean; games: number; framegen: boolean; framegen_version: string | null };
+export const optiscalerState = callable<[], OptiState>("optiscaler_state");
+export const optiscalerInstall = callable<[], { ok: boolean; error?: string; already?: boolean; version?: string }>("optiscaler_install");
 export const framegenState = callable<[], FramegenState>("framegen_state");
 export const framegenInstall = callable<[allowUnpinned: boolean], Fix & { already?: boolean; summary?: string; restarting?: boolean; tag?: string }>("framegen_install");
 

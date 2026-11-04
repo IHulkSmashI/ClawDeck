@@ -186,6 +186,7 @@ export const backend = {
   },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
+    opti_owner: "clawdeck", fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
     xmx_scope: { session_wide: false, per_game: true, auto: true, protons: ["Proton 11.0"], scoped: ["Proton 11.0"], unscoped: [] },
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
@@ -204,6 +205,11 @@ export const backend = {
       "OptiScaler's own settings for this game: Hotfix_RestoreComputeSignature=true, Spoofing_Dxgi=false"], reframework_state: { present: false, ours: false } }),
   game_apply_recommended: () => ({ ok: true, next: "Pick DLSS in the game's menu.", env: { Dx12Upscaler: "xess" } }),
   game_undo_recommended: () => ({ ok: true }),
+  game_set_opti: () => ({ ok: true }),
+  games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: null }, { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "launch" },
+    { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler" }],
+  optiscaler_state: () => ({ version: "0.9.4", installed: true, games: 1, framegen: true, framegen_version: "v0.17" }),
+  optiscaler_install: () => ({ ok: true, version: "0.9.4" }),
   xess_install: () => (state.xessInstalled
     ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", summary: "XeSS XMX 20261104 is up to date" })
     : (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", next: "log out of Game Mode and back in once" }))),
