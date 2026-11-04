@@ -97,6 +97,19 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         </PanelSectionRow>
       )}
+      {f?.quiet_log?.applies && (
+        <PanelSectionRow>
+          <Status ok={f.quiet_log.installed}
+            label={f.quiet_log.installed ? "System log: split-lock flood silenced" : "System log: flooded by split-lock lines"}
+            detail={f.quiet_log.per_minute != null ? `${f.quiet_log.per_minute} split-lock lines in the last minute` : undefined} />
+          <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.quiet_log!.installed ? "undo_quiet_split_lock_log" : "quiet_split_lock_log")}
+            description={explain(f.quiet_log.installed ? "Lets steamos-manager log split-lock hits again (removes ClawDeck's one-line setting)."
+              : "steamos-manager writes every split-lock hit from Steam into the system log, thousands a minute, for a crash reporter Bazzite doesn't have. It costs CPU and battery, and the log then erases earlier boots within minutes, so a crash or a failed wake leaves no trace. This silences only that part.",
+              undefined, "steamos-manager restarts once (a second; Steam reconnects by itself).")}>
+            {f.quiet_log.installed ? "Log split-lock hits again" : "Silence the split-lock flood"}
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <Status ok={f ? f.health.ok : null} label={f ? `Health: ${f.health.line}` : "Health: checking…"} detail={f ? `${f.health.total - f.health.problems} of ${f.health.total} checks pass` : undefined} />
         <Problem error={err} what="Fix" />
@@ -104,7 +117,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {!quick && problems.map((h) => (
         <PanelSectionRow key={h.id}>
           <Status ok={false} label={h.title} detail={h.detail} />
-          {h.fix && <ButtonItem layout="below" disabled={busy} onClick={() => fix(h.fix!)}>{h.fix === "install_xess" ? "Install the XeSS XMX driver (Setup)" : h.fix === "report_unknown_model" ? "Save a hardware survey for an issue" : "Fix"}</ButtonItem>}
+          {h.fix && <ButtonItem layout="below" disabled={busy} onClick={() => fix(h.fix!)}>{h.fix === "install_xess" ? "Install the XeSS XMX driver (Setup)" : h.fix === "quiet_split_lock_log" ? "Silence the split-lock flood" : h.fix === "report_unknown_model" ? "Save a hardware survey for an issue" : "Fix"}</ButtonItem>}
         </PanelSectionRow>
       ))}
       {!quick && (

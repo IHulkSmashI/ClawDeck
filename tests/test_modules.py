@@ -566,3 +566,28 @@ def test_external_display_ignores_the_internal_screen(tmp_path):
     assert telemetry.external_display(str(tmp_path)) == {"connected": False, "connectors": []}
     _w(tmp_path / "card0-DP-1" / "status", "connected\n")          # the MO27Q2 through USB-C
     assert telemetry.external_display(str(tmp_path)) == {"connected": True, "connectors": ["DP-1"]}
+
+
+def test_quietlog_applies_only_without_the_reporter(tmp_path):
+    from clawdeck import quietlog
+    units = tmp_path / "units"
+    _w(units / "steamos-manager.service", "[Unit]\n")
+    dropin = tmp_path / "d" / "50.conf"
+    assert quietlog.status(str(dropin), (str(units),)) == {"applies": True, "installed": False}
+    r = quietlog.apply(str(dropin), restart=False)
+    assert r["ok"] and dropin.read_text() == quietlog.TEXT and "steamos_manager::sls=off" in quietlog.TEXT
+    assert quietlog.remove(str(dropin), restart=False)["ok"] and not dropin.exists()
+    _w(units / "steamos-log-submitter.service", "[Unit]\n")          # SteamOS: the forwarding works there
+    assert quietlog.status(str(dropin), (str(units),))["applies"] is False
+
+
+def test_game_drive_flags_ntfs(tmp_path):
+    from clawdeck import storage
+    m = tmp_path / "mounts"
+    m.write_text("/dev/sda3 /var/home btrfs rw 0 0\n/dev/mmcblk0p1 /run/media/hulk/18BE9AC8BE9A9E36 fuseblk rw 0 0\n"
+                 "/dev/sdb1 /run/media/hulk/My\\040Games ext4 rw 0 0\n")
+    d = storage.game_drive("/run/media/hulk/18BE9AC8BE9A9E36/SteamLibrary/steamapps/common/blackmythwukong", str(m))
+    assert d["slow"] and d["sd"] and d["kind"] == "NTFS (ntfs-3g)"
+    assert storage.game_drive("/var/home/hulk/.local/share/Steam/steamapps/common/CONTROL Resonant", str(m))["slow"] is False
+    assert storage.game_drive("/run/media/hulk/My Games/x", str(m))["fstype"] == "ext4"
+    assert storage.game_drive(None, str(m)) is None
