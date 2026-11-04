@@ -813,3 +813,24 @@ def test_is_dx12_from_libraries_or_the_exe(tmp_path):
     _w(d / "Game-Win64-Shipping.exe", "MZ....D3D12.dll....")
     assert gamedb.is_dx12(str(d))
     assert not gamedb.is_dx12(_game(tmp_path, "c", ["Old.exe", "d3d9.dll"]), ["old.exe"])
+
+
+def test_recommend_ignores_clawdeck_optiscaler_files(tmp_path):
+    """OptiScaler's own libxess.dll must not turn a DLSS game into 'ships XeSS' once ClawDeck set it up."""
+    import json as _j
+    from clawdeck import gamedb
+    g = tmp_path / "Game"
+    g.mkdir()
+    (g / "Game.exe").write_bytes(b"MZ")
+    (g / "nvngx_dlss.dll").write_bytes(b"x")
+    assert gamedb.recommend({"games": []}, str(g))["route"] != "own_xess"
+    (g / "libxess.dll").write_bytes(b"x")
+    (g / "amd_fidelityfx_dx12.dll").write_bytes(b"x")
+    st = g / ".clawdeck-optiscaler"
+    st.mkdir()
+    (st / "manifest.json").write_text(_j.dumps({"added": ["libxess.dll", "amd_fidelityfx_dx12.dll", "OptiScaler.ini"],
+                                                "backed": ["amd_fidelityfx_dx12.dll"]}))
+    assert gamedb.recommend({"games": []}, str(g))["route"] != "own_xess"
+    assert gamedb._has(str(g), ("amd_fidelityfx_dx12.dll",))     # the game's own, backed up: still counts
+    (st / "manifest.json").write_text(_j.dumps({"added": [], "backed": []}))
+    assert gamedb.recommend({"games": []}, str(g))["route"] == "own_xess"
