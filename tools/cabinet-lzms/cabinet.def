@@ -1,0 +1,24 @@
+LIBRARY cabinet.dll
+EXPORTS
+    ; Wine's own cabinet functions, forwarded to a renamed copy of Proton's builtin cabinet.dll next to this one
+    GetDllVersion                = cabinet_wine.GetDllVersion                @1
+    DllGetVersion                = cabinet_wine.DllGetVersion                @2
+    Extract                      = cabinet_wine.Extract                      @3
+    DeleteExtractedFiles         = cabinet_wine.DeleteExtractedFiles         @4
+    FCICreate                    = cabinet_wine.FCICreate                    @10
+    FCIAddFile                   = cabinet_wine.FCIAddFile                   @11
+    FCIFlushFolder               = cabinet_wine.FCIFlushFolder               @12
+    FCIFlushCabinet              = cabinet_wine.FCIFlushCabinet              @13
+    FCIDestroy                   = cabinet_wine.FCIDestroy                   @14
+    FDICreate                    = cabinet_wine.FDICreate                    @20
+    FDIIsCabinet                 = cabinet_wine.FDIIsCabinet                 @21
+    FDICopy                      = cabinet_wine.FDICopy                      @22
+    FDIDestroy                   = cabinet_wine.FDIDestroy                   @23
+    FDITruncateCabinet           = cabinet_wine.FDITruncateCabinet           @24
+    ; the Compression API decompressor (LZMS), which Wine lacks
+    CreateDecompressor           @40
+    SetDecompressorInformation   @41
+    QueryDecompressorInformation @42
+    Decompress                   @43
+    ResetDecompressor            @44
+    CloseDecompressor            @45
