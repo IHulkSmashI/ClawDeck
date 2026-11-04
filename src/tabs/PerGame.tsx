@@ -1,5 +1,5 @@
 import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
 import { gameChoose, gameRecommend, gameStatus, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
@@ -9,7 +9,7 @@ import { LaunchWrapper } from "../components/LaunchWrapper";
 import { Anchor, explain, Group, markPick, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
 
-const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+const toast = (body: string) => notify(body);
 
 const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "off", label: "Off (the game's own FSR)" },
@@ -107,7 +107,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     try { await choose(wantUp, wantFg); setPickUp(null); setPickFg(null); } finally { setBusy(false); }
   };
   const choose = async (upscaler: string, fg: number, allow = false) => {
-    if (upscaler !== "own" && !ours) toast(`${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…`);
+    if (upscaler !== "own" && !ours) notify(`${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…`, { title: `${app.name}: installing…`, body: "OptiScaler (first time: 55 MB download)" });
     const r = await gameChoose(app.appid, upscaler, fg, allow);
     if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
@@ -115,7 +115,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       setLaunchOptions(app.appid, withWrapper(opts, gs.wrapper.replace(/ %command%$/, "")));
     }
     const up = UPSCALERS.find((u) => u.data === upscaler)?.label ?? upscaler;
-    toast(r.ok ? `${app.name}: ${up}${fg ? `, frame generation ${fg}x` : ""}. ${upscaler === "own" ? "" : "In the game's menu pick DLSS (or FSR). "}From the next launch.` : `Not saved: ${r.error}`);
+    const full = r.ok ? `${app.name}: ${up}${fg ? `, frame generation ${fg}x` : ""}. ${upscaler === "own" ? "" : "In the game's menu pick DLSS (or FSR). "}From the next launch.` : `Not saved: ${r.error}`;
+    notify(full, r.ok ? (upscaler === "own" ? { title: `${app.name}: OptiScaler removed`, body: "Back to the game's own files" }
+      : { title: `${app.name}: ${up}${fg ? ` + ${fg}x` : ""} ✓`, body: "Start the game, pick DLSS in its menu" })
+      : { title: `${app.name}: not done`, body: "Reason at the top of ClawDeck" });
     load();
   };
   const setFgmod = (on: boolean) => {

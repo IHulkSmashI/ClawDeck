@@ -1,12 +1,12 @@
 import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "./notify";
 import { FC, useEffect, useState } from "react";
 
 import { getFixes, setSetting, setWideVrr, xessInstall, xessState, Fixes, XessState } from "../api";
 import { confirmUntested } from "./confirm";
 import { Group, Note, Status } from "./Hint";
 
-const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+const toast = (body: string) => notify(body);
 
 /** The first start: what has to be in place before games can be set up, one step at a time (the XeSS XMX driver,
  * then the 30–120 Hz VRR fix), then the everyday panel. OptiScaler needs no step: it downloads with the first game.
