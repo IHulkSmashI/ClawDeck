@@ -557,3 +557,12 @@ def test_xmx_scope_loads_the_driver_only_for_xess_games_or_when_forced(tmp_path,
     assert "VK_DRIVER_FILES" not in s
     assert xmxscope.remove_scope(str(tmp_path))["protons"] == [str(proton)]
     assert (proton / "user_settings.user.py").read_text().startswith("user_settings = {'PROTON_LOG'")   # theirs is back
+
+
+def test_external_display_ignores_the_internal_screen(tmp_path):
+    from clawdeck import telemetry
+    for c, st in (("card0-eDP-1", "connected"), ("card0-DP-1", "disconnected"), ("card0-HDMI-A-1", "disconnected"), ("card0-Writeback-1", "unknown")):
+        _w(tmp_path / c / "status", st + "\n")
+    assert telemetry.external_display(str(tmp_path)) == {"connected": False, "connectors": []}
+    _w(tmp_path / "card0-DP-1" / "status", "connected\n")          # the MO27Q2 through USB-C
+    assert telemetry.external_display(str(tmp_path)) == {"connected": True, "connectors": ["DP-1"]}

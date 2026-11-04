@@ -58,7 +58,8 @@ const limit = (name: string, w: number) => {
 const xessState = () => (state.xessInstalled
   ? { installed: true, package_dir: "/home/bazzite/.local/share/clawdeck/xess-xmx-linux-20261104", version: "20261104",
       source: { repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104" }, drivers: ["26.1.2", "26.3.0-rc3"], default_driver: "26.3.0-rc3",
-      status: { state: "ok", line: "ok 2026-11-04 18:02:11 /x Mesa 26.3.0-rc3", mode: "XMX (patched driver)" }, low_latency: true, official_proton: [] }
+      status: { state: "ok", line: "ok 2026-11-04 18:02:11 /x Mesa 26.3.0-rc3", mode: "XMX (patched driver)" }, low_latency: true, official_proton: [],
+      scope: { session_wide: false, per_game: true, auto: true, protons: ["/x/Proton 11.0"], scoped: ["/x/Proton 11.0"], unscoped: [] } }
   : { installed: false, package_dir: null, version: null, source: null, drivers: [], default_driver: null, status: { state: "unknown", line: null }, low_latency: false, official_proton: [] });
 
 const framegenState = () => (state.framegen

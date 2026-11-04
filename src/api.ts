@@ -67,7 +67,8 @@ export type Launch = { xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_l
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
-  default_driver: string | null; status: { state: string; line: string | null; mode?: string }; low_latency: boolean; official_proton: string[] };
+  default_driver: string | null; status: { state: string; line: string | null; mode?: string }; low_latency: boolean; official_proton: string[];
+  scope?: XmxScope | null };
 export type LatencyState = { mode: "pacing" | "idle" | "no-fg" | "off" | "none"; detail: string };
 export type FramegenState = { installed: boolean; dir: string | null; version: string | null; fgmod_ready: boolean; fgmod: string | null; optiscaler: string | null };
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
@@ -89,6 +90,7 @@ export type ButtonsState = { applies: boolean; ok: boolean; installed: boolean; 
 export type OverlayPower = { available: boolean; on: boolean; files: { path: string; mode: string; readable: boolean }[]; battery_w: number | null };
 export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower };
 export const getFixes = callable<[], Fixes>("get_fixes");
+export const displayExternal = callable<[], { connected: boolean; connectors: string[] }>("display_external");
 export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");
 export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };
 export const getChanges = callable<[], Changes>("get_changes");
