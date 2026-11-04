@@ -46,6 +46,12 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Before the next release, on the Claw (2026-11-04 build):** per-game XMX (Setup moves the session file aside; Game
+  Mode comes up; CONTROL logs `clawdeck: XeSS XMX driver for this game`), "VRR only in games" (menus 120 Hz, games
+  30–120, stands aside with the monitor on USB-C), "Silence the split-lock flood" (Fixes; `journalctl -u
+  steamos-manager --since -60s | grep -c sls` drops to 0; steamos-manager's CPU drops), the NTFS warning in Per-game
+  (Wukong on the SD card), watts in the overlay.
+
 - Efficiency session (findings §22.1 + §22.4), with Black Myth: Wukong's benchmark: TDP sweep 8→35 W with
   `tools/efficiency-sweep.sh`, then the same at 10/12/17 W with GPU `power_saving`; watch intel_lpmd and per-core load
   during the run. Same session as the XeLL Windows-vs-Bazzite latency comparison.

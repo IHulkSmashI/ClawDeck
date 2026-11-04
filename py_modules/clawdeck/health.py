@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import power, buttons, hhd, hw, stack, sysfs, xess
+from . import quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -108,6 +108,13 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                 "fix": None if xs["installed"] else "install_xess"})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
+    ql = quietlog.status()
+    if ql["applies"]:
+        out.append({"id": "quiet_log", "title": "System log kept (no split-lock flood)", "ok": ql["installed"],
+                    "detail": "steamos-manager's split-lock forwarding is silenced" if ql["installed"] else
+                              "steamos-manager logs every split-lock hit from Steam (thousands a minute) for a crash reporter "
+                              "Bazzite doesn't have; the 50 MB journal then erases earlier boots within minutes",
+                    "fix": None if ql["installed"] else "quiet_split_lock_log"})
     others = stack.other_plugins(home)
     if others["power"]:
         out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,

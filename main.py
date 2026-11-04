@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      power, profiles, stack, sysfs, thermal, telemetry, userexec, xess, xmxscope)
+                      power, profiles, quietlog, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -193,6 +193,10 @@ class Plugin:
                 self.settings["overlay_power"] = on
                 self._save_settings()
             return r
+        if fix == "quiet_split_lock_log":
+            return await self._bg(quietlog.apply)
+        if fix == "undo_quiet_split_lock_log":
+            return await self._bg(quietlog.remove)
         if fix == "report_unknown_model":
             r = await self._bg(lambda: subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")],
                                                       capture_output=True, text=True, timeout=60, check=False))
@@ -205,7 +209,8 @@ class Plugin:
         """The Fixes panel in one call: the VRR range fix, the face-button fix, and the health check in one line."""
         vrr, checks = await asyncio.gather(self._bg(edid.status), self.get_health())
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
-                "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()}}
+                "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()},
+                "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)}}
 
     async def display_external(self) -> dict:
         """An external display connected? Read by the "VRR only in games" switch every few seconds (src/vrr.ts)."""
@@ -563,7 +568,7 @@ class Plugin:
         d = op.get("dir")
         auto = bool(op.get("present")) or bool(d and glob.glob(os.path.join(glob.escape(d), "**", "libxess*.dll"), recursive=True))
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
-                "xmx_scope": {**scope, "auto": auto}}
+                "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d)}
 
     # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
     async def framegen_state(self) -> dict:
