@@ -1,8 +1,8 @@
-import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
+import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { getFixes, getHealth, runFix, setWideVrr, Fixes, Health } from "../api";
+import { getFixes, getHealth, getSetting, runFix, setSetting, setWideVrr, Fixes, Health } from "../api";
 import { confirmRestart } from "../components/confirm";
 import { explain, Problem, Status, useExplanations } from "../components/Hint";
 
@@ -37,6 +37,10 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(true); }
   };
+  const [menusFixed, setMenusFixed] = useState<boolean | null>(null);   // VRR only in games (src/vrr.ts)
+  useEffect(() => { getSetting("vrr_menus_fixed").then((v) => setMenusFixed(v ?? null)); }, []);
+  const menusFixedOn = menusFixed ?? !!vrr?.wide;
+  const vrrStatus = (window as any).__clawdeckVrrScopeStatus?.();
   const b = f?.buttons;
   const problems = health.filter((h) => !h.ok && !h.optional);
 
@@ -57,6 +61,18 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         )}
       </PanelSectionRow>
+      {vrr?.wide && (
+        <PanelSectionRow>
+          <ToggleField label="VRR only in games" checked={menusFixedOn}
+            onChange={async (v) => { setMenusFixed(v); await setSetting("vrr_menus_fixed", v); await (window as any).__clawdeckVrrScopeSync?.();
+              toast(v ? "VRR follows the game; Steam's menus stay at 120 Hz" : "Steam's own VRR switch is in charge again"); }}
+            description={explain("Games get 30–120 Hz VRR, Steam's menus and library a fixed 120 Hz, as on Windows. Without it the menus follow a slow game's frame rate and look choppy.",
+              undefined, "ClawDeck sets Steam's VRR switch for you while this is on (your saved Steam profiles don't change).")} />
+          {menusFixedOn && vrrStatus?.active && <Status ok={vrrStatus.error ? false : true}
+            label={vrrStatus.error ? "VRR switching failed" : vrrStatus.game !== "0" ? "In a game: VRR on" : "Steam's menus: VRR off (120 Hz)"}
+            detail={vrrStatus.error ?? undefined} />}
+        </PanelSectionRow>
+      )}
       {b?.applies && (
         <PanelSectionRow>
           <Status ok={b.ok} label={b.installed ? "Face buttons: fix installed" : b.upstream_fixed ? "Face buttons: InputPlumber maps them itself" : "Face buttons: dead in Game Mode"}
