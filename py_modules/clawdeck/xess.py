@@ -289,6 +289,34 @@ def prefix_dir(home: str, appid: str) -> str:
     return os.path.join(home, COMPATDATA, str(appid), "pfx", "drive_c")
 
 
+def xmx_proof(home: str, appid: str, runtime_dir: str | None = None) -> dict:
+    """Whether the game's last launch really ran on the XMX cores, from what the patched driver and the shim leave in
+    the prefix: anv_canary (written by the patched driver when it recognises the shim's self-test, so only when it
+    was loaded in the game), the kernels the game asked for (map.txt) and the failed-compile marker. 2026-11-04: per
+    game XMX had silently left every game on the stock driver; this is the line that shows it."""
+    k = os.path.join(prefix_dir(home, appid), "igdext_kernels")
+    canary = os.path.join(k, "anv_canary")
+    failed = os.path.isfile(os.path.join(k, "compile_failed.txt"))
+    try:
+        when = os.path.getmtime(canary)
+    except OSError:
+        when = None
+    try:
+        with open(os.path.join(k, "map.txt"), "r", encoding="utf-8", errors="replace") as f:
+            kernels = sum(1 for line in f if line.strip())
+    except OSError:
+        kernels = 0
+    # the game's newest start Steam knows of: the prefix's registry is written at every launch
+    # the game's last start: the launch wrapper touches <runtime>/launch/<appid>.started (no wrapper: unknown)
+    try:
+        last = os.path.getmtime(os.path.join(runtime_dir, "launch", f"{appid}.started")) if runtime_dir else None
+    except OSError:
+        last = None
+    ran = when is not None and (last is None or when >= last - 5)
+    state = "failed" if failed else "ok" if ran else "stale" if when else "never"
+    return {"state": state, "at": when, "last_launch": last, "kernels": kernels, "failed": failed}
+
+
 def game_latency(home: str, appid: str, low_latency_on: bool) -> dict:
     """What the shim's low latency did in this game's last launch, from drive_c/igdext_xell.log (the launch wrapper
     rotates it at each start, so it describes one launch). mode: pacing | idle | no-fg | off | none."""

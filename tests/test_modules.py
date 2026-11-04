@@ -866,3 +866,25 @@ def test_opti_overlay_goes_into_optiscaler_ini():
     import pytest
     with pytest.raises(ValueError):
         launchenv.compose({"opti": "xess", "opti_overlay": 9})
+
+
+def test_xmx_proof_reads_the_prefix(tmp_path):
+    import os, time
+    from clawdeck import xess
+    home = str(tmp_path)
+    pfx = xess.prefix_dir(home, "42")
+    os.makedirs(os.path.join(pfx, "igdext_kernels"))
+    assert xess.xmx_proof(home, "42")["state"] == "never"
+    rt = tmp_path / "rt" / "launch"
+    rt.mkdir(parents=True)
+    (rt / "42.started").write_text("")
+    with open(os.path.join(pfx, "igdext_kernels", "map.txt"), "w") as f:
+        f.write("1 aa\n2 bb\n")
+    open(os.path.join(pfx, "igdext_kernels", "anv_canary"), "w").write("")
+    p = xess.xmx_proof(home, "42", str(tmp_path / "rt"))
+    assert p["state"] == "ok" and p["kernels"] == 2
+    old = time.time() - 7200
+    os.utime(os.path.join(pfx, "igdext_kernels", "anv_canary"), (old, old))
+    assert xess.xmx_proof(home, "42", str(tmp_path / "rt"))["state"] == "stale"
+    open(os.path.join(pfx, "igdext_kernels", "compile_failed.txt"), "w").write("k")
+    assert xess.xmx_proof(home, "42")["state"] == "failed"

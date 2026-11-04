@@ -154,6 +154,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <div>{wrapped ? "✓" : "–"} Launch options: {wrapped ? "ClawDeck is in them" : "ClawDeck not added yet (added when you pick below)"}</div>
           {!quick && opts !== null && <div style={{ wordBreak: "break-all", opacity: 0.8 }}>{opts || "(empty)"}</div>}
           <div>{xmxOn && xessOk ? "✓" : "–"} XMX driver: {xmxOn ? (xessOk ? "on for this game" : "on, but the driver check hasn't passed") : "off for this game"}</div>
+          {gs?.xmx_proof && <div style={{ color: gs.xmx_proof.state === "ok" ? "#4caf50" : gs.xmx_proof.state === "never" ? undefined : "#f44336" }}>
+            {({ ok: `✓ XMX cores used in the last launch (${gs.xmx_proof.kernels} XMX programs)`,
+                stale: "✗ Last launch didn't use the XMX cores (stock driver): restart the game",
+                never: "– XMX cores not used yet: start the game once",
+                failed: "✗ An XMX program didn't compile: the game falls back to DP4a (see ClawDeck's log)" } as const)[gs.xmx_proof.state]}</div>}
           <div>{launch.fg ? `✓ Frame generation ${launch.fg}x (XeSS on XMX)` : "– Frame generation off"} · XeLL low latency always on</div>
         </div>
       </PanelSectionRow>
