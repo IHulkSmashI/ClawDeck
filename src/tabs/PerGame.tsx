@@ -21,8 +21,8 @@ const picks = new Map<string, { up?: string; fg?: number }>();   // unapplied pi
 
 const UPSCALERS = [
   { data: "xess", label: "XeSS 2" },
-  { data: "fsr4_xmx", label: "FSR 4.1.1" },
-  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 Lite (faster)" },
+  { data: "fsr4_xmx", label: "FSR 4.1.2" },
+  { data: "fsr4_xmx_lite", label: "FSR 4.1.2 Lite (faster)" },
 ];
 const FRAMEGENS = [
   { data: 0, label: "Off" },
@@ -96,9 +96,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const [busy, setBusy] = useState(false);
   const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg;
-  // FSR 4.1.1 only where it can run, as OptiClick shows only what the game and the hardware support
+  // FSR 4.1.2 only where it can run, as OptiClick shows only what the game and the hardware support
   const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files);
-  const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.1 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.1 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.1 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
+  const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.2 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.2 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.2 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
   const upscalers = UPSCALERS.filter((u) => u.data === "xess" || (fsr4Ok && u.data.startsWith("fsr4")));
   const optiVer = gs?.opti_version ?? null;
   const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);
@@ -147,8 +147,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <Anchor id="upscaler"><DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
             onChange={(o) => { markPick("upscaler"); setPickUp(String(o.data)); }}
-            description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
-              : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
+            description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
+              : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
           <Anchor id="framegen"><DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
             selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
@@ -184,11 +184,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <Group title="In the game" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
-            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
+            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.2 on XMX" : "XeSS on XMX"}.</li>
             <li>Pick it <b>once</b>: switching between DLSS and FSR while the game runs can crash it (CONTROL does). To change it, quit, change it here, start the game again.</li>
             {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b> (any multiplier: ClawDeck's {launch.fg ?? 2}x is what you get), then <b>quit and start the game again</b>: switching it on while the game runs can crash it.</li>}
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu; press it again to close. {(launch.opti ?? "xess").startsWith("fsr4_xmx")
-              ? <>FSR 4.1.1 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.1</b> under FFX Settings (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
+              ? <>FSR 4.1.2 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.2</b> picked under FFX Settings, FFX Upscaler (not 4.0.2) (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
               : <>XeSS shows under Upscalers, Input: DLSS.</>}{launch.fg ? <> Frame generation: FG Output <b>XeFG</b>, Active ticked.</> : null}</li>
             <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
           </ol>
@@ -196,11 +196,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <Group title="In the game" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
-            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
+            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.2 on XMX" : "XeSS on XMX"}.</li>
             <li>Pick it <b>once</b>: switching between DLSS and FSR while the game runs can crash it (CONTROL does). To change it, quit, change it here, start the game again.</li>
             {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b> (any multiplier: ClawDeck's {launch.fg ?? 2}x is what you get), then <b>quit and start the game again</b>: switching it on while the game runs can crash it.</li>}
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu; press it again to close. {(launch.opti ?? "xess").startsWith("fsr4_xmx")
-              ? <>FSR 4.1.1 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.1</b> under FFX Settings (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
+              ? <>FSR 4.1.2 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.2</b> picked under FFX Settings, FFX Upscaler (not 4.0.2) (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
               : <>XeSS shows under Upscalers, Input: DLSS.</>}{launch.fg ? <> Frame generation: FG Output <b>XeFG</b>, Active ticked.</> : null}</li>
             <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
           </ol>
