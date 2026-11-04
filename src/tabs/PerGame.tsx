@@ -31,7 +31,6 @@ const OPTI_FG_OPTIONS: { data: string; label: string }[] = [
 const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
   { data: "off", label: "Decky Framegen's setting" },
   { data: "xess", label: "XeSS on XMX (recommended)" },
-  { data: "fsr4", label: "FSR 4 INT8 (experimental on Intel)" },
   { data: "fsr4_xmx", label: "FSR 4.1.1 on XMX (nitec's build)" },
   { data: "fsr4_xmx_lite", label: "FSR 4.1.1 on XMX, Lite (faster)" },
 ];
@@ -161,7 +160,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
               const v = { opti: o.data === "off" ? null : o.data } as any;
               ours ? setOpti(v) : save(v);
             }}
-            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. FSR 4 INT8 is AMD's model for other GPUs, slower on Intel.",
+            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. Every choice runs on the XMX cores.",
               undefined, quick ? undefined : "FSR 4 on XMX: the files go into the game folder and come out again when you pick something else.")} />
           <DropdownItem label="Frame generation (XeSS, on XMX)" layout="below" childrenContainerWidth="max" rgOptions={OPTI_FG_OPTIONS}
             selectedOption={launch.opti_fg ?? (launch.opti_xefg ? "dlssg" : "off")}
@@ -175,7 +174,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <Field label="In the game" bottomSeparator="none" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
-            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : launch.opti === "fsr4" ? "FSR 4" : "XeSS on XMX"}.</li>
+            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
             {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b>.</li>}
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu (it shows the upscaler in use); press it again to close.</li>
             <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
@@ -189,11 +188,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
         </PanelSectionRow>
       )}
       <PanelSectionRow>
-        <ToggleField label="XeSS on XMX" checked={xmxOn} disabled={!installed}
+        {!quick && <ToggleField label="XeSS on XMX (switch off only to troubleshoot)" checked={xmxOn} disabled={!installed}
           description={explain(installed ? (perGame ? `Automatic: the XMX driver loads only in games that ship XeSS or OptiScaler (${scope?.auto ? "this one does" : "this one doesn't"}); Steam's own screen and other games keep Bazzite's driver. Switch it to force it on or off for this game.`
               : "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves.")
             : "Install the XeSS XMX driver in Setup first; from then it is on for every game.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
-          onChange={(v) => save({ xmx: perGame && v === !!scope?.auto ? null : v } as any)} />
+          onChange={(v) => save({ xmx: perGame && v === !!scope?.auto ? null : v } as any)} />}
         <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && installed) || (!xmxOn && !wrapped) ? false : null) : null}
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
             : xmxOn ? (xessOk ? `XeSS runs on XMX (${perGame ? (launch.xmx == null ? "automatic" : "switched on for this game") : "default"})`
@@ -211,12 +210,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       </PanelSectionRow>
 
       <PanelSectionRow>
-        <ToggleField label="Low latency" checked={launch.low_latency !== false} disabled={!installed || !newPkg}
-          description={explain(newPkg ? "With XeSS frame generation on, starts each frame so it reaches the graphics chip just as it gets free, instead of queueing. Roughly halves the input lag in a GPU-limited game at the same frame rate (xess-xmx-linux measured 69 → 35 ms). On by default."
-            : "Needs XeSS XMX 20261104 or newer: Setup → Update XeSS XMX.", undefined, quick ? undefined : "turn it off only if this game loses frame rate with it on.")}
-          onChange={(v) => save({ low_latency: v ? null : false } as any)} />
+        {!newPkg && <Status ok={false} label="Low latency (XeLL) needs XeSS XMX 20261104 or newer" detail="Setup → Update XeSS XMX." />}
         {newPkg && lat && <Status ok={lat.mode === "pacing" || lat.mode === "idle" ? true : lat.mode === "off" ? false : null}
-          label={`Low latency: ${({ pacing: "working", idle: "on, nothing to remove", "no-fg": "waiting for frame generation", off: "off", none: "not seen yet" } as const)[lat.mode]}`}
+          label={`Low latency (XeLL, always on): ${({ pacing: "working", idle: "on, nothing to remove", "no-fg": "waiting for frame generation", off: "off", none: "not seen yet" } as const)[lat.mode]}`}
           detail={lat.detail} />}
       </PanelSectionRow>
 
