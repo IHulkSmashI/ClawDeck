@@ -133,7 +133,7 @@ def protons(home: str) -> list[str]:
     for lib in dict.fromkeys(libs):
         for p in glob.glob(os.path.join(lib, "steamapps/common/Proton*")) + glob.glob(os.path.join(lib, "compatibilitytools.d/*")):
             if HOOK_MARK in (sysfs.read(os.path.join(p, "user_settings.py")) or ""):
-                found.append(p)
+                found.append(os.path.realpath(p))     # /home is a link to /var/home on Bazzite: one entry per Proton
     return sorted(set(found))
 
 
