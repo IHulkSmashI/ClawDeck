@@ -4,7 +4,7 @@
 
 <h1 align="center">ClawDeck</h1>
 
-<p align="center"><b>Power, battery, graphics and controller settings for the MSI Claw on Linux,<br>right in Steam's Quick Access menu.</b></p>
+<p align="center"><b>What ClawTweaks and OptiClick are on Windows, for the MSI Claw on Bazzite and SteamOS,<br>right in Steam's Quick Access menu.</b></p>
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="assets/download-button.png" alt="Download" width="260"></a>
@@ -32,8 +32,20 @@
 ## What is ClawDeck?
 
 A free plugin for [Decky Loader](https://decky.xyz) that adds one ClawDeck panel to Steam's Quick Access menu (the
-right MSI button) on the MSI Claw running [Bazzite](https://bazzite.gg). It does only what Bazzite and Steam's own
-Quick Access do **not** already do:
+right MSI button) on the MSI Claw running [Bazzite](https://bazzite.gg) or SteamOS. The goal: everything ClawTweaks
+and OptiClick give the Claw on Windows, on Linux, with the same latency or better. It does only what Bazzite and
+Steam's own Quick Access do **not** already do.
+
+**Where it's going** (in progress, tested on a Claw 8 EX before each release):
+- **Everything on the XMX cores:** XeSS upscaling, XeSS frame generation (2–8x), low latency, and FSR 4 (the
+  OptiScaler community's FSR 4 build for XMX), with input lag measured against Windows.
+- **OptiClick on Linux:** one tap per game sets up OptiScaler with that game's known-good settings, including Capcom
+  RE Engine games (REFramework), OptiPatcher and the Unreal Engine 5 fixes, from an open per-game list anyone can
+  improve.
+- **Power that earns its place:** profiles by battery and dock; Autotune stays only if measurements show it saves
+  battery for the same frames.
+
+What it does today:
 
 - **XeSS on the XMX cores, with low latency.** Installs the [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)
   driver in one tap; from then every game's XeSS (or OptiScaler's) gets the same full-quality upscaling and frame
