@@ -207,6 +207,10 @@ class Plugin:
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
                 "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()}}
 
+    async def display_external(self) -> dict:
+        """An external display connected? Read by the "VRR only in games" switch every few seconds (src/vrr.ts)."""
+        return telemetry.external_display()
+
     async def get_setting(self, key: str):
         return self.settings.get(key)
 

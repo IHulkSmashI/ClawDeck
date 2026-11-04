@@ -66,8 +66,9 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <ToggleField label="VRR only in games" checked={menusFixedOn}
             onChange={async (v) => { setMenusFixed(v); await setSetting("vrr_menus_fixed", v); await (window as any).__clawdeckVrrScopeSync?.();
               toast(v ? "VRR follows the game; Steam's menus stay at 120 Hz" : "Steam's own VRR switch is in charge again"); }}
-            description={explain("Games get 30–120 Hz VRR, Steam's menus and library a fixed 120 Hz, as on Windows. Without it the menus follow a slow game's frame rate and look choppy.",
+            description={explain("On the Claw's screen: games get 30–120 Hz VRR, Steam's menus and library a fixed 120 Hz, as on Windows. Without it the menus follow a slow game's frame rate and look choppy. With a monitor or dock connected it stands aside: that display's VRR is whatever you set in Steam.",
               undefined, "ClawDeck sets Steam's VRR switch for you while this is on (your saved Steam profiles don't change).")} />
+          {menusFixedOn && vrrStatus && !vrrStatus.active && vrrStatus.game !== undefined && <Status ok={null} label="External display: Steam's VRR switch is in charge" />}
           {menusFixedOn && vrrStatus?.active && <Status ok={vrrStatus.error ? false : true}
             label={vrrStatus.error ? "VRR switching failed" : vrrStatus.game !== "0" ? "In a game: VRR on" : "Steam's menus: VRR off (120 Hz)"}
             detail={vrrStatus.error ?? undefined} />}

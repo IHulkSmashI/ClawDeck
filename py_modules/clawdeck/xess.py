@@ -113,7 +113,16 @@ def state(home: str) -> dict:
         # releases from 20261104 on: low latency with frame generation, FSR=xess, XESS_FG up to 8x
         "low_latency": bool(pkg) and has_low_latency(pkg, name),
         "official_proton": official_proton(home),
+        "scope": _scope(home) if pkg else None,          # per game or session-wide, and which Protons are covered
     }
+
+
+def _scope(home: str) -> dict:
+    from . import xmxscope
+    try:
+        return xmxscope.state(home)
+    except OSError as e:
+        return {"error": str(e)}
 
 
 def has_low_latency(pkg: str, name: str) -> bool:
