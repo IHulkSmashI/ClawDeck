@@ -88,6 +88,22 @@ The four-panel UI has not been on the device yet.
   game. Turn it off for one game: ClawDeck adds itself to that game's launch options and the line says "stock
   driver"; the game's XeSS then runs as DP4a.
 
+- **Found on the Claw 2026-11-04 (Onimusha, Proton 11.0, kernel 7.2.9):**
+  - xess-xmx-linux's session-wide driver file (`~/.config/environment.d/50-xess-xmx.conf`) reached Steam's own screen
+    and every game: Onimusha (no XeSS) lost much of its frame rate, games recompiled shaders at every switch, and the
+    one boot that went black ran with it. ClawDeck now moves that file aside after installing and loads the XMX driver
+    per game (`xmxscope.py`): only games that ship XeSS or OptiScaler, or Per-game forced on. **Test:** install
+    (Setup), reboot, Game Mode comes up; a XeSS game logs `clawdeck: XeSS XMX driver for this game` (PROTON_LOG=1);
+    Onimusha doesn't.
+  - Capcom's DRM kills Onimusha when its FidelityFX DLL is swapped (`FSR=xess`, RaiseFailFastException). Capcom games
+    need OptiScaler + REFramework instead.
+  - Onimusha flashes on every driver tried (stock Mesa 26.2.4, the package's 26.1.2 and 26.3.0-rc3): not ours.
+  - Overlay watts: `energy_uj` is 0400 and BAT1 `current_now` is 100x too high on the EX. Fixes → "Show watts in the
+    overlay" (new); check the overlay shows CPU W and ClawDeck's battery line reads ~10 W idle.
+  - Speakers silent although PCM runs (RT721 SDCA, sof-sdca-1amp): the vendor power gates stay off
+    (stevedamnvan/msi-claw-8-ex-linux, EX-AUD-001/002). Not built yet: its exact sequence still has to be read.
+  - VRR 30–120 makes Steam's menus choppy (the screen really runs at the game's 30 fps). Planned: VRR only while a
+    game shows frames, fixed 120 Hz in menus, as on Windows.
 - **0.2 on the Claw (none of this has run on hardware yet):**
   - Setup → Update XeSS XMX to 20261104, log out and in: "XeSS XMX 20261104: driver loads".
   - Per-game in a game with XeSS frame generation (Cyberpunk 2077): Frame generation 3x, restart the game, 3x on

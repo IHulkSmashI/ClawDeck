@@ -49,7 +49,9 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   }
   const launch: Launch = gs?.launch ?? {};
   const installed = !!gs?.xess.installed;
-  const xmxOn = launch.xmx !== false;
+  const scope = gs?.xmx_scope;
+  const perGame = !!scope && !scope.session_wide;            // the XMX driver loads per game (xmxscope.py), the default
+  const xmxOn = perGame ? (launch.xmx ?? !!scope?.auto) : launch.xmx !== false;
   const xessOk = installed && gs!.xess.status.state === "ok";
   const newPkg = !!gs?.xess.low_latency;                     // 20261104+: low latency, FSR on XeSS, XESS_FG to 8x
   const wrapped = hasWrapper(opts);
@@ -83,14 +85,16 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
     <PanelSection title={`Per-game: ${app.name}`}>
       <PanelSectionRow>
         <ToggleField label="XeSS on XMX" checked={xmxOn} disabled={!installed}
-          description={explain(installed ? "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves."
+          description={explain(installed ? (perGame ? `Automatic: the XMX driver loads only in games that ship XeSS or OptiScaler (${scope?.auto ? "this one does" : "this one doesn't"}); Steam's own screen and other games keep Bazzite's driver. Switch it to force it on or off for this game.`
+              : "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves.")
             : "Install the XeSS XMX driver in Setup first; from then it is on for every game.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
-          onChange={(v) => save({ xmx: v })} />
+          onChange={(v) => save({ xmx: perGame && v === !!scope?.auto ? null : v } as any)} />
         <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && installed) || (!xmxOn && !wrapped) ? false : null) : null}
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
-            : xmxOn ? (xessOk ? `XeSS on XMX (default): ${gs.xess.status.mode ?? "patched driver"}`
+            : xmxOn ? (xessOk ? `XeSS on XMX (${perGame ? (launch.xmx == null ? "automatic" : "on for this game") : "default"}): ${gs.xess.status.mode ?? "patched driver"}`
               : gs.xess.status.state === "unknown" ? "XeSS on XMX from your next log-in (the session check hasn't run yet)" : "XeSS: patched driver not loading, DP4a fallback")
-            : wrapped ? "XeSS: stock driver for this game (DP4a)" : "XMX off is saved, but ClawDeck isn't in this game's launch options yet, so the game still uses XMX"}
+            : perGame ? (launch.xmx === false ? "XeSS: Bazzite's driver for this game (switched off)" : "Bazzite's driver: this game ships no XeSS or OptiScaler")
+              : wrapped ? "XeSS: stock driver for this game (DP4a)" : "XMX off is saved, but ClawDeck isn't in this game's launch options yet, so the game still uses XMX"}
           detail={xmxOn && gs?.xess.status.state === "failed" ? gs.xess.status.line ?? undefined : undefined} />
       </PanelSectionRow>
 
