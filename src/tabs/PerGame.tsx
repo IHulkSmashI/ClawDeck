@@ -17,6 +17,8 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "fg", label: "FSR frame gen on XeSS only" },
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
+const picks = new Map<string, { up?: string; fg?: number }>();   // unapplied picks per game, across re-mounts
+
 const UPSCALERS = [
   { data: "xess", label: "XeSS 2" },
   { data: "fsr4_xmx", label: "FSR 4.1.1" },
@@ -84,8 +86,13 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   // pinned): nothing is written while picking
   const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "xess";
   const nowFg = launch.fg ?? 0;
-  const [pickUp, setPickUp] = useState<string | null>(null);
-  const [pickFg, setPickFg] = useState<number | null>(null);
+  // kept outside the component: picking in Steam's dropdown can re-mount Quick Access, which lost the pick (the
+  // choice jumped back to XeSS 2 on the Claw, 2026-11-04)
+  const kept = picks.get(app.appid) ?? {};
+  const [pickUp, setPickUpS] = useState<string | null>(kept.up ?? null);
+  const [pickFg, setPickFgS] = useState<number | null>(kept.fg ?? null);
+  const setPickUp = (v: string | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), up: v ?? undefined }); setPickUpS(v); };
+  const setPickFg = (v: number | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), fg: v ?? undefined }); setPickFgS(v); };
   const [busy, setBusy] = useState(false);
   const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg;
@@ -145,7 +152,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             selectedOption={wantFg} onChange={(o) => setPickFg(Number(o.data))}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
-          <ButtonItem layout="below" disabled={busy || (ours && !changed && !outdated)} onClick={() => apply()}
+          {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
+          <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
             {busy ? "Working…" : !ours ? "Install OptiScaler in this game" : outdated && !changed ? `Update OptiScaler to ${optiVer}` : changed ? "Apply changes" : "Installed"}
           </ButtonItem>

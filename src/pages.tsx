@@ -1,7 +1,8 @@
 import { ButtonItem, Navigation, PanelSection, PanelSectionRow, SidebarNavigation, ToggleField } from "@decky/ui";
 import { FC, useEffect, useState } from "react";
 
-import { getSetting, setSetting } from "./api";
+import { getSetting, setSetting, xessState } from "./api";
+import { FirstRun } from "./components/FirstRun";
 import { HelpContext } from "./components/Hint";
 import { MdBolt, MdBuild, MdSportsEsports } from "react-icons/md";
 
@@ -26,7 +27,9 @@ export const openPage = (page = "power") => {
  */
 export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
+  const [setupDone, setSetupDone] = useState<boolean | null>(null);
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); }, []);
+  useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d || !!x?.installed)).catch(() => setSetupDone(true)); }, []);
   return (
   <HelpContext.Provider value={help}>
     <PanelSection>
@@ -36,8 +39,9 @@ export const QuickPanel: FC = () => {
           onChange={(v) => { setHelp(v); setSetting("quick_help", v); }} />
       </PanelSectionRow>
     </PanelSection>
+    {setupDone === false && <FirstRun onDone={() => setSetupDone(true)} />}
     <PowerTab quick />
-    <GameSection quick />
+    {setupDone && <GameSection quick />}
     <FixesTab quick />
     <SetupTab quick />
     <PanelSection>
