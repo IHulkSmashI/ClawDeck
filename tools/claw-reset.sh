@@ -77,11 +77,17 @@ if [ $DO = 1 ]; then
 fi
 
 say "system changes (root)"
-if ls /etc/firmware/edid/clawdeck-*.bin >/dev/null 2>&1; then echo "  VRR screen fix file"; run sudo rm -f /etc/firmware/edid/clawdeck-*.bin; fi
+# the VRR fix in the order ClawDeck's own undo uses: the initramfs tracking and the kernel argument first, the file
+# last (rpm-ostree rebuilds the initramfs overlay and fails if a tracked file is already gone)
+for f in /etc/firmware/edid/clawdeck-*.bin; do
+  [ -e "$f" ] || continue
+  echo "  VRR screen fix: initramfs tracking of $f"; run sudo rpm-ostree initramfs-etc --untrack="$f"
+done
 if rpm-ostree kargs 2>/dev/null | tr ' ' '\n' | grep -q '^drm.edid_firmware=.*clawdeck'; then
   k=$(rpm-ostree kargs | tr ' ' '\n' | grep '^drm.edid_firmware=.*clawdeck')
   echo "  kernel argument $k"; run sudo rpm-ostree kargs --delete="$k"
 fi
+if ls /etc/firmware/edid/clawdeck-*.bin >/dev/null 2>&1; then echo "  VRR screen fix file"; run sudo rm -f /etc/firmware/edid/clawdeck-*.bin; fi
 for f in /etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml /etc/inputplumber/capability_maps.d/msiclaw_claw8ex.yaml \
          /etc/udev/hwdb.d/61-clawdeck-msi-claw-8-ex.hwdb /etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb \
          /etc/systemd/system/steamos-manager.service.d/50-clawdeck-quiet-split-lock.conf /etc/tmpfiles.d/clawdeck-overlay-power.conf; do
