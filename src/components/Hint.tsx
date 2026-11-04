@@ -55,13 +55,10 @@ export const Group: FC<{ title: ReactNode; first?: boolean }> = ({ title, first 
  * state also lives outside the component, so a Quick Access re-mount keeps it. */
 const folds = new Map<string, boolean>();
 export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: boolean; children: ReactNode }> = ({ id, title, summary, open: dflt = false, children }) => {
-  const key = `clawdeck.fold.${id}`;
-  const [open, setOpen] = useState<boolean>(() => {
-    if (folds.has(id)) return folds.get(id)!;
-    try { const v = localStorage.getItem(key); if (v !== null) return v === "1"; } catch { /* private storage */ }
-    return dflt;
-  });
-  const toggle = () => { const v = !open; folds.set(id, v); setOpen(v); try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* not remembered */ } };
+  // remembered while ClawDeck runs (a Quick Access re-mount keeps it), not across starts: every start opens one
+  // section only, the one the caller says (maintainer, 2026-11-04: "every time it starts, all closed but one")
+  const [open, setOpen] = useState<boolean>(() => (folds.has(id) ? folds.get(id)! : dflt));
+  const toggle = () => { const v = !open; folds.set(id, v); setOpen(v); };
   return (
     <>
       <PanelSection>

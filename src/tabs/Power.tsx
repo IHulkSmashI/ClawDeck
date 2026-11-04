@@ -7,6 +7,7 @@ import {
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
+import { FanBattery } from "../components/FanBattery";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Group, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
 import { runningApp } from "../steam";
@@ -180,6 +181,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
       </PanelSectionRow>
       {app && autotune && !quick && <LaunchWrapper appid={app.appid} name={app.name} />}
+      <FanBattery quick={quick} />
       {st && (
         <Advanced id="power" label="Advanced"
           description={quick ? undefined : explain("CPU boost, CPU ceiling, GPU clocks, GPU efficiency mode, CPU energy mode and Autotune's floor. Steam has none of these for this chip.", undefined, "a change here pauses Autotune for this game.")}>
