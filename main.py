@@ -710,6 +710,8 @@ class Plugin:
         who = optiscaler.owner(folder)
         fsr4 = self._fsr4_xmx_files()
         dx12 = await self._bg(gamedb.is_dx12, d, rec["main_exes"]) if d else False
+        decky.logger.info("game %s: route %s, DirectX 12 %s, FSR 4 XMX files %s (missing %s)", appid, rec["route"], dx12,
+                          fsr4["ready"], fsr4["missing"])
         return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": who["owner"],
                 "fsr4": {"dx12": dx12, "files": fsr4["ready"], "missing": fsr4["missing"], "dir": fsr4["dir"]},
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
