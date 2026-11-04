@@ -666,10 +666,41 @@ class Plugin:
     async def games_list(self) -> list[dict]:
         """Installed Steam games for the Games page, with what ClawDeck has set up in each."""
         games = await self._bg(xess.installed_games, HOME)
+        games = await self._bg(self._with_support, games)
         ours = self.settings.get("opti_games") or {}
         for g in games:
             launch = self.profiles.get_launch(g["appid"])
             g["setup"] = "optiscaler" if g["appid"] in ours else "launch" if launch else None
+        return games
+
+    def _with_support(self, games: list[dict]) -> list[dict]:
+        """Which installed games ClawDeck can set up (the Game list shows only those, as OptiClick does). Walking a
+        game folder is slow on an SD card, so the answer is kept per game until its folder changes."""
+        path = os.path.join(RUNTIME_DIR, "support-cache.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        except (OSError, ValueError):
+            cache = {}
+        doc = gamedb.load(GAMES)
+        changed = False
+        for g in games:
+            try:
+                stamp = int(os.stat(g["dir"]).st_mtime)
+            except OSError:
+                stamp = 0
+            c = cache.get(g["appid"])
+            if not c or c.get("stamp") != stamp:
+                c = {**gamedb.support(doc, g["dir"]), "stamp": stamp}
+                cache[g["appid"]] = c
+                changed = True
+            g["supported"], g["via"] = c["ok"], c["via"]
+        if changed:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(cache, f)
+            except OSError:
+                pass
         return games
 
     async def game_recommend(self, appid: str) -> dict:

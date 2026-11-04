@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 
-DEPTH = 4
+DEPTH = 6
 KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
 
 
@@ -121,3 +121,22 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
         "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],
     }
+
+
+UPSCALER_FILES = {
+    "DLSS": ("nvngx_dlss.dll", "sl.dlss.dll", "nvngx_dlssd.dll"),
+    "FSR": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll", "ffx_fsr2_api_x64.dll", "ffx_fsr2_api_dx12_x64.dll",
+            "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_vk.dll"),
+    "XeSS": ("libxess*",),
+}
+
+
+def support(doc: dict, game_dir: str | None) -> dict:
+    """Can ClawDeck set this game up? Yes when it is in the per-game list, or ships an upscaler OptiScaler takes over
+    (DLSS, FSR 2/3/3.1) or XeSS of its own. Unreal games often keep DLSS in a plugin folder, which DEPTH covers."""
+    if not game_dir or not os.path.isdir(game_dir):
+        return {"ok": False, "via": []}
+    via = [k for k, names in UPSCALER_FILES.items() if _has(game_dir, names)]
+    if match(doc, exes_in(game_dir)):
+        via.append("list")
+    return {"ok": bool(via), "via": via}
