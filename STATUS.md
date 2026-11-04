@@ -101,9 +101,9 @@ The four-panel UI has not been on the device yet.
     rotates within minutes, so the boot that didn't wake left no log. `split_lock_mitigate` is already 0 (no
     throttling). **To do:** see how the daemon sets up the trace (`strings /usr/lib/steamos-manager`), then a
     revertible Fixes switch that stops the forwarding; then catch the next failed wake in the journal.
-  - **Speakers:** after the hard reboot the RT721 Speaker sink is there and default (SoundWire mics too); before it
-    only HDMI outputs showed. The codec comes up on some boots only. **To do:** detect a missing Speaker sink and
-    re-probe it (stevedamnvan's audio-rt721 notes), shown in Fixes with the face-button and VRR fixes.
+  - **Speakers:** not a driver problem. With the MO27Q2 on USB-C, audio went to the monitor's DisplayPort output
+    (shown in Steam as "Core Ultra … HD Audio"); unplugged, the RT721 Speaker sink is default and works. Nothing to
+    fix in ClawDeck; Steam's audio output picker chooses.
   - xess-xmx-linux's session-wide driver file (`~/.config/environment.d/50-xess-xmx.conf`) reached Steam's own screen
     and every game: Onimusha (no XeSS) lost much of its frame rate, games recompiled shaders at every switch, and the
     one boot that went black ran with it. ClawDeck now moves that file aside after installing and loads the XMX driver
