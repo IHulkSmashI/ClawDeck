@@ -89,6 +89,15 @@ The four-panel UI has not been on the device yet.
   driver"; the game's XeSS then runs as DP4a.
 
 - **Found on the Claw 2026-11-04 (Onimusha, Proton 11.0, kernel 7.2.9):**
+  - **Log flood (14:10, after a hard reboot from a sleep that didn't wake):** steamos-manager's root daemon forwards
+    every `split_lock_warn` ftrace hit from Steam's `CHTTPClientThread`s (~30,000 lines in the first 3 minutes,
+    `ServiceUnknown` for each: the SLS log receiver isn't there on Bazzite), at ~14 % of a core. The 50 MB journal
+    rotates within minutes, so the boot that didn't wake left no log. `split_lock_mitigate` is already 0 (no
+    throttling). **To do:** see how the daemon sets up the trace (`strings /usr/lib/steamos-manager`), then a
+    revertible Fixes switch that stops the forwarding; then catch the next failed wake in the journal.
+  - **Speakers:** after the hard reboot the RT721 Speaker sink is there and default (SoundWire mics too); before it
+    only HDMI outputs showed. The codec comes up on some boots only. **To do:** detect a missing Speaker sink and
+    re-probe it (stevedamnvan's audio-rt721 notes), shown in Fixes with the face-button and VRR fixes.
   - xess-xmx-linux's session-wide driver file (`~/.config/environment.d/50-xess-xmx.conf`) reached Steam's own screen
     and every game: Onimusha (no XeSS) lost much of its frame rate, games recompiled shaders at every switch, and the
     one boot that went black ran with it. ClawDeck now moves that file aside after installing and loads the XMX driver
