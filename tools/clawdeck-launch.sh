@@ -65,6 +65,26 @@ if [ -f "$envfile" ]; then
     export "$k=$v"
   done < "$envfile"
 fi
+# The XeSS XMX driver for this game, set HERE, before Steam's container starts: pressure-vessel builds the
+# container's Vulkan driver list (VK_DRIVER_FILES) from this environment, and Proton's user_settings (the scope
+# script) can't change a variable that is already set. Set only there, the game kept the stock driver: no XMX for
+# XeSS, XeSS-FG or FSR 4.1.2 (CONTROL on the Claw 8 EX, 2026-11-04: /run/host/usr/lib64/libvulkan_intel.so loaded).
+xmxenv="$HOME/.local/share/clawdeck/xmx.env"
+if [ -f "$xmxenv" ] && [ "${CLAWDECK_XMX:-}" != 0 ]; then
+  want="${CLAWDECK_XMX:-}"
+  [ -z "$want" ] && [ -f "$HOME/.local/share/clawdeck/xmx-every-game" ] && want=1
+  if [ -z "$want" ] && [ -d "${STEAM_COMPAT_INSTALL_PATH:-/nonexistent}" ] && \
+     [ -n "$(find "$STEAM_COMPAT_INSTALL_PATH" -maxdepth 5 \( -iname 'libxess*.dll' -o -iname 'optiscaler.ini' \) -print -quit 2>/dev/null)" ]; then
+    want=1
+  fi
+  if [ "$want" = 1 ]; then
+    while IFS='=' read -r k v; do
+      [ -n "$k" ] && [ "${k#\#}" = "$k" ] || continue
+      export "$k=$v"
+    done < "$xmxenv"
+    echo "clawdeck: XeSS XMX driver for this game (set before the container)" >&2
+  fi
+fi
 if [ -z "${IGDEXT_XELL_LOG:-}" ]; then export IGDEXT_XELL_LOG=1; fi
 # the shim appends to its logs in the prefix, so keep only this launch (the plugin reads them)
 if [ -n "${IGDEXT_XELL_LOG:-}" ] && [ -d "${STEAM_COMPAT_DATA_PATH:-/nonexistent}/pfx/drive_c" ]; then
