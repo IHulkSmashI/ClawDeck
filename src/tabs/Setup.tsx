@@ -45,7 +45,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const xessDetail = x?.installed ? `${scopeText}Per-game sets frame generation, FSR games and low latency. ${x.status.mode ?? x.status.line ?? ""} · from ${x.source ? `${x.source.repo} ${x.source.tag}` : "unknown (installed by hand)"}${x.low_latency ? " · low latency with frame generation" : " · update for low latency and FSR on XeSS"}` : "Gives XeSS games the same upscaling and 2–4x frame generation as on Windows (up to 8x experimental), with low latency. It loads only in games that ship XeSS or OptiScaler, never for Steam's own screen.";
 
   return (
-    <PanelSection title="Setup">
+    <PanelSection title={quick ? undefined : "Setup"}>
       <PanelSectionRow>
         <Status ok={!x ? null : !x.installed || x.status.state === "failed" ? false : x.status.state === "ok" ? true : null} label={xessLine} detail={quick ? undefined : xessDetail} />
         {!noXmx && (
