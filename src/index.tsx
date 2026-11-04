@@ -57,23 +57,31 @@ export default definePlugin(() => {
   // VRR only while a game runs (Fixes): with the 30–120 Hz fix the menus otherwise follow a game's low frame rate.
   // On by default once the VRR fix is installed; Fixes turns it off (Steam's own VRR switch is then in charge).
   let vrrScope: VrrScope | null = null;
+  let disposed = false;
   let external = false;                         // a dock / monitor: stand aside (its VRR is the user's choice)
-  const ext = () => displayExternal().then((r) => { external = !!r?.connected; }).catch(() => { /* keep the last answer */ });
-  ext();
-  const extTimer = setInterval(ext, 5000);
-  unregisters.push(() => clearInterval(extTimer));
-  const vrrScopeSync = async () => {
+  const ext = () => displayExternal().then((r) => {
+    const was = external; external = !!r?.connected;
+    if (was !== external) vrrScope?.poke();     // plugged in: the user's VRR back at once; unplugged: ClawDeck's again
+  }).catch(() => { /* keep the last answer */ });
+  let extTimer: ReturnType<typeof setInterval> | null = null;
+  let syncing: Promise<void> = Promise.resolve();
+  const vrrScopeSync = () => (syncing = syncing.then(async () => {   // one at a time: never two scopes
     try {
       const [pref, f] = await Promise.all([getSetting("vrr_menus_fixed"), getFixes()]);
-      const want = pref === null || pref === undefined ? !!f?.vrr?.wide : !!pref;
-      if (want && !vrrScope) vrrScope = startVrrScope((m) => console.log("ClawDeck:", m), () => external);
+      const want = !disposed && (pref === null || pref === undefined ? !!f?.vrr?.wide : !!pref);
+      if (want && !vrrScope) {
+        await ext();
+        vrrScope = startVrrScope((m) => console.log("ClawDeck:", m), () => external);
+        if (!extTimer) extTimer = setInterval(ext, 5000);   // polled only while the switch is on
+      }
       if (!want && vrrScope) { vrrScope.stop(); vrrScope = null; }
+      if (!want && extTimer) { clearInterval(extTimer); extTimer = null; }
     } catch (err) { console.warn("ClawDeck: VRR scope", err); }
-  };
+  }));
   (window as any).__clawdeckVrrScopeSync = vrrScopeSync;    // the Fixes switch calls it after a change
   (window as any).__clawdeckVrrScopeStatus = () => vrrScope?.status() ?? { active: false };
   vrrScopeSync();
-  unregisters.push(() => { vrrScope?.stop(); vrrScope = null; });
+  unregisters.push(() => { disposed = true; if (extTimer) clearInterval(extTimer); vrrScope?.stop(); vrrScope = null; });
 
   // After a system update: say what changed, and whether everything still works (health checks run on the backend).
   getChanges().then((c) => {
