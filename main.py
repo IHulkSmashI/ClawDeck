@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      power, profiles, stack, sysfs, thermal, userexec, xess)
+                      power, profiles, stack, sysfs, thermal, telemetry, userexec, xess)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -89,6 +89,9 @@ class Plugin:
         self.running_plugged: bool | None = None
         decky.logger.info("ClawDeck on %s (%s), kernel %s", self.hw.model["name"], self.hw.product, self.hw.kernel)
         self._install_wrapper()
+        if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
+            r = telemetry.apply(True)
+            decky.logger.info("watts in the overlay: %s", "on" if r["ok"] else r["error"])
 
     async def _unload(self):
         self.autotune.stop()
@@ -174,6 +177,13 @@ class Plugin:
             return await self._bg(buttons.apply)
         if fix == "undo_face_buttons":
             return await self._bg(buttons.remove)
+        if fix in ("overlay_power_on", "overlay_power_off"):
+            on = fix.endswith("_on")
+            r = await self._bg(lambda: telemetry.apply(on))
+            if r["ok"]:
+                self.settings["overlay_power"] = on
+                self._save_settings()
+            return r
         if fix == "report_unknown_model":
             r = await self._bg(lambda: subprocess.run(["bash", os.path.join(PLUGIN_DIR, "tools", "sysfs-survey.sh")],
                                                       capture_output=True, text=True, timeout=60, check=False))
@@ -185,7 +195,8 @@ class Plugin:
     async def get_fixes(self) -> dict:
         """The Fixes panel in one call: the VRR range fix, the face-button fix, and the health check in one line."""
         vrr, checks = await asyncio.gather(self._bg(edid.status), self.get_health())
-        return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks)}
+        return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
+                "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()}}
 
     async def get_setting(self, key: str):
         return self.settings.get(key)

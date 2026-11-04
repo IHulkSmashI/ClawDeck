@@ -66,6 +66,19 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         </PanelSectionRow>
       )}
+      {f?.overlay_power?.available && (
+        <PanelSectionRow>
+          <Status ok={f.overlay_power.on ? true : null}
+            label={f.overlay_power.on ? "Watts in the overlay: on" : "Watts in the overlay: off (shows 0.0 W)"}
+            detail={f.overlay_power.battery_w != null ? `Battery now: ${f.overlay_power.battery_w} W (ClawDeck corrects the EX's 100x battery reading)` : undefined} />
+          <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.overlay_power.on ? "overlay_power_off" : "overlay_power_on")}
+            description={explain(f.overlay_power.on ? "Makes the chip's power counter root-only again, as Linux ships it."
+              : "Lets the performance overlay read the chip's power counter, so it shows real watts (CPU and graphics together). Linux makes it root-only by default; ClawDeck opens it at every start while this is on.",
+              undefined, f.overlay_power.on ? undefined : "any program on the Claw can then read the power use, which in theory can leak a little about what other programs compute. Harmless for a gaming handheld; off by default.")}>
+            {f.overlay_power.on ? "Hide watts again" : "Show watts in the overlay"}
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <Status ok={f ? f.health.ok : null} label={f ? `Health: ${f.health.line}` : "Health: checking…"} detail={f ? `${f.health.total - f.health.problems} of ${f.health.total} checks pass` : undefined} />
         <Problem error={err} what="Fix" />
