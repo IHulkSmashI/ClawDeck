@@ -78,6 +78,28 @@ try:
                 user_settings[_k] = _v
         import sys as _s
         _s.stderr.write("clawdeck: XeSS XMX driver for this game (%%s)\\n" %% ("Per-game" if _o.environ.get("CLAWDECK_XMX") or _o.path.isfile(_lf) else "ships XeSS"))
+        # the shim in the prefix's driver store: Proton Experimental and GE-Proton make that folder and install.sh fills
+        # it, but Valve's Proton 11.0 has none, so XeSS (and nitec's FSR 4.1.2) never found the shim there: DP4a, and
+        # FSR 4.1.2 drew nothing (CONTROL, Claw 8 EX, 2026-11-04). Put it there for this game, in an existing prefix.
+        _pkg = ""
+        for _l in open(_env):
+            if _l.startswith("VK_DRIVER_FILES="):
+                for _i in _l.split("=", 1)[1].strip().strip('"').split(":"):
+                    if _i.endswith("/run/intel_icd.json"):
+                        _pkg = _o.path.dirname(_o.path.dirname(_i))
+        _sys32 = _o.path.join(_o.environ.get("STEAM_COMPAT_DATA_PATH", ""), "pfx", "drive_c", "windows", "system32")
+        if _pkg and _o.path.isfile(_o.path.join(_pkg, "igdext64.dll")) and _o.path.isdir(_sys32):
+            import shutil as _sh
+            _have = [_o.path.join(_r, "igdext64.dll") for _r, _d, _f in _o.walk(_sys32) if "igd_faux.inf_1" in _r.lower() and "igdext64.dll" in [x.lower() for x in _f]]
+            if not _have:
+                _dst = _o.path.join(_sys32, "driverstore", "filerepository", "igd_faux.inf_1")
+                _o.makedirs(_dst, exist_ok=True)
+                _sh.copyfile(_o.path.join(_pkg, "igdext64.dll"), _o.path.join(_dst, "igdext64.dll"))
+                _s.stderr.write("clawdeck: XMX shim put into this prefix's driver store\\n")
+            _cl = _o.path.join(_sys32, "ControlLib.dll")
+            if not _o.path.exists(_cl) and _o.path.isfile(_o.path.join(_pkg, "ControlLib.dll")):
+                _sh.copyfile(_o.path.join(_pkg, "ControlLib.dll"), _cl)
+            user_settings.setdefault("INTC_ALT_DRIVER_EXTENSIONS_PATH", "C:\\\\windows\\\\system32\\\\driverstore\\\\filerepository\\\\igd_faux.inf_1")
 except Exception as _e:
     import sys as _s
     _s.stderr.write("clawdeck: xmx scope: %%s\\n" %% _e)
@@ -85,6 +107,29 @@ except Exception as _e:
 
 
 DEPTH = 5
+
+
+def prefix_shim(home: str, appid: str, pkg: str | None) -> dict:
+    """The same as the scope script does at launch, from the plugin (when a game is set up): the shim into the game's
+    prefix driver store when the prefix has none (Valve's Proton 11.0), and ControlLib.dll into its system32."""
+    sys32 = os.path.join(home, ".local/share/Steam/steamapps/compatdata", str(appid), "pfx", "drive_c", "windows", "system32")
+    if not pkg or not os.path.isfile(os.path.join(pkg, "igdext64.dll")) or not os.path.isdir(sys32):
+        return {"ok": False, "placed": False, "why": "no prefix yet or no package"}
+    import shutil
+    have = [os.path.join(r, "igdext64.dll") for r, _d, f in os.walk(sys32)
+            if "igd_faux.inf_1" in r.lower() and "igdext64.dll" in [x.lower() for x in f]]
+    placed = False
+    if not have:
+        dst = os.path.join(sys32, "driverstore", "filerepository", "igd_faux.inf_1")
+        os.makedirs(dst, exist_ok=True)
+        shutil.copyfile(os.path.join(pkg, "igdext64.dll"), os.path.join(dst, "igdext64.dll"))
+        userexec.chown_tree(os.path.join(sys32, "driverstore"), home)
+        placed = True
+    cl = os.path.join(sys32, "ControlLib.dll")
+    if not os.path.exists(cl) and os.path.isfile(os.path.join(pkg, "ControlLib.dll")):
+        shutil.copyfile(os.path.join(pkg, "ControlLib.dll"), cl)
+        userexec.chown_tree(cl, home)
+    return {"ok": True, "placed": placed, "existing": have}
 
 
 def ships_xess(game_dir: str | None) -> bool:
