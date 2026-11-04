@@ -28,6 +28,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
+      - run: pnpm test:ts
       - run: pnpm build
       - name: package (Decky zip layout)
         run: |
