@@ -4,7 +4,7 @@
 
 <h1 align="center">ClawDeck</h1>
 
-<p align="center"><b>What ClawTweaks and OptiClick are on Windows, for the MSI Claw on Bazzite and SteamOS,<br>right in Steam's Quick Access menu.</b></p>
+<p align="center"><b>Claw tweaks and per-game OptiScaler setup for the MSI Claw on Bazzite and SteamOS,<br>right in Steam's Quick Access menu. Inspired by ClawTweaks and OptiClick on Windows.</b></p>
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="assets/download-button.png" alt="Download" width="260"></a>
@@ -32,9 +32,15 @@
 ## What is ClawDeck?
 
 A free plugin for [Decky Loader](https://decky.xyz) that adds one ClawDeck panel to Steam's Quick Access menu (the
-right MSI button) on the MSI Claw running [Bazzite](https://bazzite.gg) or SteamOS. The goal: everything ClawTweaks
-and OptiClick give the Claw on Windows, on Linux, with the same latency or better. It does only what Bazzite and
-Steam's own Quick Access do **not** already do.
+right MSI button) on the MSI Claw running [Bazzite](https://bazzite.gg) or SteamOS. The goal: the kind of setup
+[ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks) and [OptiClick](https://github.com/onehoon/OptiClick) give the
+Claw on Windows, for people who prefer Linux, with the same latency or better. It does only what Bazzite and Steam's
+own Quick Access do **not** already do.
+
+ClawDeck is an independent project, not affiliated with ClawTweaks or OptiClick and not a replacement for them: it
+uses none of their code or data. OptiClick's per-game database is its author's own work and stays his; ClawDeck's
+per-game list is built from OptiScaler's public source code (`tools/gen_games.py`) and what we test on the Claw,
+and every project it builds on is credited in [CREDITS.md](CREDITS.md).
 
 **Where it's going** (in progress, tested on a Claw 8 EX before each release):
 - **Everything on the XMX cores:** XeSS upscaling, XeSS frame generation (2–8x), low latency, and FSR 4 (the
