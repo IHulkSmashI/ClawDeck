@@ -804,3 +804,12 @@ def test_support_needs_an_upscaler_or_a_list_entry(tmp_path):
     assert gamedb.support(doc, _game(tmp_path, "c", ["CONTROLResonant.exe", "nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"]))["via"][:2] == ["DLSS", "FSR"]
     assert gamedb.support(doc, _game(tmp_path, "u", ["G/Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll", "G.exe"]))["ok"]
     assert not gamedb.support(doc, _game(tmp_path, "b", ["Brotato.exe", "data.pck"]))["ok"]          # nothing to hook
+
+
+def test_is_dx12_from_libraries_or_the_exe(tmp_path):
+    from clawdeck import gamedb
+    assert gamedb.is_dx12(_game(tmp_path, "a", ["G.exe", "amd_fidelityfx_dx12.dll"]))
+    d = tmp_path / "b"
+    _w(d / "Game-Win64-Shipping.exe", "MZ....D3D12.dll....")
+    assert gamedb.is_dx12(str(d))
+    assert not gamedb.is_dx12(_game(tmp_path, "c", ["Old.exe", "d3d9.dll"]), ["old.exe"])
