@@ -121,6 +121,32 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
 
   return (
     <PanelSection title={embedded ? undefined : `Per-game: ${app.name}`}>
+      <PanelSectionRow>
+        <Field label="In this game now" bottomSeparator="none" />
+        <div style={{ fontSize: 12, lineHeight: "18px", color: "#b8bcbf", padding: "0 0 4px" }}>
+          <div>{ours ? "✓" : "–"} OptiScaler: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
+            : fgmodHere || gs?.opti_owner === "decky-framegen" ? "Decky Framegen's (ClawDeck leaves it alone)" : gs?.opti_owner === "other" ? "put there by another tool or by hand" : "not in the game"}</div>
+          {gs?.files?.reframework && <div>✓ REFramework (dinput8.dll)</div>}
+          <div>{wrapped ? "✓" : "–"} Launch options: {wrapped ? "ClawDeck is in them" : "ClawDeck not added yet (added when you pick below)"}</div>
+          {!quick && opts !== null && <div style={{ wordBreak: "break-all", opacity: 0.8 }}>{opts || "(empty)"}</div>}
+          <div>{xmxOn && xessOk ? "✓" : "–"} XMX driver: {xmxOn ? (xessOk ? "on for this game" : "on, but the driver check hasn't passed") : "off for this game"}</div>
+          <div>{launch.fg ? `✓ Frame generation ${launch.fg}x (XeSS on XMX)` : "– Frame generation off"} · XeLL low latency always on</div>
+        </div>
+      </PanelSectionRow>
+      {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
+        <PanelSectionRow>
+          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={UPSCALERS}
+            selectedOption={ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own"}
+            onChange={(o) => choose(String(o.data), launch.fg ?? 0)}
+            description={explain("What the game's upscaling runs as. XeSS 2 and FSR 4.1.1 run on the XMX cores through OptiScaler, which takes the game's DLSS or FSR (pick that in the game's menu). FSR 4.1.1 is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image; Lite is faster for a little less detail; it needs nitec's files in ~/fsr4-xmx. \"The game's own\" leaves the game alone (a game's own XeSS still runs on XMX).",
+              undefined, quick ? undefined : "OptiScaler's files go next to the game's exe, the game's own files are kept and come back when you pick \"The game's own\". The first time downloads OptiScaler (55 MB).")} />
+          <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
+            selectedOption={launch.fg ?? 0}
+            onChange={(o) => choose(ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own", Number(o.data))}
+            description={explain("XeSS frame generation on the XMX cores: 2x shows one generated frame for every rendered one, 3x two, 4x three, with XeLL low latency always on. With OptiScaler it takes the game's own frame generation when the game has one (turn it on in the game's menu), otherwise OptiScaler makes the frames itself.",
+              quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
+        </PanelSectionRow>
+      )}
       {rec && (
         <PanelSectionRow>
           <Status ok={rec.applied ? true : null}
@@ -137,7 +163,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           )}
         </PanelSectionRow>
       )}
-      {(ours || fgmodHere || gs?.opti_owner === "decky-framegen" || gs?.opti_owner === "other") && (
+      {(fgmodHere || gs?.opti_owner === "decky-framegen" || gs?.opti_owner === "other") && (
         <PanelSectionRow>
           <Status ok={ours ? true : null}
             label={ours ? "OptiScaler: ClawDeck's, in this game" : fgmodHere || gs?.opti_owner === "decky-framegen"
@@ -149,20 +175,6 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           {fgmodHere && opts !== null && (
             <ButtonItem layout="below" onClick={() => setFgmod(false)}>Stop using Decky Framegen here</ButtonItem>
           )}
-        </PanelSectionRow>
-      )}
-      {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
-        <PanelSectionRow>
-          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={UPSCALERS}
-            selectedOption={ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own"}
-            onChange={(o) => choose(String(o.data), launch.fg ?? 0)}
-            description={explain("What the game's upscaling runs as. XeSS 2 and FSR 4.1.1 run on the XMX cores through OptiScaler, which takes the game's DLSS or FSR (pick that in the game's menu). FSR 4.1.1 is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image; Lite is faster for a little less detail; it needs nitec's files in ~/fsr4-xmx. \"The game's own\" leaves the game alone (a game's own XeSS still runs on XMX).",
-              undefined, quick ? undefined : "OptiScaler's files go next to the game's exe, the game's own files are kept and come back when you pick \"The game's own\". The first time downloads OptiScaler (55 MB).")} />
-          <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
-            selectedOption={launch.fg ?? 0}
-            onChange={(o) => choose(ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own", Number(o.data))}
-            description={explain("XeSS frame generation on the XMX cores: 2x shows one generated frame for every rendered one, 3x two, 4x three, with XeLL low latency always on. With OptiScaler it takes the game's own frame generation when the game has one (turn it on in the game's menu), otherwise OptiScaler makes the frames itself.",
-              quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
         </PanelSectionRow>
       )}
       {(ours || fgmodHere) && (quick ? <Advanced id="ingame" label="How to use it in the game">{<PanelSectionRow>

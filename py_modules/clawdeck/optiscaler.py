@@ -63,6 +63,26 @@ def _get(url: str, sha256: str, dest: str) -> str:
     return dest
 
 
+def _unpack(arc: str, dest: str) -> str | None:
+    """OptiScaler ships as .7z (with BCJ2): 7-Zip if the system has it (7z, 7za, 7zz), else libarchive's bsdtar.
+    Returns an error text, or None when unpacked."""
+    os.makedirs(dest, exist_ok=True)
+    tried = []
+    for cmd in (["7z", "x", "-y", "-o" + dest, arc], ["7za", "x", "-y", "-o" + dest, arc], ["7zz", "x", "-y", "-o" + dest, arc],
+                ["bsdtar", "-xf", arc, "-C", dest]):
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False, env={**os.environ, "LD_LIBRARY_PATH": ""})
+        except (OSError, subprocess.SubprocessError) as e:
+            tried.append(f"{cmd[0]}: {e}")
+            continue
+        if r.returncode == 0:
+            return None
+        tried.append(f"{cmd[0]}: {(r.stderr or r.stdout).strip()[-200:]}")
+    return "; ".join(tried) or "no unpacker for .7z on this system (7z or bsdtar)"
+
+
 def install(home: str, entry: dict) -> dict:
     """entry (versions.json "optiscaler"): {version, url, sha256, extras: [{name, url, sha256, dest}]}."""
     ver = entry["version"]
@@ -75,10 +95,9 @@ def install(home: str, entry: dict) -> dict:
         arc = _get(entry["url"], entry["sha256"], os.path.join(work, os.path.basename(entry["url"])))
         tmp = d + ".new"
         shutil.rmtree(tmp, ignore_errors=True)
-        r = subprocess.run(["7z", "x", "-y", "-o" + tmp, arc], capture_output=True, text=True, timeout=300, check=False,
-                           env={**os.environ, "LD_LIBRARY_PATH": ""})
-        if r.returncode != 0:
-            return {"ok": False, "error": f"unpacking OptiScaler: {(r.stderr or r.stdout).strip()[-300:]}"}
+        r = _unpack(arc, tmp)
+        if r:
+            return {"ok": False, "error": f"unpacking OptiScaler: {r}"}
         if not os.path.isfile(os.path.join(tmp, "OptiScaler.dll")):
             return {"ok": False, "error": "the OptiScaler archive has no OptiScaler.dll"}
         for x in entry.get("extras", []):
