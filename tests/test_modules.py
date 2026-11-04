@@ -750,6 +750,8 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert (g / "cabinet.dll").exists() and (g / "cabinet_wine.dll").exists()
     assert optiscaler.patch(home, str(g), "0.9.4", {}, "xess")["ok"]
     assert not (g / "cabinet.dll").exists() and (g / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "amd-fsr4"
+    for f in ("OptiScaler.log", "fakenvapi.log", "D3D12_Optiscaler/cache.bin"):   # written by them while the game ran
+        _w(g / f, "runtime")
     assert optiscaler.unpatch(str(g))["removed"]
     assert sorted(p.name for p in g.iterdir()) == ["Game.exe", "dxgi.dll", "libxess.dll"]
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
@@ -834,3 +836,23 @@ def test_recommend_ignores_clawdeck_optiscaler_files(tmp_path):
     assert gamedb._has(str(g), ("amd_fidelityfx_dx12.dll",))     # the game's own, backed up: still counts
     (st / "manifest.json").write_text(_j.dumps({"added": [], "backed": []}))
     assert gamedb.recommend({"games": []}, str(g))["route"] == "own_xess"
+
+
+def test_fsr4_xmx_picks_4_1_2_in_optiscaler(tmp_path, monkeypatch):
+    """OptiScaler lists AMD's 4.0.2 first with the B Boost files; the pick must be 4.1.2 (index 6), written into the ini."""
+    from clawdeck import launchenv, optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    for preset in ("fsr4_xmx", "fsr4_xmx_lite"):
+        ini = launchenv.opti_ini({"opti": preset})
+        assert ini.get("FSR_UpscalerIndex") == "6" and ini.get("Upscalers_Dx12Upscaler", ini.get("Dx12Upscaler")) == "fsr31"
+    home = str(tmp_path)
+    _opti_pkg(home)
+    x = tmp_path / "fsr4-xmx"
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+        _w(x / f, "nitec-" + f)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    assert optiscaler.patch(home, str(g), "0.9.4", launchenv.opti_ini({"opti": "fsr4_xmx", "fg": 2, "opti_fg": "dlssg"}), "fsr4_xmx", fsr4_xmx=True)["ok"]
+    ini = (g / "OptiScaler.ini").read_text()
+    assert "UpscalerIndex=6" in ini.replace(" ", "") and "Dx12Upscaler=fsr31" in ini.replace(" ", "")
+    assert "FGOutput=xefg" in ini.replace(" ", "")

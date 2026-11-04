@@ -34,6 +34,9 @@ log = logging.getLogger("clawdeck.optiscaler")
 
 ROOT = ".local/share/clawdeck/optiscaler"
 STATE = ".clawdeck-optiscaler"
+# logs and caches OptiScaler, fakenvapi and OptiPatcher create in the game folder at run time (not in the manifest)
+RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "fakenvapi.log", "OptiPatcher.log",
+                 "dlssg_to_fsr3.log", "nvngx.log")
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
 # OptiScaler's package, minus what only Windows installs need
@@ -314,6 +317,16 @@ def unpatch(folder: str | None) -> dict:
             os.replace(os.path.join(folder, STATE, "backup", rel), os.path.join(folder, rel))
         except OSError as e:
             errors.append(f"restoring {rel}: {e}")
+    # what OptiScaler and its helpers write while the game runs: gone too, so the folder is as the game shipped it
+    # (maintainer, 2026-11-04: "uninstall removes everything we installed and reverts everything back")
+    for pat in RUNTIME_FILES:
+        for p in glob.glob(os.path.join(glob.escape(folder), pat)):
+            try:
+                if os.path.isfile(p) and os.path.relpath(p, folder) not in m.get("backed", []):
+                    os.remove(p)
+            except OSError:
+                pass
+    shutil.rmtree(os.path.join(folder, "D3D12_Optiscaler"), ignore_errors=True)
     for d in ("D3D12_Optiscaler", "plugins"):
         try:
             os.rmdir(os.path.join(folder, d))                 # only when empty: the game may have its own plugins/
