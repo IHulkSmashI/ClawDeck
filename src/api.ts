@@ -68,7 +68,7 @@ export const getLaunch = callable<[appid: string], { launch: Launch; env: Record
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
   default_driver: string | null; status: { state: string; line: string | null; mode?: string }; low_latency: boolean; official_proton: string[];
-  scope?: XmxScope | null };
+  scope?: XmxScope | null; pinned?: string | null; update?: boolean };
 export type LatencyState = { mode: "pacing" | "idle" | "no-fg" | "off" | "none"; detail: string };
 export type FramegenState = { installed: boolean; dir: string | null; version: string | null; fgmod_ready: boolean; fgmod: string | null; optiscaler: string | null };
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };

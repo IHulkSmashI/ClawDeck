@@ -45,6 +45,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   };
   const noXmx = hw?.known && !hw.model.xmx;
   const xessLine = !x ? "XeSS XMX driver: …" : !x.installed ? "XeSS XMX driver: not installed"
+    : x.update ? `XeSS XMX ${x.version ?? ""}: update ${x.pinned} available (tested)`
     : `XeSS XMX ${x.version ?? ""}: ${x.status.state === "ok" ? "driver loads" : x.status.state === "failed" ? "driver failed, DP4a fallback" : "no check yet (log out and in)"}`;
   const sc = x?.scope;
   const scopeText = !sc ? "" : sc.session_wide ? "Session-wide (older install): restart ClawDeck to make it per game. "
@@ -61,7 +62,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {!noXmx && (
           <ButtonItem layout="below" disabled={!!busy} onClick={() => installXess(false)}
             description={explain("Downloads xess-xmx-linux's tested release and runs its installer.", undefined, "about 260 MB; log out and in once after. Each game's first launch compiles for a minute or two, once.")}>
-            {busy === "xess" ? "Installing…" : x?.installed ? "Update XeSS XMX" : "Install XeSS XMX"}
+            {busy === "xess" ? "Installing…" : x?.update ? `Update XeSS XMX to ${x.pinned}` : x?.installed ? "Check for an update" : "Install XeSS XMX"}
           </ButtonItem>
         )}
         {noXmx && <Note>No XMX cores on the {hw?.model.name}: games use XeSS on the regular graphics cores.</Note>}

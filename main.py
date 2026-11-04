@@ -596,7 +596,14 @@ class Plugin:
 
     # ---- XeSS driver (xess-xmx-linux) --------------------------------------------------------------------------------
     async def xess_state(self) -> dict:
-        return await self._bg(xess.state, HOME)
+        """The driver's state, plus the tested release ClawDeck would install: Setup shows "update available" when
+        the installed one is older (a ClawDeck update moves the pin after the new release is tested)."""
+        st = await self._bg(xess.state, HOME)
+        pinned = (self._versions().get("xess_xmx_linux") or {}).get("tag")
+        have = (st.get("source") or {}).get("tag") or st.get("version")
+        st["pinned"] = pinned if pinned and pinned != "pending-verification" else None
+        st["update"] = bool(st.get("installed") and st["pinned"] and have and str(have) < str(st["pinned"]))
+        return st
 
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
         self._health = None
