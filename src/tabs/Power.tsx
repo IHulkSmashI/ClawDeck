@@ -62,14 +62,24 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const app = runningApp();
   const appid = app?.appid ?? null;
 
+  // Only the newest read-back may change what the profile list and the slider show, and none while a pick is still
+  // on its way to the hardware: an older answer arriving late put the previous profile or watts back on screen
+  // (2026-11-04: "one of them misses sometimes").
+  const readSeq = useRef(0);
+  const pending = useRef(0);
   const refresh = async () => {
-    const [s, auto, last, tbl, a] = await Promise.all([
-      getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(),
+    const mine = ++readSeq.current;
+    const [s, auto, last, tbl, a, atp] = await Promise.all([
+      getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(), getSetting("autotune_plugged"),
     ]);
-    setAtPlugged(!!(await getSetting("autotune_plugged")));
+    if (mine !== readSeq.current) return;
     const name = last === "dock" ? "max" : (last || "battery");
-    setSt(s); setAutotune(!!auto); setProfile(name); setTable(tbl); setAt(a);
-    setTdpV(name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12));
+    setSt(s); setAutotune(!!auto); setTable(tbl); setAt(a); setAtPlugged(!!atp);
+    if (pending.current > 0) return;
+    setProfile(name);
+    const w = name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12);
+    const l = s?.range?.min ?? s?.limits.min ?? 8, h = s?.range?.max ?? s?.limits.plugged_max ?? 35;
+    setTdpV(Math.max(l, Math.min(w, h)));
   };
   useEffect(() => { refresh(); }, []);
   // while the panel is open and Autotune runs (or the temperature guard is acting), its line follows along (one cheap
@@ -98,14 +108,20 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     setLine(`Chip now: ${r.read?.tdp_w ?? "?"} W (read back from ${backendName(r.read?.backend)})`);
     refresh();
   };
+  const writeSeq = useRef(0);
+  const write = (run: () => Promise<LimitResult>) => {
+    const mine = ++writeSeq.current;
+    pending.current = 1;                             // a debounced pick replaces the one before it: one pending at most
+    latest("limit", async () => { try { return await run(); } finally { if (mine === writeSeq.current) pending.current = 0; } }, onLimit);
+  };
   const pick = (id: string) => {
     setProfile(id);
     if (wattsOf(id)) setTdpV(wattsOf(id)!);          // the slider follows the profile at once
-    latest("limit", () => applyProfile(id, appid), onLimit);
+    write(() => applyProfile(id, appid));
   };
   const slide = (w: number) => {
     setTdpV(w); setProfile("custom");               // moving the slider = the Custom profile
-    latest("limit", () => setTdp(w), onLimit);
+    write(() => setTdp(w));
   };
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
