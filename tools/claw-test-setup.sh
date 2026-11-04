@@ -17,9 +17,10 @@ echo "== 1. xess-xmx-linux $TAG"
 if [ -x "$PKG/install.sh" ]; then
     echo "already unpacked in $PKG"
 else
-    for old in "$ROOT"/*/uninstall.sh; do
+    # older packages, also one folder deeper (ClawDeck 0.1 unpacked the release's top folder inside its own)
+    for old in "$ROOT"/*/uninstall.sh "$ROOT"/*/*/uninstall.sh; do
         [ -f "$old" ] || continue
-        d=$(dirname "$old"); [ "$d" = "$PKG" ] && continue
+        d=$(dirname "$old"); case "$d" in "$PKG"|"$PKG"/*) continue;; esac
         echo "removing the older package in $d (its uninstall.sh)"; (cd "$d" && bash ./uninstall.sh)
     done
     mkdir -p "$ROOT"; tmp=$(mktemp -d)
@@ -65,4 +66,5 @@ cp -f "$wcab" "$OUT/cabinet_wine.dll"; echo "cabinet_wine.dll from $wcab"
 echo; ls -l "$OUT"
 echo
 echo "Done. Now LOG OUT and back in (Steam → Power → Switch to Desktop / log out), so games pick up the driver."
+echo "Active package (must be $TAG only): $(grep -o "xess-xmx-linux-[0-9]*" ~/.config/environment.d/50-xess-xmx.conf 2>/dev/null | sort -u | tr '\n' ' ')"
 echo "Then: cat ~/.cache/xess-xmx/driver-status   and the O1 run in docs/testing/onimusha.md."
