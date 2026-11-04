@@ -59,13 +59,13 @@ def test_launch_env_compose_and_write(tmp_path):
     assert launchenv.compose({"xmx": True}, per_game=False) == {}
     assert launchenv.compose({"xell": True}) == {}  # a 0.1 setting (XeLL driver mode) no longer does anything
     # the package's own launch options (xess-xmx-linux docs/launch-options.md)
-    assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"CLAWDECK_XMX": "1", "XESS_FG": "4", "XESS": "latest", "IGDEXT_XELL_CAP": "off"}
+    assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"CLAWDECK_XMX": "1", "XESS_FG": "4", "XESS": "latest"}   # XeLL always on
     assert launchenv.compose({"fsr": "xess"}) == {"CLAWDECK_XMX": "1", "FSR": "xess"}
     assert launchenv.compose({"fsr": "fg"}) == {"CLAWDECK_XMX": "1", "FSR_FG": "xess"}
     assert launchenv.compose({"fsr": "inject"}) == {"CLAWDECK_XMX": "1", "FSR": "xess", "FSR_FG": "inject"}
     # Decky Framegen's fgmod writes these into the game's OptiScaler.ini
-    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
-    assert launchenv.compose({"opti": "fsr4"}) == {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"}
+    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"CLAWDECK_XMX": "1", "Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
+    assert launchenv.compose({"opti": "fsr4"}) == launchenv.compose({"opti": "fsr4_xmx"})   # INT8 retired: on XMX
     for bad in ({"fg": 1}, {"fg": 9}, {"fg": True}, {"fg": "4"}, {"fsr": "amd"}, {"opti": "dlss"}):
         with pytest.raises(ValueError):
             launchenv.compose(bad)

@@ -90,7 +90,7 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     # latest XeSS): that game needs the XMX driver even though it ships no XeSS of its own (CONTROL Resonant: FSR
     # only). OptiScaler games are found by the scope itself (optiscaler.ini).
     if per_game and x is None and (fg or (launch.get("fsr") or "off") != "off" or launch.get("xess_latest")
-                                   or launch.get("opti") in FSR4_XMX):
+                                   or launch.get("opti") in (*FSR4_XMX, "fsr4", "xess")):
         env["CLAWDECK_XMX"] = "1"
     if not isinstance(fg, int) or isinstance(fg, bool) or not (fg == 0 or 2 <= fg <= 8):
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
@@ -102,9 +102,10 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     env.update(FSR_ROUTES[route])
     if launch.get("xess_latest"):
         env["XESS"] = "latest"
-    if launch.get("low_latency") is False:
-        env["IGDEXT_XELL_CAP"] = "off"
+    # low latency (XeLL) is always on: an old "off" choice is ignored (maintainer, 2026-11-04)
     opti = launch.get("opti") or "off"
+    if opti == "fsr4":                             # FSR 4 INT8 (not on XMX) was retired: everything runs on XMX
+        opti = "fsr4_xmx"
     if opti not in OPTI_PRESETS:
         raise ValueError(f"unknown OptiScaler preset {opti!r}")
     env.update(OPTI_PRESETS[opti])
@@ -171,7 +172,8 @@ def write(runtime_dir: str, appid: str, launch: dict, per_game: bool = True) -> 
 def opti_ini(launch: dict) -> dict[str, str]:
     """The OptiScaler.ini lines for ClawDeck's own OptiScaler: the preset, XeSS frame generation, the game's settings.
     Variables that aren't ini settings (FSR 4 XMX's own switches, ClawDeck's) stay in the launch environment."""
-    env = {**OPTI_PRESETS.get(launch.get("opti") or "off", {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
+    o = "fsr4_xmx" if launch.get("opti") == "fsr4" else launch.get("opti") or "off"
+    env = {**OPTI_PRESETS.get(o, {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
            **OPTI_FG.get(launch.get("opti_fg") or "", {}), **(launch.get("opti_ini") or {})}
     fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
     if fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):

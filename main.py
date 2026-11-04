@@ -681,6 +681,7 @@ class Plugin:
             if not r.get("ok"):
                 return r
         opti = launch.get("opti") or "xess"
+        opti = "fsr4_xmx" if opti == "fsr4" else opti
         r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
                            opti, opti in launchenv.FSR4_XMX)
         if r.get("ok"):
