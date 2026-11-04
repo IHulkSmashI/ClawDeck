@@ -84,6 +84,7 @@ export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" |
   ini_version: string | null; opti_owner?: string | null; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
 export const gameRecommend = callable<[appid: string], Recommendation>("game_recommend");
 export const gameApplyRecommended = callable<[appid: string, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_apply_recommended");
+export const gameChoose = callable<[appid: string, upscaler: string, fg: number, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_choose");
 export const gameSetOpti = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string }>("game_set_opti");
 export const gameUndoRecommended = callable<[appid: string], { ok: boolean; error?: string }>("game_undo_recommended");
 
