@@ -701,7 +701,7 @@ class Plugin:
         return {"dir": d, "ready": not missing, "missing": missing}
 
     # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
-    REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll")
+    REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll", "opti_overlay")
 
     def _rec(self, appid: str) -> tuple[dict, str | None, str | None]:
         d = xess.steam_install_dir(HOME, appid)
@@ -814,7 +814,8 @@ class Plugin:
         r = await self.set_launch(appid, clean)
         return {**r, "recommended": rec, "next": rec["reasons"][0]}
 
-    async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False) -> dict:
+    async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False,
+                          overlay: int | None = None) -> dict:
         """Per-game's two choices, as plain as OptiClick's: the upscaler (the game's own, or XeSS / FSR 4.1.2 /
         FSR 4.1.2 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
         generation on XMX at 2x-4x, fed from the game's own frame generation when it has one). Everything they need
@@ -843,7 +844,8 @@ class Plugin:
                 "Decky Framegen: remove it there (Decky Framegen → Unpatch), then pick again" if who["owner"] == "decky-framegen"
                 else "somewhere else (OptiClick's files from Windows, or by hand): remove OptiScaler.ini and its DLL, then pick again")}
         launch = {"opti": upscaler, "opti_fg": rec["fg_source"] if fg else "off", "opti_ini": rec["ini"] if rec["optiscaler"] else {},
-                  "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None}
+                  "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None,
+                  "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
         r = await self._opti_into(appid, folder, {k: v for k, v in launch.items() if v is not None})
         if not r.get("ok"):
             return r

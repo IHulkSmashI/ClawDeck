@@ -17,12 +17,21 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "fg", label: "FSR frame gen on XeSS only" },
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
-const picks = new Map<string, { up?: string; fg?: number }>();   // unapplied picks per game, across re-mounts
+const picks = new Map<string, { up?: string; fg?: number; ov?: number }>();   // unapplied picks per game, across re-mounts
 
 const UPSCALERS = [
   { data: "xess", label: "XeSS 2" },
   { data: "fsr4_xmx", label: "FSR 4.1.2" },
   { data: "fsr4_xmx_lite", label: "FSR 4.1.2 Lite (faster)" },
+];
+const OVERLAYS = [
+  { data: -1, label: "Off" },
+  { data: 0, label: "FPS only" },
+  { data: 1, label: "Simple" },
+  { data: 2, label: "Detailed (upscaler, frame generation)" },
+  { data: 3, label: "Detailed + graph" },
+  { data: 4, label: "Full" },
+  { data: 5, label: "Full + graph" },
 ];
 const FRAMEGENS = [
   { data: 0, label: "Off" },
@@ -93,9 +102,13 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const [pickFg, setPickFgS] = useState<number | null>(kept.fg ?? null);
   const setPickUp = (v: string | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), up: v ?? undefined }); setPickUpS(v); };
   const setPickFg = (v: number | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), fg: v ?? undefined }); setPickFgS(v); };
+  const [pickOv, setPickOvS] = useState<number | null>(kept.ov ?? null);
+  const setPickOv = (v: number | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), ov: v ?? undefined }); setPickOvS(v); };
+  const nowOv = launch.opti_overlay ?? -1;
   const [busy, setBusy] = useState(false);
   const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
-  const changed = !ours || wantUp !== nowUp || wantFg !== nowFg;
+  const wantOv = pickOv ?? nowOv;
+  const changed = !ours || wantUp !== nowUp || wantFg !== nowFg || wantOv !== nowOv;
   // FSR 4.1.2 only where it can run, as OptiClick shows only what the game and the hardware support
   const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files);
   const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.2 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.2 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.2 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
@@ -104,11 +117,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);
   const apply = async () => {
     setBusy(true);
-    try { await choose(wantUp, wantFg); setPickUp(null); setPickFg(null); } finally { setBusy(false); }
+    try { await choose(wantUp, wantFg); setPickUp(null); setPickFg(null); setPickOv(null); } finally { setBusy(false); }
   };
   const choose = async (upscaler: string, fg: number, allow = false) => {
     if (upscaler !== "own" && !ours) notify(`${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…`, { title: `${app.name}: installing…`, body: "OptiScaler (first time: 55 MB download)" });
-    const r = await gameChoose(app.appid, upscaler, fg, allow);
+    const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || wantOv < 0 ? null : wantOv);
     if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
     if (r.ok && Object.keys(r.env ?? {}).length && opts !== null && !hasWrapper(opts) && gs?.wrapper) {
@@ -156,6 +169,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} /></Anchor>
+          <Anchor id="overlay"><DropdownItem label="OptiScaler overlay" layout="below" childrenContainerWidth="max" rgOptions={OVERLAYS}
+            selectedOption={wantOv} onChange={(o) => { markPick("overlay"); setPickOv(Number(o.data)); }}
+            description={explain("OptiScaler's own counter at the top right, from the game's start: rendered and shown fps, the upscaler in use and \"(XeFG)\" while frame generation runs, which Steam's overlay can't tell. Saved in the game's OptiScaler settings.",
+              undefined, quick ? undefined : "Detailed and Full add a few lines of text over the game.")} /></Anchor>
           <div style={{ height: 8 }} />
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}

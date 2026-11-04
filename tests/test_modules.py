@@ -856,3 +856,13 @@ def test_fsr4_xmx_picks_4_1_2_in_optiscaler(tmp_path, monkeypatch):
     ini = (g / "OptiScaler.ini").read_text()
     assert "UpscalerIndex=6" in ini.replace(" ", "") and "Dx12Upscaler=fsr31" in ini.replace(" ", "")
     assert "FGOutput=xefg" in ini.replace(" ", "")
+
+
+def test_opti_overlay_goes_into_optiscaler_ini():
+    from clawdeck import launchenv
+    ini = launchenv.opti_ini({"opti": "xess", "opti_overlay": 2})
+    assert ini["Menu_ShowFps"] == "true" and ini["Menu_FpsOverlayType"] == "2" and ini["Menu_FpsOverlayPos"] == "1"
+    assert "Menu_ShowFps" not in launchenv.opti_ini({"opti": "xess"})
+    import pytest
+    with pytest.raises(ValueError):
+        launchenv.compose({"opti": "xess", "opti_overlay": 9})
