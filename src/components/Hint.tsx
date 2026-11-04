@@ -1,5 +1,5 @@
-import { Field } from "@decky/ui";
-import { createContext, FC, ReactNode, useContext } from "react";
+import { Field, PanelSection, PanelSectionRow } from "@decky/ui";
+import { createContext, FC, ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 /**
  * The explanation every control carries (project UI rule): what it does, why you'd use it, what it costs. It goes in
@@ -49,3 +49,49 @@ export const Group: FC<{ title: ReactNode; first?: boolean }> = ({ title, first 
   <div style={{ margin: first ? "2px 0 6px" : "14px 0 6px", paddingBottom: 4, borderBottom: "1px solid rgba(26,159,255,0.35)",
     color: "#1a9fff", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</div>
 );
+
+/** A section of Quick Access that folds away behind its heading, so the panel is a short list of headings and only the
+ * part in use is open (maintainer, 2026-11-04: "it's just so long"). Open or closed is remembered on this device; the
+ * state also lives outside the component, so a Quick Access re-mount keeps it. */
+const folds = new Map<string, boolean>();
+export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: boolean; children: ReactNode }> = ({ id, title, summary, open: dflt = false, children }) => {
+  const key = `clawdeck.fold.${id}`;
+  const [open, setOpen] = useState<boolean>(() => {
+    if (folds.has(id)) return folds.get(id)!;
+    try { const v = localStorage.getItem(key); if (v !== null) return v === "1"; } catch { /* private storage */ }
+    return dflt;
+  });
+  const toggle = () => { const v = !open; folds.set(id, v); setOpen(v); try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* not remembered */ } };
+  return (
+    <>
+      <PanelSection>
+        <PanelSectionRow>
+          <Field focusable highlightOnFocus bottomSeparator="none" onActivate={toggle} onClick={toggle}
+            label={<span style={{ color: "#1a9fff", fontWeight: 700, fontSize: 14, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              <span style={{ display: "inline-block", width: 16 }}>{open ? "▾" : "▸"}</span>{title}</span>}
+            description={!open && summary ? <span style={{ marginLeft: 16 }}>{summary}</span> : undefined} />
+        </PanelSectionRow>
+      </PanelSection>
+      {open && children}
+    </>
+  );
+};
+
+/** Steam's dropdown can re-mount Quick Access when its menu closes; the D-pad then lands at the top, in another
+ * section (maintainer, 2026-11-04: "picking FSR takes me to a different section"). A pick marks its control, and the
+ * control, when it mounts again within a few seconds, takes the focus back and scrolls itself into view. */
+let lastMark: { id: string; t: number } | null = null;
+export const markPick = (id: string) => { lastMark = { id, t: Date.now() }; };
+export const Anchor: FC<{ id: string; children: ReactNode }> = ({ id, children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!lastMark || lastMark.id !== id || Date.now() - lastMark.t > 4000) return;
+    const t = setTimeout(() => {
+      const el = ref.current;
+      const target = el?.querySelector<HTMLElement>("button, [tabindex]");
+      try { target?.focus(); el?.scrollIntoView({ block: "center" }); } catch { /* best effort */ }
+    }, 60);
+    return () => clearTimeout(t);
+  }, []);
+  return <div ref={ref}>{children}</div>;
+};

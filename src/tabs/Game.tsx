@@ -2,7 +2,7 @@ import { DropdownItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { FC, useEffect, useMemo, useState } from "react";
 
 import { gamesList, GameEntry } from "../api";
-import { Note } from "../components/Hint";
+import { Anchor, markPick, Note } from "../components/Hint";
 import { runningApp } from "../steam";
 import { PerGameTab } from "./PerGame";
 
@@ -33,11 +33,11 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
 
   return (
     <>
-      <PanelSection title="Game">
+      <PanelSection title={quick ? undefined : "Game"}>
         <PanelSectionRow>
-          <DropdownItem layout="below" label={quick ? undefined : "Game"} menuLabel="Pick a game" strDefaultLabel={games === null ? "Reading your games…" : "Pick a game"}
+          <Anchor id="game"><DropdownItem layout="below" label={quick ? undefined : "Game"} menuLabel="Pick a game" strDefaultLabel={games === null ? "Reading your games…" : "Pick a game"}
             disabled={!options.length} rgOptions={options} selectedOption={cur}
-            onChange={(o) => { lastPick = String(o.data); setSel(String(o.data)); }} />
+            onChange={(o) => { markPick("game"); lastPick = String(o.data); setSel(String(o.data)); }} /></Anchor>
         </PanelSectionRow>
         {runningUnsupported && (
           <PanelSectionRow><Note>{running!.name} has no DLSS, FSR or XeSS for OptiScaler to use, so there's nothing to set up for it (Power above still applies).</Note></PanelSectionRow>

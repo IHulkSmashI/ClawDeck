@@ -1,9 +1,9 @@
 import { ButtonItem, Navigation, PanelSection, PanelSectionRow, SidebarNavigation, ToggleField } from "@decky/ui";
 import { FC, useEffect, useState } from "react";
 
-import { getSetting, setSetting, xessState } from "./api";
+import { getSetting, setSetting, uiLog, xessState } from "./api";
 import { FirstRun } from "./components/FirstRun";
-import { HelpContext } from "./components/Hint";
+import { Fold, HelpContext } from "./components/Hint";
 import { MdBolt, MdBuild, MdSportsEsports } from "react-icons/md";
 
 import { FixesTab } from "./tabs/Fixes";
@@ -28,7 +28,7 @@ export const openPage = (page = "power") => {
 export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
-  useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); }, []);
+  useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
   useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d || !!x?.installed)).catch(() => setSetupDone(true)); }, []);
   return (
   <HelpContext.Provider value={help}>
@@ -40,10 +40,10 @@ export const QuickPanel: FC = () => {
       </PanelSectionRow>
     </PanelSection>
     {setupDone === false && <FirstRun onDone={() => setSetupDone(true)} />}
-    <PowerTab quick />
-    {setupDone && <GameSection quick />}
-    <FixesTab quick />
-    <SetupTab quick />
+    <Fold id="power" title="Power" open summary="Profile, TDP and Autotune"><PowerTab quick /></Fold>
+    {setupDone && <Fold id="game" title="Upscaling and frame generation" open summary="Game, upscaler, frame generation"><GameSection quick /></Fold>}
+    <Fold id="fixes" title="Fixes" summary="VRR, face buttons, overlay watts, log"><FixesTab quick /></Fold>
+    <Fold id="setup" title="Setup" summary="XeSS XMX driver, updates"><SetupTab quick /></Fold>
     <PanelSection>
       <PanelSectionRow>
         <ButtonItem layout="below" onClick={() => openPage("power")}>Open the full view</ButtonItem>

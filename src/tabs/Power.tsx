@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
+import { explain, Group, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -153,19 +153,19 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const rapl25 = st?.rapl.max_w && st.rapl.max_w < hi ? ` The chip reports ${st.rapl.max_w} W as its sustained maximum; above that it may not follow.` : "";
 
   return (
-    <PanelSection title="Power">
+    <PanelSection title={quick ? undefined : "Power"}>
       <PanelSectionRow>
         {/* layout below + full width: inline, the description takes half the Quick Access column and cuts the option
             text off ("Max · 3..."). Rendered only once the saved profile is loaded (key), so it never mounts on the
             placeholder and keeps showing that (maintainer report 2026-10-22: "has to be selected twice"). */}
-        <DropdownItem key={st ? "loaded" : "loading"} menuLabel="Power profile" layout="below" childrenContainerWidth="max"
-          selectedOption={profile} onChange={(o) => pick(o.data)} rgOptions={profileOptions}
+        <Anchor id="power"><DropdownItem key={st ? "loaded" : "loading"} menuLabel="Power profile" layout="below" childrenContainerWidth="max"
+          selectedOption={profile} onChange={(o) => { markPick("power"); pick(o.data); }} rgOptions={profileOptions}
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
-            quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} />
-        <SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={slide}
+            quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} /></Anchor>
+        <Anchor id="tdp"><SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={(w) => { markPick("tdp"); slide(w); }}
           description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
-            quick ? undefined : "each watt more buys fps with play time and heat.")} />
+            quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
         <Status ok={err ? false : null} label={(running && st?.tdp_w != null && st.tdp_w !== tdp
             ? `Chip now: ${st.tdp_w} W (Autotune, below your ${tdp} W)` : (line ?? reads(st))) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`

@@ -6,7 +6,7 @@ import { gameChoose, gameRecommend, gameStatus, setLaunch, FsrRoute, GameStatus,
 import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Group, Note, Problem, Status, useExplanations } from "../components/Hint";
+import { Anchor, explain, Group, markPick, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
@@ -144,15 +144,15 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
           <Group title="Upscaling and frame generation (XMX cores)" />
-          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
+          <Anchor id="upscaler"><DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
-            onChange={(o) => setPickUp(String(o.data))}
+            onChange={(o) => { markPick("upscaler"); setPickUp(String(o.data)); }}
             description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
-              : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} />
-          <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
-            selectedOption={wantFg} onChange={(o) => setPickFg(Number(o.data))}
+              : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
+          <Anchor id="framegen"><DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
+            selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
-              quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
+              quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} /></Anchor>
           <div style={{ height: 8 }} />
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
