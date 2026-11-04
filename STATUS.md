@@ -102,8 +102,11 @@ The four-panel UI has not been on the device yet.
     overlay" (new); check the overlay shows CPU W and ClawDeck's battery line reads ~10 W idle.
   - Speakers silent although PCM runs (RT721 SDCA, sof-sdca-1amp): the vendor power gates stay off
     (stevedamnvan/msi-claw-8-ex-linux, EX-AUD-001/002). Not built yet: its exact sequence still has to be read.
-  - VRR 30–120 makes Steam's menus choppy (the screen really runs at the game's 30 fps). Planned: VRR only while a
-    game shows frames, fixed 120 Hz in menus, as on Windows.
+  - VRR 30–120 makes Steam's menus choppy (the screen really runs at the game's 30 fps). New: Fixes → "VRR only in
+    games" (src/vrr.ts): watches Steam's Perf state and sets is_vrr_enabled on while current_game_id ≠ 0, off
+    otherwise, with skip_storage_update. **Test:** VRR fix installed; library scrolls sharp at 120 Hz; in a game the
+    overlay's refresh follows the fps (30–120); Steam's own VRR toggle shows the change; the switch off = Steam's
+    toggle in charge again. If Steam ignores the write, the Fixes line says "VRR switching failed".
 - **0.2 on the Claw (none of this has run on hardware yet):**
   - Setup → Update XeSS XMX to 20261104, log out and in: "XeSS XMX 20261104: driver loads".
   - Per-game in a game with XeSS frame generation (Cyberpunk 2077): Frame generation 3x, restart the game, 3x on
