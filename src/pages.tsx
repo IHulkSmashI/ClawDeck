@@ -3,9 +3,10 @@ import { FC, useEffect, useState } from "react";
 
 import { getSetting, setSetting } from "./api";
 import { HelpContext } from "./components/Hint";
-import { MdBolt, MdBuild, MdSettings, MdSportsEsports, MdTune } from "react-icons/md";
+import { MdBolt, MdBuild, MdSettings, MdSportsEsports, MdTune, MdViewList } from "react-icons/md";
 
 import { FixesTab } from "./tabs/Fixes";
+import { GamesTab } from "./tabs/Games";
 import { PerGameTab } from "./tabs/PerGame";
 import { PowerTab } from "./tabs/Power";
 import { SetupTab } from "./tabs/Setup";
@@ -50,6 +51,7 @@ export const QuickPanel: FC = () => {
     <SetupTab quick />
     <PanelSection>
       <PanelSectionRow>
+        <ButtonItem layout="below" onClick={() => openPage("games")}>Set up a game (all installed games)</ButtonItem>
         <ButtonItem layout="below" onClick={() => openPage("power")}>Open the full view</ButtonItem>
       </PanelSectionRow>
     </PanelSection>
@@ -63,6 +65,7 @@ export const FullPage: FC<{ page?: string }> = ({ page }) => (
   <SidebarNavigation title="ClawDeck" showTitle page={page} pages={[
     { title: "Power", icon: <MdBolt />, route: `${ROUTE}/power`, content: <PowerTab /> },
     { title: "Per-game", icon: <MdSportsEsports />, route: `${ROUTE}/game`, content: <PerGameTab /> },
+    { title: "Games", icon: <MdViewList />, route: `${ROUTE}/games`, content: <GamesTab /> },
     { title: "Fixes", icon: <MdBuild />, route: `${ROUTE}/fixes`, content: <FixesTab /> },
     { title: "Setup", icon: <MdTune />, route: `${ROUTE}/setup`, content: <SetupTab /> },
   ]} />

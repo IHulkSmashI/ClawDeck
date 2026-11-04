@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      gamedb, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
+                      gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -144,6 +144,12 @@ class Plugin:
             os.chmod(WRAPPER, 0o755)
         except OSError as e:
             decky.logger.warning("could not leave the pass-through wrapper: %s", e)
+        for appid, folder in list((self.settings.get("opti_games") or {}).items()):
+            try:
+                decky.logger.info("uninstall: OptiScaler out of %s: %s, REFramework: %s", appid,
+                                  optiscaler.unpatch(folder), reframework.remove(folder))
+            except Exception as e:
+                decky.logger.warning("uninstall: OptiScaler out of %s: %s", appid, e)
         # XeSS XMX back as xess-xmx-linux's installer left it (session-wide), the log and power counters as shipped
         for what, undo in (("Proton per-game XMX files", lambda: xmxscope.remove_scope(HOME)),
                            ("the session's XMX driver file", lambda: xmxscope.restore_session(HOME)),
@@ -588,6 +594,17 @@ class Plugin:
             env, error = {}, str(e)
         return {"launch": launch, "env": env, "wrapper": WRAPPER + " %command%", "error": error}
 
+    async def set_launch_any(self, appid: str, values: dict) -> dict:
+        """set_launch, and for a game with ClawDeck's OptiScaler its OptiScaler.ini follows (frame generation's
+        multiplier, upscaler)."""
+        r = await self.set_launch(appid, values)
+        folder = (self.settings.get("opti_games") or {}).get(str(appid))
+        if r.get("ok") and folder and optiscaler.owner(folder)["owner"] == "clawdeck":
+            r2 = await self._opti_into(appid, folder, self.profiles.get_launch(appid))
+            if not r2.get("ok"):
+                r = {**r, "ok": False, "error": f"saved, but OptiScaler.ini wasn't updated: {r2.get('error')}"}
+        return r
+
     async def set_launch(self, appid: str, values: dict) -> dict:
         allowed = launchenv.KEYS
         clean = {k: v for k, v in values.items() if k in allowed}
@@ -610,7 +627,12 @@ class Plugin:
         detected = await self._bg(xmxscope.ships_xess, d)
         auto = detected or launchenv.compose({**launch, "xmx": None}).get("CLAWDECK_XMX") == "1"
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
-                "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files()}
+                "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files(),
+                "opti_owner": await self._bg(self._opti_owner, appid, d)}
+
+    def _opti_owner(self, appid: str, d: str | None) -> str | None:
+        folder = self.settings.get("opti_games", {}).get(str(appid)) or (optiscaler.main_exe_dir(d) if d else None)
+        return optiscaler.owner(folder)["owner"]
 
     @staticmethod
     def _fsr4_xmx_files() -> dict:
@@ -622,29 +644,71 @@ class Plugin:
         return {"dir": d, "ready": not missing, "missing": missing}
 
     # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
-    REC_KEYS = ("opti", "opti_xefg", "opti_ini", "reframework", "fsr")
+    REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll")
 
     def _rec(self, appid: str) -> tuple[dict, str | None, str | None]:
         d = xess.steam_install_dir(HOME, appid)
         rec = gamedb.recommend(gamedb.load(GAMES), d)
-        folder = reframework.exe_dir(d, rec["exes"]) if d and rec["re_engine"] else None
+        folder = optiscaler.main_exe_dir(d, rec["main_exes"]) if d else None
         return rec, d, folder
+
+    async def games_list(self) -> list[dict]:
+        """Installed Steam games for the Games page, with what ClawDeck has set up in each."""
+        games = await self._bg(xess.installed_games, HOME)
+        ours = self.settings.get("opti_games") or {}
+        for g in games:
+            launch = self.profiles.get_launch(g["appid"])
+            g["setup"] = "optiscaler" if g["appid"] in ours else "launch" if launch else None
+        return games
 
     async def game_recommend(self, appid: str) -> dict:
         rec, d, folder = await self._bg(self._rec, appid)
         launch = self.profiles.get_launch(appid)
-        applied = all(launch.get(k) == v for k, v in rec["launch"].items()) and bool(rec["launch"])
-        return {**rec, "dir": d, "applied": applied, "reframework_state": reframework.status(folder) if folder else None}
+        applied = bool(rec["launch"]) and all(launch.get(k) == v for k, v in rec["launch"].items())
+        who = optiscaler.owner(folder)
+        return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": who["owner"],
+                "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
+
+    async def _opti_into(self, appid: str, folder: str, launch: dict) -> dict:
+        """ClawDeck's OptiScaler into the game with the settings of `launch` (preset, XeSS-FG, the game's fixes)."""
+        entry = self._versions()["optiscaler"]
+        if not optiscaler.installed(HOME, entry["version"]) or not all(
+                os.path.isfile(os.path.join(optiscaler.package_dir(HOME, entry["version"]), x["dest"])) for x in entry.get("extras", [])):
+            if self._install_lock.locked():
+                return {"ok": False, "busy": True, "error": "already downloading; wait for the first one to finish"}
+            async with self._install_lock:
+                r = await self._bg(optiscaler.install, HOME, entry)
+            if not r.get("ok"):
+                return r
+        opti = launch.get("opti") or "xess"
+        r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
+                           opti, opti in launchenv.FSR4_XMX)
+        if r.get("ok"):
+            games = self.settings.setdefault("opti_games", {})
+            games[str(appid)] = folder
+            self._save_settings()
+        return r
 
     async def game_apply_recommended(self, appid: str, allow_unpinned: bool = False) -> dict:
-        """Write the recommended launch settings (and REFramework for an RE Engine game). The panel then adds
-        OptiScaler (Decky Framegen's fgmod) and ClawDeck's wrapper to the launch options when the setup needs them."""
+        """The recommended setup: launch settings, ClawDeck's OptiScaler in the game when the route needs it, and
+        REFramework for an RE Engine game. The panel then adds ClawDeck's wrapper to the launch options."""
         rec, d, folder = await self._bg(self._rec, appid)
-        if not d:
-            return {"ok": False, "error": "can't find this game's install folder"}
+        if not d or not folder:
+            return {"ok": False, "error": "can't find this game's install folder or its exe"}
+        launch = dict(rec["launch"])
+        if rec["optiscaler"]:
+            who = optiscaler.owner(folder)
+            if who["owner"] in ("decky-framegen", "other"):
+                return {"ok": False, "owner": who["owner"], "error": (
+                    "Decky Framegen has put OptiScaler in this game: remove it there (Decky Framegen → Unpatch), "
+                    "then tap again" if who["owner"] == "decky-framegen" else
+                    "this game already has OptiScaler from somewhere else (OptiClick's files from Windows, or put "
+                    "there by hand): remove OptiScaler.ini and its DLL, then tap again")}
+            r = await self._opti_into(appid, folder, launch)
+            if not r.get("ok"):
+                return r
+            launch["opti_dll"] = r["dll_override"]
         if rec["re_engine"]:
-            if not folder:
-                return {"ok": False, "error": "can't find the game's exe for REFramework"}
             if self._install_lock.locked():
                 return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
             async with self._install_lock:
@@ -652,17 +716,48 @@ class Plugin:
             if not r.get("ok"):
                 return r
         clean = {k: None for k in self.REC_KEYS}
-        clean.update(rec["launch"])
+        clean.update(launch)
         r = await self.set_launch(appid, clean)
         return {**r, "recommended": rec, "next": rec["reasons"][0]}
+
+    async def game_set_opti(self, appid: str, values: dict) -> dict:
+        """Per-game's OptiScaler upscaler / XeSS-FG choice for a game with ClawDeck's OptiScaler: saved, and the
+        game's OptiScaler.ini (and FSR 4 XMX files) rewritten at once; takes effect from the next launch."""
+        rec, d, folder = await self._bg(self._rec, appid)
+        if optiscaler.owner(folder)["owner"] != "clawdeck":
+            return await self.set_launch(appid, values)                  # Decky Framegen: its env variables
+        launch = {**self.profiles.get_launch(appid), **{k: v for k, v in values.items() if k in ("opti", "opti_xefg", "opti_fg")}}
+        launch = {k: v for k, v in launch.items() if v is not None}
+        r = await self._opti_into(appid, folder, launch)
+        if not r.get("ok"):
+            return r
+        return await self.set_launch(appid, {**values, "opti_dll": r["dll_override"]})
 
     async def game_undo_recommended(self, appid: str) -> dict:
         rec, d, folder = await self._bg(self._rec, appid)
         removed = await self._bg(reframework.remove, folder) if folder else {"ok": True}
+        opti = await self._bg(optiscaler.unpatch, folder) if folder else {"ok": True}
+        self.settings.setdefault("opti_games", {}).pop(str(appid), None)
+        self._save_settings()
         r = await self.set_launch(appid, {k: None for k in self.REC_KEYS})
-        return {**r, "reframework": removed}
+        return {**r, "reframework": removed, "optiscaler": opti, "ok": r.get("ok", True) and opti.get("ok", True)}
 
     # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
+    async def optiscaler_state(self) -> dict:
+        """Setup's OptiScaler row: ClawDeck's own (downloaded on the first recommended setup), the games it is in,
+        and whether Decky Framegen is installed too (its games stay its own)."""
+        e = self._versions()["optiscaler"]
+        fg = await self._bg(framegen.state, HOME)
+        return {"version": e["version"], "installed": optiscaler.installed(HOME, e["version"]),
+                "games": len(self.settings.get("opti_games") or {}), "framegen": bool(fg.get("installed")),
+                "framegen_version": fg.get("version")}
+
+    async def optiscaler_install(self) -> dict:
+        if self._install_lock.locked():
+            return {"ok": False, "busy": True, "error": "already downloading; wait for the first one to finish"}
+        async with self._install_lock:
+            return await self._bg(optiscaler.install, HOME, self._versions()["optiscaler"])
+
     async def framegen_state(self) -> dict:
         return await self._bg(framegen.state, HOME)
 

@@ -46,6 +46,14 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **ClawDeck's own OptiScaler (writes into game folders; replaces Decky Framegen for new setups):** Games → a DLSS
+  game (Wukong, after moving it off the NTFS card) → Use the recommended setup: OptiScaler 0.9.4 downloads (55 MB,
+  sha256 checked), lands next to the exe as dxgi.dll (or the next free proxy name) with OptiScaler.ini, OptiPatcher in
+  plugins/; the game's own files go to .clawdeck-optiscaler/backup. In the game: DLSS → XeSS on XMX (Insert shows
+  OptiScaler's menu); frame generation "from the game's DLSS FG" gives XeSS-FG at the Per-game multiplier
+  (XeFG InterpolationCount) with Reflex forced on through fakenvapi (XeLL). Switch the upscaler to FSR 4.1.1 XMX and
+  Lite from Quick Access: OptiScaler.ini and the files change without opening OptiScaler. Undo leaves the folder as it
+  was. A game Decky Framegen patched shows the warning and isn't touched.
 - **Recommended setup per game (writes into game folders):** Onimusha → "Use the recommended setup" → REFramework
   (`dinput8.dll` + `.clawdeck-reframework.json`) next to `OnimushaWotS.exe`, OptiScaler through fgmod with
   `Hotfix_RestoreComputeSignature=true` and `Spoofing_Dxgi=false`; the game starts (no Capcom DRM stop), DLSS in its

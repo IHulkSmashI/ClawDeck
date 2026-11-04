@@ -57,7 +57,20 @@ OPTI_PRESETS = {
 }
 FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")
 OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
-KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_ini", "reframework"}
+# OptiScaler's frame generation, always out through XeSS-FG (on XMX): where the frames come from
+OPTI_FG = {
+    "off": {"FrameGen_Enabled": "false", "FrameGen_FGInput": "nofg", "FrameGen_FGOutput": "nofg"},
+    "dlssg": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "dlssg", "FrameGen_FGOutput": "xefg"},      # the game's DLSS FG
+    "fsrfg": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "fsrfg", "FrameGen_FGOutput": "xefg"},      # the game's FSR FG
+    "upscaler": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "upscaler", "FrameGen_FGOutput": "xefg"},  # any game
+}
+KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll"}
+# OptiScaler.ini sections (0.9.4), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
+INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
+                "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
+                "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
+                "VSync", "Anisotropy", "Mipmap", "ProcessFilter", "Hotfix"}
+UNPREFIXED = {"Dx12Upscaler": "Upscalers", "Dx11Upscaler": "Upscalers", "VulkanUpscaler": "Upscalers"}
 INI_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")     # Decky Framegen's Section_Key form
 INI_VAL_RE = re.compile(r"^(true|false|auto|-?[0-9]+(\.[0-9]+)?)$")
 
@@ -97,6 +110,11 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     env.update(OPTI_PRESETS[opti])
     if launch.get("opti_xefg"):
         env.update(OPTI_XEFG)
+    ofg = launch.get("opti_fg")
+    if ofg is not None:
+        if ofg not in OPTI_FG:
+            raise ValueError(f"unknown OptiScaler frame generation {ofg!r}")
+        env.update(OPTI_FG[ofg])
     ini = launch.get("opti_ini") or {}
     if not isinstance(ini, dict):
         raise ValueError("opti_ini must be a map of Section_Key to value")
@@ -108,7 +126,10 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     # native DLLs instead of Wine's own: REFramework's dinput8.dll; the LZMS-capable cabinet.dll the FSR 4 XMX build
     # needs (tools/cabinet-lzms). Ends in ";" because Decky Framegen's fgmod appends its proxy as ",dxgi=n,b"; Wine
     # splits entries at ";", so the result still reads as separate entries.
-    dlls = (["dinput8"] if launch.get("reframework") else []) + (["cabinet"] if opti in FSR4_XMX else [])
+    od = launch.get("opti_dll")
+    if od is not None and (not isinstance(od, str) or not re.fullmatch(r"[a-z0-9_]+", od)):
+        raise ValueError(f"bad OptiScaler proxy name {od!r}")
+    dlls = ([od] if od else []) + (["dinput8"] if launch.get("reframework") else []) + (["cabinet"] if opti in FSR4_XMX else [])
     if dlls:
         env["WINEDLLOVERRIDES"] = "".join(f"{d}=n,b;" for d in dlls)
     return env
@@ -145,3 +166,20 @@ def write(runtime_dir: str, appid: str, launch: dict, per_game: bool = True) -> 
     os.chmod(tmp, 0o644)
     os.replace(tmp, p)
     return {"path": p, "env": env}
+
+
+def opti_ini(launch: dict) -> dict[str, str]:
+    """The OptiScaler.ini lines for ClawDeck's own OptiScaler: the preset, XeSS frame generation, the game's settings.
+    Variables that aren't ini settings (FSR 4 XMX's own switches, ClawDeck's) stay in the launch environment."""
+    env = {**OPTI_PRESETS.get(launch.get("opti") or "off", {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
+           **OPTI_FG.get(launch.get("opti_fg") or "", {}), **(launch.get("opti_ini") or {})}
+    fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
+    if fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):
+        env["XeFG_InterpolationCount"] = str(min(max(fg - 1, 1), 3))
+    out = {}
+    for k, v in env.items():
+        if k in UNPREFIXED:
+            out[f"{UNPREFIXED[k]}_{k}"] = str(v)
+        elif "_" in k and k.split("_", 1)[0] in INI_SECTIONS:
+            out[k] = str(v)
+    return out

@@ -1,8 +1,8 @@
-import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, DropdownItem, Field, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { gameApplyRecommended, gameRecommend, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset, Recommendation } from "../api";
+import { gameApplyRecommended, gameRecommend, gameSetOpti, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset, Recommendation } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
@@ -22,6 +22,12 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "fg", label: "FSR frame gen on XeSS only" },
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
+const OPTI_FG_OPTIONS: { data: string; label: string }[] = [
+  { data: "off", label: "Off" },
+  { data: "dlssg", label: "From the game's DLSS frame generation" },
+  { data: "fsrfg", label: "From the game's FSR frame generation" },
+  { data: "upscaler", label: "Any game (OptiScaler's own, may glitch the HUD)" },
+];
 const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
   { data: "off", label: "Decky Framegen's setting" },
   { data: "xess", label: "XeSS on XMX (recommended)" },
@@ -35,9 +41,9 @@ const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
  * through Bazzite's Decky Framegen with Intel presets. Every choice reaches the game through ClawDeck's launch wrapper
  * (an environment file per game), so the first change adds the wrapper to the game's launch options.
  */
-export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
+export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null }> = ({ quick, pick }) => {
   useExplanations();
-  const app = runningApp();
+  const app = pick ?? runningApp();
   const [gs, setGs] = useState<GameStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [opts, setOpts] = useState<string | null>(null);    // the game's Steam launch options; null = unreadable
@@ -47,7 +53,7 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   if (!app) {
     return (
       <PanelSection title="Per-game">
-        <PanelSectionRow><Note>Start a game: this panel sets its XeSS on the XMX cores (frame generation, FSR games on XeSS, low latency) and OptiScaler, and shows what each did.</Note></PanelSectionRow>
+        <PanelSectionRow><Note>Start a game, or set one up before you play: open the full view (gear at the top right) → Games. This panel sets the game's XeSS on the XMX cores, OptiScaler (FSR 4, frame generation) and the recommended setup, and shows what each did.</Note></PanelSectionRow>
       </PanelSection>
     );
   }
@@ -80,12 +86,12 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   useEffect(() => { gameRecommend(app.appid).then(setRec).catch(() => setRec(null)); }, [app.appid, gs]);
   const applyRec = async (allow = false) => {
     if (!rec) return;
-    if (rec.optiscaler && !fg?.fgmod_ready) { toast("Install Decky Framegen in Setup first (OptiScaler comes with it)"); return; }
+    if (rec.optiscaler && fgmodHere) { toast("This game uses Decky Framegen's OptiScaler: tap \"Stop using Decky Framegen here\" below first"); return; }
+    toast(rec.optiscaler ? `${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…` : `${app.name}: saving…`);
     const r = await gameApplyRecommended(app.appid, allow);
     if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => applyRec(true)); return; }
     if (!r.ok) { setErr(r.error ?? "not applied"); toast(`Recommended setup: not applied (${r.error})`); return; }
     let next = opts ?? "";
-    if (rec.optiscaler && fg?.fgmod) next = withFgmod(next, fg.fgmod);
     if (Object.keys(r.env ?? {}).length && !hasWrapper(next) && gs?.wrapper) next = withWrapper(next, gs.wrapper.replace(/ %command%$/, ""));
     const ok = next === (opts ?? "") || setLaunchOptions(app.appid, next);
     toast(ok ? `${app.name}: recommended setup saved. ${r.next ?? ""} Restart the game.` : "Saved, but Steam refused the launch options");
@@ -94,7 +100,14 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const undoRec = async () => {
     const r = await gameUndoRecommended(app.appid);
     if (opts !== null && fgmodHere) setLaunchOptions(app.appid, withoutFgmod(opts));
-    toast(r.ok ? `${app.name}: back to how it was (REFramework removed if ClawDeck put it there)` : `Not undone: ${r.error}`);
+    toast(r.ok ? `${app.name}: back to how it was (ClawDeck's OptiScaler and REFramework taken out, the game's own files put back)` : `Not undone: ${r.error}`);
+    load();
+  };
+  const ours = gs?.opti_owner === "clawdeck";
+  const setOpti = async (v: Partial<Launch>) => {
+    const r = await gameSetOpti(app.appid, v);
+    setErr(r.ok ? null : (r.error ?? "not saved"));
+    toast(r.ok ? `${app.name}: OptiScaler updated, from the next launch` : `Not saved: ${r.error}`);
     load();
   };
   const setFgmod = (on: boolean) => {
@@ -117,11 +130,56 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
             detail={explain(rec.reasons.join(" · ") + (rec.known ? "" : " (not in the per-game list: ClawDeck's Intel default)"))} />
           {rec.route !== "own_xess" && (
             <ButtonItem layout="below" onClick={() => (rec.applied ? undoRec() : applyRec(false))}
-              description={explain(rec.applied ? "Removes what the recommended setup added (launch settings, OptiScaler from the launch options, ClawDeck's REFramework)." : "One tap: the settings above, from OptiScaler's own per-game list and what was tested on the Claw.",
-                undefined, quick ? undefined : rec.re_engine ? "REFramework (dinput8.dll) is copied next to the game's exe; undo deletes exactly that file." : "takes effect from the next launch.")}>
+              description={explain(rec.applied ? "Takes out what the recommended setup added (ClawDeck's OptiScaler, REFramework, the launch settings) and puts the game's own files back." : "One tap: the settings above, from OptiScaler's own per-game list and what was tested on the Claw.",
+                undefined, quick ? undefined : rec.optiscaler ? "OptiScaler's files go next to the game's exe (any file of the game they replace is kept and comes back with Undo); the first time downloads OptiScaler (55 MB). From the next launch." : "takes effect from the next launch.")}>
               {rec.applied ? "Undo the recommended setup" : "Use the recommended setup"}
             </ButtonItem>
           )}
+        </PanelSectionRow>
+      )}
+      {(ours || fgmodHere || gs?.opti_owner === "decky-framegen" || gs?.opti_owner === "other") && (
+        <PanelSectionRow>
+          <Status ok={ours ? true : null}
+            label={ours ? "OptiScaler: ClawDeck's, in this game" : fgmodHere || gs?.opti_owner === "decky-framegen"
+              ? "OptiScaler: Decky Framegen's, in this game" : "OptiScaler from somewhere else is in this game"}
+            detail={explain(ours ? `Upscaler and frame generation below; the game's own files are kept and come back with Undo.${xmxOn && xessOk ? " Its XeSS runs on XMX through the driver above." : ""}`
+              : fgmodHere || gs?.opti_owner === "decky-framegen"
+                ? "Decky Framegen manages OptiScaler here. ClawDeck's upscaler presets still reach it, but the recommended setup, REFramework and its own OptiScaler wait until Decky Framegen is removed from this game (below, then Decky Framegen → Unpatch)."
+                : "OptiScaler files ClawDeck didn't put there (OptiClick's from a Windows install, or by hand). ClawDeck leaves them alone; remove OptiScaler.ini and its DLL to let ClawDeck set the game up.")} />
+          {fgmodHere && opts !== null && (
+            <ButtonItem layout="below" onClick={() => setFgmod(false)}>Stop using Decky Framegen here</ButtonItem>
+          )}
+        </PanelSectionRow>
+      )}
+      {(ours || fgmodHere) && (
+        <PanelSectionRow>
+          <DropdownItem label="OptiScaler upscaler" layout="below" childrenContainerWidth="max" rgOptions={OPTI_OPTIONS.filter((o) => ours ? o.data !== "off" : true)} selectedOption={launch.opti ?? (ours ? "xess" : "off")}
+            onChange={(o) => {
+              if (String(o.data).startsWith("fsr4_xmx") && gs?.fsr4_xmx && !gs.fsr4_xmx.ready) {
+                toast(`FSR 4 on XMX: put nitec's files in ${gs.fsr4_xmx.dir} first (missing: ${gs.fsr4_xmx.missing.join(", ")})`); return;
+              }
+              const v = { opti: o.data === "off" ? null : o.data } as any;
+              ours ? setOpti(v) : save(v);
+            }}
+            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. FSR 4 INT8 is AMD's model for other GPUs, slower on Intel.",
+              undefined, quick ? undefined : "FSR 4 on XMX: the files go into the game folder and come out again when you pick something else.")} />
+          <DropdownItem label="Frame generation (XeSS, on XMX)" layout="below" childrenContainerWidth="max" rgOptions={OPTI_FG_OPTIONS}
+            selectedOption={launch.opti_fg ?? (launch.opti_xefg ? "dlssg" : "off")}
+            onChange={(o) => { const x = { opti_fg: o.data, opti_xefg: null } as any; ours ? setOpti(x) : save(x); }}
+            description={explain("Where OptiScaler's generated frames come from; they always come out as XeSS frame generation on the XMX cores, with the multiplier above. Use the game's own frame generation when it has one (turn it on in the game's menu); \"Any game\" makes frames for games without it.",
+              undefined, quick ? undefined : "frame generation adds a little input lag; low latency above keeps it down.")} />
+        </PanelSectionRow>
+      )}
+      {(ours || fgmodHere) && (
+        <PanelSectionRow>
+          <Field label="In the game" bottomSeparator="none" />
+          <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
+            <li>Restart the game if it was running when you changed something here.</li>
+            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : launch.opti === "fsr4" ? "FSR 4" : "XeSS on XMX"}.</li>
+            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b>.</li>}
+            <li>Check it worked: press <b>Insert</b> for OptiScaler's menu (it shows the upscaler in use); press it again to close.</li>
+            <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
+          </ol>
         </PanelSectionRow>
       )}
       {gs?.drive?.slow && (
@@ -176,37 +234,6 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
         </PanelSectionRow>
       )}
 
-      <PanelSectionRow>
-        <Status ok={fg?.fgmod_ready ? (fgmodHere ? true : null) : fg?.installed ? false : null}
-          label={!fg ? "OptiScaler: …" : !fg.installed ? "OptiScaler: Decky Framegen not installed (Setup)"
-            : !fg.fgmod_ready ? "OptiScaler: open Decky Framegen once and tap Setup OptiScaler Mod"
-              : fgmodHere ? `OptiScaler ${fg.optiscaler ?? ""} in this game's launch options` : `OptiScaler ${fg.optiscaler ?? ""} ready, not used in this game`}
-          detail={gs?.optiscaler.present ? `Installed in the game folder${gs.optiscaler.version ? ` (${gs.optiscaler.version})` : ""}${xmxOn && xessOk ? ": its XeSS runs on XMX through the driver above" : ""}.` : undefined} />
-        {fg?.fgmod_ready && opts !== null && (
-          <ButtonItem layout="below" onClick={() => setFgmod(!fgmodHere)}
-            description={explain("For DLSS or FSR games without XeSS: Decky Framegen's OptiScaler takes over the upscaler. Pick DLSS (or FSR) in the game's menu; ClawDeck's preset below decides what OptiScaler uses.",
-              undefined, quick ? undefined : "the game's folder gets OptiScaler's files at launch (Decky Framegen restores them when removed).")}>
-            {fgmodHere ? "Stop using OptiScaler in this game" : "Use OptiScaler in this game"}
-          </ButtonItem>
-        )}
-      </PanelSectionRow>
-      {fgmodHere && (
-        <PanelSectionRow>
-          <DropdownItem label="OptiScaler upscaler" layout="below" childrenContainerWidth="max" rgOptions={OPTI_OPTIONS} selectedOption={launch.opti ?? "off"}
-            onChange={(o) => {
-              if (String(o.data).startsWith("fsr4_xmx") && gs?.fsr4_xmx && !gs.fsr4_xmx.ready) {
-                toast(`FSR 4 on XMX: put nitec's files in ${gs.fsr4_xmx.dir} first (missing: ${gs.fsr4_xmx.missing.join(", ")})`); return;
-              }
-              save({ opti: o.data === "off" ? null : o.data } as any);
-            }}
-            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. FSR 4 INT8 is Decky Framegen's own, slower on Intel.",
-              undefined, quick ? undefined : "FSR 4 on XMX: ClawDeck copies the files in after Decky Framegen at each launch and takes them out again when you pick something else.")} />
-          <ToggleField label="OptiScaler frame generation: XeSS" checked={!!launch.opti_xefg}
-            description={explain("OptiScaler's frame generation output becomes XeSS frame generation, which runs on XMX and takes the multiplier above.",
-              undefined, quick ? undefined : "if no frames are generated, open OptiScaler's menu in the game (Insert) and check the frame generation input.")}
-            onChange={(v) => save({ opti_xefg: v || null } as any)} />
-        </PanelSectionRow>
-      )}
       <PanelSectionRow><Problem error={err} /></PanelSectionRow>
       {!quick && <LaunchWrapper key={wrapped ? "on" : "off"} appid={app.appid} name={app.name} />}
     </PanelSection>
