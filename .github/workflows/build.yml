@@ -36,7 +36,8 @@ jobs:
           mkdir -p out/ClawDeck/tools out/ClawDeck/assets
           cp -r dist plugin.json package.json main.py py_modules LICENSE README.md out/ClawDeck/
           cp tools/clawdeck-launch.sh tools/selftest.py tools/sysfs-survey.sh out/ClawDeck/tools/
-          cp assets/versions.json out/ClawDeck/assets/
+          cp assets/versions.json assets/games.json out/ClawDeck/assets/
+          cp CREDITS.md out/ClawDeck/
           rm -rf out/ClawDeck/py_modules/clawdeck/__pycache__
           (cd out && zip -qr ../ClawDeck.zip ClawDeck)
       - uses: actions/upload-artifact@v7

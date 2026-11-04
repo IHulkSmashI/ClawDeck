@@ -63,7 +63,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 // ---- per game ------------------------------------------------------------------------------------------------------
 export type FsrRoute = "off" | "xess" | "fg" | "inject";
 export type OptiPreset = "off" | "xess" | "fsr4";
-export type Launch = { xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
+export type Launch = { opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
@@ -76,6 +76,12 @@ export type XmxScope = { session_wide: boolean; per_game: boolean; auto: boolean
 export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
   drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
+export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
+  re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
+  ini_version: string | null; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
+export const gameRecommend = callable<[appid: string], Recommendation>("game_recommend");
+export const gameApplyRecommended = callable<[appid: string, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_apply_recommended");
+export const gameUndoRecommended = callable<[appid: string], { ok: boolean; error?: string }>("game_undo_recommended");
 
 // ---- setup: installs ---------------------------------------------------------------------------------------------
 export const xessState = callable<[], XessState>("xess_state");

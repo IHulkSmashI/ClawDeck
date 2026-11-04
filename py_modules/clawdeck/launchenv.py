@@ -47,7 +47,9 @@ OPTI_PRESETS = {
     "fsr4": {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"},
 }
 OPTI_XEFG = {"FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
-KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg"}
+KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_ini", "reframework"}
+INI_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")     # Decky Framegen's Section_Key form
+INI_VAL_RE = re.compile(r"^(true|false|auto|-?[0-9]+(\.[0-9]+)?)$")
 
 
 def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
@@ -84,6 +86,18 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     env.update(OPTI_PRESETS[opti])
     if launch.get("opti_xefg"):
         env.update(OPTI_XEFG)
+    ini = launch.get("opti_ini") or {}
+    if not isinstance(ini, dict):
+        raise ValueError("opti_ini must be a map of Section_Key to value")
+    for k, v in ini.items():                       # the game's OptiScaler settings (assets/games.json)
+        v = str(v)
+        if not INI_KEY_RE.match(k) or not INI_VAL_RE.match(v) or k in env:
+            raise ValueError(f"bad OptiScaler setting {k}={v}")
+        env[k] = v
+    if launch.get("reframework"):
+        # REFramework's dinput8.dll instead of Wine's own. Ends in ";" because Decky Framegen's fgmod appends its
+        # proxy as ",dxgi=n,b"; Wine splits entries at ";", so the result still reads as two entries.
+        env["WINEDLLOVERRIDES"] = "dinput8=n,b;"
     return env
 
 

@@ -612,3 +612,55 @@ def test_ships_xess_matches_the_scope_script_depth(tmp_path):
     _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "libxess.dll", "x")   # deeper than the launch-time check looks
     assert not xmxscope.ships_xess(str(deep))
     assert not xmxscope.ships_xess(None)
+
+
+def _game(tmp_path, name, files):
+    d = tmp_path / name
+    for f in files:
+        _w(d / f, "x")
+    return str(d)
+
+
+def test_gamedb_recommends_by_engine_and_list(tmp_path):
+    from clawdeck import gamedb
+    doc = gamedb.load(os.path.join(os.path.dirname(__file__), "..", "assets", "games.json"))
+    assert len(doc["games"]) > 50 and "onimushawots.exe" in doc["re_engine_exes"]
+    oni = gamedb.recommend(doc, _game(tmp_path, "oni", ["OnimushaWotS.exe", "amd_fidelityfx_dx12.dll"]))
+    assert oni["route"] == "re_engine" and oni["launch"]["reframework"] is True
+    assert oni["ini"] == {"Hotfix_RestoreComputeSignature": "true", "Spoofing_Dxgi": "false"}   # OptiScaler main, not 0.9.4
+    control = gamedb.recommend(doc, _game(tmp_path, "control", ["CONTROLResonant.exe", "amd_fidelityfx_upscaler_dx12.dll"]))
+    assert control["route"] == "fsr_on_xess" and control["launch"] == {"fsr": "xess"} and not control["optiscaler"]
+    own = gamedb.recommend(doc, _game(tmp_path, "x", ["game.exe", "bin/libxess.dll"]))
+    assert own["route"] == "own_xess" and own["launch"] == {}
+    ue = gamedb.recommend(doc, _game(tmp_path, "shf", ["SHf/Binaries/Win64/SHf-Win64-Shipping.exe"]))
+    assert ue["known"] and ue["route"] == "optiscaler" and ue["launch"]["opti"] == "xess"
+    from clawdeck import launchenv
+    env = launchenv.compose(oni["launch"])
+    assert env["Hotfix_RestoreComputeSignature"] == "true" and env["WINEDLLOVERRIDES"] == "dinput8=n,b;"
+    with pytest.raises(ValueError):
+        launchenv.compose({"opti_ini": {"PATH": "/tmp"}})              # only Section_Key=simple value
+    with pytest.raises(ValueError):
+        launchenv.compose({"opti_ini": {"Spoofing_Dxgi": "false; rm -rf"}})
+
+
+def test_reframework_never_overwrites_a_foreign_dinput8(tmp_path, monkeypatch):
+    from clawdeck import reframework, downloads
+    folder = tmp_path / "g"
+    _w(folder / "dinput8.dll", "reshade")
+    r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
+    assert not r["ok"] and "isn't ClawDeck's" in r["error"]
+    os.remove(folder / "dinput8.dll")
+    src = tmp_path / "unpacked"
+    _w(src / "dinput8.dll", "refw")
+    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": "t1", "repo": e["repo"], "archive": "REFramework.zip", "dir": str(src)})
+    monkeypatch.setattr(reframework.userexec, "chown_tree", lambda p, h: None)
+    r = reframework.install(str(tmp_path), str(folder), {"repo": "praydog/REFramework-nightly", "tag": "t1"})
+    assert r["ok"] and r["ours"] and (folder / "dinput8.dll").read_text().strip() == "refw"
+    assert reframework.remove(str(folder))["removed"] and not (folder / "dinput8.dll").exists()
+
+
+def test_every_listed_setting_is_a_valid_launch_variable():
+    from clawdeck import gamedb, launchenv
+    doc = gamedb.load(os.path.join(os.path.dirname(__file__), "..", "assets", "games.json"))
+    for g in doc["games"]:
+        launchenv.compose({"opti": "xess", "opti_xefg": True, "opti_ini": {**g["ini"], **g["when"].get("xefg", {})}})

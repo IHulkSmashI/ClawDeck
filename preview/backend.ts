@@ -198,6 +198,12 @@ export const backend = {
 
   // ---- setup: installs ----
   xess_state: () => xessState(),
+  game_recommend: () => ({ route: "re_engine", known: true, name: "Onimusha: Way of the Sword", re_engine: true, optiscaler: true,
+    ini: { Hotfix_RestoreComputeSignature: "true", Spoofing_Dxgi: "false" }, later: [], applied: false, ini_version: "0.9.4",
+    reasons: ["Capcom RE Engine: OptiScaler (XeSS + XeSS frame generation) with REFramework, which keeps Capcom's anti-tamper from stopping the game. Pick DLSS in the game's menu.",
+      "OptiScaler's own settings for this game: Hotfix_RestoreComputeSignature=true, Spoofing_Dxgi=false"], reframework_state: { present: false, ours: false } }),
+  game_apply_recommended: () => ({ ok: true, next: "Pick DLSS in the game's menu.", env: { Dx12Upscaler: "xess" } }),
+  game_undo_recommended: () => ({ ok: true }),
   xess_install: () => (state.xessInstalled
     ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", summary: "XeSS XMX 20261104 is up to date" })
     : (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", next: "log out of Game Mode and back in once" }))),
