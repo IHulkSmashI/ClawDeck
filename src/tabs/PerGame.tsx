@@ -91,7 +91,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg;
   // FSR 4.1.1 only where it can run, as OptiClick shows only what the game and the hardware support
   const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files);
-  const fsr4Why = !rec?.fsr4 ? "" : !rec.fsr4.dx12 ? "FSR 4.1.1 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.1 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
+  const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.1 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.1 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.1 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
   const upscalers = UPSCALERS.filter((u) => u.data === "xess" || (fsr4Ok && u.data.startsWith("fsr4")));
   const optiVer = gs?.opti_version ?? null;
   const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);
@@ -139,7 +139,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <DropdownItem label="Upscaler (runs on the XMX cores)" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
             onChange={(o) => setPickUp(String(o.data))}
-            description={explain(`XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.${fsr4Why ? ` ${fsr4Why}` : ""}`)} />
+            description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
+              : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} />
           <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
             selectedOption={wantFg} onChange={(o) => setPickFg(Number(o.data))}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
