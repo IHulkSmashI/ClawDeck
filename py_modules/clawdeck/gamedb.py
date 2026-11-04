@@ -79,16 +79,20 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     g = match(doc, exes)
     re_engine = is_re_engine(doc, exes)
     ini = dict((g or {}).get("ini") or {})
-    ini.update(((g or {}).get("when") or {}).get("xefg") or {})          # the recommended setup uses XeSS-FG
+    ini.update(((g or {}).get("when") or {}).get("xefg") or {})          # frame generation goes out through XeSS-FG
     later = sorted(((g or {}).get("later") or {}).keys())
     xess = _has(game_dir, ("libxess*",))
+    # where OptiScaler's frame generation comes from: the game's own DLSS FG, its FSR FG, else off (the user can pick
+    # "any game" in Per-game; it can glitch the HUD, so it isn't the default)
+    ofg = ("dlssg" if _has(game_dir, ("nvngx_dlssg.dll", "sl.dlss_g.dll")) else
+           "fsrfg" if _has(game_dir, ("amd_fidelityfx_framegeneration_dx12.dll", "ffx_frameinterpolation_x64.dll")) else "off")
     fsr31 = _has(game_dir, ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll"))
     if xess and not re_engine:
         route, launch, opti = "own_xess", {}, False
         why = "This game ships XeSS: use XeSS in its graphics menu; it runs on the XMX cores by itself."
     elif re_engine:
         route, opti = "re_engine", True
-        launch = {"opti": "xess", "opti_xefg": True, "opti_ini": ini, "reframework": True}
+        launch = {"opti": "xess", "opti_fg": ofg, "opti_ini": ini, "reframework": True}
         why = ("Capcom RE Engine: OptiScaler (XeSS + XeSS frame generation) with REFramework, which keeps Capcom's "
                "anti-tamper from stopping the game. Pick DLSS in the game's menu.")
     elif fsr31:
@@ -96,7 +100,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         why = "This game ships FSR 3.1: xess-xmx-linux turns it into XeSS on XMX. Pick FSR in the game's menu."
     else:
         route, opti = "optiscaler", True
-        launch = {"opti": "xess", "opti_xefg": True, "opti_ini": ini}
+        launch = {"opti": "xess", "opti_fg": ofg, "opti_ini": ini}
         why = "OptiScaler turns the game's DLSS (or FSR 2) into XeSS on XMX, with XeSS frame generation. Pick DLSS in the game's menu."
     reasons = [why]
     if g and opti and (ini or later):
@@ -107,8 +111,9 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     if (g or {}).get("quirks") and opti:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
     return {
-        "route": route, "known": bool(g), "id": (g or {}).get("id"), "name": (g or {}).get("name"),
+        "route": route, "known": bool(g), "frame_gen": ofg if opti else None, "id": (g or {}).get("id"), "name": (g or {}).get("name"),
         "re_engine": re_engine, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
         "launch": launch, "reasons": reasons, "ini_version": doc.get("ini_version"),
         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
+        "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],
     }

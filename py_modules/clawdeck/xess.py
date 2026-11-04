@@ -237,6 +237,29 @@ def steam_install_dir(home: str, appid: str) -> str | None:
     return None
 
 
+TOOLS = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common Redistributables|SteamVR)", re.I)
+
+
+def installed_games(home: str) -> list[dict]:
+    """Every installed Steam game: appid, name, install folder (Proton, runtimes and redistributables left out).
+    Read from Steam's appmanifest files, the same records Steam uses."""
+    libs = [os.path.join(home, STEAM)]
+    for m in re.finditer(r'"path"\s+"([^"]+)"', sysfs.read(os.path.join(home, STEAM, "steamapps", "libraryfolders.vdf")) or ""):
+        libs.append(m.group(1).replace("\\\\", "/"))
+    out, seen = [], set()
+    for lib in dict.fromkeys(os.path.realpath(x) for x in libs):
+        for acf in glob.glob(os.path.join(lib, "steamapps", "appmanifest_*.acf")):
+            t = sysfs.read(acf) or ""
+            a, n, d = (re.search(rf'"{k}"\s+"([^"]*)"', t) for k in ("appid", "name", "installdir"))
+            if not (a and n and d) or a.group(1) in seen or TOOLS.match(n.group(1)):
+                continue
+            folder = os.path.join(lib, "steamapps", "common", d.group(1))
+            if os.path.isdir(folder):
+                seen.add(a.group(1))
+                out.append({"appid": a.group(1), "name": n.group(1), "dir": folder})
+    return sorted(out, key=lambda g: g["name"].lower())
+
+
 def optiscaler_in(home: str, appid: str) -> dict:
     """Is OptiScaler (Bazzite's Decky Framegen, or by hand) in this game? Read-only: ClawDeck never puts it there.
     Its bundled XeSS libraries run on XMX through the same shim as a game's own."""
