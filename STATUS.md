@@ -60,6 +60,11 @@ The four-panel UI has not been on the device yet.
   menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
   `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
   removes exactly those files. CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
+- **REFramework pinned (nightly 01433, sha256 b3ff4f49…):** installed with OptiScaler in RE Engine games without a
+  question now. Onimusha: the game starts, REFramework loads, DLSS → XeSS on XMX.
+- **FSR 4.1.2 picks index 6:** OptiScaler lists AMD's 4.0.2 first with the B Boost files; ClawDeck now writes
+  UpscalerIndex 6 (4.1.2). In CONTROL 4.1.2 drew a black picture in gameplay (upscaler time 0.00 ms): see the
+  OptiScaler log before offering it by default.
 - **FSR 4.1.1 on XMX (nitec's B Boost), regular and Lite:** with the files in `~/fsr4-xmx`, Per-game → OptiScaler
   upscaler "FSR 4.1.1 on XMX" in a DLSS game through fgmod: the game folder gets the B Boost
   `amd_fidelityfx_upscaler_dx12.dll` after fgmod's copy, `fsr-original.dll`, `cabinet.dll` (LZMS) and
