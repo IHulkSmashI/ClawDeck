@@ -1,12 +1,12 @@
 import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
-import { toaster } from "@decky/api";
+import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
 import { collectLogs, getHardware, optiscalerState, selfTest, setXmxEveryGame, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
-const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+const toast = (body: string) => notify(body);
 
 /** The XeSS XMX driver and Decky Framegen installs, the self-test and the log export. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
