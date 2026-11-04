@@ -66,11 +66,11 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <ToggleField label="VRR only in games" checked={menusFixedOn}
             onChange={async (v) => { setMenusFixed(v); await setSetting("vrr_menus_fixed", v); await (window as any).__clawdeckVrrScopeSync?.();
               toast(v ? "VRR follows the game; Steam's menus stay at 120 Hz" : "Steam's own VRR switch is in charge again"); }}
-            description={explain("On the Claw's screen: games get 30–120 Hz VRR, Steam's menus and library a fixed 120 Hz, as on Windows. Without it the menus follow a slow game's frame rate and look choppy. With a monitor or dock connected it stands aside: that display's VRR is whatever you set in Steam.",
+            description={explain("On the Claw's screen: Steam's menus and library run at a fixed 120 Hz, games with VRR as you set it in Steam (30–120 Hz), as on Windows. Without it the menus follow a slow frame rate and look choppy. In a game, Steam's VRR switch stays yours. With a monitor or dock connected it stands aside: that display's VRR is whatever you set in Steam.",
               undefined, "ClawDeck sets Steam's VRR switch for you while this is on (your saved Steam profiles don't change).")} />
           {menusFixedOn && vrrStatus && !vrrStatus.active && vrrStatus.game !== undefined && <Status ok={null} label="External display: Steam's VRR switch is in charge" />}
           {menusFixedOn && vrrStatus?.active && <Status ok={vrrStatus.error ? false : true}
-            label={vrrStatus.error ? "VRR switching failed" : vrrStatus.game !== "0" ? "In a game: VRR on" : "Steam's menus: VRR off (120 Hz)"}
+            label={vrrStatus.error ? "VRR switching failed" : vrrStatus.game !== "0" ? "In a game: Steam's VRR switch is yours" : "Steam's menus: VRR off (120 Hz)"}
             detail={vrrStatus.error ?? undefined} />}
         </PanelSectionRow>
       )}
@@ -87,11 +87,11 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {f?.overlay_power?.available && (
         <PanelSectionRow>
           <Status ok={f.overlay_power.on ? true : null}
-            label={f.overlay_power.on ? "Watts in the overlay: on" : "Watts in the overlay: off (shows 0.0 W)"}
+            label={f.overlay_power.on ? "Watts in the overlay: on (shows after a restart)" : "Watts in the overlay: off (shows 0.0 W)"}
             detail={f.overlay_power.battery_w != null ? `Battery now: ${f.overlay_power.battery_w} W (ClawDeck corrects the EX's 100x battery reading)` : undefined} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.overlay_power.on ? "overlay_power_off" : "overlay_power_on")}
             description={explain(f.overlay_power.on ? "Makes the chip's power counter root-only again, as Linux ships it."
-              : "Lets the performance overlay read the chip's power counter, so it shows real watts (CPU and graphics together). Linux makes it root-only by default; ClawDeck opens it at every start while this is on.",
+              : "Lets the performance overlay read the chip's power counter, so it shows real watts (CPU and graphics together). Linux makes it root-only by default; ClawDeck opens it at every boot while this is on. The overlay checks once per Game Mode session, so the watts appear after the next restart.",
               undefined, f.overlay_power.on ? undefined : "any program on the Claw can then read the power use, which in theory can leak a little about what other programs compute. Harmless for a gaming handheld; off by default.")}>
             {f.overlay_power.on ? "Hide watts again" : "Show watts in the overlay"}
           </ButtonItem>

@@ -664,3 +664,42 @@ def test_every_listed_setting_is_a_valid_launch_variable():
     doc = gamedb.load(os.path.join(os.path.dirname(__file__), "..", "assets", "games.json"))
     for g in doc["games"]:
         launchenv.compose({"opti": "xess", "opti_xefg": True, "opti_ini": {**g["ini"], **g["when"].get("xefg", {})}})
+
+
+def test_overlay_power_boot_rule(tmp_path):
+    from clawdeck import telemetry
+    p = tmp_path / "tmpfiles.d" / "x.conf"
+    assert telemetry.boot_rule(True, str(p)) is None
+    assert "z /sys/class/powercap/intel-rapl:0/energy_uj 0444 - - -" in p.read_text()
+    assert telemetry.boot_rule(False, str(p)) is None and not p.exists()
+
+
+def test_launch_wrapper_puts_fsr4_xmx_in_after_fgmod_and_takes_it_out_again(tmp_path):
+    import subprocess
+    from clawdeck import launchenv
+    game = tmp_path / "common" / "Game"
+    _w(game / "Game.exe", "x")
+    src = tmp_path / "fsr4-xmx"
+    for f, t in (("amd_fidelityfx_upscaler_dx12.dll", "bboost"), ("fsr-original.dll", "o"), ("cabinet.dll", "lzms")):
+        _w(src / f, t)
+    proton = tmp_path / "proton"
+    _w(proton / "files/lib/wine/x86_64-windows/cabinet.dll", "wine-cab")
+    fgmod = tmp_path / "fgmod" / "fgmod"                     # a stand-in: copies its own FSR 4, then runs "$@"
+    _w(fgmod, f'#!/bin/bash\necho fgmod-fsr4 > "{game}/amd_fidelityfx_upscaler_dx12.dll"\nexec "$@"\n')
+    os.chmod(fgmod, 0o755)
+    (tmp_path / "launch").mkdir()
+    env = launchenv.compose({"opti": "fsr4_xmx_lite"})
+    assert env["FSR4_XMX_LITE"] == "1" and env["WINEDLLOVERRIDES"] == "cabinet=n,b;" and env["CLAWDECK_XMX"] == "1"
+    (tmp_path / "launch" / "42.env").write_text(launchenv.render(env))
+    base = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "42",
+            "CLAWDECK_NO_MANGOHUD": "1", "CLAWDECK_FSR4_XMX_DIR": str(src), "STEAM_COMPAT_TOOL_PATHS": str(proton)}
+    wrapper = os.path.join(ROOT, "tools", "clawdeck-launch.sh")
+    out = subprocess.run(["bash", wrapper, str(fgmod), "bash", "-c", "env", "x", str(game / "Game.exe")],
+                         capture_output=True, text=True, env=base)
+    assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "bboost", out.stderr   # over fgmod's
+    assert (game / "cabinet_wine.dll").read_text().strip() == "wine-cab" and (game / "fsr-original.dll").exists()
+    assert "FSR4_XMX_LITE=1" in out.stdout and "CLAWDECK_STAGE" not in out.stdout
+    (tmp_path / "launch" / "42.env").write_text(launchenv.render(launchenv.compose({"opti": "xess"})))
+    subprocess.run(["bash", wrapper, str(fgmod), "bash", "-c", "true", "x", str(game / "Game.exe")], check=True, env=base)
+    assert not (game / "cabinet.dll").exists() and not (game / ".clawdeck-fsr4xmx").exists()
+    assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "fgmod-fsr4"

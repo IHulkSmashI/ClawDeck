@@ -52,6 +52,16 @@ The four-panel UI has not been on the device yet.
   menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
   `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
   removes exactly those files. CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
+- **FSR 4.1.1 on XMX (nitec's B Boost), regular and Lite:** with the files in `~/fsr4-xmx`, Per-game → OptiScaler
+  upscaler "FSR 4.1.1 on XMX" in a DLSS game through fgmod: the game folder gets the B Boost
+  `amd_fidelityfx_upscaler_dx12.dll` after fgmod's copy, `fsr-original.dll`, `cabinet.dll` (LZMS) and
+  `cabinet_wine.dll`, OptiScaler shows FSR 4 as the upscaler, the image is FSR 4. Lite vs regular: fps and image.
+  Switching back to XeSS removes ClawDeck's files at the next launch (`.clawdeck-fsr4xmx`).
+- **VRR in the menus (2026-11-04 report: menus still choppy, VRR couldn't be switched off):** the scope now decides
+  "in a game" from Decky's Router.MainRunningApp, switches VRR off only in the menus and leaves a game's VRR to
+  Steam's switch. Check ClawDeck's log (`ui: vrr: …` lines) while going menus → game → menus.
+- **Watts in the overlay:** after switching it on, restart once: `/etc/tmpfiles.d/clawdeck-overlay-power.conf`
+  opens the counters at boot, before mangoapp starts; the overlay (level 3+) shows CPU W.
 - **First-run fixes:** on a fresh install the face-button fix and the split-lock log fix apply by themselves once;
   removing one in Fixes keeps it removed after a restart.
 - **Before the next release, on the Claw (2026-11-04 build):** per-game XMX (Setup moves the session file aside; Game

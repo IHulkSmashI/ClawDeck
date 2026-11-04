@@ -90,7 +90,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     ...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} · ${wattsOf(p.id)} W` : p.short })),
     ...(profile === "custom" ? [{ data: "custom", label: `Custom · ${tdp} W` }] : [])],
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [table, lo, hi, profile === "custom", tdp]);
+  [table, lo, hi, profile === "custom", profile === "custom" ? tdp : null]);   // tdp only matters for Custom's label:
+  // rebuilding the options on every pick (the slider follows each profile) made a quick second pick show the first
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
