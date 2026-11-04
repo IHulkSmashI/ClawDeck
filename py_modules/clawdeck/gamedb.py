@@ -54,6 +54,19 @@ def is_re_engine(doc: dict, exes: list[str]) -> bool:
     return bool(set(exes) & {e.lower() for e in doc.get("re_engine_exes", [])})
 
 
+def _ours(folder: str) -> set[str]:
+    """Files ClawDeck's OptiScaler added to this folder (its manifest), which the game didn't ship: OptiScaler brings
+    libxess.dll and AMD's FSR DLLs, and counting them turned CONTROL into "ships XeSS" once set up (2026-11-04).
+    A file the game had and OptiScaler replaced (backed up) still counts as the game's."""
+    try:
+        with open(os.path.join(folder, ".clawdeck-optiscaler", "manifest.json"), "r", encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    backed = {str(x).lower() for x in m.get("backed") or []}
+    return {str(x).lower() for x in m.get("added") or [] if str(x).lower() not in backed and "/" not in str(x)}
+
+
 def _has(game_dir: str | None, names: tuple[str, ...]) -> bool:
     if not game_dir or not os.path.isdir(game_dir):
         return False
@@ -61,7 +74,7 @@ def _has(game_dir: str | None, names: tuple[str, ...]) -> bool:
     for r, d, f in os.walk(game_dir):
         if r.count(os.sep) - base >= DEPTH:
             d[:] = []
-        lo = {x.lower() for x in f}
+        lo = {x.lower() for x in f} - _ours(r)
         if any(n in lo or (n.endswith("*") and any(x.startswith(n[:-1]) for x in lo)) for n in names):
             return True
     return False
