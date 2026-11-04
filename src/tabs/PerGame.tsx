@@ -4,6 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { gameApplyRecommended, gameRecommend, gameSetOpti, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset, Recommendation } from "../api";
 import { confirmUntested } from "../components/confirm";
+import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
@@ -40,7 +41,7 @@ const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
  * through Bazzite's Decky Framegen with Intel presets. Every choice reaches the game through ClawDeck's launch wrapper
  * (an environment file per game), so the first change adds the wrapper to the game's launch options.
  */
-export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null }> = ({ quick, pick }) => {
+export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null; embedded?: boolean }> = ({ quick, pick, embedded }) => {
   useExplanations();
   const app = pick ?? runningApp();
   const [gs, setGs] = useState<GameStatus | null>(null);
@@ -119,7 +120,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   };
 
   return (
-    <PanelSection title={`Per-game: ${app.name}`}>
+    <PanelSection title={embedded ? undefined : `Per-game: ${app.name}`}>
       {rec && (
         <PanelSectionRow>
           <Status ok={rec.applied ? true : null}
@@ -162,15 +163,14 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             }}
             description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. Every choice runs on the XMX cores.",
               undefined, quick ? undefined : "FSR 4 on XMX: the files go into the game folder and come out again when you pick something else.")} />
-          <DropdownItem label="Frame generation (XeSS, on XMX)" layout="below" childrenContainerWidth="max" rgOptions={OPTI_FG_OPTIONS}
+          <DropdownItem label="Frame generation source (XeSS on XMX)" layout="below" childrenContainerWidth="max" rgOptions={OPTI_FG_OPTIONS}
             selectedOption={launch.opti_fg ?? (launch.opti_xefg ? "dlssg" : "off")}
             onChange={(o) => { const x = { opti_fg: o.data, opti_xefg: null } as any; ours ? setOpti(x) : save(x); }}
             description={explain("Where OptiScaler's generated frames come from; they always come out as XeSS frame generation on the XMX cores, with the multiplier above. Use the game's own frame generation when it has one (turn it on in the game's menu); \"Any game\" makes frames for games without it.",
               undefined, quick ? undefined : "frame generation adds a little input lag; low latency above keeps it down.")} />
         </PanelSectionRow>
       )}
-      {(ours || fgmodHere) && (
-        <PanelSectionRow>
+      {(ours || fgmodHere) && (quick ? <Advanced id="ingame" label="How to use it in the game">{<PanelSectionRow>
           <Field label="In the game" bottomSeparator="none" />
           <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
             <li>Restart the game if it was running when you changed something here.</li>
@@ -179,8 +179,16 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu (it shows the upscaler in use); press it again to close.</li>
             <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
           </ol>
-        </PanelSectionRow>
-      )}
+        </PanelSectionRow>}</Advanced> : <PanelSectionRow>
+          <Field label="In the game" bottomSeparator="none" />
+          <ol style={{ margin: "0 0 4px 18px", padding: 0, fontSize: 12, lineHeight: "18px", color: "#b8bcbf" }}>
+            <li>Restart the game if it was running when you changed something here.</li>
+            <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
+            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b>.</li>}
+            <li>Check it worked: press <b>Insert</b> for OptiScaler's menu (it shows the upscaler in use); press it again to close.</li>
+            <li>No keyboard? Steam button → Controller settings → Edit layout → pick a back button (M1 or M2) → Keyboard → <b>Insert</b>. Bind it in this game's layout only.</li>
+          </ol>
+        </PanelSectionRow>)}
       {gs?.drive?.slow && (
         <PanelSectionRow>
           <Status ok={false} label={`Installed on ${gs.drive.kind}${gs.drive.sd ? " (SD card)" : ""}: expect slower loads and pop-in`}
@@ -203,7 +211,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       </PanelSectionRow>
 
       <PanelSectionRow>
-        <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" disabled={!installed} rgOptions={FG_OPTIONS.filter((o) => newPkg || o.data <= 4)}
+        <DropdownItem label="Frame generation: frames per rendered one" layout="below" childrenContainerWidth="max" disabled={!installed} rgOptions={FG_OPTIONS.filter((o) => newPkg || o.data <= 4)}
           selectedOption={launch.fg ?? 0} onChange={(o) => save({ fg: o.data || null } as any)}
           description={explain("How many frames XeSS frame generation shows per rendered one, whatever the game's menu offers (Cyberpunk 2077 offers only 2x). Frame generation itself stays on or off in the game.",
             quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "5x and up are beyond what Intel supports; 7x and 8x add noticeable lag.")} />
