@@ -60,6 +60,11 @@ The four-panel UI has not been on the device yet.
   menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
   `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
   removes exactly those files. CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
+- **Fan presets (Power → Fan, msi-wmi-platform hwmon):** Quiet / Cooling / Full speed / Custom each change the fans'
+  rpm audibly (Quiet: off at idle), the "Fans now" line follows; Automatic puts MSI's own control back
+  (pwm1/pwm2_enable read 2 again). The choice survives closing a game, a restart and sleep.
+- **Charge limit (Power → Battery):** at 80 % the battery stops charging at 80 % on the charger
+  (`charge_control_end_threshold` reads 80); Off writes back the value it had (0 = no limit). Survives a restart.
 - **REFramework pinned (nightly 01433, sha256 b3ff4f49…):** installed with OptiScaler in RE Engine games without a
   question now. Onimusha: the game starts, REFramework loads, DLSS → XeSS on XMX.
 - **FSR 4.1.2 picks index 6:** OptiScaler lists AMD's 4.0.2 first with the B Boost files; ClawDeck now writes
