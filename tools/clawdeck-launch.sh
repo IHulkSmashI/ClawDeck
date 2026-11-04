@@ -9,6 +9,48 @@
 # Chains with other wrappers: "clawdeck-launch.sh ~/fgmod/fgmod %command%" exports first, then runs fgmod.
 # Env: CLAWDECK_NO_MANGOHUD=1 skips the overlay/log; CLAWDECK_RUNTIME overrides the runtime folder.
 set -u
+# ---- second stage: Decky Framegen's fgmod has copied OptiScaler and its FSR 4 into the game, then started us -----
+# FSR 4.1.1 on XMX (Per-game: OptiScaler upscaler "FSR 4 XMX"): nitec's files from ~/fsr4-xmx go over fgmod's FSR 4,
+# with Wine's own cabinet.dll as cabinet_wine.dll next to the LZMS one. What ClawDeck added is listed in
+# .clawdeck-fsr4xmx so the next launch without FSR 4 XMX removes it again (fgmod puts its own FSR 4 back every launch).
+if [ "${CLAWDECK_STAGE:-}" = post ]; then
+  unset CLAWDECK_STAGE
+  dir=""
+  for a in "$@"; do case "$a" in *.exe|*.EXE) dir=$(dirname "$a"); break;; esac; done
+  [ -z "$dir" ] && dir="${STEAM_COMPAT_INSTALL_PATH:-}"
+  if [ -n "$dir" ] && [ -d "$dir" ]; then
+    ue=$(find "$dir" -maxdepth 4 \( -iname '*-Win64-Shipping.exe' -o -iname '*-WinGDK-Shipping.exe' \) 2>/dev/null | head -1)
+    [ -n "$ue" ] && dir=$(dirname "$ue")
+    list="$dir/.clawdeck-fsr4xmx"
+    if [ -f "$list" ] && [ -z "${CLAWDECK_FSR4_XMX:-}" ]; then
+      while read -r f; do [ -n "$f" ] && rm -f "$dir/$f"; done < "$list"
+      rm -f "$list"
+      echo "clawdeck: FSR 4 XMX files removed from $dir" >&2
+    fi
+    src="${CLAWDECK_FSR4_XMX_DIR:-$HOME/fsr4-xmx}"
+    if [ -n "${CLAWDECK_FSR4_XMX:-}" ]; then
+      if [ -f "$src/amd_fidelityfx_upscaler_dx12.dll" ] && [ -f "$src/fsr-original.dll" ] && [ -f "$src/cabinet.dll" ]; then
+        : > "$list"
+        cp -f "$src/amd_fidelityfx_upscaler_dx12.dll" "$dir/"     # fgmod's own FSR 4 is put back by fgmod each launch
+        for f in fsr-original.dll cabinet.dll; do cp -f "$src/$f" "$dir/" && echo "$f" >> "$list"; done
+        wcab="$src/cabinet_wine.dll"
+        if [ ! -f "$wcab" ]; then                                 # Wine's own cabinet, from the Proton running this game
+          for p in ${STEAM_COMPAT_TOOL_PATHS//:/ }; do
+            [ -f "$p/files/lib/wine/x86_64-windows/cabinet.dll" ] && { wcab="$p/files/lib/wine/x86_64-windows/cabinet.dll"; break; }
+          done
+        fi
+        [ -f "$wcab" ] && cp -f "$wcab" "$dir/cabinet_wine.dll" && echo cabinet_wine.dll >> "$list"
+        ig=$(ls -d "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/igdext64.dll 2>/dev/null | tail -1)
+        [ -f "$src/igdext64.dll" ] && ig="$src/igdext64.dll"
+        if [ -n "$ig" ] && [ ! -f "$dir/igdext64.dll" ]; then cp -f "$ig" "$dir/" && echo igdext64.dll >> "$list"; fi
+        echo "clawdeck: FSR 4 XMX ($CLAWDECK_FSR4_XMX) into $dir" >&2
+      else
+        echo "clawdeck: FSR 4 XMX: $src needs amd_fidelityfx_upscaler_dx12.dll, fsr-original.dll and cabinet.dll; fgmod's FSR 4 stays" >&2
+      fi
+    fi
+  fi
+  exec "$@"
+fi
 RUNTIME="${CLAWDECK_RUNTIME:-$HOME/homebrew/data/ClawDeck}"
 LOGDIR="$RUNTIME/mangohud"
 mkdir -p "$LOGDIR" 2>/dev/null
@@ -35,5 +77,12 @@ if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && command -v mangohud >/dev/null 2>&1;
   # keep the user's own MANGOHUD_CONFIG keys if any were set; no_display keeps the overlay off unless they want it
   base="${MANGOHUD_CONFIG:-no_display}"
   export MANGOHUD_CONFIG="${base%,},output_folder=$LOGDIR,log_interval=1000,autostart_log=1,log_duration=0"
+fi
+# Decky Framegen's fgmod next: run it with ClawDeck's second stage in front of the game, so files ClawDeck adds
+# (FSR 4 XMX) go in after fgmod's own and anything left from an earlier launch is cleaned up
+if [ $# -ge 2 ] && [ "$(basename "$1")" = fgmod ]; then
+  fg="$1"; shift
+  export CLAWDECK_STAGE=post
+  exec "$fg" "$0" "$@"
 fi
 exec "$@"

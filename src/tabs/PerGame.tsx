@@ -26,6 +26,8 @@ const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
   { data: "off", label: "Decky Framegen's setting" },
   { data: "xess", label: "XeSS on XMX (recommended)" },
   { data: "fsr4", label: "FSR 4 INT8 (experimental on Intel)" },
+  { data: "fsr4_xmx", label: "FSR 4.1.1 on XMX (nitec's build)" },
+  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 on XMX, Lite (faster)" },
 ];
 
 /**
@@ -191,8 +193,14 @@ export const PerGameTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {fgmodHere && (
         <PanelSectionRow>
           <DropdownItem label="OptiScaler upscaler" layout="below" childrenContainerWidth="max" rgOptions={OPTI_OPTIONS} selectedOption={launch.opti ?? "off"}
-            onChange={(o) => save({ opti: o.data === "off" ? null : o.data } as any)}
-            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4 INT8 looks good but costs more on Intel and is experimental: xess-xmx-linux stopped developing FSR 4 on XMX (no real gain, problems with multi-frame generation).")} />
+            onChange={(o) => {
+              if (String(o.data).startsWith("fsr4_xmx") && gs?.fsr4_xmx && !gs.fsr4_xmx.ready) {
+                toast(`FSR 4 on XMX: put nitec's files in ${gs.fsr4_xmx.dir} first (missing: ${gs.fsr4_xmx.missing.join(", ")})`); return;
+              }
+              save({ opti: o.data === "off" ? null : o.data } as any);
+            }}
+            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. FSR 4 INT8 is Decky Framegen's own, slower on Intel.",
+              undefined, quick ? undefined : "FSR 4 on XMX: ClawDeck copies the files in after Decky Framegen at each launch and takes them out again when you pick something else.")} />
           <ToggleField label="OptiScaler frame generation: XeSS" checked={!!launch.opti_xefg}
             description={explain("OptiScaler's frame generation output becomes XeSS frame generation, which runs on XMX and takes the multiplier above.",
               undefined, quick ? undefined : "if no frames are generated, open OptiScaler's menu in the game (Insert) and check the frame generation input.")}

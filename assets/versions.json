@@ -8,9 +8,9 @@
   },
   "decky_framegen": {
     "repo": "xXJSONDeruloXx/Decky-Framegen",
-    "tag": "pending-verification",
+    "tag": "v0.17",
     "asset_glob": "*.zip",
-    "note": "OptiScaler per game (Bazzite ships it in the Portal); ClawDeck installs it only where it is missing, and passes Intel presets to it through its environment variables"
+    "note": "v0.17 (OptiScaler 0.9.4, FSR 4 variants) installed and opened on the Claw 8 EX 2026-11-04. OptiScaler per game (Bazzite ships it in the Portal); ClawDeck installs it only where it is missing, and passes Intel presets to it through its environment variables"
   },
   "reframework": {
     "repo": "praydog/REFramework-nightly",

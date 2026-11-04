@@ -40,9 +40,34 @@ def status(root: str = POWERCAP) -> dict:
     return {"available": bool(files), "on": bool(files) and all(f["readable"] for f in files), "files": files}
 
 
+TMPFILES = "/etc/tmpfiles.d/clawdeck-overlay-power.conf"
+
+
+def boot_rule(on: bool, path: str = TMPFILES, root: str = POWERCAP) -> str | None:
+    """The performance overlay (mangoapp) checks the counter once, when Game Mode starts: opened later, it keeps
+    showing no watts until the next session. A systemd-tmpfiles rule opens the counters at boot, before Game Mode;
+    removing the file undoes it. Returns an error text or None."""
+    try:
+        if on:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("# ClawDeck: watts in the performance overlay (Fixes). Remove this file to undo.\n")
+                for d in DOMAINS:
+                    f.write(f"z {root}/{d}/energy_uj 0444 - - -\n")
+        elif os.path.exists(path):
+            os.remove(path)
+    except OSError as e:
+        return f"{path}: {e}"
+    return None
+
+
 def apply(on: bool, root: str = POWERCAP) -> dict:
     """Open (0444) or close (0400) the package energy counters. Returns what each one reads afterwards."""
     errors = []
+    if root == POWERCAP:
+        e = boot_rule(on)
+        if e:
+            errors.append(e)
     for p in counters(root):
         try:
             os.chmod(p, OPEN if on else CLOSED)
