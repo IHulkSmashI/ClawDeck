@@ -61,6 +61,11 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     elif x is False:
         env.update(xess.stock_env())
     fg = launch.get("fg") or 0
+    # automatic + something that runs through xess-xmx-linux's hook (an FSR game on XeSS, frame generation, the
+    # latest XeSS): that game needs the XMX driver even though it ships no XeSS of its own (CONTROL Resonant: FSR
+    # only). OptiScaler games are found by the scope itself (optiscaler.ini).
+    if per_game and x is None and (fg or (launch.get("fsr") or "off") != "off" or launch.get("xess_latest")):
+        env["CLAWDECK_XMX"] = "1"
     if not isinstance(fg, int) or isinstance(fg, bool) or not (fg == 0 or 2 <= fg <= 8):
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
     if fg:
