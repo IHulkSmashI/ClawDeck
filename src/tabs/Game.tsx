@@ -24,17 +24,19 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
     return (games ?? []).filter((g) => g.supported !== false)
       .map((g) => ({ data: g.appid, label: g.appid === running?.appid ? `${g.name} (running)` : g.name }));
   }, [games, running?.appid]);
-  const picked = options.find((o) => o.data === sel);
+  // the running game when it can be set up, else the last pick, else the first in the list
+  const cur = options.find((o) => o.data === sel)?.data ?? options[0]?.data ?? null;
+  const picked = options.find((o) => o.data === cur);
   const hidden = (games ?? []).filter((g) => g.supported === false);
   const runningUnsupported = !!running && hidden.some((g) => g.appid === running.appid);
-  const name = (games ?? []).find((g) => g.appid === sel)?.name ?? (running?.appid === sel ? running?.name : null) ?? "";
+  const name = (games ?? []).find((g) => g.appid === cur)?.name ?? "";
 
   return (
     <>
       <PanelSection title="Game">
         <PanelSectionRow>
           <DropdownItem layout="below" label={quick ? undefined : "Game"} menuLabel="Pick a game" strDefaultLabel={games === null ? "Reading your games…" : "Pick a game"}
-            disabled={!options.length} rgOptions={options} selectedOption={picked ? sel : null}
+            disabled={!options.length} rgOptions={options} selectedOption={cur}
             onChange={(o) => { lastPick = String(o.data); setSel(String(o.data)); }} />
         </PanelSectionRow>
         {runningUnsupported && (
@@ -43,11 +45,11 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
         {!quick && hidden.length > 0 && (
           <PanelSectionRow><Note>{hidden.length} installed game{hidden.length === 1 ? "" : "s"} without DLSS, FSR or XeSS not listed: {hidden.map((g) => g.name).join(", ")}.</Note></PanelSectionRow>
         )}
-        {!sel && games !== null && (
+        {!cur && games !== null && (
           <PanelSectionRow><Note>{options.length ? "Pick a game to set up XeSS, FSR 4 and frame generation on the XMX cores." : "No installed Steam games found."}</Note></PanelSectionRow>
         )}
       </PanelSection>
-      {sel && name && picked && <PerGameTab key={sel} quick={quick} embedded pick={{ appid: sel, name }} />}
+      {cur && name && picked && <PerGameTab key={cur} quick={quick} embedded pick={{ appid: cur, name }} />}
     </>
   );
 };

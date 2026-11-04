@@ -2,7 +2,7 @@ import { ButtonItem, DropdownItem, Field, PanelSection, PanelSectionRow, ToggleF
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { gameApplyRecommended, gameChoose, gameRecommend, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
+import { gameChoose, gameRecommend, gameStatus, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
@@ -18,16 +18,15 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
 const UPSCALERS = [
-  { data: "own", label: "The game's own (no OptiScaler)" },
-  { data: "xess", label: "XeSS 2 on XMX" },
-  { data: "fsr4_xmx", label: "FSR 4.1.1 on XMX" },
-  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 Lite on XMX (faster)" },
+  { data: "xess", label: "XeSS 2" },
+  { data: "fsr4_xmx", label: "FSR 4.1.1" },
+  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 Lite (faster)" },
 ];
 const FRAMEGENS = [
   { data: 0, label: "Off" },
-  { data: 2, label: "2x: XeSS frame generation on XMX" },
-  { data: 3, label: "3x: XeSS frame generation on XMX" },
-  { data: 4, label: "4x: XeSS frame generation on XMX" },
+  { data: 2, label: "2x" },
+  { data: 3, label: "3x" },
+  { data: 4, label: "4x" },
 ];
 
 /**
@@ -78,35 +77,22 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   };
   const [rec, setRec] = useState<Recommendation | null>(null);
   useEffect(() => { gameRecommend(app.appid).then(setRec).catch(() => setRec(null)); }, [app.appid, gs]);
-  const applyRec = async (allow = false) => {
-    if (!rec) return;
-    if (rec.optiscaler && fgmodHere) { toast("This game uses Decky Framegen's OptiScaler: tap \"Stop using Decky Framegen here\" below first"); return; }
-    toast(rec.optiscaler ? `${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…` : `${app.name}: saving…`);
-    const r = await gameApplyRecommended(app.appid, allow);
-    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => applyRec(true)); return; }
-    if (!r.ok) { setErr(r.error ?? "not applied"); toast(`Recommended setup: not applied (${r.error})`); return; }
-    let next = opts ?? "";
-    if (Object.keys(r.env ?? {}).length && !hasWrapper(next) && gs?.wrapper) next = withWrapper(next, gs.wrapper.replace(/ %command%$/, ""));
-    const ok = next === (opts ?? "") || setLaunchOptions(app.appid, next);
-    toast(ok ? `${app.name}: recommended setup saved. ${r.next ?? ""} Restart the game.` : "Saved, but Steam refused the launch options");
-    setErr(null); load();
-  };
-  const undoRec = async () => {
-    const r = await gameUndoRecommended(app.appid);
-    if (opts !== null && fgmodHere) setLaunchOptions(app.appid, withoutFgmod(opts));
-    toast(r.ok ? `${app.name}: back to how it was (ClawDeck's OptiScaler and REFramework taken out, the game's own files put back)` : `Not undone: ${r.error}`);
-    load();
-  };
+
+
   const ours = gs?.opti_owner === "clawdeck";
   // OptiClick's way: pick the upscaler and frame generation, then one Apply (or Update when a newer OptiScaler is
   // pinned): nothing is written while picking
-  const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own";
+  const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "xess";
   const nowFg = launch.fg ?? 0;
   const [pickUp, setPickUp] = useState<string | null>(null);
   const [pickFg, setPickFg] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? nowFg;
-  const changed = wantUp !== nowUp || wantFg !== nowFg;
+  const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
+  const changed = !ours || wantUp !== nowUp || wantFg !== nowFg;
+  // FSR 4.1.1 only where it can run, as OptiClick shows only what the game and the hardware support
+  const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files);
+  const fsr4Why = !rec?.fsr4 ? "" : !rec.fsr4.dx12 ? "FSR 4.1.1 isn't offered: this game isn't DirectX 12." : !rec.fsr4.files ? `FSR 4.1.1 appears once nitec's files are in ${rec.fsr4.dir}.` : "";
+  const upscalers = UPSCALERS.filter((u) => u.data === "xess" || (fsr4Ok && u.data.startsWith("fsr4")));
   const optiVer = gs?.opti_version ?? null;
   const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);
   const apply = async () => {
@@ -150,33 +136,21 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       </PanelSectionRow>
       {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
-          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={UPSCALERS}
+          <DropdownItem label="Upscaler (runs on the XMX cores)" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
             onChange={(o) => setPickUp(String(o.data))}
-            description={explain("What the game's upscaling runs as. XeSS 2 and FSR 4.1.1 run on the XMX cores through OptiScaler, which takes the game's DLSS or FSR (pick that in the game's menu). FSR 4.1.1 is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image; Lite is faster for a little less detail; it needs nitec's files in ~/fsr4-xmx. \"The game's own\" leaves the game alone (a game's own XeSS still runs on XMX).",
-              undefined, quick ? undefined : "OptiScaler's files go next to the game's exe, the game's own files are kept and come back when you pick \"The game's own\". The first time downloads OptiScaler (55 MB).")} />
+            description={explain(`XeSS 2: Intel's own, the fastest here. FSR 4.1.1: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.${fsr4Why ? ` ${fsr4Why}` : ""}`)} />
           <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
-            selectedOption={wantFg}
-            onChange={(o) => setPickFg(Number(o.data))}
-            description={explain("XeSS frame generation on the XMX cores: 2x shows one generated frame for every rendered one, 3x two, 4x three, with XeLL low latency always on. With OptiScaler it takes the game's own frame generation when the game has one (turn it on in the game's menu), otherwise OptiScaler makes the frames itself.",
+            selectedOption={wantFg} onChange={(o) => setPickFg(Number(o.data))}
+            description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
-          <ButtonItem layout="below" disabled={busy || (!changed && !(ours && outdated))} onClick={() => apply()}>
-            {busy ? "Working…" : !changed && ours && outdated ? `Update OptiScaler to ${optiVer}` : !changed ? (nowUp === "own" ? "Nothing to apply" : "Applied") : wantUp === "own" ? `Remove OptiScaler from ${app.name}` : `Apply to ${app.name}`}
+          <ButtonItem layout="below" disabled={busy || (ours && !changed && !outdated)} onClick={() => apply()}
+            description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
+            {busy ? "Working…" : !ours ? "Install OptiScaler in this game" : outdated && !changed ? `Update OptiScaler to ${optiVer}` : changed ? "Apply changes" : "Installed"}
           </ButtonItem>
-        </PanelSectionRow>
-      )}
-      {rec && (
-        <PanelSectionRow>
-          <Status ok={rec.applied ? true : null}
-            label={rec.applied ? "Recommended setup: in use" : rec.route === "own_xess" ? "Recommended: the game's own XeSS"
-              : rec.route === "re_engine" ? "Recommended: OptiScaler + REFramework (Capcom)" : rec.route === "fsr_on_xess" ? "Recommended: FSR on XeSS (XMX)"
-              : "Recommended: OptiScaler with XeSS on XMX"}
-            detail={explain(rec.reasons.join(" · ") + (rec.known ? "" : " (not in the per-game list: ClawDeck's Intel default)"))} />
-          {rec.route !== "own_xess" && (
-            <ButtonItem layout="below" onClick={() => (rec.applied ? undoRec() : applyRec(false))}
-              description={explain(rec.applied ? "Takes out what the recommended setup added (ClawDeck's OptiScaler, REFramework, the launch settings) and puts the game's own files back." : "One tap: the settings above, from OptiScaler's own per-game list and what was tested on the Claw.",
-                undefined, quick ? undefined : rec.optiscaler ? "OptiScaler's files go next to the game's exe (any file of the game they replace is kept and comes back with Undo); the first time downloads OptiScaler (55 MB). From the next launch." : "takes effect from the next launch.")}>
-              {rec.applied ? "Undo the recommended setup" : "Use the recommended setup"}
+          {ours && (
+            <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { await choose("own", 0); } finally { setBusy(false); } }}>
+              Uninstall OptiScaler from this game
             </ButtonItem>
           )}
         </PanelSectionRow>
