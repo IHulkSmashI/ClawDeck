@@ -35,6 +35,10 @@ const ago = (s: number | null | undefined) => (s == null ? "" : s < 90 ? `${s} s
 
 /** Writes that follow a slider or a quick flick through a list: wait for the last value, write once, and let only the
  *  newest answer through (an older one that arrives late is dropped), so the toast never shows a stale value. */
+// the last pick, outside the component: choosing in Steam's dropdown can re-mount Quick Access, and the new panel's
+// first read-back (before the write landed) showed the previous profile (Claw, 2026-11-04)
+let lastPick: { profile: string; tdp: number; at: number } | null = null;
+
 const useLatest = () => {
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const seq = useRef<Record<string, number>>({});
@@ -52,8 +56,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [at, setAt] = useState<AutotuneStatus | null>(null);
   const [autotune, setAutotune] = useState(false);
   const [atPlugged, setAtPlugged] = useState(false);
-  const [profile, setProfile] = useState("battery");
-  const [tdp, setTdpV] = useState(12);
+  const recent = lastPick && Date.now() - lastPick.at < 4000 ? lastPick : null;
+  const [profile, setProfile] = useState(recent?.profile ?? "battery");
+  const [tdp, setTdpV] = useState(recent?.tdp ?? 12);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
   const [line, setLine] = useState<string | null>(null);      // after the last change: "RAPL reads 17 W / 24 W"
   const [err, setErr] = useState<string | null>(null);        // the last write that didn't take, in red
@@ -76,6 +81,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     const name = last === "dock" ? "max" : (last || "battery");
     setSt(s); setAutotune(!!auto); setTable(tbl); setAt(a); setAtPlugged(!!atp);
     if (pending.current > 0) return;
+    if (lastPick && Date.now() - lastPick.at < 4000 && lastPick.profile !== name) {
+      setProfile(lastPick.profile); setTdpV(lastPick.tdp); return;     // the write is still on its way
+    }
     setProfile(name);
     const w = name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12);
     const l = s?.range?.min ?? s?.limits.min ?? 8, h = s?.range?.max ?? s?.limits.plugged_max ?? 35;
@@ -109,18 +117,21 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     refresh();
   };
   const writeSeq = useRef(0);
-  const write = (run: () => Promise<LimitResult>) => {
+  const write = (run: () => Promise<LimitResult>, ms = 300) => {
     const mine = ++writeSeq.current;
     pending.current = 1;                             // a debounced pick replaces the one before it: one pending at most
-    latest("limit", async () => { try { return await run(); } finally { if (mine === writeSeq.current) pending.current = 0; } }, onLimit);
+    latest("limit", async () => { try { return await run(); } finally { if (mine === writeSeq.current) pending.current = 0; } }, onLimit, ms);
   };
   const pick = (id: string) => {
     setProfile(id);
-    if (wattsOf(id)) setTdpV(wattsOf(id)!);          // the slider follows the profile at once
-    write(() => applyProfile(id, appid));
+    const w = wattsOf(id) ?? tdp;
+    setTdpV(w);                                      // the slider follows the profile at once
+    lastPick = { profile: id, tdp: w, at: Date.now() };
+    write(() => applyProfile(id, appid), 0);         // a pick is written at once; only the slider waits for the last value
   };
   const slide = (w: number) => {
     setTdpV(w); setProfile("custom");               // moving the slider = the Custom profile
+    lastPick = { profile: "custom", tdp: w, at: Date.now() };
     write(() => setTdp(w));
   };
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
