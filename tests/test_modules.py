@@ -1,5 +1,6 @@
 """Tests: HHD schema walking, the launch environment, xess state and install, downloads safety, power revert of HHD
 TDP, autotune pause, and the UI <-> backend wiring rule (every callable in src/api.ts exists in main.py)."""
+import json
 import os
 import re
 import sys
@@ -48,17 +49,28 @@ def _hardware(paths=None, product="MS-1T91"):
 
 # ---- launch environment -----------------------------------------------------------------------------------------------
 def test_launch_env_compose_and_write(tmp_path):
-    assert launchenv.compose({"xell": True}) == xess.XELL_ENV
     off = launchenv.compose({"xmx": False})
     assert off["VKD3D_DISABLE_EXTENSIONS"] == "" and "VK_DRIVER_FILES" in off      # the stock drivers for this game
-    assert launchenv.compose({"xmx": True, "xell": False}) == {}
+    assert launchenv.compose({"xmx": True, "low_latency": True, "fg": 0, "fsr": "off", "opti": "off"}) == {}
     assert launchenv.compose({}) == {}            # a game nobody touched: the session's driver, i.e. XMX on (the default)
-    r = launchenv.write(str(tmp_path), "1234", {"xell": True})
-    assert open(r["path"]).read().splitlines()[1] == "IGDEXT_TRACE=1"
-    assert launchenv.write(str(tmp_path), "1234", {"xell": False})["path"] is None
+    assert launchenv.compose({"xell": True}) == {}  # a 0.1 setting (XeLL driver mode) no longer does anything
+    # the package's own launch options (xess-xmx-linux docs/launch-options.md)
+    assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"XESS_FG": "4", "XESS": "latest", "IGDEXT_XELL_CAP": "off"}
+    assert launchenv.compose({"fsr": "xess"}) == {"FSR": "xess"}
+    assert launchenv.compose({"fsr": "fg"}) == {"FSR_FG": "xess"}
+    assert launchenv.compose({"fsr": "inject"}) == {"FSR": "xess", "FSR_FG": "inject"}
+    # Decky Framegen's fgmod writes these into the game's OptiScaler.ini
+    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
+    assert launchenv.compose({"opti": "fsr4"}) == {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"}
+    for bad in ({"fg": 1}, {"fg": 9}, {"fg": True}, {"fg": "4"}, {"fsr": "amd"}, {"opti": "dlss"}):
+        with pytest.raises(ValueError):
+            launchenv.compose(bad)
+    r = launchenv.write(str(tmp_path), "1234", {"fg": 3})
+    assert open(r["path"]).read().splitlines()[1] == "XESS_FG=3"
+    assert launchenv.write(str(tmp_path), "1234", {"fg": 0})["path"] is None
     assert not os.path.exists(os.path.join(tmp_path, "launch", "1234.env"))
     with pytest.raises(ValueError):
-        launchenv.write(str(tmp_path), "../x", {"xell": True})
+        launchenv.write(str(tmp_path), "../x", {"fg": 2})
 
 
 def test_launch_wrapper_reads_env_file(tmp_path):
@@ -73,8 +85,8 @@ def test_launch_wrapper_reads_env_file(tmp_path):
 
 def test_profiles_launch_slot(tmp_path):
     p = profiles.Profiles(str(tmp_path / "p.json"))
-    p.set_launch("7", {"xmx": False, "xell": True})
-    p.set_launch("7", {"xell": None})
+    p.set_launch("7", {"xmx": False, "fg": 3})
+    p.set_launch("7", {"fg": None})
     assert p.get_launch("7") == {"xmx": False}
     q = profiles.Profiles(str(tmp_path / "p.json"))
     assert q.get_launch("7") == {"xmx": False} and q.games() == ["7"]
@@ -270,23 +282,22 @@ def _xess_fetch(monkeypatch, home, fetched=None):
     monkeypatch.setattr(downloads, "fetch", fetch)
 
 
-def test_xess_install_falls_back_to_upstream_when_the_fork_has_no_release(tmp_path, monkeypatch):
+def test_xess_install_names_the_failing_step(tmp_path, monkeypatch):
     import urllib.error
     asked = []
-    _xess_release(monkeypatch, {"HHHHanasak1/xess-xmx-linux": "20261018"}, asked)
+    _xess_release(monkeypatch, {"HHHHanasak1/xess-xmx-linux": "20261104"}, asked)
     _xess_fetch(monkeypatch, tmp_path)
     _xess_runs(monkeypatch, str(tmp_path))
-    entry = {"repo": "HHHHanasak1/xess-xmx-linux", "fork": "IHulkSmashI/xess-xmx-linux", "use_fork": True, "tag": "pending-verification"}
-    r = xess.install(str(tmp_path), entry, allow_unpinned=True)
-    assert r["ok"] and asked == ["IHulkSmashI/xess-xmx-linux", "HHHHanasak1/xess-xmx-linux"]
-    assert "no release yet" in r["note"] and r["repo"] == "HHHHanasak1/xess-xmx-linux"
-    assert xess.source_of(r["package_dir"]) == {"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261018"}
-    # any other failure names the step and the real reason, never a bare "file not found"
+    entry = {"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261104"}
+    r = xess.install(str(tmp_path), entry)
+    assert r["ok"] and asked == ["HHHHanasak1/xess-xmx-linux"] and r["repo"] == "HHHHanasak1/xess-xmx-linux"
+    assert xess.source_of(r["package_dir"]) == {"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261104"}
+    # any failure names the step and the real reason, never a bare "file not found"
     monkeypatch.setattr(downloads, "fetch", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no asset matching x in y")))
     _w(tmp_path / xess.ENV_CONF, "")                                   # nothing installed: no up-to-date shortcut
-    assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: FileNotFoundError: no asset matching x in y"
+    assert xess.install(str(tmp_path), entry)["error"] == "download: FileNotFoundError: no asset matching x in y"
     monkeypatch.setattr(downloads, "release", lambda *a: (_ for _ in ()).throw(urllib.error.HTTPError("https://u", 403, "rate limited", {}, None)))
-    assert xess.install(str(tmp_path), entry, allow_unpinned=True)["error"] == "download: https://u answered 403 rate limited"
+    assert xess.install(str(tmp_path), entry)["error"] == "download: https://u answered 403 rate limited"
 
 
 def test_xess_install_reports_the_script_failure(tmp_path, monkeypatch):
@@ -337,22 +348,66 @@ def test_xess_session_check_without_a_package_or_script(tmp_path, monkeypatch):
     assert not r["ran"] and "session-check.sh" in r["error"]
 
 
-def test_xess_state_knows_a_fork_build_and_game_xell(tmp_path):
+def test_xess_state_and_game_low_latency(tmp_path):
     home = tmp_path
-    pkg = home / ".local/share/clawdeck/xess-xmx-linux-fork1"
-    _w(pkg / "lib/mesa-26.3.0-rc1/libvulkan_intel.so", "x"); _w(pkg / "lib/active", "26.3.0-rc1")
-    _w(pkg / "tools/xell-probe.sh", "")
-    _w(pkg / xess.SOURCE_FILE, '{"repo": "IHulkSmashI/xess-xmx-linux", "tag": "fork1"}')
+    pkg = home / ".local/share/clawdeck/xess-xmx-linux-20261104"
+    _w(pkg / "lib/mesa-26.3.0-rc3/libvulkan_intel.so", "x"); _w(pkg / "lib/active", "26.3.0-rc3")
+    _w(pkg / "docs/launch-options.md", "| `IGDEXT_XELL_CAP=off %command%` | turns the low latency off |")
+    _w(pkg / xess.SOURCE_FILE, '{"repo": "HHHHanasak1/xess-xmx-linux", "tag": "20261104"}')
     _w(home / ".config/environment.d/50-xess-xmx.conf", f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
     st = xess.state(str(home))
-    assert st["xell_capable"] and st["source"]["repo"].startswith("IHulkSmashI") and st["version"] == "fork1"
+    assert st["low_latency"] and st["version"] == "20261104" and st["drivers"] == ["26.3.0-rc3"]
+    old = home / "old/xess-xmx-linux-20261018"
+    _w(old / "docs/launch-options.md", "| `XESS_FG=3` |")
+    assert not xess.has_low_latency(str(old), old.name)
+    assert xess.has_low_latency(str(home / "none"), "xess-xmx-linux-20261110")   # no docs: by the date in the name
     pfx = home / xess.COMPATDATA / "42/pfx/drive_c"
-    assert xess.game_xell(str(home), "42", False)["mode"] == "off"
-    assert xess.game_xell(str(home), "42", True)["mode"] == "none"
-    _w(pfx / "igdext_xell.log", "xellSetSleepMode ctx=1 game: minimumIntervalUs=0 lowLatency=1 boost=0")
-    assert xess.game_xell(str(home), "42", True)["mode"] == "cross-vendor"
-    _w(pfx / "igdext_trace.log", "XELLPROBE LatencyReductionExt(version 1, enabled 1, timings 1, slots 8)\nXELLPROBE RenderSubmitStart(frame 3)")
-    assert xess.game_xell(str(home), "42", True)["mode"] == "driver"
+    assert xess.game_latency(str(home), "42", False)["mode"] == "off"
+    assert xess.game_latency(str(home), "42", True)["mode"] == "none"
+    _w(pfx / "igdext_xell.log", "low latency: on\nauto: frame generation off (none), not pacing\n")
+    assert xess.game_latency(str(home), "42", True)["mode"] == "no-fg"
+    _w(pfx / "igdext_xell.log", "low latency: on\nauto: frame generation on (xefg), pacing\n"
+       "auto: waited in 0 of 100 frames, 0.0 ms each (0.00 ms spun); last: 0.0 ms left, 2 in flight, frame 16.00 ms (uncapped 16.00), cpu 9.0 ms\n")
+    assert xess.game_latency(str(home), "42", True)["mode"] == "idle"
+    _w(pfx / "igdext_xell.log", "low latency: on\nauto: frame generation on (xefg), pacing\n"
+       "auto: waited in 87 of 100 frames, 6.4 ms each (0.12 ms spun); last: 5.0 ms left, 3 in flight, frame 27.00 ms (uncapped 27.00), cpu 4.0 ms\n")
+    lat = xess.game_latency(str(home), "42", True)
+    assert lat["mode"] == "pacing" and "87 of the last 100" in lat["detail"] and "6.4 ms" in lat["detail"]
+    _w(pfx / "igdext_xell.log", "low latency: off\n")
+    assert xess.game_latency(str(home), "42", True)["mode"] == "off"
+
+
+def test_framegen_detects_installs_and_never_overwrites(tmp_path, monkeypatch):
+    from clawdeck import framegen
+    home = tmp_path
+    assert framegen.state(str(home)) == {"installed": False, "dir": None, "version": None, "fgmod_ready": False, "fgmod": None, "optiscaler": None}
+    plugins = home / framegen.PLUGINS
+    plugins.mkdir(parents=True)
+    # install from the release zip: the folder carrying its plugin.json goes into Decky's plugins, Decky restarts
+    def fetch(entry, workdir, allow_unpinned=False, rel=None):
+        d = os.path.join(workdir, "unpacked")
+        _w(os.path.join(d, "Decky Framegen", "plugin.json"), json.dumps({"name": "Decky-Framegen"}))
+        _w(os.path.join(d, "Decky Framegen", "package.json"), json.dumps({"version": "0.17"}))
+        return {"tag": "v0.17", "archive": os.path.join(workdir, "Decky Framegen.zip"), "dir": d, "repo": entry["repo"]}
+    monkeypatch.setattr(downloads, "fetch", fetch)
+    monkeypatch.setattr(framegen, "_restart_decky", lambda: True)
+    r = framegen.install(str(home), {"repo": "xXJSONDeruloXx/Decky-Framegen", "tag": "v0.17", "asset_glob": "*.zip"})
+    assert r["ok"], r
+    assert r["restarting"] and "Setup OptiScaler Mod" in r["next"]
+    st = framegen.state(str(home))
+    assert st["installed"] and st["version"] == "0.17" and not st["fgmod_ready"]
+    # an installed one is left alone
+    assert framegen.install(str(home), {"repo": "x/y", "tag": "1"})["already"]
+    # fgmod set up in Decky Framegen: ready, with the OptiScaler version from its manifest
+    _w(home / "fgmod/fgmod", "#!/bin/bash\n"); os.chmod(home / "fgmod/fgmod", 0o755)
+    _w(home / "fgmod/install-manifest.json", json.dumps({"optiscaler": {"version": "0.9.4-final.20260718"}}))
+    st = framegen.state(str(home))
+    assert st["fgmod_ready"] and st["optiscaler"] == "0.9.4-final.20260718"
+    assert framegen.uses_fgmod("clawdeck-launch.sh ~/fgmod/fgmod %command%") and not framegen.uses_fgmod("%command%")
+    # a folder of the same name that isn't Decky Framegen is never overwritten
+    other = tmp_path / "other"
+    (other / framegen.PLUGINS / "Decky-Framegen").mkdir(parents=True)
+    assert "not overwritten" in framegen.install(str(other), {"repo": "x/y", "tag": "1"})["error"]
 
 
 def test_health_summary_one_line():
@@ -366,13 +421,13 @@ def test_health_summary_one_line():
 def test_launch_wrapper_rotates_xell_logs_for_one_launch(tmp_path):
     import subprocess
     (tmp_path / "launch").mkdir()
-    (tmp_path / "launch" / "7.env").write_text("IGDEXT_XELL_PROBE=1\n")
+    (tmp_path / "launch" / "7.env").write_text("XESS_FG=3\n")
     pfx = tmp_path / "compat/pfx/drive_c"
-    _w(pfx / "igdext_trace.log", "old")
+    _w(pfx / "igdext_xell.log", "old")
     subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "true"], check=True,
                    env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "7",
                         "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"})
-    assert not (pfx / "igdext_trace.log").exists() and (pfx / "igdext_trace.log.prev").read_text().strip() == "old"
+    assert not (pfx / "igdext_xell.log").exists() and (pfx / "igdext_xell.log.prev").read_text().strip() == "old"
 
 
 def test_optiscaler_from_decky_framegen_is_seen_read_only(tmp_path):
@@ -390,7 +445,7 @@ def test_optiscaler_from_decky_framegen_is_seen_read_only(tmp_path):
     assert xess.optiscaler_in(str(home), "1")["present"] is False and xess.steam_install_dir(str(home), "../x") is None
 
 
-def test_launch_wrapper_asks_for_rendered_frame_timing_while_autotune_is_on(tmp_path):
+def test_launch_wrapper_asks_the_shim_for_its_xell_log(tmp_path):
     import subprocess
     pfx = tmp_path / "compat/pfx/drive_c"
     _w(pfx / "igdext_xell.log", "last launch")
@@ -398,7 +453,6 @@ def test_launch_wrapper_asks_for_rendered_frame_timing_while_autotune_is_on(tmp_
            "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"}
     run = lambda: subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], env=env,
                                  capture_output=True, text=True, check=True).stdout
-    assert "IGDEXT_XELL_LOG" not in run()                   # autotune off: the shim stays quiet
-    _w(tmp_path / "autotune.on", "1")
+    # always: autotune counts rendered frames from it, Per-game reads what the low latency did
     assert "IGDEXT_XELL_LOG=1" in run()
     assert not (pfx / "igdext_xell.log").exists() and (pfx / "igdext_xell.log.prev").exists()   # one launch per log

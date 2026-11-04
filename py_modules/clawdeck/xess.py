@@ -1,6 +1,5 @@
-"""XeSS driver: install, update and check xess-xmx-linux (github.com/HHHHanasak1/xess-xmx-linux; our fork
-IHulkSmashI/xess-xmx-linux carries the XeLL driver-mode work of PRs #23 and #24), which runs Intel XeSS super
-resolution and frame generation on the XMX cores under Proton.
+"""XeSS driver: install, update and check xess-xmx-linux (github.com/HHHHanasak1/xess-xmx-linux), which runs Intel
+XeSS super resolution and frame generation on the XMX cores under Proton.
 
 What the package does (its README): install.sh writes ~/.config/environment.d/50-xess-xmx.conf pointing
 VK_DRIVER_FILES at <package>/run/intel_icd.json, puts its igdext64.dll shim into every Proton and prefix, and
@@ -8,10 +7,12 @@ enables xess-xmx-check.service, which before each session writes ~/.cache/xess-x
 <driverInfo>" or "FAILED <date> <lib>: <reason>"). The package carries patched drivers for two Mesa versions in
 lib/mesa-<version>/; lib/active names the default.
 
-XeLL (Intel's latency reduction, used with XeSS frame generation) runs in its cross-vendor mode under stock Proton.
-The fork's shim offers XeLL its driver mode when IGDEXT_XELL_PROBE is set for the game; with IGDEXT_TRACE=1 and
-IGDEXT_XELL_LOG=1 it logs what XeLL did into the game's prefix (drive_c/igdext_trace.log, igdext_xell.log), which
-is how ClawDeck tells per game whether XeLL is in driver mode, in cross-vendor mode, or not used at all.
+Low latency with frame generation: from release 20261104 the package's shim times each frame so it reaches the GPU
+when the GPU gets free (on by default while XeSS frame generation runs; IGDEXT_XELL_CAP=off turns it off). With
+IGDEXT_XELL_LOG=1 (the launch wrapper sets it) the shim logs what it did into the game's prefix
+(drive_c/igdext_xell.log): "low latency: on", "auto: frame generation on", "auto: waited in N of 100 frames ...".
+game_latency() reads that per launch. The package's per-game switches (XESS_FG, FSR=xess, FSR_FG, XESS=latest) are
+environment variables its Proton hook reads, so they reach a game through ClawDeck's launch wrapper (launchenv.py).
 
 ClawDeck reads that state, downloads a release into ~/.local/share/clawdeck (the package must stay where it was
 unpacked) and runs its install.sh / uninstall.sh as the desktop user (never as root). Any XeSS library loaded in a
@@ -37,9 +38,8 @@ INSTALL_ROOT = ".local/share/clawdeck"
 SOURCE_FILE = ".clawdeck-source.json"      # written next to install.sh: which repo and tag this package came from
 COMPATDATA = ".local/share/Steam/steamapps/compatdata"
 STOCK_ICD_DIRS = ("/usr/share/vulkan/icd.d", "/usr/local/share/vulkan/icd.d", "/etc/vulkan/icd.d")
-# the environment the launch wrapper exports when XeLL driver mode is on for a game (fork shim; the stock shim
-# ignores the variables, so a game then runs exactly as before)
-XELL_ENV = {"IGDEXT_XELL_PROBE": "1", "IGDEXT_XELL_LOG": "1", "IGDEXT_TRACE": "1"}
+# the first release whose shim has the low latency with frame generation and the FSR-on-XeSS route
+LOW_LATENCY_SINCE = "20261104"
 
 
 def package_dir(home: str) -> str | None:
@@ -106,24 +106,24 @@ def state(home: str) -> dict:
         "drivers": drivers,
         "default_driver": active,
         "status": st,
-        # the fork's shim (XeLL driver mode) ships tools/xell-probe.sh; upstream's releases don't
-        "xell_capable": bool(pkg) and os.path.exists(os.path.join(pkg, "tools", "xell-probe.sh")),
+        # releases from 20261104 on: low latency with frame generation, FSR=xess, XESS_FG up to 8x
+        "low_latency": bool(pkg) and has_low_latency(pkg, name),
         "official_proton": official_proton(home),
     }
 
 
+def has_low_latency(pkg: str, name: str) -> bool:
+    """Does this package have the low latency with frame generation? Its launch-options doc names IGDEXT_XELL_CAP
+    from 20261104 on; a package without docs is judged by the date in its folder name."""
+    doc = sysfs.read(os.path.join(pkg, "docs", "launch-options.md"))
+    if doc is not None:
+        return "IGDEXT_XELL_CAP" in doc
+    m = re.search(r"(\d{8})", name)
+    return bool(m) and m.group(1) >= LOW_LATENCY_SINCE
+
+
 def _latest(entry: dict) -> tuple[str, dict, str | None]:
-    """(repo, release, note): the fork's release when versions.json says use_fork; when the fork has published none
-    (404), upstream's, with a note the UI shows. Any other failure is raised for install() to report."""
-    if entry.get("use_fork") and entry.get("fork"):
-        try:
-            return entry["fork"], downloads.release(entry["fork"], entry.get("tag")), None
-        except urllib.error.HTTPError as e:
-            if e.code != 404:
-                raise
-            note = f"{entry['fork']} has no release yet; installed {entry['repo']}'s instead (no XeLL driver mode)"
-            log.warning(note)
-            return entry["repo"], downloads.release(entry["repo"], entry.get("tag")), note
+    """(repo, release, note) for the pinned tag (or the latest, when the user allowed an untested one)."""
     return entry["repo"], downloads.release(entry["repo"], entry.get("tag")), None
 
 
@@ -159,7 +159,7 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
             chk = session_check(home, pkg_now)
             return {"ok": True, "up_to_date": True, "tag": tag, "repo": repo, "package_dir": pkg_now, "note": note,
                     "check": chk, "next": None, "summary": f"XeSS XMX {tag} is up to date"}
-        got = downloads.fetch({**entry, "repo": repo, "use_fork": False}, root, allow_unpinned, rel=rel)
+        got = downloads.fetch({**entry, "repo": repo}, root, allow_unpinned, rel=rel)
     except PermissionError as e:
         return {"ok": False, "error": str(e)}
     except urllib.error.HTTPError as e:
@@ -247,19 +247,22 @@ def prefix_dir(home: str, appid: str) -> str:
     return os.path.join(home, COMPATDATA, str(appid), "pfx", "drive_c")
 
 
-def game_xell(home: str, appid: str, xell_on: bool) -> dict:
-    """What XeLL did in this game's last launch, from the shim's logs in the prefix (the launch wrapper rotates them
-    at each start, so they describe one launch). mode: driver | cross-vendor | none | off."""
-    pfx = prefix_dir(home, appid)
-    trace = sysfs.read(os.path.join(pfx, "igdext_trace.log")) or ""
-    xlog = sysfs.read(os.path.join(pfx, "igdext_xell.log")) or ""
-    shim = "XELLPROBE" in trace or "device info" in trace or bool(xlog)
-    if "LatencyReductionExt(" in trace or "GetRenderSubmitTimingsBuffers" in trace or "RenderSubmitStart(" in trace:
-        return {"mode": "driver", "shim": True, "detail": "XeLL driver mode active: the game paces frames with GPU timings from the shim"}
-    if "xellSetSleepMode" in xlog or "LatencyReduction" in trace:
-        return {"mode": "cross-vendor", "shim": shim,
-                "detail": "XeLL is used, in its built-in cross-vendor mode" + ("" if xell_on else " (turn XeLL driver mode on for this game)")}
-    if not xell_on:
-        return {"mode": "off", "shim": shim, "detail": "XeLL driver mode is off for this game"}
-    return {"mode": "none", "shim": shim,
-            "detail": "no XeLL activity logged yet: the game needs XeSS frame generation on, and the shim loaded (restart the game once after installing)"}
+def game_latency(home: str, appid: str, low_latency_on: bool) -> dict:
+    """What the shim's low latency did in this game's last launch, from drive_c/igdext_xell.log (the launch wrapper
+    rotates it at each start, so it describes one launch). mode: pacing | idle | no-fg | off | none."""
+    xlog = sysfs.read(os.path.join(prefix_dir(home, appid), "igdext_xell.log")) or ""
+    if not low_latency_on:
+        return {"mode": "off", "detail": "Turned off for this game: frames may queue in front of the GPU (more input lag)"}
+    if not xlog:
+        return {"mode": "none", "detail": "Nothing logged yet: start the game through ClawDeck (launch options) and turn on XeSS frame generation in it"}
+    state = re.findall(r"low latency: ([^\r\n]+)", xlog)
+    if state and not state[-1].startswith("on"):
+        return {"mode": "off", "detail": f"The shim reports low latency {state[-1]}"}
+    fg = re.findall(r"auto: frame generation (on|off)", xlog)
+    if not fg or fg[-1] == "off":
+        return {"mode": "no-fg", "detail": "Frame generation is off in this game, so there is nothing to pace (low latency works only with XeSS frame generation)"}
+    waits = re.findall(r"auto: waited in (\d+) of 100 frames, ([\d.]+) ms each", xlog)
+    if waits and int(waits[-1][0]) > 0:
+        n, ms = waits[-1]
+        return {"mode": "pacing", "detail": f"Holding frames back so they don't queue: waited in {n} of the last 100 frames, {ms} ms each"}
+    return {"mode": "idle", "detail": "On, and nothing to do: this game doesn't queue frames, so there is no lag to remove"}

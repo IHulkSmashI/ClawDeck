@@ -1,11 +1,15 @@
 {
-  "_comment": "xess_xmx_linux is pinned on purpose (a system driver: tested version first; 'pending-verification' asks before installing the latest). use_fork: the installer tries the fork's release first (XeLL driver mode, PRs #23/#24) and, while the fork has published none, falls back to upstream's and says so.",
+  "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and a Decky plugin (Decky Framegen) are installed only at a tested tag; 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
   "xess_xmx_linux": {
     "repo": "HHHHanasak1/xess-xmx-linux",
-    "fork": "IHulkSmashI/xess-xmx-linux",
-    "use_fork": true,
-    "tag": "pending-verification",
+    "tag": "20261104",
     "asset_glob": "xess-xmx-linux-*.zip",
-    "note": "the fork carries PRs #23/#24 (XeLL driver mode) but publishes no release yet: until it does, upstream's 20261018 is installed; switch back to upstream once HHHHanasak1 merges"
+    "note": "20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
+  },
+  "decky_framegen": {
+    "repo": "xXJSONDeruloXx/Decky-Framegen",
+    "tag": "pending-verification",
+    "asset_glob": "*.zip",
+    "note": "OptiScaler per game (Bazzite ships it in the Portal); ClawDeck installs it only where it is missing, and passes Intel presets to it through its environment variables"
   }
 }

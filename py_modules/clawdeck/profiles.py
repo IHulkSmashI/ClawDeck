@@ -69,7 +69,7 @@ class Profiles:
         return self.get(appid, plugged)
 
     def get_launch(self, appid: str | int) -> dict:
-        """Game-wide launch settings (XeSS XMX, XeLL): the same plugged in or on battery."""
+        """Game-wide launch settings (launchenv.py): the same plugged in or on battery."""
         return dict(self.data["games"].get(str(appid), {}).get("launch", {}))
 
     def set_launch(self, appid: str | int, values: dict) -> dict:

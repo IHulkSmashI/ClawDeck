@@ -50,6 +50,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [st, setSt] = useState<PowerStatus | null>(null);
   const [at, setAt] = useState<AutotuneStatus | null>(null);
   const [autotune, setAutotune] = useState(false);
+  const [atPlugged, setAtPlugged] = useState(false);
   const [profile, setProfile] = useState("battery");
   const [tdp, setTdpV] = useState(12);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
@@ -64,6 +65,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     const [s, auto, last, tbl, a] = await Promise.all([
       getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(),
     ]);
+    setAtPlugged(!!(await getSetting("autotune_plugged")));
     const name = last === "dock" ? "max" : (last || "battery");
     setSt(s); setAutotune(!!auto); setProfile(name); setTable(tbl); setAt(a);
     setTdpV(name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12));
@@ -142,7 +144,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       </PanelSectionRow>
       <PanelSectionRow>
         <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within ${st?.autotune_keep ?? 5} % of them. Counts rendered frames, not the ones frame generation adds.`,
+          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within ${st?.autotune_keep ?? 5} % of them. On battery only (Advanced turns it on plugged in). Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
       </PanelSectionRow>
@@ -199,6 +201,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
               onChange={(v) => latest("keep", () => setAutotuneKeep(v), (r) => { toast(r.summary); refresh(); })}
               description={explain("How many of the most frames the TDP gives Autotune may trade for power (5 % of 60 fps = 3 fps).",
                 quick ? undefined : "smaller keeps more frames; larger saves more battery.", undefined)} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField label="Autotune when plugged in" checked={atPlugged}
+              onChange={async (v) => { setAtPlugged(v); await setSetting("autotune_plugged", v); toast(v ? "Autotune also runs on the charger, from the next game" : "Autotune runs on battery only, from the next game"); }}
+              description={explain("Off by default: on the charger there's no battery to save, and a frame limit already lets the chip lower its own power.",
+                quick ? undefined : "a quieter, cooler Claw when docked.", "fewer frames than the plugged-in profile could give.")} />
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField label="Autotune floor (W)" value={st.autotune_floor ?? lo} min={lo} max={hi} step={1} showValue
