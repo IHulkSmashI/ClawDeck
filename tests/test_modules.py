@@ -796,3 +796,11 @@ def test_opti_ini_follows_the_frame_generation_multiplier():
     ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 3})
     assert ini["XeFG_InterpolationCount"] == "2" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
     assert "XeFG_InterpolationCount" not in launchenv.opti_ini({"opti": "xess", "opti_fg": "off", "fg": 3})
+
+
+def test_support_needs_an_upscaler_or_a_list_entry(tmp_path):
+    from clawdeck import gamedb
+    doc = gamedb.load(os.path.join(os.path.dirname(__file__), "..", "assets", "games.json"))
+    assert gamedb.support(doc, _game(tmp_path, "c", ["CONTROLResonant.exe", "nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"]))["via"][:2] == ["DLSS", "FSR"]
+    assert gamedb.support(doc, _game(tmp_path, "u", ["G/Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll", "G.exe"]))["ok"]
+    assert not gamedb.support(doc, _game(tmp_path, "b", ["Brotato.exe", "data.pck"]))["ok"]          # nothing to hook

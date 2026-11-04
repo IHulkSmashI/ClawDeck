@@ -17,13 +17,16 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
   const [sel, setSel] = useState<string | null>(running?.appid ?? lastPick);
   useEffect(() => { gamesList().then(setGames).catch(() => setGames([])); }, []);
   useEffect(() => { if (running?.appid && !lastPick) setSel(running.appid); }, [running?.appid]);
+  useEffect(() => { if (games && !sel) { const first = games.find((g) => g.supported !== false); if (first && !running) setSel(first.appid); } }, [games]);
 
   const options = useMemo(() => {
-    const list = (games ?? []).map((g) => ({ data: g.appid, label: g.appid === running?.appid ? `${g.name} (running)` : g.name }));
-    if (running && !list.some((o) => o.data === running.appid)) list.unshift({ data: running.appid, label: `${running.name} (running)` });
-    return list;
+    // only games ClawDeck can set up, as OptiClick lists only supported games: DLSS, FSR or XeSS inside, or in the list
+    return (games ?? []).filter((g) => g.supported !== false)
+      .map((g) => ({ data: g.appid, label: g.appid === running?.appid ? `${g.name} (running)` : g.name }));
   }, [games, running?.appid]);
   const picked = options.find((o) => o.data === sel);
+  const hidden = (games ?? []).filter((g) => g.supported === false);
+  const runningUnsupported = !!running && hidden.some((g) => g.appid === running.appid);
   const name = (games ?? []).find((g) => g.appid === sel)?.name ?? (running?.appid === sel ? running?.name : null) ?? "";
 
   return (
@@ -34,11 +37,17 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
             disabled={!options.length} rgOptions={options} selectedOption={picked ? sel : null}
             onChange={(o) => { lastPick = String(o.data); setSel(String(o.data)); }} />
         </PanelSectionRow>
+        {runningUnsupported && (
+          <PanelSectionRow><Note>{running!.name} has no DLSS, FSR or XeSS for OptiScaler to use, so there's nothing to set up for it (Power above still applies).</Note></PanelSectionRow>
+        )}
+        {!quick && hidden.length > 0 && (
+          <PanelSectionRow><Note>{hidden.length} installed game{hidden.length === 1 ? "" : "s"} without DLSS, FSR or XeSS not listed: {hidden.map((g) => g.name).join(", ")}.</Note></PanelSectionRow>
+        )}
         {!sel && games !== null && (
           <PanelSectionRow><Note>{options.length ? "Pick a game to set up XeSS, FSR 4 and frame generation on the XMX cores." : "No installed Steam games found."}</Note></PanelSectionRow>
         )}
       </PanelSection>
-      {sel && name && <PerGameTab key={sel} quick={quick} embedded pick={{ appid: sel, name }} />}
+      {sel && name && picked && <PerGameTab key={sel} quick={quick} embedded pick={{ appid: sel, name }} />}
     </>
   );
 };
