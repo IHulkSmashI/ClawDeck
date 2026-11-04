@@ -206,6 +206,7 @@ export const backend = {
   game_apply_recommended: () => ({ ok: true, next: "Pick DLSS in the game's menu.", env: { Dx12Upscaler: "xess" } }),
   game_undo_recommended: () => ({ ok: true }),
   game_set_opti: () => ({ ok: true }),
+  game_choose: () => ({ ok: true, env: { CLAWDECK_XMX: "1" } }),
   games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: null }, { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "launch" },
     { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler" }],
   optiscaler_state: () => ({ version: "0.9.4", installed: true, games: 1, framegen: true, framegen_version: "v0.17" }),

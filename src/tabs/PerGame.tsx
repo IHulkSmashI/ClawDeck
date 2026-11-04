@@ -2,7 +2,7 @@ import { ButtonItem, DropdownItem, Field, PanelSection, PanelSectionRow, ToggleF
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { gameApplyRecommended, gameRecommend, gameSetOpti, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, OptiPreset, Recommendation } from "../api";
+import { gameApplyRecommended, gameChoose, gameRecommend, gameStatus, gameUndoRecommended, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
@@ -11,29 +11,23 @@ import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, w
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
-const FG_OPTIONS = [
-  { data: 0, label: "Game's choice" },
-  { data: 2, label: "2x" }, { data: 3, label: "3x" }, { data: 4, label: "4x" },
-  { data: 5, label: "5x (experimental)" }, { data: 6, label: "6x (experimental)" },
-  { data: 7, label: "7x (experimental, more lag)" }, { data: 8, label: "8x (experimental, more lag)" },
-];
 const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "off", label: "Off (the game's own FSR)" },
   { data: "xess", label: "FSR on XeSS (upscaling + frame gen)" },
   { data: "fg", label: "FSR frame gen on XeSS only" },
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
-const OPTI_FG_OPTIONS: { data: string; label: string }[] = [
-  { data: "off", label: "Off" },
-  { data: "dlssg", label: "From the game's DLSS frame generation" },
-  { data: "fsrfg", label: "From the game's FSR frame generation" },
-  { data: "upscaler", label: "Any game (OptiScaler's own, may glitch the HUD)" },
+const UPSCALERS = [
+  { data: "own", label: "The game's own (no OptiScaler)" },
+  { data: "xess", label: "XeSS 2 on XMX" },
+  { data: "fsr4_xmx", label: "FSR 4.1.1 on XMX" },
+  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 Lite on XMX (faster)" },
 ];
-const OPTI_OPTIONS: { data: OptiPreset; label: string }[] = [
-  { data: "off", label: "Decky Framegen's setting" },
-  { data: "xess", label: "XeSS on XMX (recommended)" },
-  { data: "fsr4_xmx", label: "FSR 4.1.1 on XMX (nitec's build)" },
-  { data: "fsr4_xmx_lite", label: "FSR 4.1.1 on XMX, Lite (faster)" },
+const FRAMEGENS = [
+  { data: 0, label: "Off" },
+  { data: 2, label: "2x: XeSS frame generation on XMX" },
+  { data: 3, label: "3x: XeSS frame generation on XMX" },
+  { data: 4, label: "4x: XeSS frame generation on XMX" },
 ];
 
 /**
@@ -104,10 +98,16 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     load();
   };
   const ours = gs?.opti_owner === "clawdeck";
-  const setOpti = async (v: Partial<Launch>) => {
-    const r = await gameSetOpti(app.appid, v);
+  const choose = async (upscaler: string, fg: number, allow = false) => {
+    if (upscaler !== "own" && !ours) toast(`${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…`);
+    const r = await gameChoose(app.appid, upscaler, fg, allow);
+    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
-    toast(r.ok ? `${app.name}: OptiScaler updated, from the next launch` : `Not saved: ${r.error}`);
+    if (r.ok && Object.keys(r.env ?? {}).length && opts !== null && !hasWrapper(opts) && gs?.wrapper) {
+      setLaunchOptions(app.appid, withWrapper(opts, gs.wrapper.replace(/ %command%$/, "")));
+    }
+    const up = UPSCALERS.find((u) => u.data === upscaler)?.label ?? upscaler;
+    toast(r.ok ? `${app.name}: ${up}${fg ? `, frame generation ${fg}x` : ""}. ${upscaler === "own" ? "" : "In the game's menu pick DLSS (or FSR). "}From the next launch.` : `Not saved: ${r.error}`);
     load();
   };
   const setFgmod = (on: boolean) => {
@@ -151,23 +151,18 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           )}
         </PanelSectionRow>
       )}
-      {(ours || fgmodHere) && (
+      {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
-          <DropdownItem label="OptiScaler upscaler" layout="below" childrenContainerWidth="max" rgOptions={OPTI_OPTIONS.filter((o) => ours ? o.data !== "off" : true)} selectedOption={launch.opti ?? (ours ? "xess" : "off")}
-            onChange={(o) => {
-              if (String(o.data).startsWith("fsr4_xmx") && gs?.fsr4_xmx && !gs.fsr4_xmx.ready) {
-                toast(`FSR 4 on XMX: put nitec's files in ${gs.fsr4_xmx.dir} first (missing: ${gs.fsr4_xmx.missing.join(", ")})`); return;
-              }
-              const v = { opti: o.data === "off" ? null : o.data } as any;
-              ours ? setOpti(v) : save(v);
-            }}
-            description={explain("XeSS runs on the XMX cores and is the cheapest here (about 1.5 ms per frame on the B390). FSR 4.1.1 on XMX is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image of the FSR options; Lite trades a little image quality for speed. It needs nitec's files in ~/fsr4-xmx (from the OptiScaler Discord) and is experimental. Every choice runs on the XMX cores.",
-              undefined, quick ? undefined : "FSR 4 on XMX: the files go into the game folder and come out again when you pick something else.")} />
-          <DropdownItem label="Frame generation source (XeSS on XMX)" layout="below" childrenContainerWidth="max" rgOptions={OPTI_FG_OPTIONS}
-            selectedOption={launch.opti_fg ?? (launch.opti_xefg ? "dlssg" : "off")}
-            onChange={(o) => { const x = { opti_fg: o.data, opti_xefg: null } as any; ours ? setOpti(x) : save(x); }}
-            description={explain("Where OptiScaler's generated frames come from; they always come out as XeSS frame generation on the XMX cores, with the multiplier above. Use the game's own frame generation when it has one (turn it on in the game's menu); \"Any game\" makes frames for games without it.",
-              undefined, quick ? undefined : "frame generation adds a little input lag; low latency above keeps it down.")} />
+          <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={UPSCALERS}
+            selectedOption={ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own"}
+            onChange={(o) => choose(String(o.data), launch.fg ?? 0)}
+            description={explain("What the game's upscaling runs as. XeSS 2 and FSR 4.1.1 run on the XMX cores through OptiScaler, which takes the game's DLSS or FSR (pick that in the game's menu). FSR 4.1.1 is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image; Lite is faster for a little less detail; it needs nitec's files in ~/fsr4-xmx. \"The game's own\" leaves the game alone (a game's own XeSS still runs on XMX).",
+              undefined, quick ? undefined : "OptiScaler's files go next to the game's exe, the game's own files are kept and come back when you pick \"The game's own\". The first time downloads OptiScaler (55 MB).")} />
+          <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
+            selectedOption={launch.fg ?? 0}
+            onChange={(o) => choose(ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own", Number(o.data))}
+            description={explain("XeSS frame generation on the XMX cores: 2x shows one generated frame for every rendered one, 3x two, 4x three, with XeLL low latency always on. With OptiScaler it takes the game's own frame generation when the game has one (turn it on in the game's menu), otherwise OptiScaler makes the frames itself.",
+              quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
         </PanelSectionRow>
       )}
       {(ours || fgmodHere) && (quick ? <Advanced id="ingame" label="How to use it in the game">{<PanelSectionRow>
@@ -210,12 +205,6 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           detail={xmxOn && gs?.xess.status.state === "failed" ? gs.xess.status.line ?? undefined : undefined} />
       </PanelSectionRow>
 
-      <PanelSectionRow>
-        <DropdownItem label="Frame generation: frames per rendered one" layout="below" childrenContainerWidth="max" disabled={!installed} rgOptions={FG_OPTIONS.filter((o) => newPkg || o.data <= 4)}
-          selectedOption={launch.fg ?? 0} onChange={(o) => save({ fg: o.data || null } as any)}
-          description={explain("How many frames XeSS frame generation shows per rendered one, whatever the game's menu offers (Cyberpunk 2077 offers only 2x). Frame generation itself stays on or off in the game.",
-            quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "5x and up are beyond what Intel supports; 7x and 8x add noticeable lag.")} />
-      </PanelSectionRow>
 
       <PanelSectionRow>
         {!newPkg && <Status ok={false} label="Low latency (XeLL) needs XeSS XMX 20261104 or newer" detail="Setup → Update XeSS XMX." />}
@@ -230,7 +219,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             description={explain("Runs the game with Intel's current XeSS (SDK 3.0.2) instead of the older copy it ships; its files are swapped while it runs and put back when it exits.",
               "a game with XeSS older than 2.0.2.68 shows XeSS as DP4a or hides XeSS frame generation (Cyberpunk 2077).")}
             onChange={(v) => save({ xess_latest: v || null } as any)} />
-          <DropdownItem label="FSR games" layout="below" childrenContainerWidth="max" disabled={!installed || !newPkg} rgOptions={FSR_OPTIONS} selectedOption={launch.fsr ?? "off"}
+          <DropdownItem label="FSR games without OptiScaler (xess-xmx-linux's FSR route)" layout="below" childrenContainerWidth="max" disabled={!installed || !newPkg} rgOptions={FSR_OPTIONS} selectedOption={launch.fsr ?? "off"}
             onChange={(o) => save({ fsr: o.data === "off" ? null : o.data } as any)}
             description={explain(newPkg ? "For a game with FSR 3.1+ and no XeSS: its FSR runs on XeSS on the XMX cores, with multi-frame generation. Pick FSR in the game's menu as usual."
               : "Needs XeSS XMX 20261104 or newer: Setup → Update XeSS XMX.",
