@@ -263,6 +263,8 @@ def _xess_runs(monkeypatch, home, install_rc=0, check_line="ok 2026-10-22 12:00 
 
     def run(cmd, h, timeout=600, cwd=None, env=None):
         ran.append(os.path.basename(cmd[1]) + (" " + " ".join(cmd[2:]) if cmd[2:] else ""))
+        if cmd[0] == "systemctl":                 # clearing the session's variables (xmxscope.isolate_session)
+            return {"rc": 0, "out": ""}
         if cmd[1].endswith("session-check.sh"):
             _w(os.path.join(home, xess.STATUS), check_line)
             return {"rc": 0 if check_line.startswith("ok") else 1, "out": check_line}
@@ -322,7 +324,7 @@ def test_xess_install_runs_the_driver_check_so_setup_is_right_without_a_relogin(
     _w(tmp_path / xess.STATUS, "FAILED 2026-10-01 10:00 /old/libvulkan_intel.so: old driver")   # the last log-in's verdict
     ran = _xess_runs(monkeypatch, str(tmp_path))
     r = xess.install(str(tmp_path), {"repo": "a/b", "tag": "2"})
-    assert r["ok"] and ran == ["install.sh", "session-check.sh --dry-run"]
+    assert r["ok"] and ran == ["install.sh", "session-check.sh --dry-run", "--user unset-environment VK_DRIVER_FILES"]
     assert r["check"]["ok"] and xess.state(str(tmp_path))["status"]["state"] == "ok"   # read straight after
     # a driver that fails its check: installed, and the toast says why (the log-in unit switches drivers)
     _xess_release(monkeypatch, {"a/b": "3"})
@@ -599,3 +601,14 @@ def test_automatic_xmx_is_forced_for_hook_features():
     assert launchenv.compose({"fsr": "xess"})["CLAWDECK_XMX"] == "1"           # an FSR-only game on XeSS (CONTROL)
     assert launchenv.compose({"fg": 3})["CLAWDECK_XMX"] == "1"
     assert launchenv.compose({"xmx": False, "fsr": "xess"})["CLAWDECK_XMX"] == "0"   # an explicit off wins
+
+
+def test_ships_xess_matches_the_scope_script_depth(tmp_path):
+    from clawdeck import xmxscope
+    g = tmp_path / "game"
+    _w(g / "a" / "b" / "c" / "libxess.dll", "x")
+    assert xmxscope.ships_xess(str(g))
+    deep = tmp_path / "deep"
+    _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "libxess.dll", "x")   # deeper than the launch-time check looks
+    assert not xmxscope.ships_xess(str(deep))
+    assert not xmxscope.ships_xess(None)

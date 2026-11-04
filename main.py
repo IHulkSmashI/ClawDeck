@@ -118,6 +118,15 @@ class Plugin:
             os.chmod(WRAPPER, 0o755)
         except OSError as e:
             decky.logger.warning("could not leave the pass-through wrapper: %s", e)
+        # XeSS XMX back as xess-xmx-linux's installer left it (session-wide), the log and power counters as shipped
+        for what, undo in (("Proton per-game XMX files", lambda: xmxscope.remove_scope(HOME)),
+                           ("the session's XMX driver file", lambda: xmxscope.restore_session(HOME)),
+                           ("the split-lock log setting", quietlog.remove),
+                           ("the overlay's power counters", lambda: telemetry.apply(False))):
+            try:
+                decky.logger.info("uninstall: %s: %s", what, undo())
+            except Exception as e:
+                decky.logger.warning("uninstall: %s: %s", what, e)
 
     def _install_wrapper(self) -> None:
         try:
@@ -566,7 +575,8 @@ class Plugin:
             self._bg(xess.optiscaler_in, HOME, appid), self._bg(framegen.state, HOME))
         scope = await self._bg(xmxscope.state, HOME)
         d = op.get("dir")
-        auto = bool(op.get("present")) or bool(d and glob.glob(os.path.join(glob.escape(d), "**", "libxess*.dll"), recursive=True))
+        detected = await self._bg(xmxscope.ships_xess, d)
+        auto = detected or launchenv.compose({**launch, "xmx": None}).get("CLAWDECK_XMX") == "1"
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d)}
 

@@ -59,7 +59,7 @@ try:
         _found = False
         if _game and _o.path.isdir(_game):
             for _r, _d, _f in _o.walk(_game):
-                if _r.count(_o.sep) - _game.count(_o.sep) >= 5:
+                if _r.count(_o.sep) - _game.rstrip(_o.sep).count(_o.sep) >= %(depth)d:
                     _d[:] = []
                 _lo = [x.lower() for x in _f]
                 if any(x.startswith("libxess") and x.endswith(".dll") for x in _lo) or "optiscaler.ini" in _lo:
@@ -79,6 +79,24 @@ except Exception as _e:
     import sys as _s
     _s.stderr.write("clawdeck: xmx scope: %%s\\n" %% _e)
 '''
+
+
+DEPTH = 5
+
+
+def ships_xess(game_dir: str | None) -> bool:
+    """What the generated scope script checks at launch (keep the two the same): libxess*.dll or optiscaler.ini
+    within DEPTH folders of the game's install folder."""
+    if not game_dir or not os.path.isdir(game_dir):
+        return False
+    base = game_dir.rstrip(os.sep).count(os.sep)
+    for r, d, f in os.walk(game_dir):
+        if r.count(os.sep) - base >= DEPTH:
+            d[:] = []
+        lo = [x.lower() for x in f]
+        if any(x.startswith("libxess") and x.endswith(".dll") for x in lo) or "optiscaler.ini" in lo:
+            return True
+    return False
 
 
 def _parse_env(text: str) -> dict[str, str]:
@@ -117,9 +135,14 @@ def isolate_session(home: str) -> dict:
         userexec.write_new(out, "# the XeSS XMX driver's variables, from " + SESSION_CONF + " (ClawDeck applies them per game)\n"
                            + "".join(f"{k}={v}\n" for k, v in env.items()), 0o644)
         os.replace(conf, conf + PARKED_SUFFIX)
-        userexec.chown_tree(out, home)
+        userexec.chown_tree(os.path.join(home, ".local/share/clawdeck"), home)
     except OSError as e:
         return {"ok": False, "moved": False, "error": f"moving {conf}: {e}"}
+    # install.sh also sets these in the running session (systemctl --user set-environment): without this they reach
+    # every game, and gamescope after a Steam restart, until the next reboot
+    r = userexec.run(["systemctl", "--user", "unset-environment", *sorted(env)], home, timeout=20)
+    if r["rc"] != 0:
+        log.warning("XeSS XMX driver: could not clear the session's variables (%s); a reboot clears them", r["out"].strip())
     log.info("XeSS XMX driver: session-wide file moved to %s%s, %d variables per game", conf, PARKED_SUFFIX, len(env))
     return {"ok": True, "moved": True, "env": env}
 
@@ -138,14 +161,21 @@ def protons(home: str) -> list[str]:
 
 
 def install_scope(home: str) -> dict:
-    text = SCOPE_PY % {"prev": PREV_PY, "xmx_env": XMX_ENV}
+    text = SCOPE_PY % {"prev": PREV_PY, "xmx_env": XMX_ENV, "depth": DEPTH}
     done, errors = [], []
     for p in protons(home):
         u, prev = os.path.join(p, USER_PY), os.path.join(p, PREV_PY)
         try:
             cur = sysfs.read(u)
             if cur is not None and MARK not in cur:
-                os.replace(u, prev)           # the user's own Proton settings keep running, first
+                keep = prev
+                n = 1
+                while os.path.exists(keep):          # never overwrite settings kept earlier
+                    keep = f"{prev[:-3]}.{n}.py"
+                    n += 1
+                if keep != prev:                     # only prev is chained; an older one stays for the user to see
+                    log.warning("Proton settings: %s already kept; this one kept as %s", prev, keep)
+                os.replace(u, keep)          # the user's own Proton settings keep running, first
             if (sysfs.read(u) or "") != text:
                 userexec.write_new(u, text, 0o644)
                 userexec.chown_tree(u, home)
@@ -156,15 +186,18 @@ def install_scope(home: str) -> dict:
 
 
 def remove_scope(home: str) -> dict:
-    removed = []
+    removed, errors = [], []
     for p in protons(home):
         u, prev = os.path.join(p, USER_PY), os.path.join(p, PREV_PY)
-        if MARK in (sysfs.read(u) or ""):
-            os.remove(u)
-            if os.path.isfile(prev):
-                os.replace(prev, u)
-            removed.append(p)
-    return {"ok": True, "protons": removed}
+        try:
+            if MARK in (sysfs.read(u) or ""):
+                os.remove(u)
+                if os.path.isfile(prev):
+                    os.replace(prev, u)
+                removed.append(p)
+        except OSError as e:
+            errors.append(f"{p}: {e}")
+    return {"ok": not errors, "protons": removed, "error": "; ".join(errors) or None}
 
 
 def restore_session(home: str) -> dict:
