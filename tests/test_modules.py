@@ -59,10 +59,10 @@ def test_launch_env_compose_and_write(tmp_path):
     assert launchenv.compose({"xmx": True}, per_game=False) == {}
     assert launchenv.compose({"xell": True}) == {}  # a 0.1 setting (XeLL driver mode) no longer does anything
     # the package's own launch options (xess-xmx-linux docs/launch-options.md)
-    assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"XESS_FG": "4", "XESS": "latest", "IGDEXT_XELL_CAP": "off"}
-    assert launchenv.compose({"fsr": "xess"}) == {"FSR": "xess"}
-    assert launchenv.compose({"fsr": "fg"}) == {"FSR_FG": "xess"}
-    assert launchenv.compose({"fsr": "inject"}) == {"FSR": "xess", "FSR_FG": "inject"}
+    assert launchenv.compose({"fg": 4, "xess_latest": True, "low_latency": False}) == {"CLAWDECK_XMX": "1", "XESS_FG": "4", "XESS": "latest", "IGDEXT_XELL_CAP": "off"}
+    assert launchenv.compose({"fsr": "xess"}) == {"CLAWDECK_XMX": "1", "FSR": "xess"}
+    assert launchenv.compose({"fsr": "fg"}) == {"CLAWDECK_XMX": "1", "FSR_FG": "xess"}
+    assert launchenv.compose({"fsr": "inject"}) == {"CLAWDECK_XMX": "1", "FSR": "xess", "FSR_FG": "inject"}
     # Decky Framegen's fgmod writes these into the game's OptiScaler.ini
     assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
     assert launchenv.compose({"opti": "fsr4"}) == {"Dx12Upscaler": "fsr31", "FSR_Fsr4ForceEnableInt8": "true"}
@@ -70,7 +70,7 @@ def test_launch_env_compose_and_write(tmp_path):
         with pytest.raises(ValueError):
             launchenv.compose(bad)
     r = launchenv.write(str(tmp_path), "1234", {"fg": 3})
-    assert open(r["path"]).read().splitlines()[1] == "XESS_FG=3"
+    assert open(r["path"]).read().splitlines()[1:] == ["CLAWDECK_XMX=1", "XESS_FG=3"]
     assert launchenv.write(str(tmp_path), "1234", {"fg": 0})["path"] is None
     assert not os.path.exists(os.path.join(tmp_path, "launch", "1234.env"))
     with pytest.raises(ValueError):
@@ -591,3 +591,11 @@ def test_game_drive_flags_ntfs(tmp_path):
     assert storage.game_drive("/var/home/hulk/.local/share/Steam/steamapps/common/CONTROL Resonant", str(m))["slow"] is False
     assert storage.game_drive("/run/media/hulk/My Games/x", str(m))["fstype"] == "ext4"
     assert storage.game_drive(None, str(m)) is None
+
+
+def test_automatic_xmx_is_forced_for_hook_features():
+    from clawdeck import launchenv
+    assert "CLAWDECK_XMX" not in launchenv.compose({})                         # automatic: the scope decides
+    assert launchenv.compose({"fsr": "xess"})["CLAWDECK_XMX"] == "1"           # an FSR-only game on XeSS (CONTROL)
+    assert launchenv.compose({"fg": 3})["CLAWDECK_XMX"] == "1"
+    assert launchenv.compose({"xmx": False, "fsr": "xess"})["CLAWDECK_XMX"] == "0"   # an explicit off wins
