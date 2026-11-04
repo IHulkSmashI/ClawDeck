@@ -105,6 +105,20 @@ export const startVrrScope = (log: (m: string) => void = () => {}, standAside: (
     perf.UpdateSettings(b64(encodeVrrUpdate(profile, on)));
     writes++;
   };
+  // VRR switched back on while the game starts doesn't take: gamescope keeps the game's window on the fixed 120 Hz,
+  // so frames land on 30/60 (CONTROL, Claw 8 EX, 2026-11-04: locked 30/60 until Steam's VRR switch was flicked off
+  // and on, then 35/70 free). So once the game's window is up, flick it the same way: off, and on a moment later.
+  let rearms: ReturnType<typeof setTimeout>[] = [];
+  const rearm = (profile: bigint) => {
+    rearms.forEach(clearTimeout);
+    rearms = [8000, 25000].map((ms) => setTimeout(() => {
+      if (stopped || aside || !playing || orig.has(String(profile))) return;
+      try {
+        write(profile, false);
+        setTimeout(() => { try { write(profile, true); log(`VRR re-armed for the game (${ms / 1000} s in)`); } catch (e) { error = `Steam refused the VRR change: ${e}`; } }, 400);
+      } catch (e) { error = `Steam refused the VRR change: ${e}`; }
+    }, ms));
+  };
   const restore = (why: string) => {
     for (const [p, v] of orig) {
       try { write(BigInt(p), v); } catch (e) { error = `could not put VRR back: ${e}`; }
@@ -134,6 +148,7 @@ export const startVrrScope = (log: (m: string) => void = () => {}, standAside: (
       if (seen.vrr !== v) {
         try { write(seen.profile, v); log(`VRR back to ${v ? "on" : "off"} for the game`); } catch (e) { error = `Steam refused the VRR change: ${e}`; }
       }
+      if (v) rearm(seen.profile);
       return;
     }
     if (!seen.vrr) { refused = 0; return; }     // menus, already off
@@ -161,6 +176,7 @@ export const startVrrScope = (log: (m: string) => void = () => {}, standAside: (
       if (stopped) return;
       stopped = true;
       if (timer) clearTimeout(timer);
+      rearms.forEach(clearTimeout);
       try { reg?.unregister?.(); } catch { /* gone */ }
       if (!aside) restore("switched off");
     },
