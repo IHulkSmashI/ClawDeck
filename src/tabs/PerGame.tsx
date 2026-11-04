@@ -186,7 +186,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             <li>Restart the game if it was running when you changed something here.</li>
             <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
             <li>Pick it <b>once</b>: switching between DLSS and FSR while the game runs can crash it (CONTROL does). To change it, quit, change it here, start the game again.</li>
-            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b>.</li>}
+            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b> (any multiplier: ClawDeck's {launch.fg ?? 2}x is what you get), then <b>quit and start the game again</b>: switching it on while the game runs can crash it.</li>}
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu; press it again to close. {(launch.opti ?? "xess").startsWith("fsr4_xmx")
               ? <>FSR 4.1.1 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.1</b> under FFX Settings (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
               : <>XeSS shows under Upscalers, Input: DLSS.</>}{launch.fg ? <> Frame generation: FG Output <b>XeFG</b>, Active ticked.</> : null}</li>
@@ -198,7 +198,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             <li>Restart the game if it was running when you changed something here.</li>
             <li>Graphics settings: set the upscaler to <b>DLSS</b> (or FSR if the game has no DLSS), at the quality you like. OptiScaler swaps it for {(launch.opti ?? "xess").startsWith("fsr4_xmx") ? "FSR 4.1.1 on XMX" : "XeSS on XMX"}.</li>
             <li>Pick it <b>once</b>: switching between DLSS and FSR while the game runs can crash it (CONTROL does). To change it, quit, change it here, start the game again.</li>
-            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b>.</li>}
+            {(launch.opti_fg === "dlssg" || launch.opti_fg === "fsrfg") && <li>Turn on the game's <b>{launch.opti_fg === "dlssg" ? "DLSS" : "FSR"} Frame Generation</b> (any multiplier: ClawDeck's {launch.fg ?? 2}x is what you get), then <b>quit and start the game again</b>: switching it on while the game runs can crash it.</li>}
             <li>Check it worked: press <b>Insert</b> for OptiScaler's menu; press it again to close. {(launch.opti ?? "xess").startsWith("fsr4_xmx")
               ? <>FSR 4.1.1 shows as <b>FSR 3.X</b> under Upscalers with <b>FSR 4.1.1</b> under FFX Settings (OptiScaler files FSR 4 under FSR 3.X), Input: DLSS.</>
               : <>XeSS shows under Upscalers, Input: DLSS.</>}{launch.fg ? <> Frame generation: FG Output <b>XeFG</b>, Active ticked.</> : null}</li>
