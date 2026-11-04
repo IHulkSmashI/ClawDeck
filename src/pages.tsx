@@ -29,7 +29,9 @@ export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
-  useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d || !!x?.installed)).catch(() => setSetupDone(true)); }, []);
+  // the steps show on the first start and stay until Done or Skip; without the XMX driver they come back (nothing on
+  // the XMX cores works without it). A driver left over from an earlier install no longer skips the VRR step.
+  useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d && !!x?.installed)).catch(() => setSetupDone(true)); }, []);
   return (
   <HelpContext.Provider value={help}>
     <PanelSection>
