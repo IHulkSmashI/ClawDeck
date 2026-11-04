@@ -24,6 +24,9 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   Framegen sets up.
 - **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows tool whose one-tap, per-game OptiScaler setup
   ClawDeck's Per-game OptiScaler row follows. No code is shared.
+- **[wimlib](https://wimlib.net)** by Eric Biggers (LGPL-2.1+) — its LZMS decoder is inside `tools/cabinet-lzms`, the
+  open `cabinet.dll` that lets the FSR 4 on XMX builds unpack their kernels under Proton without Windows' copy.
+- **FSR 4 on XMX** by nitec and the OptiScaler community — the upscaler build ClawDeck sets up; not shipped with ClawDeck.
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
 - **Decky Framerate** — an early reference for reading frame times in Game Mode.
 
