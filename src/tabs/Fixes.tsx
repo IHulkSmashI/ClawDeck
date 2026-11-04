@@ -4,13 +4,14 @@ import { FC, useEffect, useState } from "react";
 
 import { getFixes, getHealth, runFix, setWideVrr, Fixes, Health } from "../api";
 import { confirmRestart } from "../components/confirm";
-import { explain, Problem, Status } from "../components/Hint";
+import { explain, Problem, Status, useExplanations } from "../components/Hint";
 
 const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
 
 /** What the hardware gets wrong out of the box: the VRR range (ClawLab's EDID fix), the Claw 8 EX face buttons, and
  *  the health check in one line. Install / remove buttons, not toggles: each one is a change to the system. */
 export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
+  useExplanations();
   const [f, setF] = useState<Fixes | null>(null);
   const [health, setHealth] = useState<Health[]>([]);
   const [busy, setBusy] = useState(false);

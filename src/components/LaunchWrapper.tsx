@@ -4,7 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getLaunch } from "../api";
 import { getLaunchOptions, hasWrapper, setLaunchOptions, withWrapper, withoutWrapper } from "../steam";
-import { explain, Note, Status } from "./Hint";
+import { explain, Note, Status, useExplanations } from "./Hint";
 
 /**
  * Autotune and every Per-game choice (XeSS XMX off, frame generation, FSR on XeSS, low latency, OptiScaler presets)
@@ -12,6 +12,7 @@ import { explain, Note, Status } from "./Hint";
  * row shows whether the running game has it and adds or removes it in Steam's own launch options with one tap.
  */
 export const LaunchWrapper: FC<{ appid: string; name: string }> = ({ appid, name }) => {
+  useExplanations();
   const [opts, setOpts] = useState<string | null>(null);
   const [wrapper, setWrapper] = useState("");
   const load = async () => { setWrapper((await getLaunch(appid)).wrapper.replace(/ %command%$/, "")); setOpts(await getLaunchOptions(appid)); };

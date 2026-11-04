@@ -1,12 +1,20 @@
 import { Field } from "@decky/ui";
-import { FC, ReactNode } from "react";
+import { createContext, FC, ReactNode, useContext } from "react";
 
 /**
  * The explanation every control carries (project UI rule): what it does, why you'd use it, what it costs. It goes in
  * the control's own `description`, so it sits inside the focusable row: moving the D-pad onto a control scrolls its
  * explanation into view with it. Nothing on a page is plain text the controller can't reach.
  */
-export const explain = (does: ReactNode, why?: ReactNode, cost?: ReactNode): ReactNode => (
+let shown = true;
+/** Quick Access hides the explanations unless its "Explain" switch is on (like the plugins people know: controls and
+ *  status first); the full-screen page always shows them. Each panel says which through HelpContext, and every
+ *  component that calls explain() starts its render with useExplanations(), so a re-render of one panel never uses
+ *  the other's choice. */
+export const HelpContext = createContext(true);
+export const useExplanations = () => { shown = useContext(HelpContext); return shown; };
+
+export const explain = (does: ReactNode, why?: ReactNode, cost?: ReactNode): ReactNode => (!shown ? undefined :
   <span style={{ whiteSpace: "normal" }}>
     {does}
     {why && <><br />Why: {why}</>}
