@@ -1,8 +1,8 @@
-import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
+import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, optiscalerInstall, optiscalerState, selfTest, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
+import { collectLogs, getHardware, optiscalerInstall, optiscalerState, selfTest, setXmxEveryGame, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
@@ -56,6 +56,14 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
         )}
         {noXmx && <Note>No XMX cores on the {hw?.model.name}: games use XeSS on the regular graphics cores.</Note>}
       </PanelSectionRow>
+      {x?.installed && x.scope?.per_game && !noXmx && (
+        <PanelSectionRow>
+          <ToggleField label="XMX driver for every game" checked={!!x.scope.every_game}
+            onChange={async (v) => { const r = await setXmxEveryGame(v); toast(r.ok ? (v ? "Every game gets the XMX driver from its next launch" : "Only games with XeSS, OptiScaler or FSR on XeSS get the XMX driver") : `Not changed: ${r.error}`); refresh(); }}
+            description={explain("Every game starts on the XeSS XMX driver, so whatever XeSS, XeSS frame generation or XeLL a game has built in runs on the XMX cores, with or without OptiScaler. Steam's own screen keeps Bazzite's driver either way. Off: only games that ship XeSS or OptiScaler, or that you set up for FSR on XeSS.",
+              undefined, "a game without any XeSS gains nothing from it and can lose a little speed (Onimusha did); switch that one off in Per-game. Each game's first launch compiles for a minute or two, once.")} />
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <Status ok={!op ? null : op.installed ? true : null}
           label={!op ? "OptiScaler: …" : op.installed ? `OptiScaler ${op.version}: ready${op.games ? `, in ${op.games} game${op.games === 1 ? "" : "s"}` : ""}` : `OptiScaler ${op.version}: downloads with the first recommended setup`}
