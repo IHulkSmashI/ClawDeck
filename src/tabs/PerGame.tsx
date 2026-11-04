@@ -98,6 +98,21 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     load();
   };
   const ours = gs?.opti_owner === "clawdeck";
+  // OptiClick's way: pick the upscaler and frame generation, then one Apply (or Update when a newer OptiScaler is
+  // pinned): nothing is written while picking
+  const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own";
+  const nowFg = launch.fg ?? 0;
+  const [pickUp, setPickUp] = useState<string | null>(null);
+  const [pickFg, setPickFg] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? nowFg;
+  const changed = wantUp !== nowUp || wantFg !== nowFg;
+  const optiVer = gs?.opti_version ?? null;
+  const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);
+  const apply = async () => {
+    setBusy(true);
+    try { await choose(wantUp, wantFg); setPickUp(null); setPickFg(null); } finally { setBusy(false); }
+  };
   const choose = async (upscaler: string, fg: number, allow = false) => {
     if (upscaler !== "own" && !ours) toast(`${app.name}: setting up OptiScaler (the first time downloads it, about 55 MB)…`);
     const r = await gameChoose(app.appid, upscaler, fg, allow);
@@ -136,15 +151,18 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
           <DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={UPSCALERS}
-            selectedOption={ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own"}
-            onChange={(o) => choose(String(o.data), launch.fg ?? 0)}
+            selectedOption={wantUp}
+            onChange={(o) => setPickUp(String(o.data))}
             description={explain("What the game's upscaling runs as. XeSS 2 and FSR 4.1.1 run on the XMX cores through OptiScaler, which takes the game's DLSS or FSR (pick that in the game's menu). FSR 4.1.1 is nitec's build of AMD's FSR 4 for Intel's matrix cores: the best image; Lite is faster for a little less detail; it needs nitec's files in ~/fsr4-xmx. \"The game's own\" leaves the game alone (a game's own XeSS still runs on XMX).",
               undefined, quick ? undefined : "OptiScaler's files go next to the game's exe, the game's own files are kept and come back when you pick \"The game's own\". The first time downloads OptiScaler (55 MB).")} />
           <DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
-            selectedOption={launch.fg ?? 0}
-            onChange={(o) => choose(ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "own", Number(o.data))}
+            selectedOption={wantFg}
+            onChange={(o) => setPickFg(Number(o.data))}
             description={explain("XeSS frame generation on the XMX cores: 2x shows one generated frame for every rendered one, 3x two, 4x three, with XeLL low latency always on. With OptiScaler it takes the game's own frame generation when the game has one (turn it on in the game's menu), otherwise OptiScaler makes the frames itself.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} />
+          <ButtonItem layout="below" disabled={busy || (!changed && !(ours && outdated))} onClick={() => apply()}>
+            {busy ? "Working…" : !changed && ours && outdated ? `Update OptiScaler to ${optiVer}` : !changed ? (nowUp === "own" ? "Nothing to apply" : "Applied") : wantUp === "own" ? `Remove OptiScaler from ${app.name}` : `Apply to ${app.name}`}
+          </ButtonItem>
         </PanelSectionRow>
       )}
       {rec && (

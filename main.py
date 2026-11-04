@@ -633,7 +633,7 @@ class Plugin:
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files(),
                 "opti_owner": (files := await self._bg(self._game_files, appid, xess.steam_install_dir(HOME, appid)))["owner"],
-                "files": files}
+                "files": files, "opti_version": self._versions()["optiscaler"]["version"]}
 
     def _opti_owner(self, appid: str, d: str | None) -> str | None:
         return self._game_files(appid, d)["owner"]
