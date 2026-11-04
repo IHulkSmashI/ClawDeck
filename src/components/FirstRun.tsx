@@ -1,0 +1,74 @@
+import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
+import { toaster } from "@decky/api";
+import { FC, useEffect, useState } from "react";
+
+import { getFixes, setSetting, setWideVrr, xessInstall, xessState, Fixes, XessState } from "../api";
+import { confirmUntested } from "./confirm";
+import { Note, Status } from "./Hint";
+
+const toast = (body: string) => toaster.toast({ title: "ClawDeck", body });
+
+/** The first start: what has to be in place before games can be set up, one step at a time (the XeSS XMX driver,
+ * then the 30–120 Hz VRR fix), then the everyday panel. OptiScaler needs no step: it downloads with the first game.
+ * The face buttons and the log fix need none either: ClawDeck applies them by itself. */
+export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
+  const [x, setX] = useState<XessState | null>(null);
+  const [f, setF] = useState<Fixes | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = async () => { const [a, b] = await Promise.all([xessState(), getFixes()]); setX(a); setF(b); };
+  useEffect(() => { load(); }, []);
+  const driverOk = !!x?.installed;
+  const vrr = f?.vrr;
+  const vrrDone = !!vrr && (vrr.wide || vrr.pending === "on" || !vrr.supported);
+  const finish = async () => { await setSetting("setup_done", true); onDone(); };
+
+  const installDriver = async (allow = false) => {
+    setBusy("xess");
+    toast("Installing the XeSS XMX driver (about 260 MB)…");
+    try {
+      const r = await xessInstall(allow);
+      if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("xess-xmx-linux", () => installDriver(true)); return; }
+      toast(r.ok ? "XeSS XMX driver installed" : `Not installed: ${r.error}`);
+    } finally { setBusy(null); load(); }
+  };
+  const installVrr = async () => {
+    setBusy("vrr");
+    try {
+      const r = await setWideVrr(true);
+      toast(r.ok ? "VRR fix 30–120 Hz installed: it works from the next restart" : `Not installed: ${r.error}`);
+    } finally { setBusy(null); load(); }
+  };
+
+  return (
+    <PanelSection title="Set up ClawDeck">
+      <PanelSectionRow>
+        <Note>Two steps, once. After that this panel shows Power and your games.</Note>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <Status ok={driverOk ? true : null} label={`1. XeSS XMX driver: ${driverOk ? "installed" : "not installed"}`}
+          detail="Runs XeSS, FSR 4.1.1, frame generation and XeLL on the XMX cores, per game (never for Steam's own screen)." />
+        {!driverOk && (
+          <ButtonItem layout="below" disabled={!!busy || !x} onClick={() => installDriver(false)}>
+            {busy === "xess" ? "Installing… (a minute or two)" : "Install the XeSS XMX driver"}
+          </ButtonItem>
+        )}
+      </PanelSectionRow>
+      {vrr?.supported && (
+        <PanelSectionRow>
+          <Status ok={vrrDone ? true : null} label={`2. VRR 30–120 Hz: ${vrr.wide ? "installed" : vrr.pending === "on" ? "installed, restart to use it" : "not installed"}`}
+            detail="The screen can do VRR from 30 Hz but says 48, so games below 48 fps judder. ClawLab's fix, the one Windows users install. Needs one restart." />
+          {!vrrDone && (
+            <ButtonItem layout="below" disabled={!!busy} onClick={installVrr}>
+              {busy === "vrr" ? "Installing…" : "Install the VRR fix"}
+            </ButtonItem>
+          )}
+        </PanelSectionRow>
+      )}
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={!!busy} onClick={finish}>
+          {driverOk && (vrrDone || !vrr?.supported) ? "Done: show the panel" : "Skip for now"}
+        </ButtonItem>
+      </PanelSectionRow>
+    </PanelSection>
+  );
+};
