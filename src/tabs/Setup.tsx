@@ -2,7 +2,7 @@ import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/u
 import { toaster } from "@decky/api";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, optiscalerInstall, optiscalerState, selfTest, setXmxEveryGame, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
+import { collectLogs, getHardware, optiscalerState, selfTest, setXmxEveryGame, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
@@ -66,17 +66,8 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       )}
       <PanelSectionRow>
         <Status ok={!op ? null : op.installed ? true : null}
-          label={!op ? "OptiScaler: …" : op.installed ? `OptiScaler ${op.version}: ready${op.games ? `, in ${op.games} game${op.games === 1 ? "" : "s"}` : ""}` : `OptiScaler ${op.version}: downloads with the first recommended setup`}
+          label={!op ? "OptiScaler: …" : op.installed ? `OptiScaler ${op.version}: ready${op.games ? `, in ${op.games} game${op.games === 1 ? "" : "s"}` : ""}` : `OptiScaler ${op.version}: downloads by itself when you pick an upscaler for a game`}
           detail={quick ? undefined : `ClawDeck's own OptiScaler and OptiPatcher (pinned, checked), put into a game by Per-game's recommended setup and taken out again by Undo.${op?.framegen ? ` Decky Framegen ${op.framegen_version ?? ""} is installed too: games it set up stay its own, ClawDeck shows a warning there and doesn't touch them.` : ""}`} />
-        {op && !op.installed && !quick && (
-          <ButtonItem layout="below" disabled={!!busy} onClick={async () => {
-            setBusy("opti");
-            try { const r = await optiscalerInstall(); toast(r.ok ? `OptiScaler ${r.version ?? ""} downloaded` : `OptiScaler: not downloaded (${r.error})`); setErr(r.ok ? null : (r.error ?? "error")); }
-            finally { setBusy(null); refresh(); }
-          }} description={explain("Downloads OptiScaler now instead of with the first game (about 55 MB).")}>
-            {busy === "opti" ? "Downloading…" : "Download OptiScaler now"}
-          </ButtonItem>
-        )}
       </PanelSectionRow>
       <PanelSectionRow>
         <ButtonItem layout="below" disabled={!!busy} onClick={async () => {

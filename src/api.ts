@@ -75,7 +75,8 @@ export type OptiScalerIn = { present: boolean; dir: string | null; version?: str
 export type XmxScope = { session_wide: boolean; per_game: boolean; every_game?: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
 export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
   drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null;
-  fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null };
+  fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null;
+  files?: { owner: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null };
 export const gamesList = callable<[], GameEntry[]>("games_list");

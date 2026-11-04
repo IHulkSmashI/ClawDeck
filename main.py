@@ -632,11 +632,18 @@ class Plugin:
         auto = detected or launchenv.compose({**launch, "xmx": None}).get("CLAWDECK_XMX") == "1"
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files(),
-                "opti_owner": await self._bg(self._opti_owner, appid, d)}
+                "opti_owner": (files := await self._bg(self._game_files, appid, xess.steam_install_dir(HOME, appid)))["owner"],
+                "files": files}
 
     def _opti_owner(self, appid: str, d: str | None) -> str | None:
+        return self._game_files(appid, d)["owner"]
+
+    def _game_files(self, appid: str, d: str | None) -> dict:
+        """What is in the game's folder right now: whose OptiScaler (and as which DLL, which preset), REFramework."""
         folder = self.settings.get("opti_games", {}).get(str(appid)) or (optiscaler.main_exe_dir(d) if d else None)
-        return optiscaler.owner(folder)["owner"]
+        who = optiscaler.owner(folder)
+        return {**who, "folder": folder, "reframework": reframework.status(folder)["present"] if folder else False,
+                "install_dir": d}
 
     @staticmethod
     def _fsr4_xmx_files() -> dict:
