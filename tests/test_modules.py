@@ -557,6 +557,15 @@ def test_xmx_scope_loads_the_driver_only_for_xess_games_or_when_forced(tmp_path,
     _w(tmp_path / "rt/launch/1091500.env", "CLAWDECK_XMX=0\n")                              # Per-game: off
     s = _run_scope(script, {**base, "SteamAppId": "1091500", "STEAM_COMPAT_INSTALL_PATH": str(xess_game)}, monkeypatch)
     assert "VK_DRIVER_FILES" not in s
+    monkeypatch.setattr(xmxscope.userexec, "chown_tree", lambda p, h: None)
+    assert xmxscope.set_every_game(str(tmp_path), True)["every_game"]                    # Setup: every game on XMX
+    other = tmp_path / "games/Plain"
+    other.mkdir(parents=True)
+    s = _run_scope(script, {**base, "SteamAppId": "999", "STEAM_COMPAT_INSTALL_PATH": str(other)}, monkeypatch)
+    assert "VK_DRIVER_FILES" in s                                                       # a game with nothing: XMX too
+    s = _run_scope(script, {**base, "SteamAppId": "1091500", "STEAM_COMPAT_INSTALL_PATH": str(xess_game)}, monkeypatch)
+    assert "VK_DRIVER_FILES" not in s                                                   # switched off per game: stays off
+    assert not xmxscope.set_every_game(str(tmp_path), False)["every_game"]
     assert xmxscope.remove_scope(str(tmp_path))["protons"] == [str(proton)]
     assert (proton / "user_settings.user.py").read_text().startswith("user_settings = {'PROTON_LOG'")   # theirs is back
 

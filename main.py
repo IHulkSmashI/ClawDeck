@@ -125,6 +125,10 @@ class Plugin:
             except Exception as e:
                 auto[key] = f"failed: {e}"
                 decky.logger.warning("first-run fix %s: %s", key, e)
+        if "xmx_every_game" not in auto and xmxscope.xmx_env(HOME):
+            r = xmxscope.set_every_game(HOME, True)
+            auto["xmx_every_game"] = "on" if r["ok"] else f"failed: {r.get('error')}"
+            jobs.append(("xmx_every_game", None))
         if jobs:
             self._save_settings()
 
@@ -744,6 +748,12 @@ class Plugin:
         return {**r, "reframework": removed, "optiscaler": opti, "ok": r.get("ok", True) and opti.get("ok", True)}
 
     # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
+    async def set_xmx_every_game(self, on: bool) -> dict:
+        r = await self._bg(xmxscope.set_every_game, HOME, bool(on))
+        self.settings.setdefault("auto_fixes", {})["xmx_every_game"] = "on" if on else "off"
+        self._save_settings()
+        return r
+
     async def optiscaler_state(self) -> dict:
         """Setup's OptiScaler row: ClawDeck's own (downloaded on the first recommended setup), the games it is in,
         and whether Decky Framegen is installed too (its games stay its own)."""

@@ -60,7 +60,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const installed = !!gs?.xess.installed;
   const scope = gs?.xmx_scope;
   const perGame = !!scope && !scope.session_wide;            // the XMX driver loads per game (xmxscope.py), the default
-  const xmxOn = perGame ? (launch.xmx ?? !!scope?.auto) : launch.xmx !== false;
+  const xmxOn = perGame ? (launch.xmx ?? (!!scope?.auto || !!scope?.every_game)) : launch.xmx !== false;
   const xessOk = installed && gs!.xess.status.state === "ok";
   const newPkg = !!gs?.xess.low_latency;                     // 20261104+: low latency, FSR on XeSS, XESS_FG to 8x
   const wrapped = hasWrapper(opts);
@@ -189,10 +189,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       )}
       <PanelSectionRow>
         {!quick && <ToggleField label="XeSS on XMX (switch off only to troubleshoot)" checked={xmxOn} disabled={!installed}
-          description={explain(installed ? (perGame ? `Automatic: the XMX driver loads only in games that ship XeSS or OptiScaler (${scope?.auto ? "this one does" : "this one doesn't"}); Steam's own screen and other games keep Bazzite's driver. Switch it to force it on or off for this game.`
+          description={explain(installed ? (perGame ? (scope?.every_game ? "Setup has the XMX driver on for every game: whatever XeSS, XeSS frame generation or XeLL this game has runs on the XMX cores. Switch it off here only if this game misbehaves or loses speed." : `Automatic: the XMX driver loads in games that ship XeSS or OptiScaler, or are set up for FSR on XeSS (${scope?.auto ? "this one is" : "this one isn't"}); Steam's own screen keeps Bazzite's driver. Setup can turn it on for every game.`)
               : "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves.")
             : "Install the XeSS XMX driver in Setup first; from then it is on for every game.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
-          onChange={(v) => save({ xmx: perGame && v === !!scope?.auto ? null : v } as any)} />}
+          onChange={(v) => save({ xmx: perGame && v === (!!scope?.auto || !!scope?.every_game) ? null : v } as any)} />}
         <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && installed) || (!xmxOn && !wrapped) ? false : null) : null}
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
             : xmxOn ? (xessOk ? `XeSS runs on XMX (${perGame ? (launch.xmx == null ? "automatic" : "switched on for this game") : "default"})`
