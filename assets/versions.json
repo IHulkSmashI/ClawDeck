@@ -66,11 +66,11 @@
  },
  "fsr4_xmx": {
   "repo": "IHulkSmashI/ClawDeck",
-  "tag": "fsr4-xmx-4.1.2",
+  "base": "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/34a8210e75962eaa3b7b1bf55c6f915eb036c3f6",
   "files": {
    "amd_fidelityfx_upscaler_dx12.dll": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
    "fsr-original.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
-  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files OptiClick installs on Intel (its Archives/Custom/FSR4_XMX). Hosted as assets of ClawDeck's fsr4-xmx-4.1.2 release; downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04)."
+  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files OptiClick installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04)."
  }
 }

@@ -357,7 +357,10 @@ def fsr4_xmx_download(home: str, entry: dict) -> dict:
         dest = os.path.join(xdir, name)
         if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
             continue
-        url = f"https://github.com/{entry['repo']}/releases/download/{entry['tag']}/{name}"
+        # a files-only branch pinned by commit (base): not on the Releases page, where the files looked like a second
+        # download users had to fetch themselves (maintainer, 2026-11-05); a release tag still works for old entries
+        url = (entry["base"].rstrip("/") + "/" + name if entry.get("base")
+               else f"https://github.com/{entry['repo']}/releases/download/{entry['tag']}/{name}")
         tmp = downloads.download(url, dest + ".new", timeout=120.0)
         if downloads.sha256_of(tmp) != sha:
             os.unlink(tmp)

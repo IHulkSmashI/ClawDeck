@@ -74,7 +74,7 @@ You need an MSI Claw on [Bazzite](https://bazzite.gg) or SteamOS. New to Linux? 
 - **From Game Mode, no terminal:** Quick Access → Decky → gear → **Developer mode** on → **Developer** → **Install
   plugin from URL**, and enter:
   ```
-  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.1/ClawDeck.zip
+  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.2/ClawDeck.zip
   ```
 - **From Desktop Mode:** open **Konsole** and paste (asks for your password once; run it again to update):
   ```
