@@ -276,3 +276,25 @@ def disable() -> dict:
         except OSError:
             pass
     return {"ok": True, "restart": True}
+
+
+_idle_hold: bool | None = None
+
+
+def gamescope_idle_hold() -> bool:
+    """gamescope 3.17+ holds the refresh rate at the panel's maximum while Steam's own UI is focused
+    (adaptive_sync_idle_hold, on by default; ValveSoftware/gamescope 8e0a5be). With it, VRR can stay on in the menus,
+    so ClawDeck's menus-fixed VRR scope (src/vrr.ts) isn't needed: its off/on switch is a full modeset each time.
+    Bazzite 45.20261104 ships gamescope 3.17.0-ogc1 (read on the maintainer's Claw, 2026-11-05)."""
+    global _idle_hold
+    if _idle_hold is None:
+        exe = shutil.which("gamescope")
+        found = False
+        if exe:
+            try:
+                with open(exe, "rb") as f:
+                    found = b"adaptive_sync_idle_hold" in f.read()
+            except OSError:
+                found = False
+        _idle_hold = found
+    return _idle_hold

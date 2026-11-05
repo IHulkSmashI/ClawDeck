@@ -69,7 +69,8 @@ export default definePlugin(() => {
   const vrrScopeSync = () => (syncing = syncing.then(async () => {   // one at a time: never two scopes
     try {
       const [pref, f] = await Promise.all([getSetting("vrr_menus_fixed"), getFixes()]);
-      const want = !disposed && (pref === null || pref === undefined ? !!f?.vrr?.wide : !!pref);
+      // gamescope 3.17+ holds 120 Hz in Steam's menus by itself (idle hold): then the scope is off unless switched on
+      const want = !disposed && (pref === null || pref === undefined ? (!!f?.vrr?.wide && !f?.vrr?.idle_hold) : !!pref);
       if (want && !vrrScope) {
         await ext();
         vrrScope = startVrrScope((m) => { console.log("ClawDeck:", m); uiLog(`vrr: ${m}`).catch(() => undefined); },

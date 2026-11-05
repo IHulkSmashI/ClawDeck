@@ -47,6 +47,11 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **VRR without ClawDeck's menu switching (Bazzite 45, gamescope 3.17.0, 2026-11-05):** gamescope now holds 120 Hz in
+  Steam's menus with VRR on (adaptive_sync_idle_hold), so "VRR only in games" is off by default where gamescope has
+  it. Check with VRR on in Steam: the menus and library smooth at 120 Hz (not following a shader compile's 30 fps), a
+  game unlocked (not 30/60). If the menus are choppy again, Fixes → "VRR only in games" on brings the old behaviour.
+
 - **Bazzite update line (2026-11-05):** Fixes shows "Bazzite up to date (kernel, Intel graphics driver, Mesa,
   gamescope)" and, while an update waits, "Bazzite 45.x is available (running 44.x) …" (rpm-ostree upgrade --check, once
   per start, nothing downloaded). After updating: "… is downloaded: restart the Claw".
