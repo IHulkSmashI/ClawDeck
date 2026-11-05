@@ -339,18 +339,20 @@ def test_autotune_one_slow_window_is_measured_again_not_acted_on(fake_hw, monkey
 
 def test_autotune_keeps_a_cpu_gpu_lever_only_if_it_helps(fake_hw, monkeypatch):
     at, s = _tuner(fake_hw, monkeypatch)
-    # GPU-bound: giving the GPU the CPU's share helps once (100 -> 90 %), not twice
-    _Game(at, lambda tdp, cpu, *_: (52.0 if cpu <= 90 else 50.0) if tdp == 20 else 30.0, cpu_pct=35, gpu_busy=97)
+    # GPU-bound: a higher GPU floor helps once (+4 %), the second step doesn't and is undone. The CPU ceiling is never
+    # trimmed any more (no proven tool does it; it hurts frame pacing)
+    _Game(at, lambda tdp, cpu, gmin, *_: (52.0 if gmin else 50.0) if tdp == 20 else 30.0, cpu_pct=35, gpu_busy=97)
     for _ in range(3):
         at._step()
     assert s.learned.max_fps == 50
-    at._step()                                                  # trying CPU ceiling 90 %
-    assert s.learned.cpu_max_pct == 90 and "trying" in s.last_action
-    at._step()                                                  # +4 %: kept, the set TDP gives 52 now; next: 80 %
-    assert s.learned.max_fps == 52 and s.learned.cpu_max_pct == 80
+    at._step()
+    assert s.learned.gpu_min_mhz and "trying" in s.last_action and "GPU floor" in s.last_action
+    first = s.learned.gpu_min_mhz
+    at._step()                                                  # +4 %: kept; the next step is tried
+    assert s.learned.max_fps == 52 and s.learned.gpu_min_mhz == first + autotune.GPU_STEP_MHZ
     at._step()                                                  # no gain: undone
-    assert s.learned.cpu_max_pct == 90 and "undone" in s.last_action
-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
+    assert s.learned.gpu_min_mhz == first and "undone" in s.last_action
+    assert s.learned.cpu_max_pct == 100
     at.session = None
 
 

@@ -583,10 +583,8 @@ class Autotune:
             if self._gpu_active() == "power_saving":
                 out.append(("gpu_base", lambda: self._gpu_profile(l, "base"), lambda: self._gpu_profile(l, "power_saving"),
                             "turned GPU efficiency mode off (clocks up faster)", "GPU efficiency off"))
-            if p.cpu_max_perf_pct and l.cpu_max_pct - 10 >= CPU_MIN_PCT:
-                was = l.cpu_max_pct
-                out.append(("cpu_down", lambda w=was: self._cpu(l, w - 10), lambda w=was: self._cpu(l, w),
-                            f"lowered CPU ceiling to {was - 10} % (power to the GPU)", "−10 % CPU"))
+            # no CPU-ceiling trim (max_perf_pct): no proven tool does it and it hurts frame pacing (audit 2026-11-05);
+            # PL2 = PL1 + 2 W already keeps CPU bursts from taking the GPU's budget
             rpe, top = self._gpu_limits()
             nxt = (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ
             if p.gpu_min_freq and (top is None or nxt <= top):

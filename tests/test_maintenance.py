@@ -91,7 +91,7 @@ def test_tdp_boost_off_keeps_pl2_one_watt_over(tmp_path, monkeypatch):
     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 21, 21]
     pw.boost = True
     pw.set_tdp(20, plugged=False)
-    assert sysfs.read_int(p.msi_pl2) == 26
+    assert sysfs.read_int(p.msi_pl2) == 22                       # PL2 = PL1 + 2 W (hhd, PowerControl, PowerStation)
 
 
 def test_tar_with_a_link_outside_is_refused(tmp_path):

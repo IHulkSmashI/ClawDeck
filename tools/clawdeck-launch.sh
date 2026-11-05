@@ -94,7 +94,10 @@ if [ -n "${IGDEXT_XELL_LOG:-}" ] && [ -d "${STEAM_COMPAT_DATA_PATH:-/nonexistent
     [ -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" ] && mv -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f.prev"
   done
 fi
-if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && command -v mangohud >/dev/null 2>&1; then
+# MangoHud's frame-time log is only for Autotune: inject it only while Autotune is on (<runtime>/autotune.on, written
+# by the plugin). It used to go into every wrapped game, on top of Steam's own overlay (mangoapp) - one more layer in
+# every present for nothing when Autotune is off (audit 2026-11-05)
+if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && [ -f "$RUNTIME/autotune.on" ] && command -v mangohud >/dev/null 2>&1; then
   export MANGOHUD=1
   # keep the user's own MANGOHUD_CONFIG keys if any were set; no_display keeps the overlay off unless they want it
   base="${MANGOHUD_CONFIG:-no_display}"
