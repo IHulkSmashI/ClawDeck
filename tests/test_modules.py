@@ -636,7 +636,10 @@ def test_gamedb_recommends_by_engine_and_list(tmp_path):
     assert len(doc["games"]) > 50 and "onimushawots.exe" in doc["re_engine_exes"]
     oni = gamedb.recommend(doc, _game(tmp_path, "oni", ["OnimushaWotS.exe", "amd_fidelityfx_dx12.dll"]))
     assert oni["route"] == "re_engine" and oni["launch"]["reframework"] is True
-    assert oni["ini"] == {"Hotfix_RestoreComputeSignature": "true", "Spoofing_Dxgi": "false"}   # OptiScaler main, not 0.9.4
+    # OptiScaler's list says Spoofing_Dxgi=false for Onimusha, but the Capcom setup's DLSS-G needs the spoofing
+    assert oni["ini"] == {"Hotfix_RestoreComputeSignature": "true"}
+    assert oni["launch"]["opti_fg"] == "dlssg" and oni["fg_source"] == "dlssg" and oni["capcom"]
+    assert oni["capcom_tested"] and "tested on a Claw" in " ".join(oni["reasons"])
     control = gamedb.recommend(doc, _game(tmp_path, "control", ["CONTROLResonant.exe", "amd_fidelityfx_upscaler_dx12.dll"]))
     assert control["route"] == "optiscaler" and control["optiscaler"] and "Pick FSR" in control["reasons"][0]
     own = gamedb.recommend(doc, _game(tmp_path, "x", ["game.exe", "bin/libxess.dll"]))
@@ -898,3 +901,248 @@ def test_profiles_own_slot_is_only_the_games(tmp_path):
     assert p.own("1", False) == {} and p.get("1", False).get("base") == "battery"
     p.set("1", False, {"base": "max", "tdp": None})
     assert p.own("1", False) == {"base": "max"} and p.own("1", True) == {}
+
+
+# ---- Capcom RE Engine games: OptiClick's setup (OptiScaler v10 in OptiScaler/, onehoon's REFramework) ---------------
+def _snapshot(d):
+    out = {}
+    for r, ds, fs in os.walk(d):
+        rel = os.path.relpath(r, d)
+        out[rel + "/"] = None
+        for f in fs:
+            with open(os.path.join(r, f), "rb") as fh:
+                out[os.path.join(rel, f)] = fh.read()
+    return out
+
+
+def _opti_v10_pkg(home, ver="10.0.0-pre1-20261030"):
+    """The v10 nightly's layout, as unpacked from OptiScaler_v10.0.0-pre1_20261030.7z (OptiPatcher added by install)."""
+    from clawdeck import optiscaler
+    d = os.path.join(home, optiscaler.ROOT, ver)
+    ini = ("[Upscalers]\nDx11Upscaler=auto\nDx12Upscaler=auto\nVulkanUpscaler=auto\n\n[FrameGen]\nEnabled=auto\nFGInput=auto\n"
+           "FGOutput=auto\nFGNvngxReplacement=auto\nDisableHudless=auto\n\n[XeFG]\nInterpolationCount=auto\n"
+           "OverrideInterpolationCount=auto\n\n[DLSSG]\nInterpolationCount=auto\nOverrideInterpolationCount=auto\n\n"
+           "[FSR]\nUpscalerIndex=auto\n\n[NvngxFG]\nDisableHudless = auto\n\n[Libraries]\nOptiDllPath=auto\n\n[Menu]\n"
+           "UseHQFont=auto\nShowFps=auto\nFpsOverlayPos=auto\nFpsOverlayType=auto\n\n[Spoofing]\nDxgi=auto\n\n[Plugins]\n"
+           "LoadAsiPlugins=auto\n\n[Hotfix]\nRestoreComputeSignature=auto\n")
+    for f, t in (("OptiScaler.dll", "opti10"), ("OptiScaler.ini", ini), ("setup_linux.sh", "x"), ("setup_windows.bat", "x"),
+                 ("Licenses/XeSS_LICENSE.txt", "l"), ("OptiScaler/libxess.dll", "xess10"), ("OptiScaler/libxess_fg.dll", "xefg"),
+                 ("OptiScaler/libxell.dll", "xell"), ("OptiScaler/amd_fidelityfx_upscaler_dx12.dll", "amd-fsr4"),
+                 ("OptiScaler/dlssg_to_fsr3_amd_is_better.dll", "nukem"), ("OptiScaler/D3D12_OptiScaler/D3D12Core.dll", "core"),
+                 ("OptiScaler/Streamlined_fetcher_windows.bat", "bat"), ("OptiScaler/plugins/OptiPatcher.asi", "op")):
+        _w(os.path.join(d, f), t)
+    return d
+
+
+def _ini(text):
+    """OptiScaler.ini as {Section_Key: value}."""
+    out, sec = {}, None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            sec = line[1:-1]
+        elif "=" in line and not line.startswith(";"):
+            k, v = line.split("=", 1)
+            out[f"{sec}_{k.strip()}"] = v.strip()
+    return out
+
+
+def test_versions_pin_the_capcom_setup():
+    v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
+    ref = v["reframework"]
+    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866"
+    assert ref["asset_glob"] == "REFramework.zip" and len(ref["sha256"]) == 64 and downloads.is_pinned(ref)
+    o10 = v["optiscaler_v10"]
+    assert o10["layout"] == "subfolder" and o10["tag"] == "nightly-20261030"
+    assert o10["sha256"] == "db4fe2deae7edd9f6657f5cb223edc694ebdec62b52f15a3a59913f8b656c176"
+    assert o10["url"].endswith("/nightly-20261030/OptiScaler_v10.0.0-pre1_20261030.7z")
+    assert [x["dest"] for x in o10["extras"]] == ["OptiScaler/plugins/OptiPatcher.asi"]
+    assert v["optiscaler"]["version"] == "0.9.4" and "layout" not in v["optiscaler"]       # everything else unchanged
+    with open(os.path.join(ROOT, "assets", "upstream.lock.json"), encoding="utf-8") as f:
+        lock = json.load(f)
+    assert lock["REFramework (onehoon fork)"] == ref["tag"] and lock["OptiScaler nightly (v10)"] == o10["tag"]
+
+
+def test_capcom_ini_is_opticlicks():
+    from clawdeck import launchenv
+    launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 2, "reframework": True, "opti_overlay": 2,
+              "opti_ini": {"Hotfix_RestoreComputeSignature": "true", "Spoofing_Dxgi": "false"}}     # an older saved profile
+    ini = launchenv.opti_ini(launch)
+    want = {"Upscalers_Dx11Upscaler": "fsr31_12", "Upscalers_Dx12Upscaler": "xess", "Upscalers_VulkanUpscaler": "xess",
+            "FrameGen_Enabled": "true", "FrameGen_FGInput": "DLSSG", "FrameGen_FGOutput": "XeFG",
+            "FrameGen_FGNvngxReplacement": "XeFG_NVNGX", "Libraries_OptiDllPath": ".\\OptiScaler",
+            "Menu_FpsOverlayType": "2", "Plugins_LoadAsiPlugins": "true", "NvngxFG_DisableHudless": "true",
+            "DLSSG_OverrideInterpolationCount": "1", "Hotfix_RestoreComputeSignature": "true"}
+    assert {k: ini.get(k) for k in want} == want
+    assert "Spoofing_Dxgi" not in ini and "XeFG_InterpolationCount" not in ini and "FramerateLimit" not in str(ini)
+    assert "Spoofing_Dxgi" not in launchenv.compose(launch)                  # nor through the launch environment
+    assert launchenv.opti_ini({**launch, "fg": 4})["DLSSG_OverrideInterpolationCount"] == "3"
+    assert launchenv.opti_ini({**launch, "fg": None})["DLSSG_OverrideInterpolationCount"] == "2"   # OptiClick's
+    off = launchenv.opti_ini({**launch, "opti_fg": "off", "fg": None})
+    assert off["FrameGen_Enabled"] == "false" and "DLSSG_OverrideInterpolationCount" not in off
+    lite = launchenv.opti_ini({**launch, "opti": "fsr4_xmx_lite"})
+    assert lite["Upscalers_Dx12Upscaler"] == "fsr31" and lite["FSR_UpscalerIndex"] == "9" and "FSR_Fsr4Update" not in lite
+    assert launchenv.opti_ini({**launch, "opti": "fsr4_xmx"})["FSR_UpscalerIndex"] == "6"
+    assert launchenv.compose(launch)["WINEDLLOVERRIDES"] == "dinput8=n,b;"
+
+
+def test_non_capcom_game_is_unchanged():
+    """A DLSS game without REFramework: OptiScaler 0.9.4 lines as before, flat layout, Spoofing kept from the list."""
+    from clawdeck import launchenv
+    launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 3, "opti_ini": {"Spoofing_Dxgi": "false"}}
+    assert not launchenv.capcom(launch)
+    ini = launchenv.opti_ini(launch)
+    assert ini == {"Upscalers_Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGInput": "dlssg",
+                   "FrameGen_FGOutput": "xefg", "Spoofing_Dxgi": "false", "XeFG_InterpolationCount": "2"}
+    assert launchenv.opti_ini({"opti": "fsr4_xmx"})["FSR_Fsr4Update"] == "true"
+
+
+def test_capcom_layout_round_trip_leaves_the_folder_exactly_as_it_was(tmp_path, monkeypatch):
+    from clawdeck import launchenv, optiscaler, reframework
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    monkeypatch.setattr(reframework.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    ver = "10.0.0-pre1-20261030"
+    _opti_v10_pkg(home, ver)
+    g = tmp_path / "common" / "Onimusha"
+    _w(g / "OnimushaWotS.exe", "x" * 100)
+    _w(g / "amd_fidelityfx_dx12.dll", "capcom-fsr")             # the game's own
+    _w(g / "natives" / "x.pak", "data")
+    before = _snapshot(str(g))
+    launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 2, "reframework": True, "opti_ini": {"Hotfix_RestoreComputeSignature": "true"}}
+    r = optiscaler.patch(home, str(g), ver, launchenv.opti_ini(launch), "xess", layout="subfolder")
+    assert r["ok"] and r["dll"] == "dxgi.dll" and r["layout"] == "subfolder"
+    top = sorted(p.name for p in g.iterdir())
+    assert top == [".clawdeck-optiscaler", "OnimushaWotS.exe", "OptiScaler", "OptiScaler.ini", "amd_fidelityfx_dx12.dll", "dxgi.dll", "natives"]
+    assert (g / "dxgi.dll").read_text().strip() == "opti10" and (g / "OptiScaler" / "libxess.dll").read_text().strip() == "xess10"
+    assert (g / "OptiScaler" / "plugins" / "OptiPatcher.asi").exists() and (g / "OptiScaler" / "D3D12_OptiScaler" / "D3D12Core.dll").exists()
+    assert not (g / "OptiScaler" / "Streamlined_fetcher_windows.bat").exists() and not (g / "Licenses").exists()
+    ini = _ini((g / "OptiScaler.ini").read_text())
+    assert ini["Libraries_OptiDllPath"] == ".\\OptiScaler" and ini["FrameGen_FGOutput"] == "XeFG" and ini["NvngxFG_DisableHudless"] == "true"
+    assert ini["Spoofing_Dxgi"] == "auto" and ini["DLSSG_OverrideInterpolationCount"] == "1" and ini["Plugins_LoadAsiPlugins"] == "true"
+    m = json.loads((g / ".clawdeck-optiscaler" / "manifest.json").read_text())
+    assert m["layout"] == "subfolder" and "OptiScaler" in m["dirs"]
+    # FSR 4.1.2 on XMX: nitec's two files into OptiScaler/, cabinet next to the exe; then back to XeSS
+    x = tmp_path / "fsr4-xmx"
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+        _w(x / f, "nitec-" + f)
+    assert optiscaler.patch(home, str(g), ver, launchenv.opti_ini({**launch, "opti": "fsr4_xmx"}), "fsr4_xmx", True, "subfolder")["ok"]
+    assert (g / "OptiScaler" / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "nitec-amd_fidelityfx_upscaler_dx12.dll"
+    assert (g / "OptiScaler" / "fsr-original.dll").exists() and not (g / "fsr-original.dll").exists()
+    assert (g / "cabinet.dll").exists() and (g / "cabinet_wine.dll").exists()
+    assert not (g / "amd_fidelityfx_upscaler_dx12.dll").exists()
+    assert optiscaler.patch(home, str(g), ver, launchenv.opti_ini(launch), "xess", layout="subfolder")["ok"]
+    assert (g / "OptiScaler" / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "amd-fsr4"
+    assert not (g / "OptiScaler" / "fsr-original.dll").exists() and not (g / "cabinet.dll").exists()
+    # REFramework next to it, its menu key moved off Insert
+    src = tmp_path / "unpacked"
+    _w(src / "dinput8.dll", "onehoon-ref")
+    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": e["tag"], "repo": e["repo"], "archive": "REFramework.zip", "dir": str(src)})
+    entry = {"repo": "onehoon/REFramework", "tag": "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866"}
+    assert reframework.install(home, str(g), entry)["ok"]
+    assert (g / "re2_fw_config.txt").read_text() == "REFrameworkConfig_MenuKey_V2=46\n"
+    # what they write while the game runs
+    for f in ("OptiScaler.log", "OptiScaler/D3D12_OptiScaler/cache.bin", "OptiScaler/plugins/OptiPatcher.log", "reframework_log.txt"):
+        _w(g / f, "runtime")
+    (g / "reframework" / "autorun").mkdir(parents=True)
+    _w(g / "re2_fw_config.txt", "REFrameworkConfig_MenuKey_V2=46\nREFrameworkConfig_FontSize=16\n")   # REF saved its config
+    assert reframework.remove(str(g))["removed"]
+    assert optiscaler.unpatch(str(g))["removed"]
+    assert _snapshot(str(g)) == before
+
+
+def test_capcom_switch_from_the_old_flat_setup_takes_it_out_first(tmp_path, monkeypatch):
+    """An Onimusha set up by ClawDeck 0.2 (0.9.4, flat) moves to v10 in OptiScaler/ with nothing of 0.9.4 left."""
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    _opti_v10_pkg(home)
+    g = tmp_path / "oni"
+    _w(g / "OnimushaWotS.exe", "x")
+    before = _snapshot(str(g))
+    assert optiscaler.patch(home, str(g), "0.9.4", {})["ok"] and (g / "libxess.dll").exists()
+    assert optiscaler.patch(home, str(g), "10.0.0-pre1-20261030", {}, layout="subfolder")["ok"]
+    assert not (g / "libxess.dll").exists() and not (g / "plugins").exists() and (g / "OptiScaler" / "libxess.dll").exists()
+    assert optiscaler.owner(str(g))["version"] == "10.0.0-pre1-20261030"
+    assert optiscaler.unpatch(str(g))["removed"] and _snapshot(str(g)) == before
+
+
+def test_reframework_menu_key_touches_only_its_line(tmp_path, monkeypatch):
+    from clawdeck import reframework
+    monkeypatch.setattr(reframework.userexec, "chown_tree", lambda p, h: None)
+    g = tmp_path / "g"
+    _w(g / "re9.exe", "x")
+    user = "FontSize=20\r\nREFrameworkConfig_MenuKey_V2=45\r\nREFrameworkConfig_Theme=dark\r\n"
+    (g / "re2_fw_config.txt").write_bytes(user.encode())
+    (g / "reframework" / "autorun").mkdir(parents=True)
+    _w(g / "reframework" / "autorun" / "mine.lua", "-- the user's script")
+    before = _snapshot(str(g))
+    src = tmp_path / "unpacked"
+    _w(src / "dinput8.dll", "ref")
+    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: {"tag": e["tag"], "repo": e["repo"], "archive": "REFramework.zip", "dir": str(src)})
+    assert reframework.install(str(tmp_path), str(g), {"repo": "onehoon/REFramework", "tag": "t15"})["ok"]
+    assert (g / "re2_fw_config.txt").read_bytes() == user.replace("_V2=45", "_V2=46").encode()
+    assert reframework.remove(str(g))["removed"]
+    assert _snapshot(str(g)) == before                                   # the user's config and scripts as they were
+    # a config without the line: added, then taken out again
+    (g / "re2_fw_config.txt").write_text("FontSize=20\n")
+    assert reframework.install(str(tmp_path), str(g), {"repo": "onehoon/REFramework", "tag": "t15"})["ok"]
+    assert (g / "re2_fw_config.txt").read_text() == "FontSize=20\nREFrameworkConfig_MenuKey_V2=46\n"
+    assert reframework.remove(str(g))["removed"] and (g / "re2_fw_config.txt").read_text() == "FontSize=20\n"
+
+
+def test_reframework_comes_from_the_fork_and_replaces_clawdecks_older_copy(tmp_path, monkeypatch):
+    from clawdeck import reframework
+    monkeypatch.setattr(reframework.userexec, "chown_tree", lambda p, h: None)
+    v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
+    seen = []
+    g = tmp_path / "g"
+    _w(g / "OnimushaWotS.exe", "x")
+    for tag, body in (("nightly-01433", "praydog"), (v["reframework"]["tag"], "onehoon")):
+        _w(tmp_path / tag / "dinput8.dll", body)
+    def fetch(e, w, a=False):
+        seen.append(e["repo"])
+        return {"tag": e["tag"], "repo": e["repo"], "archive": "REFramework.zip", "dir": str(tmp_path / e["tag"])}
+    monkeypatch.setattr(downloads, "fetch", fetch)
+    assert reframework.install(str(tmp_path), str(g), {"repo": "praydog/REFramework-nightly", "tag": "nightly-01433"}, menu_key=None)["ok"]
+    r = reframework.install(str(tmp_path), str(g), {k: v["reframework"][k] for k in ("repo", "tag", "asset_glob")})
+    assert r["ok"] and r["tag"] == v["reframework"]["tag"] and (g / "dinput8.dll").read_text().strip() == "onehoon"
+    assert seen[-1] == "onehoon/REFramework"
+    assert reframework.install(str(tmp_path), str(g), {"repo": "onehoon/REFramework", "tag": v["reframework"]["tag"]})["already"]
+    # the pinned dll's own sha256 is checked too: a wrong one installs nothing
+    assert reframework.remove(str(g))["removed"]
+    r = reframework.install(str(tmp_path), str(g), {"repo": "onehoon/REFramework", "tag": v["reframework"]["tag"], "dll_sha256": "0" * 64})
+    assert not r["ok"] and "sha256" in r["error"] and not (g / "dinput8.dll").exists()
+
+
+def test_fsr4_is_never_offered_without_xmx():
+    from clawdeck import launchenv
+    for preset in ("fsr4_xmx", "fsr4_xmx_lite", "fsr4"):
+        with pytest.raises(ValueError, match="XMX"):
+            launchenv.compose({"opti": preset, "xmx": False})
+        launchenv.compose({"opti": preset})                                 # automatic: fine
+    launchenv.compose({"opti": "xess", "xmx": False})                        # XeSS without XMX: DP4a, allowed
+
+
+def test_capcom_route_for_every_re_engine_game_dd2_untested(tmp_path):
+    from clawdeck import gamedb
+    doc = gamedb.load(os.path.join(ROOT, "assets", "games.json"))
+    assert "dd2.exe" in doc["capcom"]["untested"] and "onimushawots.exe" in doc["capcom"]["tested"]
+    dd2 = gamedb.recommend(doc, _game(tmp_path, "dd2", ["DD2.exe", "nvngx_dlss.dll"]))
+    assert dd2["route"] == "re_engine" and dd2["launch"]["reframework"] and dd2["capcom_tested"] is None
+    assert "not tested on a Claw" in " ".join(dd2["reasons"]) and "Spoofing_Dxgi" not in dd2["ini"]
+    wukong = gamedb.recommend(doc, _game(tmp_path, "w", ["b1/Binaries/Win64/b1-Win64-Shipping.exe", "nvngx_dlss.dll"]))
+    assert not wukong["re_engine"] and "reframework" not in wukong["launch"]
+
+
+def test_capcom_subfolder_files_dont_count_as_the_games(tmp_path, monkeypatch):
+    """v10's libraries in OptiScaler/ must not make Onimusha 'ships XeSS' or 'ships FSR 3.1' once set up."""
+    from clawdeck import gamedb, optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_v10_pkg(home)
+    g = tmp_path / "oni"
+    _w(g / "OnimushaWotS.exe", "x")
+    assert optiscaler.patch(home, str(g), "10.0.0-pre1-20261030", {}, layout="subfolder")["ok"]
+    assert not gamedb._has(str(g), ("libxess*",)) and not gamedb._has(str(g), ("amd_fidelityfx_upscaler_dx12.dll",))

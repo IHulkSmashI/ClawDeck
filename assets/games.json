@@ -26,6 +26,17 @@
   "re9demo.exe",
   "streetfighter6.exe"
  ],
+ "capcom": {
+  "_comment": "Every game in re_engine_exes gets OptiClick's Capcom setup (onehoon's REFramework, OptiScaler v10 in the OptiScaler/ subfolder, DLSS-G to XeSS-FG; launchenv.capcom). tested: seen working on a Claw, with where and when. untested: games known to have DLSS frame generation the setup relies on, not run on a Claw yet; the rest of re_engine_exes is untested too.",
+  "tested": {
+   "onimushawots.exe": "Onimusha: Way of the Sword, Claw 8 EX on Bazzite, 2026-11-04"
+  },
+  "untested": [
+   "dd2.exe",
+   "dd2ccs.exe",
+   "onimushawots_demo.exe"
+  ]
+ },
  "games": [
   {
    "id": "",

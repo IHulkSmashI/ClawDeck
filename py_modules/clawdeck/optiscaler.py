@@ -14,6 +14,14 @@ version is ClawDeck's to choose:
              launch wrapper sets it from the game's launch file).
   unpatch()  removes what the manifest lists and puts the backups back; a file someone changed since is kept.
 
+Two package layouts (versions.json "layout"):
+  flat       OptiScaler 0.9.4 (every game but Capcom's): its libraries, D3D12_Optiscaler/ and plugins/ next to the exe.
+  subfolder  OptiScaler v10 (Capcom RE Engine games, the way OptiClick installs them on Windows): only the proxy DLL
+             and OptiScaler.ini next to the exe; the libraries, D3D12_OptiScaler/ and plugins/ in OptiScaler/
+             (OptiDllPath=.\\OptiScaler). nitec's FSR 4.1.2 files go into OptiScaler/ too; cabinet.dll and
+             cabinet_wine.dll (LZMS, loaded by Wine) stay next to the exe. The folders ClawDeck creates are listed in
+             the manifest ("dirs"), so unpatch() takes them away with what OptiScaler wrote into them.
+
 OptiScaler from another tool (Decky Framegen's fgmod, OptiClick's files from a Windows install, by hand) is never
 touched: owner() says whose it is and the panel shows a warning instead.
 """
@@ -42,6 +50,7 @@ FSR4_XMX_DIR = "fsr4-xmx"
 # OptiScaler's package, minus what only Windows installs need
 SKIP = {"setup_linux.sh", "setup_windows.bat", "OptiScaler.dll", "OptiScaler.ini"}
 SKIP_PREFIX = ("!!", "Licenses/")
+SKIP_SUFFIX = (".bat",)                  # v10: OptiScaler/Streamlined_fetcher_windows.bat (a Windows download helper)
 # always: OptiPatcher (plugins/) loads, and the HQ font stays off (its auto mode asserts on a missing font under
 # Proton; Decky Framegen sets the same two)
 BASE_INI = {"Plugins_LoadAsiPlugins": "true", "Menu_UseHQFont": "false"}
@@ -200,8 +209,23 @@ def set_ini(text: str, values: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _put(src: str, dest: str, folder: str, added: list, backed: list) -> None:
-    rel = os.path.relpath(dest, folder)
+def _mkdirs(folder: str, rel_dir: str, dirs: list | None) -> None:
+    """makedirs for folder/rel_dir, recording each folder that didn't exist yet (so unpatch takes it away again)."""
+    if not rel_dir or rel_dir == ".":
+        return
+    parts = rel_dir.replace(os.sep, "/").split("/")
+    for i in range(1, len(parts) + 1):
+        rel = "/".join(parts[:i])
+        p = os.path.join(folder, rel)
+        if not os.path.isdir(p):
+            os.makedirs(p, exist_ok=True)
+            if dirs is not None and rel not in dirs:
+                dirs.append(rel)
+
+
+def _put(src: str, dest: str, folder: str, added: list, backed: list, dirs: list | None = None) -> None:
+    rel = os.path.relpath(dest, folder).replace(os.sep, "/")
+    _mkdirs(folder, os.path.dirname(rel), dirs)
     if os.path.lexists(dest) and rel not in added:
         bak = os.path.join(folder, STATE, "backup", rel)
         os.makedirs(os.path.dirname(bak), exist_ok=True)
@@ -221,9 +245,12 @@ def _proton_cabinet(home: str) -> str | None:
 
 
 def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str = "xess",
-          fsr4_xmx: bool = False) -> dict:
+          fsr4_xmx: bool = False, layout: str = "flat") -> dict:
     """Put ClawDeck's OptiScaler into `folder` (the game's exe folder). Patching again (another preset) rewrites
-    the ini and the FSR 4 files; the proxy name and backups stay."""
+    the ini and the FSR 4 files; the proxy name and backups stay. Another version or layout than the one in the
+    folder is taken out first, then put in fresh."""
+    if layout not in ("flat", "subfolder"):
+        return {"ok": False, "error": f"unknown OptiScaler layout {layout!r}"}
     pkg = package_dir(home, version)
     if not installed(home, version):
         return {"ok": False, "error": f"OptiScaler {version} isn't downloaded yet"}
@@ -232,8 +259,16 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
         return {"ok": False, "owner": who["owner"],
                 "error": "this game already has OptiScaler from " + ("Decky Framegen" if who["owner"] == "decky-framegen" else "another tool or by hand")
                          + "; remove that first (ClawDeck never overwrites it)"}
-    m = _manifest(folder) or {"version": version, "dll": None, "added": [], "backed": []}
+    m = _manifest(folder)
+    if m and (m.get("version") != version or (m.get("layout") or "flat") != layout):
+        r = unpatch(folder)                   # 0.9.4 (flat) -> v10 (subfolder) and back: nothing of the old one stays
+        if not r.get("ok"):
+            return {"ok": False, "error": f"taking out OptiScaler {m.get('version')} first: {r.get('error')}"}
+        m = None
+    m = m or {"version": version, "layout": layout, "dll": None, "added": [], "backed": [], "dirs": []}
     added, backed = m["added"], m["backed"]
+    dirs = m.setdefault("dirs", [])
+    sub = "OptiScaler/" if layout == "subfolder" else ""        # where OptiScaler's libraries (and FSR 4's) go
     try:
         dll = m.get("dll")
         if not dll:
@@ -245,28 +280,30 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
             if not dll:
                 return {"ok": False, "error": f"every proxy name ({', '.join(PROXIES)}) is taken in {folder}"}
         os.makedirs(os.path.join(folder, STATE), exist_ok=True)
-        _put(os.path.join(pkg, "OptiScaler.dll"), os.path.join(folder, dll), folder, added, backed)
+        _put(os.path.join(pkg, "OptiScaler.dll"), os.path.join(folder, dll), folder, added, backed, dirs)
         for r, d, f in os.walk(pkg):
             for x in f:
                 rel = os.path.relpath(os.path.join(r, x), pkg).replace(os.sep, "/")
-                if rel in SKIP or rel.startswith(SKIP_PREFIX):
+                if rel in SKIP or rel.startswith(SKIP_PREFIX) or rel.endswith(SKIP_SUFFIX):
                     continue
-                if fsr4_xmx and rel == "amd_fidelityfx_upscaler_dx12.dll":
+                if fsr4_xmx and rel == sub + "amd_fidelityfx_upscaler_dx12.dll":
                     continue
-                _put(os.path.join(r, x), os.path.join(folder, rel), folder, added, backed)
-        # FSR 4 on XMX: nitec's upscaler instead of AMD's, with what it needs; or AMD's back when switched away
+                _put(os.path.join(r, x), os.path.join(folder, rel), folder, added, backed, dirs)
+        # FSR 4 on XMX: nitec's upscaler instead of AMD's, with what it needs; or AMD's back when switched away.
+        # The upscaler and fsr-original.dll sit where OptiScaler loads its libraries from (OptiScaler/ in the
+        # subfolder layout); cabinet.dll / cabinet_wine.dll next to the exe, where Wine loads them (cabinet=n,b).
         xdir = os.path.join(home, FSR4_XMX_DIR)
-        extra = ("fsr-original.dll", "cabinet.dll", "cabinet_wine.dll")
+        extra = (sub + "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll")
         if fsr4_xmx:
             need = [f for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll") if not os.path.isfile(os.path.join(xdir, f))]
             if need:
                 return {"ok": False, "error": f"FSR 4 on XMX needs {', '.join(need)} in {xdir}"}
-            for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll"):
-                _put(os.path.join(xdir, f), os.path.join(folder, f), folder, added, backed)
+            for f, to in (("amd_fidelityfx_upscaler_dx12.dll", sub), ("fsr-original.dll", sub), ("cabinet.dll", "")):
+                _put(os.path.join(xdir, f), os.path.join(folder, to + f), folder, added, backed, dirs)
             wcab = os.path.join(xdir, "cabinet_wine.dll")
             wcab = wcab if os.path.isfile(wcab) else _proton_cabinet(home)
             if wcab:
-                _put(wcab, os.path.join(folder, "cabinet_wine.dll"), folder, added, backed)
+                _put(wcab, os.path.join(folder, "cabinet_wine.dll"), folder, added, backed, dirs)
         else:
             for f in extra:
                 if f in added and os.path.exists(os.path.join(folder, f)):
@@ -287,17 +324,18 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
             t = re.sub(r"(?m)^force_reflex=.*$", f"force_reflex={want}", t) if re.search(r"(?m)^force_reflex=", t) else t + f"\nforce_reflex={want}\n"
             with open(fk, "w", encoding="utf-8") as f:
                 f.write(t)
-        m.update({"version": version, "dll": dll, "preset": preset, "ini": ini, "added": added, "backed": backed})
+        m.update({"version": version, "layout": layout, "dll": dll, "preset": preset, "ini": ini, "added": added,
+                  "backed": backed, "dirs": dirs})
         with open(os.path.join(folder, STATE, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(m, f, indent=1)
-        for rel in added + [STATE]:
+        for rel in added + [STATE] + [x for x in dirs if "/" not in x]:
             p = os.path.join(folder, rel)
             if os.path.exists(p):
                 userexec.chown_tree(p, home)
     except OSError as e:
         return {"ok": False, "error": f"putting OptiScaler into {folder}: {e}"}
-    log.info("OptiScaler %s into %s as %s (%s)", version, folder, dll, preset)
-    return {"ok": True, "dll": dll, "dll_override": dll[:-4], "folder": folder, "version": version}
+    log.info("OptiScaler %s (%s) into %s as %s (%s)", version, layout, folder, dll, preset)
+    return {"ok": True, "dll": dll, "dll_override": dll[:-4], "folder": folder, "version": version, "layout": layout}
 
 
 def unpatch(folder: str | None) -> dict:
@@ -327,6 +365,17 @@ def unpatch(folder: str | None) -> dict:
             except OSError:
                 pass
     shutil.rmtree(os.path.join(folder, "D3D12_Optiscaler"), ignore_errors=True)
+    # the folders ClawDeck created (manifest "dirs", deepest first): OptiScaler/ of the subfolder layout goes with
+    # whatever OptiScaler wrote into it (its caches, logs); any other only when empty
+    for rel in sorted(m.get("dirs") or [], key=lambda x: x.count("/"), reverse=True):
+        p = os.path.join(folder, rel)
+        if rel == "OptiScaler":
+            shutil.rmtree(p, ignore_errors=True)
+        else:
+            try:
+                os.rmdir(p)
+            except OSError:
+                pass
     for d in ("D3D12_Optiscaler", "plugins"):
         try:
             os.rmdir(os.path.join(folder, d))                 # only when empty: the game may have its own plugins/
