@@ -4,7 +4,7 @@
 
 <h1 align="center">ClawDeck</h1>
 
-<p align="center"><b>Power, fans, fixes and OptiClick-style per-game upscaling for the MSI Claw on Bazzite and SteamOS,<br>right in Steam's Quick Access menu, with everything running on the Claw's XMX cores.</b></p>
+<p align="center"><b>Everything an Intel MSI Claw needs on Linux, in one Decky plugin.<br>FSR 4.1.2 and XeSS on the XMX cores, XeSS frame generation with low latency, power, fans and the fixes,<br>all from Steam's Quick Access menu.</b></p>
 
 <p align="center">
   <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/ClawDeck?include_prereleases&filter=v*&label=Latest%20Release&logo=github&color=7c3aed" alt="Latest release"></a>
@@ -25,9 +25,42 @@
   <img src="docs/img/fixes.png" alt="Fixes: VRR, face buttons, overlay watts, health" width="32%">
 </p>
 
-> **Test builds only, no release yet.** We test every build on a Claw 8 EX before a release appears under
+## One plugin, the whole Claw
+
+On Windows, a Claw owner ends up with a pile of tools: ClawTweaks for power and fans, OptiClick for OptiScaler, ClawLab
+for the VRR range, Intel's driver for XMX and frame generation. On Bazzite, ClawDeck does all of it, from one panel in
+Quick Access, with no terminal after the install.
+
+- 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores (nitec's build, shared with his
+  OK). ClawDeck downloads it for you and offers it in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
+- ⚡ **XeSS 2 on XMX**, the real Intel path, not the slower DP4a fallback Linux gives you out of the box.
+- 🎞️ **XeSS frame generation** with **XeLL low latency always on**, so the extra frames don't cost you the feel.
+- 🎮 **One tap per game.** Pick the game, pick the upscaler and frame generation, tap Install. ClawDeck installs a
+  pinned, tested OptiScaler, applies the per-game fixes OptiScaler's developers publish, and adds REFramework to
+  Capcom games, which need it to start. Uninstall puts every original file back.
+- 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX), Autotune
+  to find the lowest wattage that keeps your frame rate, fan curves and a battery charge limit.
+- 🛠️ **The fixes Bazzite doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
+  performance overlay, and a system log flood that costs battery.
+
+**Tested on:** MSI Claw 8 EX AI+ (Intel Core Ultra, Panther Lake, Arc B390 graphics) on Bazzite, mainly with
+CONTROL Resonant and Onimusha: Way of the Sword. The Claw 8 AI+ and 7 AI+ should get everything too (tell us!), and
+the older A1M and A8 get power and fixes.
+
+> **Beta.** We test every build on a Claw 8 EX before it goes under
 > [Releases](https://github.com/IHulkSmashI/ClawDeck/releases). Screenshots are from the preview with example data.
 > Tried it? Tell us how your games run: [Feedback](#feedback).
+
+### Quick install
+
+1. Install **Decky Loader** (Bazzite: **Bazzite Portal** → tick **Decky Loader**).
+2. In Desktop Mode, open **Konsole** and paste:
+   ```
+   curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/tools/update-from-main.sh | bash
+   ```
+3. Back in Game Mode: Quick Access → **ClawDeck** → follow **Set up ClawDeck** (two taps and one restart).
+
+The full walkthrough is under [Install](#install).
 
 ---
 
@@ -53,8 +86,9 @@ MSI button). The panel is four headings that fold open and shut: **Power**, **Up
 otherwise Power. **Explain** at the top shows what each control does, why you'd use it and what it costs.
 
 It's inspired by [ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks) and
-[OptiClick](https://github.com/onehoon/OptiClick) on Windows. It's an independent project and uses none of their code
-or data.
+[OptiClick](https://github.com/onehoon/OptiClick) on Windows. It's an independent project and uses none of their code. It
+reads OptiClick's public supported-game list and OptiScaler's public compatibility list to decide what each game
+gets.
 
 ### Power
 
@@ -136,9 +170,15 @@ curl -fsSL https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/tools/upd
 ```
 
 It asks for your password once (to copy the plugin into Decky's folder) and restarts Decky. Run the same line again
-to update. Once releases exist: download **ClawDeck.zip** from
-[Releases](https://github.com/IHulkSmashI/ClawDeck/releases), then Quick Access → Decky → gear → **Developer
-mode** on → Developer → **Install plugin from ZIP file**.
+to update.
+
+Prefer not to use a terminal? Once a release is out, Decky can install it straight from Game Mode: Quick Access →
+Decky → gear → **Developer mode** on → **Developer** → **Install plugin from URL**, and enter the
+link of **ClawDeck.zip** from the [Releases](https://github.com/IHulkSmashI/ClawDeck/releases) page (it looks like
+`https://github.com/IHulkSmashI/ClawDeck/releases/download/<version>/ClawDeck.zip`). (Or download **ClawDeck.zip** from
+[Releases](https://github.com/IHulkSmashI/ClawDeck/releases) and use **Install plugin from ZIP file**.)
+
+ClawDeck isn't in Decky's plugin store, so it won't show up there: use one of the ways above.
 
 **3. Do the two first-run steps.** Back in Game Mode, open Quick Access → ClawDeck. The first time, it shows
 **Set up ClawDeck**:
@@ -231,7 +271,7 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
 | Problem | What to do |
 |---|---|
 | **Black picture** in the game (the HUD still shows) | Look at **XMX cores used in the last launch** in ClawDeck. Red means the game ran on the stock driver: restart the game. FSR 4.1.2 needs the XMX cores and draws nothing without them. XeSS 2 still works in that case. |
-| **Locked at 30 fps, or 60 with frame generation** | VRR isn't on in the game. Wait about 25 seconds after the game appears: ClawDeck turns VRR on for the game. If it stays locked: … → Performance → Enable VRR off and on, and check **Fixes → VRR fix** is installed. |
+| **Locked at 30 fps, or 60 with frame generation** | VRR isn't on. Open … → Performance → turn **Enable VRR** off and on, and check **Fixes → VRR fix** is installed (it needs one restart). |
 | **The game crashes when you change the upscaler or frame generation in its menu** | Switching mid-game crashes some games. Quit, change it in ClawDeck, start again. |
 | **OptiScaler shows FSR 4.0.2 instead of 4.1.2** | Tap **Apply changes** in ClawDeck and restart the game. |
 | **"Decky Framegen's" or "put there by another tool"** under In this game now | ClawDeck never touches OptiScaler it didn't install (you don't need Decky Framegen: ClawDeck brings its own). Remove that one first (Stop using Decky Framegen here, then Decky Framegen → Unpatch; or delete its OptiScaler.ini and DLL), then pick again. |
