@@ -148,7 +148,7 @@ start, and applies each game's fixes from OptiScaler's compatibility list.
 
 | Fix | What it does |
 |---|---|
-| **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. ClawLab's fix; one restart. |
+| **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. |
 | **Face buttons** (Claw 8 EX) | Maps the two MSI buttons: left = Steam menu, right = Quick Access. |
 | **Performance overlay** | Real watts in Steam's performance overlay. |
 | **System log** | Stops a split-lock log flood that costs battery. |
