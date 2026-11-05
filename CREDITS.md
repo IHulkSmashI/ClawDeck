@@ -11,6 +11,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)** — the plugin system ClawDeck runs in.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)** — Intel xe/i915 GPU clock paths, RAPL package domain,
   intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
+- **PL2 = PL1 + 2 W** follows Handheld Daemon (`adjustor/core/rapl.py`), PowerControl (`cpu.py`) and PowerStation
+  (`intel_apu_database.toml`, max_boost 2.0); found in the 2026-11-05 audit of proven TDP tools.
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
   suspend/resume) and Decky patterns.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
