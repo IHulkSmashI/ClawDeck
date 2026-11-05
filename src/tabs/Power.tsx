@@ -9,7 +9,7 @@ import {
 import { Advanced } from "../components/Advanced";
 import { FanBattery } from "../components/FanBattery";
 import { LaunchWrapper } from "../components/LaunchWrapper";
-import { explain, Group, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
+import { explain, Group, Note, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
 import { runningApp } from "../steam";
 
 const toast = (body: string) => notify(body);
@@ -233,6 +233,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP (3 W steps on a plateau, then 1 W) while the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60 (${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
+        {autotune && !!at?.game_fg && (
+          <Note label={`Frame generation is on (${at.game_fg}x)`}>
+            {`The screen's refresh caps the frames the game renders at refresh ÷ ${at.game_fg} (40 fps at 3x on 120 Hz), and frame generation costs some frames too. So Autotune finds the least power that holds that cap, not the most this game can render. For a full measurement: set Frame generation to Off in Upscaling and frame generation, play until Autotune says "holding", then turn it back on.`}
+          </Note>
+        )}
       </PanelSectionRow>
       {app && autotune && !quick && <LaunchWrapper appid={app.appid} name={app.name} />}
       <FanBattery quick={quick} />
