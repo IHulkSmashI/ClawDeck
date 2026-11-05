@@ -134,10 +134,11 @@ class Power:
         return False
 
     def _sppt_for(self, watts: int, lim: dict) -> int:
-        ceiling = max(lim["plugged_max"], lim["battery_max"])
-        if self.boost:
-            return min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"])
-        return min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as ClawTweaks does from a single slider
+        # PL2 = PL1 + 2 W, as every proven Intel TDP tool does: Handheld Daemon (adjustor/core/rapl.py), PowerControl
+        # (cpu.py), PowerStation (intel_apu_database max_boost 2.0); Handheld Companion uses PL2 = PL1 (+1 W on Lunar
+        # Lake). ClawDeck used to scale PL2 up to 45 W (35 W -> 45 W): the package burst, then got clamped, and CPU
+        # bursts took the GPU's share - noisy frame times (audit 2026-11-05). Boost off: +1 W, as ClawTweaks does.
+        return min(watts + (2 if self.boost else 1), lim["sppt_max"])
 
     def _set_rapl(self, watts: int, lim: dict) -> bool:
         # thermald re-applies the platform's DPTF power table to this RAPL domain every few seconds (polling mode):

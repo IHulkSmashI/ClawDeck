@@ -47,6 +47,14 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Power, from the audit of proven tools (2026-11-05):** PL2 is now PL1 + 2 W (hhd, PowerControl, PowerStation), not
+  scaled to 45 W; Autotune is off by default and marked beta; MangoHud is injected only while Autotune is on; Autotune
+  no longer trims the CPU ceiling. Check: CONTROL at a 35 W pick, Autotune off, frame-time graph in Steam's overlay
+  compared with before (it was noisy at 45 fps); the chip reads PL2 = 37 W (`cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw`).
+  Still to test on the Claw (audit): `platform_profile` → `custom` with the MSI firmware attributes (what steamos-manager
+  and PowerControl do), MSR PL1 = MMIO PL1 with thermald left running, TCC offset / PTC instead of the software guard,
+  `gamescope --version` (3.17 holds the refresh rate in the menus: the VRR scope's off/on flicks can go).
+
 - **Temperature guard steps back up (2026-11-04):** after "thermal: stepped to N W", once the package is under 80 °C
   the TDP climbs 2 W every 30 s back to your limit and the line goes away (it used to stay stepped down until a new
   pick or the game closed: 21 W at 55 °C with a 35 W limit).

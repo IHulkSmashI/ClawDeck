@@ -197,10 +197,10 @@ def test_tdp_through_msi_firmware_when_no_hhd(tmp_path, monkeypatch):
     pw = power.Power(_hardware(p))
     assert pw.tdp_backend() == "msi-firmware"
     assert pw.set_tdp(15, plugged=False)
-    # EX: 35 W ceiling, 45 W boost -> boost scales 15 * 45/35 = 19 W; PL3 never above the boost limit
-    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [15, 19, 19]
+    # PL2 = PL1 + 2 W as the proven tools do; PL3 never above the boost limit
+    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [15, 17, 17]
     assert pw.set_tdp(99, plugged=True)                         # clamped to the plugged ceiling
-    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 45, 45]
+    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 37, 37]
     pw.revert_all()
     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 30, 40]
 
