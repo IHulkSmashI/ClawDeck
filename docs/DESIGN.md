@@ -81,7 +81,8 @@ tools/
 The backend never polls. The frontend registers Steam's own notifications and forwards them:
 `GameSessions.RegisterForAppLifetimeNotifications` (game start/stop), `System.RegisterForBatteryStateChanges`
 (the running game switches profile slot), `System.RegisterForOnResumeFromSuspend` (re-apply the running game).
-Timers exist only while autotune runs for a game, and the temperature guard's 10 s check while thermald is paused.
+Timers exist only while autotune runs for a game, and the temperature guard's 10 s check while thermald is paused
+(which includes the menus while ClawDeck holds a limit the user picked).
 
 ## Who sets the TDP
 On the Claw 8 EX the MSI firmware attributes are accepted but ignored (docs/HARDWARE-FINDINGS.md §12); the SoC
@@ -91,6 +92,21 @@ Every write answers with the value read back (§14).
 
 thermald (Bazzite, polling mode) re-applies the platform's DPTF table to that RAPL domain every few seconds (§21), so
 `power._set_rapl` stops it (never disables it) the first time ClawDeck sets a TDP and `revert_all` starts it again.
+
+## Your limit and Autotune (main.py `_pick`)
+The limit is what the user picked for the power source the Claw is on: the running game's own pick (a pick made while
+it ran, saved per game, battery and plugged in apart), else the last pick on that power source, else the default.
+`power_slot` returns it as `pick`, and the profile list and the slider show it, in a game and in the menus. With
+Autotune the slider stays that limit; the line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58
+fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
+- **Game start, a pick in a game, Use default, unplugging, resume:** `revert_all(keep_thermald=True)` (back to boot
+  values, thermald stays stopped because a TDP follows at once), then the pick, then a fresh Autotune session at that
+  limit. A pick in a game drops what was learned at the old limit, so nothing pulls the new limit down until
+  Autotune has measured it.
+- **Game exit:** what Autotune learned is saved, everything is reverted, then the pick for the power source the Claw
+  is on now goes back on the chip. With no pick on that power source the chip keeps the firmware's limits and thermald
+  starts again. Unplugging with no game switches to the other power source's pick the same way.
+- **Unload:** `revert_all()` as always: every value back to boot, thermald started.
 
 ## Temperature guard (§21)
 While thermald is stopped, `thermal.Guard` takes over its temperature job for ClawDeck's own TDP. main.py runs it

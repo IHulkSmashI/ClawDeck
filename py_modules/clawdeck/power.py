@@ -362,9 +362,8 @@ class Power:
         """True while ClawDeck holds a TDP and has stopped thermald: the temperature guard (thermal.py) runs then."""
         return self._thermald_paused
 
-    def revert_all(self) -> int:
-        """Back to what was there before ClawDeck: every sysfs value it touched, and HHD's TDP mode/value."""
-        n = sysfs.revert_all()
+    def release_thermald(self) -> None:
+        """thermald back in charge (started again if ClawDeck stopped it)."""
         if self._thermald_paused:
             r = _systemctl("start", THERMALD)
             self._thermald_paused = not (r is not None and r.returncode == 0)
@@ -372,6 +371,14 @@ class Power:
                 log.error("could not restart thermald after reverting the TDP: run 'sudo systemctl start thermald'")
             else:
                 log.info("thermald restarted")
+
+    def revert_all(self, keep_thermald: bool = False) -> int:
+        """Back to what was there before ClawDeck: every sysfs value it touched, and HHD's TDP mode/value.
+        keep_thermald: the caller sets a TDP again right away (a new pick, the game's exit back to the user's limit),
+        so thermald stays stopped instead of starting for a moment and rewriting PL1; release_thermald() if not."""
+        n = sysfs.revert_all()
+        if not keep_thermald:
+            self.release_thermald()
         orig, self._hhd_orig = self._hhd_orig, None
         if orig and orig.get("mode"):
             vals = {hhd.KEY_TDP_MODE: orig["mode"]}

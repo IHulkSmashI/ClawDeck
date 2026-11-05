@@ -30,7 +30,8 @@ Cost, per second while a game runs: the new lines of two small logs, /proc/stat,
 energy counter. The log directory listing and PowerStation's GPU load are cached (LOG_RESCAN_S, BUSY_EVERY_S).
 
 Rules: a manual change (Advanced) pauses it for the session; picking a profile or
-moving the TDP slider hands control back; everything applied is reverted on game exit.
+moving the TDP slider starts it over from the new limit (main.py); everything applied is reverted on game exit, and
+main.py puts the user's limit back.
 """
 from __future__ import annotations
 
@@ -391,12 +392,15 @@ class Autotune:
     def running(self) -> bool:
         return self.session is not None
 
-    def stop(self) -> dict | None:
+    def stop(self, revert: bool = True) -> dict | None:
+        """End the session; what it learned is returned for the game's profile. revert=False leaves the power as it is
+        for the caller, which reverts and sets the user's limit again itself (main.py)."""
         s = self.session
         self.session = None
         self.sampler.set_prefix(None)
         if s:
-            self.power.revert_all()
+            if revert:
+                self.power.revert_all()
             return {"learned": s.learned.__dict__, "samples": len(s.history)}
         return None
 
@@ -768,7 +772,7 @@ class Autotune:
         r = lambda v: None if v is None else round(v, 1)
         return {"running": True, "enabled": self.enabled, "appid": s.appid, "paused": s.paused, "phase": s.phase,
                 "learned": l.__dict__, "bound": l.bound, "tdp": l.tdp, "ceiling_tdp": s.ceiling_tdp,
-                "floor_tdp": s.floor_tdp, "keep_pct": s.keep_pct, "keep_fps": KEEP_FPS,
+                "floor_tdp": s.floor_tdp, "plugged": self.plugged, "keep_pct": s.keep_pct, "keep_fps": KEEP_FPS,
                 "saves_w": (s.ceiling_tdp - l.tdp) if (s.phase == "hold" and l.tdp is not None and s.ceiling_tdp > l.tdp) else None, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,

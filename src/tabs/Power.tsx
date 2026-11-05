@@ -61,7 +61,6 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [profile, setProfile] = useState(recent?.profile ?? "battery");
   const [tdp, setTdpV] = useState(recent?.tdp ?? 12);
   const [table, setTable] = useState<Record<string, { tdp?: number }>>({});
-  const [line, setLine] = useState<string | null>(null);      // after the last change: "RAPL reads 17 W / 24 W"
   const [err, setErr] = useState<string | null>(null);        // the last write that didn't take, in red
   const [advErr, setAdvErr] = useState<string | null>(null);
   const latest = useLatest();
@@ -82,29 +81,41 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     ]);
     if (mine !== readSeq.current) return;
     setSlot(sl);
-    // in a game, what that game runs with (its own pick for this power source) - not the last pick anywhere, which
-    // showed 35 W while the game ran its saved 15 W (2026-11-04)
-    const mineLast = appid && sl?.base ? sl.base : last;
-    const name = mineLast === "dock" ? "max" : (mineLast || "battery");
     setSt(s); setAutotune(auto !== false); setTable(tbl); setAt(a); setAtPlugged(atp !== false);
     if (pending.current > 0) return;
-    if (lastPick && Date.now() - lastPick.at < 4000 && lastPick.profile !== name) {
+    // the pick for this power source, as the backend applies it: in a game that game's own pick, else the last pick on
+    // battery / plugged in (not the last pick anywhere: on battery that showed the plugged-in profile), else the default.
+    // Its watts are your limit; what Autotune uses under it is the live line below, never the slider (2026-11-04).
+    const name = sl?.pick?.profile ?? (last === "dock" ? "max" : (last || "battery"));
+    const l = s?.range?.min ?? s?.limits.min ?? 8, h = s?.range?.max ?? s?.limits.plugged_max ?? 35;
+    const w = Math.max(l, Math.min(sl?.pick?.tdp ?? (name === "custom" ? s.custom_tdp : tbl[name]?.tdp) ?? s.tdp_w ?? 12, h));
+    if (lastPick && Date.now() - lastPick.at < 4000 && (lastPick.profile !== name || lastPick.tdp !== w)) {
       setProfile(lastPick.profile); setTdpV(lastPick.tdp); return;     // the write is still on its way
     }
     setProfile(name);
-    const w = name === "custom" ? ((appid && sl?.base === "custom" ? sl.tdp : null) ?? s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12);
-    const l = s?.range?.min ?? s?.limits.min ?? 8, h = s?.range?.max ?? s?.limits.plugged_max ?? 35;
-    setTdpV(Math.max(l, Math.min(w, h)));
+    setTdpV(w);
   };
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  const atRef = useRef<AutotuneStatus | null>(null);
+  atRef.current = at;
   useEffect(() => { refresh(); }, []);
-  // while the panel is open and Autotune runs (or the temperature guard is acting), its line follows along (one cheap
-  // call every 3 s, only while visible)
+  // while the panel is open in a game (Autotune on), or the temperature guard is acting, the live line follows along:
+  // one cheap call every 3 s, only while visible. When Autotune starts, stops, gets a new limit or the power source
+  // changes, everything is read again, so nothing stale stays on screen
   const hot = !!(at?.thermal?.tripped || at?.thermal?.stepped_w);
+  const live = !!(at?.running || hot || (appid && autotune));
   useEffect(() => {
-    if (!at?.running && !hot) return;
-    const t = setInterval(() => { getAutotune().then(setAt).catch(() => undefined); }, 3000);
+    if (!live) return;
+    const t = setInterval(() => {
+      getAutotune().then((a) => {
+        const p = atRef.current;
+        setAt(a);
+        if (!p || p.running !== a.running || p.ceiling_tdp !== a.ceiling_tdp || p.plugged !== a.plugged || p.appid !== a.appid) refreshRef.current();
+      }).catch(() => undefined);
+    }, 3000);
     return () => clearInterval(t);
-  }, [at?.running, hot]);
+  }, [live]);
 
   const lo = st?.range?.min ?? st?.limits.min ?? 8, hi = st?.range?.max ?? st?.limits.plugged_max ?? 35;
   const wattsOf = (id: string) => (table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
@@ -120,7 +131,6 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
-    setLine(`Chip now: ${r.read?.tdp_w ?? "?"} W (read back from ${backendName(r.read?.backend)})`);
     refresh();
   };
   const writeSeq = useRef(0);
@@ -153,7 +163,13 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (appid ? "Autotune on: waiting for frame times (is ClawDeck in the launch options?)" : "Autotune on: starts with the next game")
     : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
-    : `Autotune: ${at.ceiling_tdp} W max → using ${at.tdp} W · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "") + (at.saves_w ? ` · saves ~${at.saves_w} W` : "");
+    : `Autotune on · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "");
+  // the live line under the slider: your limit (the slider) and what Autotune runs the chip at under it now
+  const limitW = running ? (at?.ceiling_tdp ?? tdp) : null;
+  const savesW = running && at?.tdp != null && limitW != null && limitW > at.tdp ? limitW - at.tdp : 0;
+  const usingLine = running && at?.tdp != null
+    ? `Autotune: using ${at.tdp} W of your ${limitW} W` + (savesW ? ` · saves ${savesW} W` : "") +
+      ` · ${at.avg_fps != null ? `${Math.round(at.avg_fps)} fps` : "measuring…"}` : null;
   const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
   const atDetail = running
     ? `${bound} · ${phase}${at?.last_action ? ` · ${at.last_action}${at.last_change_s != null ? ` (${ago(at.last_change_s)})` : ""}` : ""}` : undefined;
@@ -173,10 +189,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
             quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
-        <Status ok={err ? false : null} label={(running && st?.tdp_w != null && st.tdp_w !== tdp
-            ? `Chip now: ${st.tdp_w} W (Autotune, below your ${tdp} W)` : (line ?? reads(st))) + (thermalLine ? ` · ${thermalLine}` : "")}
+        <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`
-            : app ? app.name : "No game running: the profile applies when one starts"} />
+            : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`
+            : app ? app.name : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
+            : "No game running: this limit is on the chip now, and comes back when a game closes"} />
         <Problem error={err} what="Power limit" />
         {app && slot && (
           <Field focusable bottomSeparator="none"

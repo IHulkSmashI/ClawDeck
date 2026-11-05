@@ -885,3 +885,159 @@ def test_autotune_frame_limited_holds_the_limit_at_the_floor(fake_hw, monkeypatc
     _run(at, 80)
     assert s.learned.tdp >= s.floor_tdp and s.learned.tdp <= 13 and s.learned.fps >= 38
     at.session = None
+
+
+# ---- the power path end to end (maintainer, 2026-11-04): your pick, Autotune under it, back to the pick on exit -----
+FW_PL1, FW_PL2 = 25_000_000, 37_000_000      # what the firmware holds before ClawDeck (boot values)
+
+
+@pytest.fixture
+def plugin(fake_hw, tmp_path, monkeypatch):
+    """main.Plugin with real Power / Autotune / Profiles on a fake RAPL tree, a fake thermald and a fake charger.
+    No background tasks: autotune's loop and the guard's are not started, the tests drive autotune's steps."""
+    from clawdeck import power as pw_mod
+    m = _load_main(tmp_path, monkeypatch)
+    root = tmp_path / "rapl"
+    _w(str(root / "constraint_0_power_limit_uw"), FW_PL1)
+    _w(str(root / "constraint_1_power_limit_uw"), FW_PL2)
+    fake_hw.paths.rapl_pl1 = str(root / "constraint_0_power_limit_uw")
+    fake_hw.paths.rapl_pl2 = str(root / "constraint_1_power_limit_uw")
+    thermald = {"active": True}
+
+    class R:
+        def __init__(self, out=""): self.returncode, self.stdout, self.stderr = 0, out, ""
+
+    def systemctl(*args):
+        if args[0] == "is-active":
+            return R("active" if thermald["active"] else "inactive")
+        thermald["active"] = args[0] == "start"
+        return R()
+    monkeypatch.setattr(pw_mod, "_systemctl", systemctl)
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    p = m.Plugin.__new__(m.Plugin)
+    p.hw = fake_hw
+    p.power = power.Power(fake_hw)
+    ac = {"plugged": False}
+    p.battery = type("B", (), {"plugged": lambda self: ac["plugged"]})()
+    p.profiles = profiles.Profiles(str(tmp_path / "profiles.json"))
+    p.autotune = autotune.Autotune(fake_hw, p.power, "/nonexistent")
+    p.settings = {"autotune": True, "autotune_plugged": True}
+    p._save_settings = lambda: None
+    p.running_appid, p.running_plugged, p._holding_pick = None, None, False
+    p.guard = thermal.Guard(None, None)
+    p._guard_task = None
+
+    import asyncio
+    p._power_lock = asyncio.Lock()
+    p.ac, p.thermald = ac, thermald
+    p.run = lambda coro: asyncio.run(coro)
+    p.chip = lambda: p.power.read_tdp()
+    yield p
+    p.autotune.session = None
+    sysfs.revert_all()
+
+
+def _lower(p, steps=30):
+    """Autotune runs for a while in a game that gets 60 fps from 15 W up (4 fps per watt below)."""
+    s = p.autotune.session
+    s.settle = 1
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp))
+    for _ in range(steps):
+        p.autotune._step()
+    return s
+
+
+def test_game_exit_puts_your_pick_back_not_the_firmwares_limits(plugin):
+    p = plugin
+    r = p.run(p.set_tdp(20))                                       # the slider in the menus, no game
+    assert r["ok"] and p.chip() == 20 and not p.thermald["active"]
+    p.run(p.game_started("42"))
+    assert p.chip() == 20 and p.autotune.session.ceiling_tdp == 20
+    s = _lower(p)
+    assert s.learned.tdp < 20 and p.chip() == s.learned.tdp       # Autotune uses less than your 20 W
+    p.run(p.game_stopped("42"))
+    assert p.chip() == 20                                          # your limit, not the firmware's 25 W
+    assert sysfs.read_int(p.hw.paths.rapl_pl1) == 20_000_000
+    assert p.profiles.own("42", False)["learned"]["tdp"] < 20      # what it learned is kept for the next start
+    p.run(p._unload())                                             # unloading still reverts everything
+    assert sysfs.read_int(p.hw.paths.rapl_pl1) == FW_PL1 and p.thermald["active"]
+
+
+def test_never_picked_on_this_power_source_leaves_the_firmware_and_thermald(plugin):
+    p = plugin
+    p.run(p.game_started("42"))                                    # default for battery: Battery 12 W
+    assert p.chip() == 12 and not p.thermald["active"]
+    _lower(p, 5)
+    p.run(p.game_stopped("42"))
+    assert sysfs.read_int(p.hw.paths.rapl_pl1) == FW_PL1 and p.thermald["active"]
+
+
+def test_status_shows_your_limit_and_what_autotune_uses(plugin):
+    p = plugin
+    p.settings["last_profile_battery"] = "max"                     # 35 W
+    p.run(p.game_started("42"))
+    s = _lower(p)
+    at = p.run(p.get_autotune())
+    st = p.run(p.get_power())
+    slot = p.run(p.power_slot("42"))
+    assert at["ceiling_tdp"] == 35 and at["tdp"] == s.learned.tdp < 35 and at["plugged"] is False
+    assert st["limit_w"] == 35 and st["autotune_w"] == at["tdp"] == st["tdp_w"]
+    assert slot["pick"] == {"profile": "max", "tdp": 35, "from": "last"} and slot["running"]
+
+
+def test_a_pick_in_a_game_is_the_new_limit_at_once_and_comes_back_at_the_next_start(plugin):
+    p = plugin
+    p.run(p.game_started("7"))
+    s = _lower(p)
+    assert s.ceiling_tdp == 12 and p.chip() == s.learned.tdp
+    p.autotune.pause("manual CPU ceiling")
+    r = p.run(p.apply_profile("balanced", "7"))
+    s = p.autotune.session
+    assert r["ok"] and p.chip() == 17 and r["limit_w"] == 17 and r["autotune_w"] == 17
+    assert s.ceiling_tdp == 17 and s.learned.tdp == 17 and s.phase == "measure" and not s.paused
+    assert s.learned.max_fps is None                               # measured again from the new limit
+    r = p.run(p.set_tdp(26))                                       # the slider, in the game
+    assert r["ok"] and p.chip() == 26 and p.autotune.session.ceiling_tdp == 26
+    assert p.profiles.own("7", False)["base"] == "custom" and p.profiles.own("7", False)["tdp"] == 26
+    p.run(p.game_stopped("7"))
+    assert p.chip() == 26                                          # the last pick on battery
+    p.run(p.apply_profile("saver"))                                # a different pick for all games, in the menus
+    assert p.chip() == 10
+    p.run(p.game_started("7"))
+    assert p.chip() == 26 and p.autotune.session.ceiling_tdp == 26  # the game's own pick
+    p.run(p.game_stopped("7"))
+    assert p.chip() == 10
+
+
+def test_use_default_follows_the_last_pick_again(plugin):
+    p = plugin
+    p.settings["last_profile_battery"] = "balanced"
+    p.run(p.game_started("7"))
+    p.run(p.set_tdp(22))
+    assert p.chip() == 22
+    p.settings["last_profile_battery"] = "balanced"                # as if picked again in the menus
+    r = p.run(p.reset_power_slot("7"))
+    assert r["ok"] and p.chip() == 17 and p.autotune.session.ceiling_tdp == 17
+
+
+def test_unplugging_during_and_after_a_game_follows_each_power_sources_pick(plugin):
+    p = plugin
+    p.ac["plugged"] = True
+    p.run(p.apply_profile("max"))                                  # plugged in: Max 35 W
+    p.ac["plugged"] = False
+    p.run(p.power_source_changed(False))
+    p.run(p.set_tdp(20))                                           # on battery: 20 W
+    assert p.chip() == 20
+    p.run(p.game_started("42"))
+    _lower(p, 10)
+    p.ac["plugged"] = True
+    r = p.run(p.power_source_changed(True))
+    assert r["changed"] and p.chip() == 35 and p.autotune.session.ceiling_tdp == 35 and p.autotune.plugged
+    assert p.profiles.own("42", False).get("learned")              # battery's learning kept in its own slot
+    p.run(p.game_stopped("42"))
+    assert p.chip() == 35                                          # exit on the charger: the plugged-in pick
+    p.ac["plugged"] = False
+    r = p.run(p.power_source_changed(False))
+    assert r["changed"] and p.chip() == 20                         # unplugged with no game: the battery pick
+    r = p.run(p.resumed())
+    assert r["reapplied"] and p.chip() == 20
