@@ -18,10 +18,13 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   XMX under Proton, with low latency; ClawDeck installs it, probes it, sets its per-game launch options and reads the
   shim's logs (low latency per game, rendered frames for Autotune).
 - **[Decky Framegen](https://github.com/xXJSONDeruloXx/Decky-Framegen)** by xXJSONDeruloXx — OptiScaler per game on
-  SteamOS / Bazzite. ClawDeck installs its release when missing and passes Intel presets through its fgmod
-  environment variables; nothing of it is copied.
-- **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — the upscaler / frame generation swap that Decky
-  Framegen sets up.
+  SteamOS / Bazzite. Its v0.17 OptiScaler + OptiPatcher pins (same release, same sha256) are where ClawDeck's own
+  install started from, and its `Section_Key` ini form and Proton defaults (OptiPatcher loading, HQ font off) are
+  followed. Games it patched are detected and left alone; nothing of its code is copied.
+- **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — the upscaler / frame generation swap ClawDeck installs
+  per game (its pinned release, unchanged).
+- **OptiPatcher** — the OptiScaler plugin ClawDeck puts in a game's `plugins/` folder; the pinned build (sha256
+  checked) comes from [OptiScaler-Bleeding-Edge](https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge)'s releases.
 - **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows tool whose one-tap, per-game OptiScaler setup
   ClawDeck's "Use the recommended setup" follows (match by exe, REFramework for RE Engine games, per-game ini
   values). OptiClick's own game data is private; no code or data is shared.

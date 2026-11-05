@@ -33,7 +33,7 @@ UPSTREAMS = {
     "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                               "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
-    "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "OptiScaler per game (framegen.py installs it, pinned)"),
+    "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "compatibility only: games it patched are detected and left alone (framegen.py)"),
     "OptiScaler": ("release", "optiscaler/OptiScaler", "ClawDeck's own OptiScaler per game (optiscaler.py; pinned with sha256)"),
     "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "the v10 line OptiClick uses for some games; FSR 4.1.2 model selection"),
     "OptiPatcher": ("release", "xXJSONDeruloXx/OptiScaler-Bleeding-Edge", "OptiPatcher.asi next to OptiScaler (pinned with sha256)"),

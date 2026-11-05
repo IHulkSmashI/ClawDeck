@@ -4,8 +4,8 @@ Windows, from an open source anyone can check and extend.
 For a game, match() finds its entry by the game's executables (OptiScaler's own exe names, and Unreal projects as
 <project>-Win64-Shipping.exe / -WinGDK-Shipping.exe). recommend() turns it into the Per-game setup for the Claw:
 
-  * OptiScaler through Decky Framegen with XeSS on XMX and XeSS frame generation (Intel's own, as on Windows);
-  * the game's OptiScaler settings from the list, as Decky Framegen launch variables ([Section] Key = Section_Key);
+  * ClawDeck's own OptiScaler (optiscaler.py) with XeSS on XMX and XeSS frame generation (Intel's own, as on Windows);
+  * the game's OptiScaler settings from the list, written into its OptiScaler.ini ([Section] Key = Section_Key);
   * Capcom RE Engine games: REFramework (dinput8.dll) next to OptiScaler, or Capcom's anti-tamper stops the game.
 """
 from __future__ import annotations
@@ -124,7 +124,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         reasons.append(f"{len(ini)} fix(es) from OptiScaler's own list for this game ({', '.join(k.split('_', 1)[1] for k in ini)})" if ini
                        else "OptiScaler's list has this game; no extra settings needed")
     if later and opti:
-        reasons.append(f"Not yet possible with the OptiScaler Decky Framegen ships ({doc.get('ini_version') or '?'}): {', '.join(later)}")
+        reasons.append(f"Not yet possible with the OptiScaler ClawDeck pins ({doc.get('ini_version') or '?'}): {', '.join(later)}")
     if (g or {}).get("quirks") and opti:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
     return {

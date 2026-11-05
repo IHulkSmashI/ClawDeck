@@ -1,5 +1,5 @@
 {
- "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and a Decky plugin (Decky Framegen) are installed only at a tested tag; 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
+ "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and ClawDeck's own OptiScaler + OptiPatcher are installed only at a tested version (OptiScaler with its sha256); 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
   "tag": "20261104",

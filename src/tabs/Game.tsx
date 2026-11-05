@@ -8,7 +8,7 @@ import { PerGameTab } from "./PerGame";
 
 let lastPick: string | null = null;      // the game picked last, while the plugin stays loaded
 
-/** One game at a time, picked from a list like Decky Framegen's: the running game first, then every installed game.
+/** One game at a time, picked from a list: the running game first, then every installed game.
  * Under it the game's recommended setup, upscaler and frame generation (PerGameTab). Same in Quick Access and the
  * full view; the full view adds the explanations and the less used switches. */
 export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
