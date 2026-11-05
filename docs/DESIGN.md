@@ -15,6 +15,8 @@ them). Priority, in order; nothing lower starts until the line above works on th
    game's settings and the Intel presets (XeSS on XMX, FSR 4 on XMX, XeSS frame generation) and takes them out again
    exactly (manifest + backups). The version is ClawDeck's to choose and test. Decky Framegen is compatibility only:
    a game it patched (fgmod in the launch options, or its files) is detected and left alone with a warning.
+   Capcom RE Engine games get OptiClick's Capcom setup instead (`optiscaler_v10` in the `OptiScaler\` subfolder,
+   onehoon's REFramework, the game's DLSS-G turned into XeSS-FG; `launchenv.capcom`); every other game 0.9.4.
    Lossless Scaling stays decky-lsfg-vk's.
 4. **Power + autotune** — profiles through RAPL-MMIO, as a dropdown plus the Autotune switch.
 
@@ -35,8 +37,11 @@ py_modules/clawdeck/
    autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
    xess.py      xess-xmx-linux: install (asset sha256 checked), state, per-game low latency from the shim's log,
                 OptiScaler-present detection (read-only)
-   optiscaler.py ClawDeck's OptiScaler: pinned install (sha256), patch / unpatch a game with manifest + backups,
-                owner() (ClawDeck's, Decky Framegen's or someone else's; only ClawDeck's is touched)
+   optiscaler.py ClawDeck's OptiScaler: pinned install (sha256), patch / unpatch a game with manifest + backups
+                (flat 0.9.4, or v10's OptiScaler/ subfolder for Capcom games), owner() (ClawDeck's, Decky
+                Framegen's or someone else's; only ClawDeck's is touched)
+   reframework.py onehoon's REFramework fork next to a Capcom game's exe (never over a dinput8.dll not ours), its
+                menu key moved to Delete
    framegen.py  Decky Framegen compatibility: is it installed, fgmod state (read-only; ClawDeck doesn't install it)
    launchenv.py per-game <runtime>/launch/<appid>.env: XMX off, XESS_FG, IGDEXT_XELL_CAP=off, XESS=latest, FSR routes,
                 OptiScaler presets (read by the wrapper)

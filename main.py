@@ -841,7 +841,7 @@ class Plugin:
         return {"launch": launch, "xess": xs, "latency": lat, "optiscaler": op, "framegen": fg, "wrapper": WRAPPER + " %command%",
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files(),
                 "opti_owner": (files := await self._bg(self._game_files, appid, xess.steam_install_dir(HOME, appid)))["owner"],
-                "files": files, "opti_version": self._versions()["optiscaler"]["version"],
+                "files": files, "opti_version": self._opti_entry(launch)["version"],
                 "xmx_proof": await self._bg(xess.xmx_proof, HOME, appid, RUNTIME_DIR)}
 
     def _opti_owner(self, appid: str, d: str | None) -> str | None:
@@ -922,12 +922,23 @@ class Plugin:
         decky.logger.info("game %s: route %s, DirectX 12 %s, FSR 4 XMX files %s (missing %s)", appid, rec["route"], dx12,
                           fsr4["ready"], fsr4["missing"])
         return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": who["owner"],
-                "fsr4": {"dx12": dx12, "files": fsr4["ready"], "missing": fsr4["missing"], "dir": fsr4["dir"]},
+                "fsr4": {"dx12": dx12, "files": fsr4["ready"], "missing": fsr4["missing"], "dir": fsr4["dir"],
+                         "xmx": not self._xmx_off(appid)},
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
+
+    def _opti_entry(self, launch: dict) -> dict:
+        """The OptiScaler this game gets: OptiClick's Capcom setup (v10, subfolder layout) for a Capcom RE Engine
+        game, 0.9.4 for every other one."""
+        v = self._versions()
+        return v["optiscaler_v10"] if launchenv.capcom(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+
+    def _xmx_off(self, appid: str) -> bool:
+        """XMX switched off for this game (Per-game): FSR 4.1.2 isn't offered then (a black screen without XMX)."""
+        return self.profiles.get_launch(appid).get("xmx") is False
 
     async def _opti_into(self, appid: str, folder: str, launch: dict) -> dict:
         """ClawDeck's OptiScaler into the game with the settings of `launch` (preset, XeSS-FG, the game's fixes)."""
-        entry = self._versions()["optiscaler"]
+        entry = self._opti_entry(launch)
         if not optiscaler.installed(HOME, entry["version"]) or not all(
                 os.path.isfile(os.path.join(optiscaler.package_dir(HOME, entry["version"]), x["dest"])) for x in entry.get("extras", [])):
             if self._install_lock.locked():
@@ -938,8 +949,10 @@ class Plugin:
                 return r
         opti = launch.get("opti") or "xess"
         opti = "fsr4_xmx" if opti == "fsr4" else opti
+        if opti in launchenv.FSR4_XMX and launch.get("xmx") is False:
+            return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
         r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
-                           opti, opti in launchenv.FSR4_XMX)
+                           opti, opti in launchenv.FSR4_XMX, entry.get("layout") or "flat")
         if r.get("ok"):
             games = self.settings.setdefault("opti_games", {})
             games[str(appid)] = folder
@@ -991,6 +1004,8 @@ class Plugin:
         rec, d, folder = await self._bg(self._rec, appid)
         if not d or not folder:
             return {"ok": False, "error": "can't find this game's install folder or its exe"}
+        if upscaler.startswith("fsr4_xmx") and self._xmx_off(appid):
+            return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
         if upscaler.startswith("fsr4_xmx") and not self._fsr4_xmx_files()["ready"]:
             f = self._fsr4_xmx_files()
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
@@ -1009,7 +1024,8 @@ class Plugin:
         launch = {"opti": upscaler, "opti_fg": rec["fg_source"] if fg else "off", "opti_ini": rec["ini"] if rec["optiscaler"] else {},
                   "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None,
                   "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
-        r = await self._opti_into(appid, folder, {k: v for k, v in launch.items() if v is not None})
+        r = await self._opti_into(appid, folder, {**{k: v for k, v in launch.items() if v is not None},
+                                                  "xmx": self.profiles.get_launch(appid).get("xmx")})
         if not r.get("ok"):
             return r
         launch["opti_dll"] = r["dll_override"]

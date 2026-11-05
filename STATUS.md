@@ -57,12 +57,43 @@ The four-panel UI has not been on the device yet.
   saves Z W", or "still learning; nothing new saved" after a short session. `ps -L -o psr,ni -p $(pgrep -f ClawDeck)`
   in a game shows only cores 10-13 (the LP-E cores) and nice 10.
 
-- **Onimusha the OptiClick way (2026-11-04, test in progress):** OptiClick's Windows install of Onimusha runs
-  onehoon's REFramework fork (fork-release-15, 854e42d) as dinput8.dll, OptiScaler 0.9.5-pre4 as dxgi.dll with its
-  files in `OptiScaler\` (OptiDllPath), OptiPatcher as a plugin, and XeFG fed by the game's own DLSS frame generation
-  (FGInput=DLSSG, FGOutput=XeFG). That exact set was copied into the Linux install for a test. If it works, ClawDeck's
-  Capcom setup moves to it; the forks are watched by `tools/upstream_watch.py` (onehoon REFramework, onehoon
-  OptiScaler, OptiScaler 0.9.5 previews, OptiClick).
+- **Onimusha the OptiClick way (2026-11-05, writes into game folders; test before the next release):** Capcom RE
+  Engine games now get exactly what OptiClick installs on Windows: onehoon's REFramework fork (release 15, the
+  23252480-byte `dinput8.dll`) and OptiScaler **v10** (nightly-20261030; OptiClick's 0.9.5-pre4 isn't on GitHub) in the
+  `OptiScaler\` subfolder layout, with OptiClick's ini (DLSS-G in, XeFG out). Every other game stays on 0.9.4.
+  1. Start clean: in Onimusha's folder (`steamapps/common/<Onimusha>/`, next to `OnimushaWotS.exe`) there is no
+     `dinput8.dll`, `dxgi.dll`, `OptiScaler.ini`, `OptiScaler\` or `re2_fw_config.txt` (move the files from tonight's
+     hand test out first; ClawDeck leaves OptiScaler it didn't install alone and says so).
+  2. ClawDeck → Games → Onimusha: the reasons read "The way OptiClick sets up Capcom games, tested on a Claw". Upscaler
+     XeSS 2, Frame generation 2x → **Install OptiScaler in this game** (one tap; the first time downloads about 72 MB
+     of OptiScaler and 13 MB of REFramework, both sha256-checked).
+  3. The folder now has, next to the exe: `dxgi.dll` (OptiScaler), `OptiScaler.ini`, `dinput8.dll` (REFramework),
+     `re2_fw_config.txt` with `REFrameworkConfig_MenuKey_V2=46` (only that line if the file was there before),
+     `.clawdeck-optiscaler/`, `.clawdeck-reframework.json`, and `OptiScaler\` with libxess, libxess_fg, libxell,
+     amd_fidelityfx_*, dlssg_to_fsr3_amd_is_better.dll, `D3D12_OptiScaler\` and `plugins\OptiPatcher.asi`. No
+     OptiScaler library next to the exe. `OptiScaler.ini` has Dx11Upscaler=fsr31_12, Dx12Upscaler=xess,
+     VulkanUpscaler=xess, [FrameGen] Enabled=true, FGInput=DLSSG, FGOutput=XeFG, FGNvngxReplacement=XeFG_NVNGX,
+     [DLSSG] OverrideInterpolationCount=1 (2x; 3x writes 2, 4x writes 3), [NvngxFG] DisableHudless=true,
+     OptiDllPath=.\OptiScaler, LoadAsiPlugins=true, RestoreComputeSignature=true, and [Spoofing] Dxgi=auto (the
+     wiki's Dxgi=false is left out on purpose: DLSS-G needs the spoofing). The game's launch environment
+     (`~/homebrew/data/ClawDeck/launch/2638890.env`) has `WINEDLLOVERRIDES=dxgi=n,b;dinput8=n,b;` and no
+     `Spoofing_Dxgi`.
+  4. Start the game. Graphics: DLSS on, DLSS Frame Generation on; quit and start again. Insert opens OptiScaler's
+     menu: Upscalers shows XeSS with Input DLSS; Frame generation shows FG Input DLSSG, FG Output XeFG. Delete opens
+     REFramework's menu (no longer Insert). The OptiScaler overlay (if picked) shows "(XeFG)".
+  5. FSR 4.1.2 (with nitec's files in `~/fsr4-xmx`): pick it, Apply: nitec's `amd_fidelityfx_upscaler_dx12.dll` and
+     `fsr-original.dll` land in `OptiScaler\`, `cabinet.dll` / `cabinet_wine.dll` next to the exe, the env adds
+     `cabinet=n,b`. In OptiScaler: FSR 3.X with FSR 4.1.2 under FFX Upscaler. Switch XMX off for the game: FSR 4.1.2
+     disappears from the list (and the backend refuses it); it was a black screen without XMX.
+  6. **Uninstall OptiScaler from this game**: the folder is exactly as in step 1 (also after the game wrote its logs:
+     OptiScaler's, REFramework's `reframework_log.txt` and empty `reframework\` folders go too; a
+     `re2_fw_config.txt` that was there before keeps every line, the menu key back as it was).
+  7. An Onimusha set up by ClawDeck 0.2 (0.9.4 next to the exe): Per-game offers "Update OptiScaler to
+     10.0.0-pre1-20261030"; Apply takes 0.9.4 out and puts v10 in `OptiScaler\`; praydog's nightly `dinput8.dll` is
+     swapped for onehoon's.
+  Not tested anywhere yet: Dragon's Dogma 2 (and its character creator) and the other RE Engine games get the same
+  setup, marked "not tested on a Claw" in their reasons. Releases 16 and 17 of onehoon's REFramework are watched by
+  `tools/upstream_watch.py`, not pinned.
 
 - **Power: your limit and Autotune stay in step (power-sync, 2026-11-04):** in the menus pick Custom 20 W (battery)
   and Max (plugged in). Start CONTROL on battery: the slider shows 20 W and the line under it "Autotune: using N W of
@@ -80,12 +111,8 @@ The four-panel UI has not been on the device yet.
   (XeFG InterpolationCount) with Reflex forced on through fakenvapi (XeLL). Switch the upscaler to FSR 4.1.1 XMX and
   Lite from Quick Access: OptiScaler.ini and the files change without opening OptiScaler. Undo leaves the folder as it
   was. A game Decky Framegen patched shows the warning and isn't touched.
-- **Recommended setup per game (writes into game folders):** Onimusha → "Use the recommended setup" → REFramework
-  (`dinput8.dll` + `.clawdeck-reframework.json`) next to `OnimushaWotS.exe`, ClawDeck's OptiScaler with
-  `Hotfix_RestoreComputeSignature=true` and `Spoofing_Dxgi=false`; the game starts (no Capcom DRM stop), DLSS in its
-  menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
-  `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
-  removes exactly those files. CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
+- **Recommended setup per game (writes into game folders):** Onimusha: see "Onimusha the OptiClick way" above.
+  CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
 - **Fan presets (Power → Fan, msi-wmi-platform hwmon):** Quiet / Cooling / Full speed / Custom each change the fans'
   rpm audibly (Quiet: off at idle), the "Fans now" line follows; Automatic puts MSI's own control back
   (pwm1/pwm2_enable read 2 again). The choice survives closing a game, a restart and sleep.
@@ -94,8 +121,6 @@ The four-panel UI has not been on the device yet.
 - **Autotune, efficiency (on by default, on the charger too):** CONTROL on battery and plugged in, from 35 W: note
   where it settles (Power shows "saves ~Z W"), the fps lost against the start (should be at most ~2–3 fps), and how
   long it takes to settle (3 W steps on a plateau, then 1 W). Check it holds a frame limit with the least power.
-- **REFramework pinned (nightly 01433, sha256 b3ff4f49…):** installed with OptiScaler in RE Engine games without a
-  question now. Onimusha: the game starts, REFramework loads, DLSS → XeSS on XMX.
 - **FSR 4.1.2 picks index 6:** OptiScaler lists AMD's 4.0.2 first with the B Boost files; ClawDeck now writes
   UpscalerIndex 6 (4.1.2). In CONTROL 4.1.2 drew a black picture in gameplay (upscaler time 0.00 ms): see the
   OptiScaler log before offering it by default.
