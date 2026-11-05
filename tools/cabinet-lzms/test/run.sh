@@ -8,7 +8,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"; trap 'wineserver -k 2>/dev/null; rm -rf "$work"' EXIT
 unset TMPDIR                                     # Wine 9 (Ubuntu) aborts in a fresh prefix with TMPDIR set
 export WINEPREFIX="$work/prefix" WINEDEBUG=-all WINEDLLOVERRIDES="cabinet=n,b;mscoree,mshtml="
-wine=$(command -v wine64 || command -v wine)
+wine=$(command -v wine || command -v wine64 || ls /usr/lib/wine/wine64 2>/dev/null) || { echo "wine not found"; exit 1; }
 cc -O2 -Wall -o "$work/mkvector" "$here/test/mkvector.c" -lwim
 # the DLL as ClawDeck places it: ours as cabinet.dll, Wine's builtin next to it as cabinet_wine.dll
 mkdir -p "$work/game"
