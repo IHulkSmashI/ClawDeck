@@ -157,8 +157,20 @@ def _only_empty_dirs(p: str) -> bool:
     return all(not f for _, _, f in os.walk(p))
 
 
-def remove(folder: str | None) -> dict:
+def remove(folder: str | None, known_sha256: tuple[str, ...] = ()) -> dict:
+    """Take ClawDeck's REFramework out of the game. A dinput8.dll without ClawDeck's mark but byte for byte a
+    REFramework build ClawDeck pins (`known_sha256`: copied in by hand, or an install whose mark was lost) goes too:
+    it is the same file ClawDeck would have put there, and leaving it keeps loading REFramework after "Uninstall
+    OptiScaler" (Onimusha, 2026-11-05). Any other dinput8.dll is someone else's and stays (reported as present)."""
     st = status(folder)
+    if not st["ours"] and st["present"] and known_sha256:
+        dll = os.path.join(folder, DLL)
+        if downloads.sha256_of(dll) in known_sha256:
+            try:
+                os.remove(dll)
+            except OSError as e:
+                return {"ok": False, "error": str(e), **st}
+            return {"ok": True, "removed": True, "unmarked": True, **status(folder)}
     if not st["ours"]:
         return {"ok": True, "removed": False, **st}
     m = _mark(folder) or {}
