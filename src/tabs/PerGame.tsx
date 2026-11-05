@@ -112,7 +112,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg || wantOv !== nowOv;
   // FSR 4.1.2 only where it can run, as OptiClick shows only what the game and the hardware support
   // never without XMX: nitec's FSR 4.1.2 drew a black screen on the stock driver (Onimusha, Claw 8 EX, 2026-11-04)
-  const fsr4Xmx = xmxOn && rec?.fsr4?.xmx !== false;
+  // only an explicit "XMX off" for the game hides it: before OptiScaler is set up the per-game XMX driver reads as off
+  // (nothing in the game uses XeSS yet), and picking an OptiScaler upscaler is what switches it on (launchenv: opti
+  // implies CLAWDECK_XMX=1). CONTROL showed no FSR 4.1.2 for that reason, 2026-11-05.
+  const fsr4Xmx = launch.xmx !== false && rec?.fsr4?.xmx !== false;
   const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files && fsr4Xmx);
   const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.2 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.2 isn't offered: this game isn't DirectX 12."
     : !fsr4Xmx ? "FSR 4.1.2 isn't offered: XMX is off for this game, and FSR 4.1.2 needs the XMX cores (a black screen without them)."
