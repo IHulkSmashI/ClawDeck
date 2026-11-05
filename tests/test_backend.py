@@ -1092,16 +1092,18 @@ def test_autotune_saves_only_a_finished_result(fake_hw, monkeypatch):
 def test_quiet_moves_only_this_process_to_the_efficiency_cores(tmp_path, monkeypatch):
     from clawdeck import quiet
     atom = tmp_path / "cpus"
-    atom.write_text("4-7\n")
+    atom.write_text("2-7\n")
+    for c in (2, 3):                                            # E-cores on the L3; 4-7 have none: LP-E
+        (tmp_path / "sys" / f"cpu{c}" / "cache" / "index3").mkdir(parents=True)
     calls = []
     monkeypatch.setattr(quiet.os, "cpu_count", lambda: 8)
     monkeypatch.setattr(quiet, "_threads", lambda: [11, 12])
     monkeypatch.setattr(quiet.os, "sched_setaffinity", lambda t, c: calls.append(("aff", t, sorted(c))))
     monkeypatch.setattr(quiet.os, "setpriority", lambda w, t, n: calls.append(("nice", t, n)))
     monkeypatch.setattr(quiet, "_on", False)
-    assert quiet.background(True, str(atom))
+    assert quiet.background(True, str(atom), str(tmp_path / "sys"))
     assert ("aff", 11, [4, 5, 6, 7]) in calls and ("nice", 12, 10) in calls
-    assert not quiet.background(True, str(atom))                # already there: nothing again
+    assert not quiet.background(True, str(atom), str(tmp_path / "sys"))                # already there: nothing again
     calls.clear()
-    assert quiet.background(False, str(atom))
+    assert quiet.background(False, str(atom), str(tmp_path / "sys"))
     assert ("aff", 11, list(range(8))) in calls and ("nice", 11, 0) in calls

@@ -51,7 +51,7 @@ The four-panel UI has not been on the device yet.
   2–3 min (no longer a full re-check every 5 min, now 20 min). A loading screen or the pause menu doesn't move the
   TDP (ClawDeck's log: "skipped a N fps window"). At exit the toast reads "Autotune saved X W of your Y W: A of B fps,
   saves Z W", or "still learning; nothing new saved" after a short session. `ps -L -o psr,ni -p $(pgrep -f ClawDeck)`
-  in a game shows only E-core numbers and nice 10.
+  in a game shows only cores 10-13 (the LP-E cores) and nice 10.
 
 - **Onimusha the OptiClick way (2026-11-04, test in progress):** OptiClick's Windows install of Onimusha runs
   onehoon's REFramework fork (fork-release-15, 854e42d) as dinput8.dll, OptiScaler 0.9.5-pre4 as dxgi.dll with its
