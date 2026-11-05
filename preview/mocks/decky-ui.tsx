@@ -8,9 +8,11 @@ export const staticClasses = { Title: "qam-title" };
 // description: the explanation line Steam draws under a control's label, inside the same focusable row
 const Desc: FC<{ d?: ReactNode }> = ({ d }) => (d ? <div className="qam-desc">{d}</div> : null);
 
-export const Field: FC<{ label?: ReactNode; description?: ReactNode; focusable?: boolean; bottomSeparator?: string; children?: ReactNode }> =
-  ({ label, description, focusable, children }) => (
-    <div className="qam-field qam-info" tabIndex={focusable ? 0 : undefined}>
+export const Field: FC<{ label?: ReactNode; description?: ReactNode; focusable?: boolean; bottomSeparator?: string; children?: ReactNode;
+  highlightOnFocus?: boolean; onClick?: () => void; onActivate?: () => void }> =
+  ({ label, description, focusable, children, onClick, onActivate }) => (
+    <div className="qam-field qam-info" tabIndex={focusable ? 0 : undefined} onClick={onClick ?? onActivate}
+      style={onClick || onActivate ? { cursor: "pointer" } : undefined}>
       {label && <span className="qam-label">{label}</span>}
       <Desc d={description} />
       {children}
