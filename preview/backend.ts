@@ -229,9 +229,6 @@ export const backend = {
     ? ok({ up_to_date: true, repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", summary: "XeSS XMX 20261104 is up to date" })
     : (state.xessInstalled = true, ok({ repo: "HHHHanasak1/xess-xmx-linux", tag: "20261104", next: "log out of Game Mode and back in once" }))),
   framegen_state: () => framegenState(),
-  framegen_install: (allow: boolean) => (state.framegen ? ok({ already: true, summary: "Decky Framegen 0.17 is installed" })
-    : allow ? (state.framegen = true, ok({ tag: "v0.17", restarting: true, next: "Decky restarts in a few seconds. Then open Decky Framegen once and tap \"Setup OptiScaler Mod\"." }))
-    : { ok: false, error: "xXJSONDeruloXx/Decky-Framegen has no tested version pinned yet; allow 'latest (untested)' to continue" }),
 
   // ---- fixes ----
   set_wide_vrr: (on: boolean) => { state.wideVrr = on; return { ok: true, restart: true }; },

@@ -102,7 +102,6 @@ export const setXmxEveryGame = callable<[on: boolean], { ok: boolean; error?: st
 export const optiscalerState = callable<[], OptiState>("optiscaler_state");
 export const optiscalerInstall = callable<[], { ok: boolean; error?: string; already?: boolean; version?: string }>("optiscaler_install");
 export const framegenState = callable<[], FramegenState>("framegen_state");
-export const framegenInstall = callable<[allowUnpinned: boolean], Fix & { already?: boolean; summary?: string; restarting?: boolean; tag?: string }>("framegen_install");
 
 // ---- fixes -----------------------------------------------------------------------------------------------------------
 export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;

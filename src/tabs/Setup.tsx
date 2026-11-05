@@ -8,7 +8,8 @@ import { explain, Note, Problem, Status, useExplanations } from "../components/H
 
 const toast = (body: string) => notify(body);
 
-/** The XeSS XMX driver and Decky Framegen installs, the self-test and the log export. */
+/** The XeSS XMX driver install, ClawDeck's own OptiScaler (and whether Decky Framegen is installed too), the self-test
+ * and the log export. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   useExplanations();
   const [hw, setHw] = useState<Hardware | null>(null);

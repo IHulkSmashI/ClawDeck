@@ -49,8 +49,9 @@ Tools in `tools/`. The release zip carries only the three the plugin runs (`claw
 
 ClawDeck depends on a lot of other people's projects, and each one can change under it. Three things keep it working:
 
-1. **For users, at runtime** (`py_modules/clawdeck/downloads.py`, `xess.py`): the xess-xmx-linux driver and Decky Framegen
-   are pinned in `assets/versions.json` and bumped after testing (an unpinned one asks "latest, untested?").
+1. **For users, at runtime** (`py_modules/clawdeck/downloads.py`, `xess.py`, `optiscaler.py`): the xess-xmx-linux driver
+   and ClawDeck's own OptiScaler + OptiPatcher (`optiscaler`) are pinned in `assets/versions.json` and bumped after
+   testing (an unpinned driver asks "latest, untested?").
    Downloads go over HTTPS from the project's own releases, with a checksum check where one is published.
 2. **Every day, on GitHub** (`.github/workflows/upstream-watch.yml` → `tools/upstream_watch.py`): the newest version
    of every upstream is compared with `assets/upstream.lock.json` (what was last tested), and ClawDeck's own parsers

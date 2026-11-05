@@ -2,8 +2,9 @@
 
 Every per-game choice that has to be in the game's environment lands here, composed from the game's launch settings
 (profiles.py, key "launch"). The xess-xmx-linux variables are read by the package's Proton hook and shim
-(its docs/launch-options.md); the OptiScaler ones by Decky Framegen's fgmod wrapper, which writes them into the
-game's OptiScaler.ini at each launch (its README, "Configuring OptiScaler via Environment Variables").
+(its docs/launch-options.md). The OptiScaler settings go into the game's OptiScaler.ini when ClawDeck's own
+OptiScaler is put in or re-applied (opti_ini, optiscaler.patch); the same Section_Key names are what Decky
+Framegen's fgmod reads from the environment, so a game Decky Framegen patched still gets the presets.
 
   xmx          bool | unset         per-game scope (xmxscope.py, the default since 0.2): unset = automatic (the XMX
                                     driver only for a game that ships XeSS or OptiScaler), on/off = CLAWDECK_XMX=1/0.
@@ -18,9 +19,9 @@ game's OptiScaler.ini at each launch (its README, "Configuring OptiScaler via En
   xess_latest  bool                 XESS=latest: Intel's current XeSS libraries instead of the game's older ones
   low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
   opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
-                                    OptiScaler (Decky Framegen) upscaler for this game: XeSS on XMX, FSR 4 INT8
-                                    (experimental on Intel), or FSR 4.1.2 on XMX (nitec's build, regular or lite);
-                                    only takes effect when the game runs through fgmod
+                                    OptiScaler upscaler for this game: XeSS on XMX, FSR 4 INT8 (experimental on
+                                    Intel), or FSR 4.1.2 on XMX (nitec's build, regular or lite); takes effect when
+                                    ClawDeck's OptiScaler is in the game (or, for compatibility, through fgmod)
   opti_xefg    bool                 OptiScaler's frame-generation output = XeSS-FG (on XMX through the shim)
 
 The plugin never edits Steam's launch options itself; the user adds the wrapper once per game (Per-game does it on

@@ -222,7 +222,7 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
 | **Locked at 30 fps, or 60 with frame generation** | VRR isn't on in the game. Wait about 25 seconds after the game appears: ClawDeck turns VRR on for the game. If it stays locked: … → Performance → Enable VRR off and on, and check **Fixes → VRR fix** is installed. |
 | **The game crashes when you change the upscaler or frame generation in its menu** | Switching mid-game crashes some games. Quit, change it in ClawDeck, start again. |
 | **OptiScaler shows FSR 4.0.2 instead of 4.1.2** | Tap **Apply changes** in ClawDeck and restart the game. |
-| **"Decky Framegen's" or "put there by another tool"** under In this game now | ClawDeck never touches OptiScaler it didn't install. Remove that one first (Decky Framegen → Unpatch, or delete its OptiScaler.ini and DLL), then pick again. |
+| **"Decky Framegen's" or "put there by another tool"** under In this game now | ClawDeck never touches OptiScaler it didn't install (you don't need Decky Framegen: ClawDeck brings its own). Remove that one first (Stop using Decky Framegen here, then Decky Framegen → Unpatch; or delete its OptiScaler.ini and DLL), then pick again. |
 | **A message was cut off** | Steam shows one line. The whole message stays at the top of Quick Access for two minutes. |
 | **Anything else** | Setup → **Export log to Desktop**, then [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) and attach the file. |
 

@@ -41,8 +41,8 @@ const FRAMEGENS = [
 ];
 
 /**
- * The running game's XeSS on the XMX cores (xess-xmx-linux's per-game launch options, one tap each) and OptiScaler
- * through Bazzite's Decky Framegen with Intel presets. Every choice reaches the game through ClawDeck's launch wrapper
+ * The running game's XeSS on the XMX cores (xess-xmx-linux's per-game launch options, one tap each) and ClawDeck's
+ * own pinned OptiScaler with Intel presets (a game Decky Framegen patched is left alone, with a warning). Every choice reaches the game through ClawDeck's launch wrapper
  * (an environment file per game), so the first change adds the wrapper to the game's launch options.
  */
 export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null; embedded?: boolean }> = ({ quick, pick, embedded }) => {
