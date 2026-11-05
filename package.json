@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "python3 -m pytest -q tests",
     "preview": "node preview/build.mjs",
-    "test:ts": "esbuild tests/ts/vrr.test.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/clawdeck-tests/vrr.test.mjs && node node_modules/.cache/clawdeck-tests/vrr.test.mjs"
+    "test:ts": "tsc --noEmit"
   },
   "repository": {
     "type": "git",

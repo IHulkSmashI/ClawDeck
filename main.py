@@ -87,6 +87,10 @@ class Plugin:
             if self.profiles.get_launch(appid).get("xmx") is False:
                 self.profiles.set_launch(appid, {"xmx": None})
                 decky.logger.info("game %s: XMX switch-off dropped (the switch was removed)", appid)
+            # "E-cores only" is gone too: the kernel's hybrid scheduler places a game's threads on the P-, E- and LP-E
+            # cores itself, as Thread Director does on Windows (maintainer: "should just be automatic")
+            if self.profiles.get_launch(appid).get("cores") is not None:
+                self.profiles.set_launch(appid, {"cores": None})
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)
@@ -151,9 +155,14 @@ class Plugin:
             except Exception as e:
                 auto[key] = f"failed: {e}"
                 decky.logger.warning("first-run fix %s: %s", key, e)
-        if "xmx_every_game" not in auto and xmxscope.xmx_env(HOME):
-            r = xmxscope.set_every_game(HOME, True)
-            auto["xmx_every_game"] = "on" if r["ok"] else f"failed: {r.get('error')}"
+        # the XMX driver wherever XMX can be used (maintainer, 2026-11-05: "XMX cores used any time they can be"):
+        # automatic, in every game with XeSS, XeSS frame generation, XeLL or OptiScaler, which is all a game can run on
+        # the XMX cores, on Windows too. "Every game" also put it in games with none of those, where it gains nothing
+        # and costs speed (its Mesa build is not Bazzite's newest: Onimusha without OptiScaler lost much of its frame
+        # rate), so it goes back to automatic once; there is no switch any more.
+        if xmxscope.every_game(HOME) and auto.get("xmx_every_game") != "automatic":
+            r = xmxscope.set_every_game(HOME, False)
+            auto["xmx_every_game"] = "automatic" if r["ok"] else f"failed: {r.get('error')}"
             jobs.append(("xmx_every_game", None))
         if jobs:
             self._save_settings()

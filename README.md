@@ -95,7 +95,6 @@ ClawDeck in the launch options, the XMX driver, and **"XMX cores used in the las
 | Fix | What it does and why |
 |---|---|
 | **VRR fix 30–120 Hz** | The Claw's screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. This is ClawLab's fix, the one Windows users install. It needs one restart. |
-| **VRR only in games** | With VRR on in Steam's menus, the screen follows the menus' frame rate, and a game compiling shaders at 30 fps made the whole library choppy. So ClawDeck keeps Steam's menus at a steady 120 Hz and turns VRR on only while a game runs. With a dock or monitor connected, ClawDeck leaves VRR to Steam. |
 | **Face buttons** (Claw 8 EX) | The two MSI buttons do nothing in Game Mode on current Bazzite. The fix maps them: left = Steam menu, right = Quick Access. |
 | **Performance overlay** | Real watts in Steam's performance overlay. Linux hides the power counter by default; ClawDeck opens it at boot. |
 | **System log** | Silences a split-lock log flood (thousands of lines a minute) that cost battery and erased crash logs. |

@@ -1,8 +1,8 @@
-import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, optiscalerState, selfTest, setXmxEveryGame, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
+import { collectLogs, getHardware, optiscalerState, selfTest, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 
@@ -59,10 +59,9 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       </PanelSectionRow>
       {x?.installed && x.scope?.per_game && !noXmx && (
         <PanelSectionRow>
-          <ToggleField label="XMX driver for every game" checked={!!x.scope.every_game}
-            onChange={async (v) => { const r = await setXmxEveryGame(v); toast(r.ok ? (v ? "Every game gets the XMX driver from its next launch" : "Only games with XeSS, OptiScaler or FSR on XeSS get the XMX driver") : `Not changed: ${r.error}`); refresh(); }}
-            description={explain("Every game starts on the XeSS XMX driver, so whatever XeSS, XeSS frame generation or XeLL a game has built in runs on the XMX cores, with or without OptiScaler. Steam's own screen keeps Bazzite's driver either way. Off: only games that ship XeSS or OptiScaler, or that you set up for FSR on XeSS.",
-              undefined, "a game without any XeSS gains nothing from it and can lose a little speed (Onimusha did); switch that one off in Per-game. Each game's first launch compiles for a minute or two, once.")} />
+          <Status ok={true} label="XMX driver: in every game that can use the XMX cores"
+            detail={explain("Automatic, as on Windows: every game with XeSS, XeSS frame generation, XeLL or ClawDeck's OptiScaler starts on the XeSS XMX driver, so that work runs on the XMX cores. A game with none of them can't use the XMX cores at all and keeps Bazzite's newer driver. DLSS and FSR games get there through OptiScaler (Per-game).",
+              undefined, "each game's first launch on it compiles for a minute or two, once.")} />
         </PanelSectionRow>
       )}
       <PanelSectionRow>
