@@ -89,7 +89,7 @@ export const FanBattery: FC<{ quick?: boolean }> = ({ quick }) => {
           <Group title="Fan" />
           <Anchor id="fan"><DropdownItem label={quick ? undefined : "Fan"} layout="below" childrenContainerWidth="max" rgOptions={FAN_OPTIONS}
             selectedOption={fanNow} onChange={(o) => { markPick("fan"); pickFan(String(o.data)); }}
-            description={explain(FAN_DOES[fanNow] ?? "", quick ? undefined : "the same presets as ClawTweaks on Windows; Steam has no fan control for the Claw.",
+            description={explain(FAN_DOES[fanNow] ?? "", quick ? undefined : "Steam has no fan control for the Claw.",
               fanNow === "full" ? "loud" : fanNow === "quiet" ? "warmer: the chip may lower its clocks sooner in heavy games" : undefined)} /></Anchor>
           <Status ok={fanErr ? false : null} label={`Fans now: ${rpm} rpm`} detail={fs.fans?.[0]?.enable === 1 ? "Following ClawDeck's fan table" : "MSI automatic"} />
           <Problem error={fanErr} what="Fan" />

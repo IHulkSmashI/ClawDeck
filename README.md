@@ -220,9 +220,8 @@ ClawDeck is free. If you'd like to chip in: [ko-fi.com/gamervault](https://ko-fi
 
 ## Credits
 
-ClawDeck stands on the work of xess-xmx-linux, OptiScaler, nitec's FSR 4 build, REFramework, ClawLab, ClawTweaks,
-OptiClick, InputPlumber, PowerStation, Handheld Daemon, MangoHud, Decky Loader and Bazzite. What each one does for
-ClawDeck: [CREDITS.md](CREDITS.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+ClawDeck uses open-source work from xess-xmx-linux, OptiScaler, nitec's FSR 4 build, REFramework and others: the full
+list is in [CREDITS.md](CREDITS.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [AGPLv3](LICENSE) (see [LICENSING.md](LICENSING.md)). A community project, not affiliated with MSI, Valve, Intel, AMD
 or Microsoft. "Claw" is a trademark of MSI.
