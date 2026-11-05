@@ -939,8 +939,7 @@ class Plugin:
     async def _opti_into(self, appid: str, folder: str, launch: dict) -> dict:
         """ClawDeck's OptiScaler into the game with the settings of `launch` (preset, XeSS-FG, the game's fixes)."""
         entry = self._opti_entry(launch)
-        if not optiscaler.installed(HOME, entry["version"]) or not all(
-                os.path.isfile(os.path.join(optiscaler.package_dir(HOME, entry["version"]), x["dest"])) for x in entry.get("extras", [])):
+        if not optiscaler.installed(HOME, entry["version"]) or not optiscaler.extras_ready(HOME, entry):
             if self._install_lock.locked():
                 return {"ok": False, "busy": True, "error": "already downloading; wait for the first one to finish"}
             async with self._install_lock:

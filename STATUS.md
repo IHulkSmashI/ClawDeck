@@ -70,10 +70,14 @@ The four-panel UI has not been on the device yet.
   3. The folder now has, next to the exe: `dxgi.dll` (OptiScaler), `OptiScaler.ini`, `dinput8.dll` (REFramework),
      `re2_fw_config.txt` with `REFrameworkConfig_MenuKey_V2=46` (only that line if the file was there before),
      `.clawdeck-optiscaler/`, `.clawdeck-reframework.json`, and `OptiScaler\` with libxess, libxess_fg, libxell,
-     amd_fidelityfx_*, dlssg_to_fsr3_amd_is_better.dll, `D3D12_OptiScaler\` and `plugins\OptiPatcher.asi`. No
-     OptiScaler library next to the exe. `OptiScaler.ini` has Dx11Upscaler=fsr31_12, Dx12Upscaler=xess,
+     amd_fidelityfx_*, dlssg_to_fsr3_amd_is_better.dll, `fakenvapi.dll` (v1.4.1, 415232 bytes) with `fakenvapi.ini`
+     (enable_logs=1, enable_trace_logs=0, force_latencyflex=0, force_reflex=0), `D3D12_OptiScaler\` and
+     `plugins\OptiPatcher.asi`. No OptiScaler library and no fakenvapi next to the exe. (v10 has fakenvapi built
+     in, `[fakenvapi] UseFakenvapi=true`, and doesn't load the file; it is there because OptiClick's folder has it.
+     Check OptiScaler.log for the low-latency line: the game's Reflex should become XeLL.) `OptiScaler.ini` has Dx11Upscaler=fsr31_12, Dx12Upscaler=xess,
      VulkanUpscaler=xess, [FrameGen] Enabled=true, FGInput=DLSSG, FGOutput=XeFG, FGNvngxReplacement=XeFG_NVNGX,
-     [DLSSG] OverrideInterpolationCount=1 (2x; 3x writes 2, 4x writes 3), [NvngxFG] DisableHudless=true,
+     [DLSSG] OverrideInterpolationCount=1 (2x; 3x writes 2, 4x writes 3; OptiScaler counts generated frames, so
+     OptiClick's =2 on Windows ran 3x there), [NvngxFG] DisableHudless=true,
      OptiDllPath=.\OptiScaler, LoadAsiPlugins=true, RestoreComputeSignature=true, and [Spoofing] Dxgi=auto (the
      wiki's Dxgi=false is left out on purpose: DLSS-G needs the spoofing). The game's launch environment
      (`~/homebrew/data/ClawDeck/launch/2638890.env`) has `WINEDLLOVERRIDES=dxgi=n,b;dinput8=n,b;` and no

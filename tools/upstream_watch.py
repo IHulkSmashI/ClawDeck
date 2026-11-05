@@ -36,6 +36,7 @@ UPSTREAMS = {
     "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "compatibility only: games it patched are detected and left alone (framegen.py)"),
     "OptiScaler": ("release", "optiscaler/OptiScaler", "ClawDeck's own OptiScaler per game (optiscaler.py; pinned with sha256)"),
     "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "Capcom RE Engine games: ClawDeck's OptiScaler v10 in the OptiScaler/ subfolder (optiscaler.py; pinned with sha256)"),
+    "fakenvapi": ("release", "FakeMichau/fakenvapi", "Capcom games: fakenvapi.dll in OptiScaler/ next to v10 (optiscaler.py; pinned with sha256)"),
     "OptiPatcher": ("release", "xXJSONDeruloXx/OptiScaler-Bleeding-Edge", "OptiPatcher.asi next to OptiScaler (pinned with sha256)"),
     # OptiClick's own forks (onehoon): its Windows install of Onimusha (2026-11-04) runs this REFramework fork with
     # OptiScaler 0.9.5-pre4 and XeFG from the game's DLSS-G; the fork's notes: "custom OptiScaler with this custom

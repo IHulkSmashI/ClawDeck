@@ -48,8 +48,20 @@
     "url": "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/bins-for-optipatcher-rolling/OptiPatcher_rolling.asi",
     "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
     "dest": "OptiScaler/plugins/OptiPatcher.asi"
+   },
+   {
+    "name": "fakenvapi",
+    "url": "https://github.com/FakeMichau/fakenvapi/releases/download/v1.4.1/fakenvapi-v1.4.1.7z",
+    "sha256": "e1239f74f458e3bafd7e86fb6c02557abb267499650580c4bfbdd60815304ddd",
+    "files": {
+     "fakenvapi.dll": "OptiScaler/fakenvapi.dll"
+    },
+    "file_sha256": {
+     "fakenvapi.dll": "373e73dc06e2d66e90083fde3bc99ef5c1ed0bef98d1f7eda56c8b073269c3f1"
+    },
+    "ini": "OptiScaler/fakenvapi.ini"
    }
   ],
-  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. OptiClick's Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4)."
+  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. OptiClick's Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with OptiClick's fakenvapi.ini, as in OptiClick's folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw."
  }
 }

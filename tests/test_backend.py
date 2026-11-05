@@ -1163,7 +1163,8 @@ def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_pat
     v["reframework"].pop("dll_sha256")                  # the stand-in dinput8.dll below isn't the real one
     monkeypatch.setattr(p, "_versions", lambda: v)
     pkg = optiscaler.package_dir(home, v["optiscaler_v10"]["version"])
-    for f in ("OptiScaler.dll", "OptiScaler/libxess.dll", "OptiScaler/amd_fidelityfx_upscaler_dx12.dll", v["optiscaler_v10"]["extras"][0]["dest"]):
+    for f in ("OptiScaler.dll", "OptiScaler/libxess.dll", "OptiScaler/amd_fidelityfx_upscaler_dx12.dll",
+              *[p for x in v["optiscaler_v10"]["extras"] for p in optiscaler.extra_dests(x)]):
         _w(os.path.join(pkg, f), f)
     _w(os.path.join(pkg, "OptiScaler.ini"), "[FrameGen]\nFGInput=auto\n\n[Spoofing]\nDxgi=auto\n")
     game = tmp_path / "steam" / "Onimusha"
@@ -1187,6 +1188,8 @@ def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_pat
     r = p.run(p.game_choose("2638890", "xess", 2))
     assert r["ok"], r
     assert got == ["onehoon/REFramework"] and (game / "dinput8.dll").exists() and (game / "OptiScaler" / "libxess.dll").exists()
+    assert (game / "OptiScaler" / "fakenvapi.dll").exists() and (game / "OptiScaler" / "fakenvapi.ini").exists()
+    assert "UseFakenvapi=true" in (game / "OptiScaler.ini").read_text()
     assert (game / "re2_fw_config.txt").read_text() == "REFrameworkConfig_MenuKey_V2=46\n"
     ini = (game / "OptiScaler.ini").read_text()
     assert "FGInput=DLSSG" in ini and "Dxgi=auto" in ini and "OptiDllPath=.\\OptiScaler" in ini

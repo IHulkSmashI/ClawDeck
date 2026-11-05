@@ -25,6 +25,10 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   per game (its pinned release, unchanged). Capcom RE Engine games get the v10 build from the
   **[OptiScaler nightly](https://github.com/optiscaler/OptiScaler-nightly)** releases (pinned with its sha256), installed
   in the `OptiScaler\` subfolder layout the v10 package ships.
+- **[fakenvapi](https://github.com/FakeMichau/fakenvapi)** by FakeMichau (MIT) — turns a game's Reflex into XeLL /
+  LatencyFlex on non-Nvidia GPUs. OptiScaler v10 carries it built in; ClawDeck also puts the v1.4.1 release's
+  `fakenvapi.dll` (pinned with its sha256, the same build OptiScaler 0.9.4 ships) and OptiClick's `fakenvapi.ini` in
+  a Capcom game's `OptiScaler\` folder, as OptiClick does. Downloaded from its releases, not shipped with ClawDeck.
 - **OptiPatcher** — the OptiScaler plugin ClawDeck puts in a game's `plugins/` folder; the pinned build (sha256
   checked) comes from [OptiScaler-Bleeding-Edge](https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge)'s releases.
 - **[OptiClick](https://github.com/onehoon/OptiClick)** by onehoon — the Windows tool whose one-tap, per-game OptiScaler
