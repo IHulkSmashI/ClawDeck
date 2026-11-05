@@ -58,7 +58,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
 - **[xess-xmx-linux issue #49](https://github.com/HHHHanasak1/xess-xmx-linux/issues/49)** — where the open
   `cabinet.dll` was proposed (LZMS via wimlib instead of Windows' copy). HHHHanasak1 asked for it to live in
   ClawDeck.
-- **FSR 4 on XMX** by nitec and the OptiScaler community — the upscaler build ClawDeck sets up; not shipped with ClawDeck.
+- **FSR 4 on XMX** by nitec and the OptiScaler community — the FSR 4.1.2 build for the XMX cores. Shared with ClawDeck
+  with nitec's OK: hosted as assets of ClawDeck's `fsr4-xmx-4.1.2` release and downloaded once into `~/fsr4-xmx`.
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
 - **Decky Framerate** — an early reference for reading frame times in Game Mode.
 

@@ -347,6 +347,29 @@ def fsr4_xmx_import(home: str, depth: int = 3) -> dict:
     return {"ok": True, "imported": False, "dir": xdir}
 
 
+def fsr4_xmx_download(home: str, entry: dict) -> dict:
+    """nitec's FSR 4.1.2 XMX files into ~/fsr4-xmx from where ClawDeck hosts them (versions.json "fsr4_xmx"), each
+    sha256 checked; a file already there with the right sha256 isn't fetched again. Blocking (about 100 MB)."""
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    os.makedirs(xdir, exist_ok=True)
+    got = []
+    for name, sha in (entry.get("files") or {}).items():
+        dest = os.path.join(xdir, name)
+        if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
+            continue
+        url = f"https://github.com/{entry['repo']}/releases/download/{entry['tag']}/{name}"
+        tmp = downloads.download(url, dest + ".new", timeout=120.0)
+        if downloads.sha256_of(tmp) != sha:
+            os.unlink(tmp)
+            return {"ok": False, "error": f"{name}: the download doesn't match its sha256 (not used)"}
+        os.replace(tmp, dest)
+        got.append(name)
+    if got:
+        userexec.chown_tree(xdir, home)
+        log.info("FSR 4.1.2 XMX files downloaded: %s", ", ".join(got))
+    return {"ok": True, "downloaded": got, "dir": xdir}
+
+
 def _proton_cabinet(home: str) -> str | None:
     for p in sorted(glob.glob(os.path.join(home, ".local/share/Steam/steamapps/common/Proton*/files/lib/wine/x86_64-windows/cabinet.dll")), reverse=True):
         return p
