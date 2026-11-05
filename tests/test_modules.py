@@ -1474,3 +1474,26 @@ def test_fsr4_xmx_files_are_taken_from_downloads_as_a_pair_or_a_zip(tmp_path, mo
     assert r["imported"] and (home / "fsr4-xmx" / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"nitec"
     assert (home / "fsr4-xmx" / "fsr-original.dll").read_bytes() == b"amd"
     assert optiscaler.fsr4_xmx_import(str(home))["imported"] is False          # already there
+
+
+def test_fsr4_xmx_download_checks_each_sha256(tmp_path, monkeypatch):
+    import hashlib
+    from clawdeck import downloads, optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    body = {"amd_fidelityfx_upscaler_dx12.dll": b"nitec", "fsr-original.dll": b"amd"}
+    entry = {"repo": "o/r", "tag": "t", "files": {k: hashlib.sha256(v).hexdigest() for k, v in body.items()}}
+    urls = []
+
+    def fake(url, dest, timeout=0):
+        urls.append(url)
+        open(dest, "wb").write(body[url.rsplit("/", 1)[1]])
+        return dest
+    monkeypatch.setattr(downloads, "download", fake)
+    r = optiscaler.fsr4_xmx_download(str(tmp_path), entry)
+    assert r["ok"] and sorted(r["downloaded"]) == sorted(body)
+    assert urls[0].startswith("https://github.com/o/r/releases/download/t/")
+    assert optiscaler.fsr4_xmx_download(str(tmp_path), entry)["downloaded"] == []          # already there
+    entry["files"]["fsr-original.dll"] = "0" * 64
+    (tmp_path / "fsr4-xmx" / "fsr-original.dll").unlink()
+    r = optiscaler.fsr4_xmx_download(str(tmp_path), entry)
+    assert not r["ok"] and not (tmp_path / "fsr4-xmx" / "fsr-original.dll").exists()

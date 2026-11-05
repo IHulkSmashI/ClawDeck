@@ -112,6 +112,8 @@ class Plugin:
         # the per-game lists, kept current (OptiClick reads its database at every start too): ClawDeck's, OptiClick's
         # supported list, OptiScaler's Compatibility List; offline: the copies from last time, else the plugin's
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
+        # FSR 4.1.2 on XMX with nothing to set up: nitec's files fetched once in the background (versions.json)
+        asyncio.get_event_loop().run_in_executor(None, self._fsr4_fetch)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
@@ -936,6 +938,18 @@ class Plugin:
         who = optiscaler.owner(folder)
         return {**who, "folder": folder, "reframework": reframework.status(folder)["present"] if folder else False,
                 "install_dir": d}
+
+    def _fsr4_fetch(self) -> None:
+        try:
+            if not any(m in optiscaler.FSR4_XMX_FILES for m in optiscaler.fsr4_xmx_missing(HOME)):
+                return
+            if optiscaler.fsr4_xmx_import(HOME).get("imported"):
+                return
+            entry = self._versions().get("fsr4_xmx")
+            if entry:
+                decky.logger.info("FSR 4.1.2 XMX: %s", optiscaler.fsr4_xmx_download(HOME, entry))
+        except Exception as e:                    # offline, or the release isn't there: Downloads still works
+            decky.logger.info("FSR 4.1.2 XMX download: %s", e)
 
     @staticmethod
     def _fsr4_xmx_files() -> dict:
