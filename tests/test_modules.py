@@ -842,9 +842,9 @@ def test_fsr4_xmx_picks_4_1_2_in_optiscaler(tmp_path, monkeypatch):
     """OptiScaler lists AMD's 4.0.2 first with the B Boost files; the pick must be 4.1.2 (index 6), written into the ini."""
     from clawdeck import launchenv, optiscaler
     monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
-    for preset in ("fsr4_xmx", "fsr4_xmx_lite"):
+    for preset, idx in (("fsr4_xmx", "6"), ("fsr4_xmx_lite", "9")):
         ini = launchenv.opti_ini({"opti": preset})
-        assert ini.get("FSR_UpscalerIndex") == "6" and ini.get("Upscalers_Dx12Upscaler", ini.get("Dx12Upscaler")) == "fsr31"
+        assert ini.get("FSR_UpscalerIndex") == idx and ini.get("Upscalers_Dx12Upscaler", ini.get("Dx12Upscaler")) == "fsr31"
     home = str(tmp_path)
     _opti_pkg(home)
     x = tmp_path / "fsr4-xmx"

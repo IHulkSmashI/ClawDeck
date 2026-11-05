@@ -50,10 +50,12 @@ OPTI_PRESETS = {
     # FSR 4.1.2 on the XMX cores: nitec's "B Boost" build of AMD's upscaler (OptiScaler Discord). The user puts its
     # files in ~/fsr4-xmx; clawdeck-launch.sh copies them over fgmod's FSR 4 after fgmod ran (CLAWDECK_FSR4_XMX).
     # OptiScaler: the FSR 3.1 path with the FSR 4 provider. With the B Boost files OptiScaler lists 4.0.2 first (AMD's
-    # original, kept as fsr-original.dll) and 4.1.2 (the XMX build) at index 6 (CONTROL, Claw 8 EX, 2026-11-04).
+    # original, kept as fsr-original.dll) first. The FFX Upscaler list with nitec's file (CONTROL, Claw 8 EX, 2026-11-04):
+    # 0-5 FSR 4.0.2X (+ Skip, QSkip, Hybrid...), 6 FSR 4.1.2X, 7/8 its Skip/QSkip, 9 FSR 4.1.2X Lite, 10 Lite Skip,
+    # 11+ DLSS-EX/FX/EFX/KX/MX/LX (DLSS presets on XMX from the game's nvngx_dlss.dll). Lite is its own entry.
     "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
                  "CLAWDECK_FSR4_XMX": "regular", "FSR4_XMX_NO_DIALOG": "1"},
-    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
+    "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "9", "FSR_Fsr4Update": "true",
                       "CLAWDECK_FSR4_XMX": "lite", "FSR4_XMX_LITE": "1", "FSR4_XMX_NO_DIALOG": "1"},
 }
 FSR4_XMX = ("fsr4_xmx", "fsr4_xmx_lite")
