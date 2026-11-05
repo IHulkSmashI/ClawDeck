@@ -1,0 +1,17 @@
+cabinet-lzms: an open cabinet.dll (Compression API LZMS decompressor) for Wine / Proton, part of ClawDeck.
+
+Copyright (C) 2026 IHulkSmashI and ClawDeck contributors
+Copyright (C) 2012-2016 Eric Biggers (wimlib/: the LZMS decoder and its helpers)
+
+This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General
+Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option)
+any later version.
+
+This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+details.
+
+The full text of the GNU Lesser General Public License, version 2.1, is in wimlib/COPYING.LGPL; wimlib's own
+licensing note is in wimlib/COPYING. Some of wimlib's files (compress_common.c, decompress_common.c, cpu_features.c
+and several headers) are under the MIT license stated in each of them, which is compatible with the above. The files in this folder are under this license; the rest of ClawDeck is under
+the MIT License in the repository's root LICENSE file.

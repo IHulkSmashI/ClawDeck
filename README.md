@@ -188,8 +188,13 @@ FSR 4.1.2 on the XMX cores is nitec's build of AMD's FSR 4, from the OptiScaler 
 We can't redistribute it, so you add the files yourself once:
 
 1. Make a folder **fsr4-xmx** in your home folder (`/home/<you>/fsr4-xmx`).
-2. Put these three files in it: `amd_fidelityfx_upscaler_dx12.dll`, `fsr-original.dll`, `cabinet.dll`.
+2. Put these two files in it: `amd_fidelityfx_upscaler_dx12.dll`, `fsr-original.dll`.
 3. Reopen ClawDeck: FSR 4.1.2 and FSR 4.1.2 Lite appear in the Upscaler list for DirectX 12 games.
+
+You don't need Windows' `cabinet.dll`. The build unpacks its kernels with Windows' Compression API (LZMS), and
+ClawDeck brings its own open `cabinet.dll` for that (`tools/cabinet-lzms`, LGPL, built on wimlib's LZMS decoder). It
+goes next to the game's exe and comes out again with the rest. A `cabinet.dll` left in `fsr4-xmx` from before is not
+used, and you can delete it.
 
 If they don't appear, the note under the Upscaler says why: not a DirectX 12 game, or a file is missing.
 

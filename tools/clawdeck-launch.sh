@@ -10,8 +10,9 @@
 # Env: CLAWDECK_NO_MANGOHUD=1 skips the overlay/log; CLAWDECK_RUNTIME overrides the runtime folder.
 set -u
 # ---- second stage: Decky Framegen's fgmod has copied OptiScaler and its FSR 4 into the game, then started us -----
-# FSR 4.1.1 on XMX (Per-game: OptiScaler upscaler "FSR 4 XMX"): nitec's files from ~/fsr4-xmx go over fgmod's FSR 4,
-# with Wine's own cabinet.dll as cabinet_wine.dll next to the LZMS one. What ClawDeck added is listed in
+# FSR 4.1.2 on XMX (Per-game: OptiScaler upscaler "FSR 4 XMX"): nitec's files from ~/fsr4-xmx go over fgmod's FSR 4,
+# with ClawDeck's own LZMS cabinet.dll (tools/cabinet-lzms; the plugin keeps a copy next to this wrapper) and Wine's
+# own cabinet.dll as cabinet_wine.dll next to it. What ClawDeck added is listed in
 # .clawdeck-fsr4xmx so the next launch without FSR 4 XMX removes it again (fgmod puts its own FSR 4 back every launch).
 if [ "${CLAWDECK_STAGE:-}" = post ]; then
   unset CLAWDECK_STAGE
@@ -28,11 +29,13 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
       echo "clawdeck: FSR 4 XMX files removed from $dir" >&2
     fi
     src="${CLAWDECK_FSR4_XMX_DIR:-$HOME/fsr4-xmx}"
+    cab="${CLAWDECK_CABINET:-$HOME/.local/share/clawdeck/cabinet.dll}"
     if [ -n "${CLAWDECK_FSR4_XMX:-}" ]; then
-      if [ -f "$src/amd_fidelityfx_upscaler_dx12.dll" ] && [ -f "$src/fsr-original.dll" ] && [ -f "$src/cabinet.dll" ]; then
+      if [ -f "$src/amd_fidelityfx_upscaler_dx12.dll" ] && [ -f "$src/fsr-original.dll" ] && [ -f "$cab" ]; then
         : > "$list"
         cp -f "$src/amd_fidelityfx_upscaler_dx12.dll" "$dir/"     # fgmod's own FSR 4 is put back by fgmod each launch
-        for f in fsr-original.dll cabinet.dll; do cp -f "$src/$f" "$dir/" && echo "$f" >> "$list"; done
+        cp -f "$src/fsr-original.dll" "$dir/" && echo fsr-original.dll >> "$list"
+        cp -f "$cab" "$dir/cabinet.dll" && echo cabinet.dll >> "$list"
         wcab="$src/cabinet_wine.dll"
         if [ ! -f "$wcab" ]; then                                 # Wine's own cabinet, from the Proton running this game
           for p in ${STEAM_COMPAT_TOOL_PATHS//:/ }; do
@@ -45,7 +48,7 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
         if [ -n "$ig" ] && [ ! -f "$dir/igdext64.dll" ]; then cp -f "$ig" "$dir/" && echo igdext64.dll >> "$list"; fi
         echo "clawdeck: FSR 4 XMX ($CLAWDECK_FSR4_XMX) into $dir" >&2
       else
-        echo "clawdeck: FSR 4 XMX: $src needs amd_fidelityfx_upscaler_dx12.dll, fsr-original.dll and cabinet.dll; fgmod's FSR 4 stays" >&2
+        echo "clawdeck: FSR 4 XMX: needs amd_fidelityfx_upscaler_dx12.dll and fsr-original.dll in $src, and ClawDeck's $cab; fgmod's FSR 4 stays" >&2
       fi
     fi
   fi

@@ -33,15 +33,16 @@ def run(cmd: list[str], home: str, timeout: float = 600, cwd: str | None = None,
         return {"rc": -1, "out": str(e)}
 
 
-def write_new(path: str, text: str, mode: int = 0o644) -> str:
+def write_new(path: str, text: str | bytes, mode: int = 0o644) -> str:
     """Write a file in a folder the user can write to, as root, without following a link someone planted there:
-    whatever is at the path (file or symlink) is removed first, and the new file is created exclusively."""
+    whatever is at the path (file or symlink) is removed first, and the new file is created exclusively. Text is
+    written as UTF-8, bytes as they are."""
     try:
         os.unlink(path)
     except FileNotFoundError:
         pass
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), mode)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with (os.fdopen(fd, "wb") if isinstance(text, bytes) else os.fdopen(fd, "w", encoding="utf-8")) as f:
         f.write(text)
     os.chmod(path, mode)
     return path
