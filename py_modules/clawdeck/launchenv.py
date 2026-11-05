@@ -110,13 +110,10 @@ CAPCOM_FG_COUNT = "2"
 
 
 def v10(launch: dict) -> bool:
-    """OptiScaler v10 (OptiScaler/ subfolder layout) instead of 0.9.4: OptiClick's Capcom setup, and 3x / 4x frame
-    generation fed from the game's own DLSS-G. With DLSS-G as the source, 0.9.4 follows the game's frame count, and a
-    game whose DLSS-G menu offers 2x only (no Nvidia MFG on Intel) stays at 2x whatever XESS_FG says: CONTROL on the
-    Claw, 2026-11-05 (XeFG initialized with maxInterpolatedFrames 1, the override never asked). v10's [DLSSG]
-    OverrideInterpolationCount replaces the game's count, as OptiClick sets it on Windows (its Onimusha install:
-    OverrideInterpolationCount=2 for 3x)."""
-    return capcom(launch) or (launch.get("opti_fg") == "dlssg" and (launch.get("fg") or 0) >= 3)
+    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for OptiClick's Capcom setup, which was
+    tested with it. 3x / 4x in other games come from XESS_FG (xess-xmx-linux's ControlLib.dll answers XeSS frame
+    generation's override query, as Intel Graphics Software does on Windows), with any OptiScaler."""
+    return capcom(launch)
 
 
 def capcom(launch: dict) -> bool:
@@ -248,13 +245,6 @@ def opti_ini(launch: dict) -> dict[str, str]:
     ov = launch.get("opti_overlay")
     if isinstance(ov, int) and not isinstance(ov, bool) and ov in OVERLAYS:
         env.update({"Menu_ShowFps": "true", "Menu_FpsOverlayType": str(ov), "Menu_FpsOverlayPos": "1"})
-    if v10(launch) and not capcom(launch):
-        # the game's DLSS-G count replaced (1 = 2x, 2 = 3x, 3 = 4x), v10's subfolder layout; FSR 4's 0.9.4-only
-        # switches don't exist in v10
-        for k in ("FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "XeFG_InterpolationCount"):
-            env.pop(k, None)
-        env.update({"DLSSG_OverrideInterpolationCount": str(min(max(fg - 1, 1), 3)),
-                    "Libraries_OptiDllPath": ".\\OptiScaler", "Plugins_LoadAsiPlugins": "true"})
     if capcom(launch):
         for k in CAPCOM_DROP:
             env.pop(k, None)
