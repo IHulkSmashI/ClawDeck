@@ -1495,3 +1495,18 @@ def test_fsr4_xmx_download_checks_each_sha256(tmp_path, monkeypatch):
     (tmp_path / "fsr4-xmx" / "fsr-original.dll").unlink()
     r = optiscaler.fsr4_xmx_download(str(tmp_path), entry)
     assert not r["ok"] and not (tmp_path / "fsr4-xmx" / "fsr-original.dll").exists()
+
+
+def test_game_latency_reports_xells_own_average(tmp_path, monkeypatch):
+    from clawdeck import xess
+    d = tmp_path / "pfx" / "drive_c"
+    d.mkdir(parents=True)
+    monkeypatch.setattr(xess, "prefix_dir", lambda home, appid: str(d))
+    (d / "igdext_xell.log").write_text(
+        "low latency: on (auto)\nauto: frame generation on (xefg), pacing\n"
+        "auto: waited in 100 of 100 frames, 10.1 ms each (0.22 ms spun)\n"
+        "xell latency: simulation start -> present end avg 28.6 ms (sim -> render submit 8.9 ms) over 62 frames\n"
+        "xell latency: simulation start -> present end avg 33.4 ms (sim -> render submit 12.4 ms) over 63 frames\n")
+    r = xess.game_latency(str(tmp_path), "1", True)
+    assert r["mode"] == "pacing" and r["latency_ms"] == 31.0 and "31 ms on average" in r["detail"]
+    assert xess.game_latency(str(tmp_path), "1", False)["latency_ms"] == 31.0
