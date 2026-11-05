@@ -275,5 +275,5 @@ and answered:
 **Help:** [CONTRIBUTING.md](CONTRIBUTING.md) · ClawDeck is free; if you'd like to chip in:
 [ko-fi.com/gamervault](https://ko-fi.com/gamervault).
 
-[MIT](LICENSE). ClawDeck is a community project, not affiliated with MSI, Valve, Intel, AMD or Microsoft. "Claw" is a
+[AGPLv3](LICENSE) (see [LICENSING.md](LICENSING.md)). ClawDeck is a community project, not affiliated with MSI, Valve, Intel, AMD or Microsoft. "Claw" is a
 trademark of MSI.
