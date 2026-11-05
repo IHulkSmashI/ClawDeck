@@ -19,7 +19,7 @@ export type PowerStatus = {
 export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; line: string | null; stepped_s: number | null };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
 export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
-export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; last?: any;
+export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; no_frames?: boolean; last?: any;
   phase?: "measure" | "balance" | "lower" | "hold"; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number; keep_fps?: number; saves_w?: number | null;
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
   source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
