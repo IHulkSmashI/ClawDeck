@@ -115,10 +115,10 @@ def patch(edid: bytes, key: str, lo: int = WIDE[0], hi: int = WIDE[1]) -> bytes:
     """The factory EDID with the wider range. Raises ValueError for anything but a validated factory EDID."""
     p = PANELS.get(key)
     if p is None:
-        raise ValueError(f"panel {key or '?'} is not one ClawLab validated")
+        raise ValueError(f"panel {key or '?'} is not a validated panel")
     base = canonical(edid, p["length"])
     if base is None or sha256(base) != p["physical_sha256"]:
-        raise ValueError(f"panel {key} has an EDID ClawLab has not validated ({sha256(edid)[:12]}...)")
+        raise ValueError(f"panel {key} has an EDID that isn't validated ({sha256(edid)[:12]}...)")
     e = bytearray(base)
     for mn, mx in p["range_offsets"]:
         e[mn], e[mx] = lo, hi
@@ -188,7 +188,7 @@ def status() -> dict:
     if not raw:
         reason = "no internal screen EDID found"
     elif p is None:
-        reason = f"screen {key or '?'} is not one of the panels ClawLab validated"
+        reason = f"screen {key or '?'} is not one of the validated panels"
     elif ours:
         supported = True
     else:
