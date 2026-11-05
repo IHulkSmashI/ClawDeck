@@ -1,4 +1,4 @@
-import { Field, PanelSection, PanelSectionRow } from "@decky/ui";
+import { Field, PanelSection, PanelSectionRow, useQuickAccessVisible } from "@decky/ui";
 import { createContext, FC, ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 /**
@@ -54,23 +54,23 @@ export const Group: FC<{ title: ReactNode; first?: boolean }> = ({ title, first 
  * part in use is open (maintainer, 2026-11-04: "it's just so long"). Open or closed is remembered on this device; the
  * state also lives outside the component, so a Quick Access re-mount keeps it. */
 const folds = new Map<string, boolean>();
-let foldsAt = 0;
-const KEEP_MS = 10000;
 export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: boolean; children: ReactNode }> = ({ id, title, summary, open: dflt = false, children }) => {
-  // every time Quick Access opens, all sections are closed (maintainer, 2026-11-05: "always open ClawDeck with all 4
-  // menus closed"). Only a re-mount right after a change keeps them as they were: Steam's dropdown re-mounts Quick
-  // Access when its menu closes, and the section in use must stay open then.
-  const [open, setOpen] = useState<boolean>(() => (Date.now() - foldsAt < KEEP_MS && folds.has(id) ? folds.get(id)! : dflt));
+  // open or closed as you left it while Quick Access is open (Steam's dropdowns re-mount the panel when their menu
+  // closes); every section closed again when Quick Access closes (maintainer, 2026-11-05: "always open ClawDeck with
+  // all 4 menus closed", and "every time I click a dropdown it resets where I was")
+  const [open, setOpen] = useState<boolean>(() => (folds.has(id) ? folds.get(id)! : dflt));
+  const visible = useQuickAccessVisible();
+  // a dropdown's menu may hide Quick Access while it is open: that is not closing it (a menu opened in the last minute)
+  useEffect(() => { if (!visible && !(lastMark && Date.now() - lastMark.t < 60000)) { folds.clear(); setOpen(dflt); } }, [visible]);
   // one press can reach the heading as both onActivate (A button / touch) and onClick: two toggles cancelled out and
-  // the press looked ignored (maintainer, 2026-11-05: "sometimes doesn't register my click"). One toggle per press.
+  // the press looked ignored. One toggle per press.
   const lastToggle = useRef(0);
   const toggle = () => {
     const now = Date.now();
     if (now - lastToggle.current < 400) return;
     lastToggle.current = now;
-    setOpen((o) => { const v = !o; folds.set(id, v); foldsAt = now; return v; });
+    setOpen((o) => { const v = !o; folds.set(id, v); return v; });
   };
-  useEffect(() => { if (open) foldsAt = Date.now(); });       // using an open section keeps it open across a re-mount
   return (
     <>
       <PanelSection>
@@ -91,14 +91,18 @@ export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: b
  * control, when it mounts again within a few seconds, takes the focus back and scrolls itself into view. */
 let lastMark: { id: string; t: number } | null = null;
 export const markPick = (id: string) => { lastMark = { id, t: Date.now() }; };
+/** The menu closed and the control has its focus back: later re-mounts (a refresh) don't jump to it again. */
+const clearMark = (id: string) => { if (lastMark?.id === id) lastMark = null; };
 export const Anchor: FC<{ id: string; children: ReactNode }> = ({ id, children }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!lastMark || lastMark.id !== id || Date.now() - lastMark.t > 4000) return;
+    // marked when its menu opened or a pick was made: the menu can stay open a while (B closes it without a pick)
+    if (!lastMark || lastMark.id !== id || Date.now() - lastMark.t > 60000) return;
     const t = setTimeout(() => {
       const el = ref.current;
       const target = el?.querySelector<HTMLElement>("button, [tabindex]");
       try { target?.focus(); el?.scrollIntoView({ block: "center" }); } catch { /* best effort */ }
+      clearMark(id);
     }, 60);
     return () => clearTimeout(t);
   }, []);
