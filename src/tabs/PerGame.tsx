@@ -201,6 +201,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             onChange={(o) => { markPick("upscaler"); setPickUp(String(o.data)); }}
             description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
               : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
+          {wantUp.startsWith("fsr4_xmx") && /control/i.test(app?.name ?? "") && <Status ok={null}
+            label="FSR 4.1.2 in CONTROL: turn HDR off"
+            detail="With HDR on, the clouds flicker with FSR 4 and XeSS frame generation (seen by xess-xmx-linux's author, 2026-11). Turn HDR off in the game's display settings." />}
           <Anchor id="framegen"><DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
             selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
