@@ -199,9 +199,10 @@ class Plugin:
                                   optiscaler.unpatch(folder), reframework.remove(folder, self._ref_shas()))
             except Exception as e:
                 decky.logger.warning("uninstall: OptiScaler out of %s: %s", appid, e)
-        # XeSS XMX back as xess-xmx-linux's installer left it (session-wide), the log and power counters as shipped
+        # the XeSS XMX driver out if ClawDeck installed it (else back as its own installer left it), the log and power
+        # counters as shipped
         for what, undo in (("Proton per-game XMX files", lambda: xmxscope.remove_scope(HOME)),
-                           ("the session's XMX driver file", lambda: xmxscope.restore_session(HOME)),
+                           ("the XeSS XMX driver", lambda: xess.remove_for_uninstall(HOME)),
                            ("the split-lock log setting", quietlog.remove),
                            ("the overlay's power counters", lambda: telemetry.apply(False))):
             try:
