@@ -336,8 +336,11 @@ def game_latency(home: str, appid: str, low_latency_on: bool) -> dict:
     """What the shim's low latency did in this game's last launch, from drive_c/igdext_xell.log (the launch wrapper
     rotates it at each start, so it describes one launch). mode: pacing | idle | no-fg | off | none."""
     xlog = sysfs.read(os.path.join(prefix_dir(home, appid), "igdext_xell.log")) or ""
+    lat0 = [float(x) for x in re.findall(r"xell latency: simulation start -> present end avg ([\d.]+) ms", xlog)]
     if not low_latency_on:
-        return {"mode": "off", "detail": "Turned off for this game: frames may queue in front of the GPU (more input lag)"}
+        return {"mode": "off", "latency_ms": round(sum(lat0) / len(lat0), 1) if lat0 else None,
+                "detail": "Turned off for this game: frames may queue in front of the GPU (more input lag)"
+                          + (f". Input-to-screen latency {sum(lat0) / len(lat0):.0f} ms on average in the last launch." if lat0 else "")}
     if not xlog:
         return {"mode": "none", "detail": "Nothing logged yet: start the game through ClawDeck (launch options) and turn on XeSS frame generation in it"}
     state = re.findall(r"low latency: ([^\r\n]+)", xlog)
@@ -346,8 +349,14 @@ def game_latency(home: str, appid: str, low_latency_on: bool) -> dict:
     fg = re.findall(r"auto: frame generation (on|off)", xlog)
     if not fg or fg[-1] == "off":
         return {"mode": "no-fg", "detail": "Frame generation is off in this game, so there is nothing to pace (low latency works only with XeSS frame generation)"}
+    lat = [float(x) for x in re.findall(r"xell latency: simulation start -> present end avg ([\d.]+) ms", xlog)]
+    # the latency XeLL itself measures (simulation start -> present end), averaged over the launch: what "no added
+    # latency" is checked against (xess-xmx-linux's docs/performance.md measures it the same way)
+    avg = f" Input-to-screen latency {sum(lat) / len(lat):.0f} ms on average ({len(lat) * 100} frames)." if lat else ""
     waits = re.findall(r"auto: waited in (\d+) of 100 frames, ([\d.]+) ms each", xlog)
     if waits and int(waits[-1][0]) > 0:
         n, ms = waits[-1]
-        return {"mode": "pacing", "detail": f"Holding frames back so they don't queue: waited in {n} of the last 100 frames, {ms} ms each"}
-    return {"mode": "idle", "detail": "On, and nothing to do: this game doesn't queue frames, so there is no lag to remove"}
+        return {"mode": "pacing", "latency_ms": round(sum(lat) / len(lat), 1) if lat else None,
+                "detail": f"Holding frames back so they don't queue: waited in {n} of the last 100 frames, {ms} ms each.{avg}"}
+    return {"mode": "idle", "latency_ms": round(sum(lat) / len(lat), 1) if lat else None,
+            "detail": f"On, and nothing to do: this game doesn't queue frames, so there is no lag to remove.{avg}"}
