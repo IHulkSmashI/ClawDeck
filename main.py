@@ -1061,7 +1061,23 @@ class Plugin:
         for g in games:
             launch = self.profiles.get_launch(g["appid"])
             g["setup"] = "optiscaler" if g["appid"] in ours else "launch" if launch else None
+            g["tags"] = self._game_tags(launch) if g["appid"] in ours else []
         return games
+
+    # the upscaler ClawDeck put into a game, as the Game list's coloured tag shows it
+    UPSCALER_TAGS = {"fsr4_xmx": "FSR 4.1.2", "fsr4_xmx_lite": "FSR 4.1.2 Lite", "fsr4": "FSR 4.1.2", "xess": "XeSS 2"}
+
+    def _game_tags(self, launch: dict) -> list[dict]:
+        """What ClawDeck's OptiScaler runs in a game, for the tags after its name in the Game list (maintainer,
+        2026-11-05): the upscaler (FSR red, XeSS blue) and frame generation (purple)."""
+        tags = []
+        up = self.UPSCALER_TAGS.get(launch.get("opti") or "")
+        if up:
+            tags.append({"text": up, "kind": "fsr" if up.startswith("FSR") else "xess"})
+        fg = launch.get("fg") or 0
+        if fg >= 2 and launch.get("opti_fg") not in (None, "off"):
+            tags.append({"text": f"{fg}x FG", "kind": "fg"})
+        return tags
 
     def _with_support(self, games: list[dict]) -> list[dict]:
         """Which installed games ClawDeck can set up (the Game list shows only those, as OptiClick does). Walking a
