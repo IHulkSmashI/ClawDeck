@@ -1321,9 +1321,9 @@ def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
     bundled = tmp_path / "games.json"
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-11-05T00:00:00Z", "games": []}))
     newer = json.dumps({"schema": 1, "generated": "2026-11-06T00:00:00Z", "games": [{"id": "x"}]}).encode()
-    pages = {livedb.GAMES_URL: newer, livedb.OPTICLICK_URL: OPTICLICK_PAGE.encode()}
+    pages = {livedb.GAMES_URL: newer, livedb.OPTICLICK_URL: OPTICLICK_PAGE.encode(), livedb.OPTISCALER_COMPAT_URL: COMPAT_PAGE.encode()}
     out = livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: pages[u])
-    assert out == {"games": "updated", "opticlick": "updated"}
+    assert out == {"games": "updated", "opticlick": "updated", "optiscaler": "updated"}
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)).startswith(str(tmp_path / "lists"))
     assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
     # fresh: no second download
@@ -1331,7 +1331,7 @@ def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
     # another schema or an older list is never used; a failed download keeps the copy
     other = json.dumps({"schema": 2, "generated": "2027", "games": []}).encode()
     out = livedb.refresh(str(tmp_path / "lists"), str(bundled), force=True, get=lambda u: other if u == livedb.GAMES_URL else b"nothing")
-    assert out["games"] == "other schema, kept" and "kept" in out["opticlick"]
+    assert out["games"] == "other schema, kept" and "kept" in out["opticlick"] and "kept" in out["optiscaler"]
     assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-12-01T00:00:00Z", "games": []}))
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)) == str(bundled)
@@ -1347,3 +1347,72 @@ def test_shipped_lists_upscaler_fg_and_latency(tmp_path):
     assert s == {"upscaler": ["DLSS", "XeSS"], "fg": ["XeSS-FG"], "latency": ["Reflex", "XeLL"]}
     rec = gamedb.recommend({"games": [], "re_engine_exes": []}, str(g))
     assert rec["route"] == "own_xess" and "XeSS frame generation and XeLL" in rec["reasons"][0]
+
+
+COMPAT_PAGE = """| GAME NAME | ✅/❌/➖ | DLSS/FSR3.1/XeSS | ✨ | Notes go here | [#](url) |
+| Game | Compatibility | Upscaler <br>Inputs | OptiPatcher <br>Support | Notes | Images |
+| ---- | :---: | :---: | :---: | ----- | :----: |
+| [Enshrouded](Enshrouded) | ✅ | DLSS |  | Shimmering grass | [1](https://x) |
+| [Onimusha: Way of the Sword](Onimusha-Way-of-the-Sword) | ✅ | DLSS, FSR3.1 |  | Requires [REFramework](https://github.com/praydog/REFramework-nightly) to work | |
+| EA Sports WRC | ❌ | FSR2 |  | Crashes at start | |
+| [CONTROL Ultimate Edition](Control-Ultimate-Edition) | ✅ | DLSS |  |  | |
+"""
+
+ENSHROUDED_PAGE = """[cols="1,1"]
+|===
+|**Last Tested Version**
+|0.9
+
+|**Filename**
+|`winmm.dll`, `dbghelp.dll`
+
+|**OS**
+|Windows, Linux
+
+|**Known Issues**
+a|
+* FSR3 inputs don't work.
+* +++<s>old problem</s>+++
+* On Linux you may need https://github.com/aron-w/proxy[nvlowlatencyvk-proxy] to load *OptiScaler.dll*
+
+|**Notes**
+a|
+* Game runs on Vulkan.
+
+|**Reported By**
+|-
+|===
+"""
+
+
+def test_optiscaler_compat_list_rows_and_a_games_entry(tmp_path):
+    from clawdeck import livedb
+    c = livedb.parse_compat(COMPAT_PAGE)
+    assert set(c) == {"enshrouded", "onimushawayofthesword", "easportswrc", "controlultimateedition"}
+    assert c["easportswrc"]["status"] == "broken" and c["easportswrc"]["slug"] is None
+    assert c["onimushawayofthesword"]["reframework"] and not c["enshrouded"]["reframework"]
+    assert livedb.find_compat(c, "Onimusha: Way of the Sword")["slug"] == "Onimusha-Way-of-the-Sword"
+    assert livedb.find_compat(c, "CONTROL Ultimate Edition")["name"] == "CONTROL Ultimate Edition"
+    assert livedb.find_compat(c, "Some Other Game") is None
+    p = livedb.parse_page(ENSHROUDED_PAGE)
+    assert p["proxies"] == ["winmm.dll", "dbghelp.dll"] and p["tested_on_linux"]
+    assert p["issues"] == ["FSR3 inputs don't work.", "On Linux you may need nvlowlatencyvk-proxy to load OptiScaler.dll"]
+    got = livedb.game_page(str(tmp_path), "Enshrouded", get=lambda u: ENSHROUDED_PAGE.encode())
+    assert got["proxies"] == ["winmm.dll", "dbghelp.dll"]
+    assert livedb.game_page(str(tmp_path), "Enshrouded", get=lambda u: 1 / 0)["proxies"]   # cached: no fetch
+    assert livedb.game_page(str(tmp_path), "../etc", get=lambda u: b"") is None
+
+
+def test_patch_takes_the_games_own_proxy_name_first(tmp_path, monkeypatch):
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    _w(g / "winmm.dll", "games-own")                 # the entry's first name is taken: its second one
+    r = optiscaler.patch(home, str(g), "0.9.4", {}, proxies=["winmm.dll", "dbghelp.dll", "d3d12.dll"])
+    assert r["ok"] and r["dll"] == "dbghelp.dll" and (g / "winmm.dll").read_text().strip() == "games-own"
+    g2 = tmp_path / "game2"
+    _w(g2 / "Game.exe", "x")
+    assert optiscaler.patch(home, str(g2), "0.9.4", {}, proxies=["d3d12.dll"])["dll"] == "dxgi.dll"   # not ours: default

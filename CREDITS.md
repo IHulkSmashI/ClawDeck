@@ -27,6 +27,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   per game (its pinned release, unchanged). Capcom RE Engine games get the v10 build from the
   **[OptiScaler nightly](https://github.com/optiscaler/OptiScaler-nightly)** releases (pinned with its sha256), installed
   in the `OptiScaler\` subfolder layout the v10 package ships.
+  Its community **[Compatibility List](https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List)** (wiki) is read live:
+  per game whether OptiScaler works, which file name it loads as, REFramework notes and known issues.
 - **[fakenvapi](https://github.com/FakeMichau/fakenvapi)** by FakeMichau (MIT) — turns a game's Reflex into XeLL /
   LatencyFlex on non-Nvidia GPUs. OptiScaler v10 carries it built in; ClawDeck also puts the v1.4.1 release's
   `fakenvapi.dll` (pinned with its sha256, the same build OptiScaler 0.9.4 ships) and OptiClick's `fakenvapi.ini` in
@@ -37,6 +39,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   setup ClawDeck's "Use the recommended setup" follows (match by exe, REFramework for RE Engine games, per-game ini
   values). ClawDeck's Capcom setup is OptiClick's working Onimusha install used as the reference (its files, its
   OptiScaler.ini lines, its `OptiScaler\` layout). OptiClick's own game data is private; no code or data is shared.
+  Its public [Supported Game List](https://github.com/onehoon/OptiClick/wiki/Supported-Game-List) is read live (which
+  games it supports on Intel Arc).
 - **[REFramework fork](https://github.com/onehoon/REFramework)** by onehoon (MIT, from praydog's REFramework) — the
   build OptiClick installs for Capcom games and ClawDeck installs as `dinput8.dll` (release 15, pinned with its
   sha256), downloaded from its releases, not shipped with ClawDeck.

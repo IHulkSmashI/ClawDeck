@@ -46,7 +46,7 @@ STATE = ".clawdeck-optiscaler"
 # logs and caches OptiScaler, fakenvapi and OptiPatcher create in the game folder at run time (not in the manifest)
 RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "fakenvapi.log", "OptiPatcher.log",
                  "dlssg_to_fsr3.log", "nvngx.log")
-PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll")
+PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll", "wininet.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
 FSR4_XMX_FILES = ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")   # what the user puts in ~/fsr4-xmx
 # ClawDeck's own cabinet.dll (tools/cabinet-lzms, built by CI into the plugin's bin/): the Compression API LZMS
@@ -308,10 +308,11 @@ def _proton_cabinet(home: str) -> str | None:
 
 
 def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str = "xess",
-          fsr4_xmx: bool = False, layout: str = "flat") -> dict:
+          fsr4_xmx: bool = False, layout: str = "flat", proxies: list[str] | None = None) -> dict:
     """Put ClawDeck's OptiScaler into `folder` (the game's exe folder). Patching again (another preset) rewrites
     the ini and the FSR 4 files; the proxy name and backups stay. Another version or layout than the one in the
-    folder is taken out first, then put in fresh."""
+    folder is taken out first, then put in fresh. `proxies`: the file names OptiScaler's Compatibility List gives
+    for this game, tried first in its order (livedb.game_page), then PROXIES."""
     if layout not in ("flat", "subfolder"):
         return {"ok": False, "error": f"unknown OptiScaler layout {layout!r}"}
     pkg = package_dir(home, version)
@@ -338,7 +339,7 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
     try:
         dll = m.get("dll")
         if not dll:
-            for name in PROXIES:
+            for name in dict.fromkeys([*(x.lower() for x in proxies or [] if x.lower() in PROXIES), *PROXIES]):
                 p = os.path.join(folder, name)
                 if not os.path.exists(p):
                     dll = name
