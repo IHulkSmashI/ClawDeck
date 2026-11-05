@@ -30,8 +30,8 @@
 Upscaling, frame generation, power, fans and the fixes the Claw needs, from one panel in Quick Access, with no
 terminal after the install.
 
-- 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores (nitec's build, shared with his
-  OK). ClawDeck downloads it for you and offers it in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
+- 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores (nitec's build). ClawDeck
+  downloads it for you and offers it in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
 - ⚡ **XeSS 2 on XMX**, the real Intel path, not the slower DP4a fallback Linux gives you out of the box.
 - 🎞️ **XeSS frame generation** with **XeLL low latency always on**, so the extra frames don't cost you the feel.
 - 🎮 **One tap per game.** Pick the game, pick the upscaler and frame generation, tap Install. ClawDeck installs a
@@ -105,7 +105,7 @@ per-game list. Then:
 
 | Pick | Choices | What it means |
 |---|---|---|
-| **Upscaler** | XeSS 2, FSR 4.1.2, FSR 4.1.2 Lite | Everything runs on the XMX cores. XeSS 2 is Intel's own and the fastest. FSR 4.1.2 is AMD's FSR 4 rebuilt for Intel's XMX cores, the best image (you add its files, see [below](#fsr-412-files)). Lite is faster for a little less detail. FSR 4.1.2 only shows for DirectX 12 games. |
+| **Upscaler** | XeSS 2, FSR 4.1.2, FSR 4.1.2 Lite | Everything runs on the XMX cores. XeSS 2 is Intel's own and the fastest. FSR 4.1.2 is AMD's FSR 4 rebuilt for Intel's XMX cores, the best image. Lite is faster for a little less detail. FSR 4.1.2 only shows for DirectX 12 games. |
 | **Frame generation** | Off, 2x, 3x, 4x | XeSS frame generation on the XMX cores: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one. |
 | **OptiScaler overlay** | Off, FPS only, Simple, Detailed, Detailed + graph, Full, Full + graph | OptiScaler's own counter at the top right. It shows the upscaler in use and "(XeFG)" while frame generation runs, which Steam's overlay can't tell you. |
 
@@ -229,18 +229,8 @@ on the XMX cores with it.
 
 ## FSR 4.1.2 files
 
-FSR 4.1.2 on the XMX cores is nitec's build of AMD's FSR 4, from the OptiScaler community (the OptiScaler Discord),
-shared with ClawDeck with nitec's OK. **There's nothing to set up:** ClawDeck downloads the two files once
-(`amd_fidelityfx_upscaler_dx12.dll`, `fsr-original.dll`, about 100 MB, each sha256 checked) into `~/fsr4-xmx`, and
-FSR 4.1.2 and FSR 4.1.2 Lite appear in the Upscaler list for DirectX 12 games. Offline, a copy in Downloads (the two
-files or their zip) is picked up instead.
-
-You don't need Windows' `cabinet.dll`. The build unpacks its kernels with Windows' Compression API (LZMS), and
-ClawDeck brings its own open `cabinet.dll` for that (`tools/cabinet-lzms`, LGPL, built on wimlib's LZMS decoder). It
-goes next to the game's exe and comes out again with the rest. A `cabinet.dll` left in `fsr4-xmx` from before is not
-used, and you can delete it.
-
-If they don't appear, the note under the Upscaler says why: not a DirectX 12 game, or a file is missing.
+Nothing to set up. ClawDeck downloads FSR 4.1.2 (nitec's build, about 100 MB) the first time, and FSR 4.1.2 shows in
+the Upscaler list for DirectX 12 games. If it doesn't, the note under the Upscaler says why.
 
 ---
 
