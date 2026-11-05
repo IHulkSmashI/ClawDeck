@@ -7,9 +7,16 @@
 <p align="center"><b>Power, fans, fixes and OptiClick-style per-game upscaling for the MSI Claw on Bazzite and SteamOS,<br>right in Steam's Quick Access menu, with everything running on the Claw's XMX cores.</b></p>
 
 <p align="center">
-  <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/ClawDeck?include_prereleases&label=version&color=3fa7ff" alt="version"></a>
-  <a href="https://github.com/IHulkSmashI/ClawDeck/commits/main"><img src="https://img.shields.io/github/last-commit/IHulkSmashI/ClawDeck?label=last%20update" alt="last update"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/IHulkSmashI/ClawDeck?color=f0b429" alt="license"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="https://img.shields.io/github/v/release/IHulkSmashI/ClawDeck?include_prereleases&label=Latest%20Release&logo=github&color=7c3aed" alt="Latest release"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/releases"><img src="https://img.shields.io/github/downloads/IHulkSmashI/ClawDeck/total?label=Downloads&color=4caf50" alt="Downloads"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/commits/main"><img src="https://img.shields.io/github/last-commit/IHulkSmashI/ClawDeck?label=Last%20update" alt="Last update"></a>
+  <br>
+  <a href="#contents"><img src="https://img.shields.io/badge/Guide%20%26%20FAQ-Read%20the%20docs-2563eb?logo=readthedocs&logoColor=white" alt="Guide and FAQ"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/discussions"><img src="https://img.shields.io/badge/Community-Discussions-5865F2?logo=github&logoColor=white" alt="Community: GitHub Discussions"></a>
+  <a href="https://github.com/IHulkSmashI/ClawDeck/issues/new?template=game_report.yml"><img src="https://img.shields.io/badge/Report-a%20game-0ea5e9" alt="Report a game"></a>
+  <br>
+  <a href="https://ko-fi.com/gamervault"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/IHulkSmashI/ClawDeck?label=License&color=f0b429" alt="License"></a>
 </p>
 
 <p align="center">
