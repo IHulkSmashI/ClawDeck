@@ -888,3 +888,13 @@ def test_xmx_proof_reads_the_prefix(tmp_path):
     assert xess.xmx_proof(home, "42", str(tmp_path / "rt"))["state"] == "stale"
     open(os.path.join(pfx, "igdext_kernels", "compile_failed.txt"), "w").write("k")
     assert xess.xmx_proof(home, "42")["state"] == "failed"
+
+
+def test_profiles_own_slot_is_only_the_games(tmp_path):
+    from clawdeck import profiles
+    p = profiles.Profiles(str(tmp_path / "p.json")) if hasattr(profiles, "Profiles") else None
+    if p is None:
+        return
+    assert p.own("1", False) == {} and p.get("1", False).get("base") == "battery"
+    p.set("1", False, {"base": "max", "tdp": None})
+    assert p.own("1", False) == {"base": "max"} and p.own("1", True) == {}

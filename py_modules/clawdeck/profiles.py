@@ -55,6 +55,10 @@ class Profiles:
         base.update(game.get(slot, {}))
         return base
 
+    def own(self, appid: str | int, plugged: bool) -> dict:
+        """Only what this game's slot holds itself (no defaults)."""
+        return dict(self.data["games"].get(str(appid), {}).get("plugged" if plugged else "battery", {}))
+
     def set(self, appid: str | int, plugged: bool, values: dict) -> dict:
         slot = "plugged" if plugged else "battery"
         g = self.data["games"].setdefault(str(appid), {})
