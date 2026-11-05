@@ -109,6 +109,14 @@ CAPCOM_DROP = ("Spoofing_Dxgi", "FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "Xe
 CAPCOM_FG_COUNT = "2"
 
 
+def v10(launch: dict) -> bool:
+    """OptiScaler v10 for this game (OptiScaler/ subfolder layout) instead of 0.9.4: Capcom's setup, and 3x / 4x
+    frame generation fed from the game's own DLSS-G. 0.9.4 takes DLSS-G's frame count from the game, which offers 2x
+    only (CONTROL stayed at 2x with 3x picked, Claw, 2026-11-05); v10 has [DLSSG] OverrideInterpolationCount, the
+    3x / 4x OptiScaler's menu shows on Windows."""
+    return capcom(launch) or (launch.get("opti_fg") == "dlssg" and (launch.get("fg") or 0) >= 3)
+
+
 def capcom(launch: dict) -> bool:
     """OptiClick's Capcom setup for this game (OptiScaler v10, subfolder layout, CAPCOM_INI): every game that gets
     REFramework, i.e. Capcom's RE Engine games (gamedb.recommend)."""
@@ -238,6 +246,13 @@ def opti_ini(launch: dict) -> dict[str, str]:
     ov = launch.get("opti_overlay")
     if isinstance(ov, int) and not isinstance(ov, bool) and ov in OVERLAYS:
         env.update({"Menu_ShowFps": "true", "Menu_FpsOverlayType": str(ov), "Menu_FpsOverlayPos": "1"})
+    if v10(launch) and not capcom(launch):
+        # 3x / 4x from the game's DLSS-G: v10's override of the game's count, its subfolder layout; FSR 4's 0.9.4-only
+        # switches don't exist there
+        for k in ("FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "XeFG_InterpolationCount"):
+            env.pop(k, None)
+        env.update({"DLSSG_OverrideInterpolationCount": str(min(max(fg - 1, 1), 3)),
+                    "Libraries_OptiDllPath": ".\\OptiScaler", "Plugins_LoadAsiPlugins": "true"})
     if capcom(launch):
         for k in CAPCOM_DROP:
             env.pop(k, None)
