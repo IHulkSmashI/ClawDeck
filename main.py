@@ -763,7 +763,24 @@ class Plugin:
             return {"reapplied": True, **self._restart_game_power(self.running_appid, plugged)}
 
     async def get_autotune(self) -> dict:
-        return {**self.autotune.status(), "thermal": self.guard.status()}
+        st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid}
+        if not st.get("running"):
+            st["why"] = self._autotune_why()
+        return st
+
+    def _autotune_why(self) -> str:
+        """Why no Autotune session runs, in the words the Power panel shows (it used to always blame the launch
+        options, maintainer 2026-11-05: Autotune on, CONTROL running, "waiting for frame times")."""
+        if not self.settings.get("autotune"):
+            return "off"
+        if self.running_appid is None:
+            return "no game reported to ClawDeck yet"
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
+        if plugged and not self.settings.get("autotune_plugged"):
+            return "off on the charger (Advanced → Autotune on the charger)"
+        if self.profiles.get(self.running_appid, plugged).get("autotune") is False:
+            return "off for this game"
+        return "not started"
 
     async def set_autotune_keep(self, pct: float) -> dict:
         """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,
