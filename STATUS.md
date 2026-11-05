@@ -47,6 +47,10 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Temperature guard steps back up (2026-11-04):** after "thermal: stepped to N W", once the package is under 80 °C
+  the TDP climbs 2 W every 30 s back to your limit and the line goes away (it used to stay stepped down until a new
+  pick or the game closed: 21 W at 55 °C with a 35 W limit).
+
 - **Autotune, quieter (2026-11-04):** play CONTROL for 10 min with Autotune on. The TDP changes only in the first
   2–3 min (no longer a full re-check every 5 min, now 20 min). A loading screen or the pause menu doesn't move the
   TDP (ClawDeck's log: "skipped a N fps window"). At exit the toast reads "Autotune saved X W of your Y W: A of B fps,

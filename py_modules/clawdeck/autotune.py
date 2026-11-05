@@ -399,6 +399,21 @@ class Autotune:
         self._did(s, f"thermal: stepped to {l.tdp} W", "thermal")
         return True
 
+    def thermal_release(self, watts: int) -> bool:
+        """The package cooled down: the guard lets autotune use up to `watts` again (the set TDP: the step is gone and
+        autotune measures again what the full TDP gives). Autotune's own TDP isn't raised here; it climbs if the game
+        needs it (hold: +1 W below the line), or starts over at the full TDP."""
+        s = self.session
+        if not s or s.thermal_cap is None:
+            return False
+        if watts >= s.ceiling_tdp:
+            s.thermal_cap = None
+            self._remeasure(s, "cooled down")
+        else:
+            s.thermal_cap = int(watts)
+            self._did(s, f"thermal: cooled, up to {s.thermal_cap} W allowed", "thermal")
+        return True
+
     def _top(self, s: Session) -> int:
         """The most autotune may use: the set TDP, or less while the temperature guard holds it down."""
         return s.ceiling_tdp if s.thermal_cap is None else min(s.ceiling_tdp, s.thermal_cap)
