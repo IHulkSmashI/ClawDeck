@@ -47,6 +47,14 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **XeFG even flips (xess-xmx-linux branch xefg-flip-metering, test build fg-meter-test-build, 2026-11-05):** the
+  shim spaces XeFG's presents itself, since on Intel XeFG leaves pacing to the Windows driver and nothing does it on
+  Linux. Off by default. With `IGDEXT_FG_METER=1` (added to `~/.local/share/clawdeck/xmx.env` for the test) the log
+  `C:\igdext_xell.log` should show `fgmeter ... out: ... short 0%` and `added latency per real frame avg 0.0x`;
+  `IGDEXT_FG_METER=measure` gives the same lines without pacing, for comparison. Install/undo:
+  `fg-meter-install.sh` on that branch. Steam's frame-time graph flat with VRR on, CONTROL Resonant at XeFG 2x; no
+  crash with OptiScaler (the 2026-11-04 build crashed patching OptiScaler's wrapper; it now only touches DXVK's).
+
 - **E-cores only, per game (2026-11-05, r/MSIClaw request):** Per-game → E-cores only on, start a game: ClawDeck's log
   line "clawdeck: E-cores only (2-9)" in the game's Proton output, and `ps -L -o psr= -p $(pgrep -f <game>.exe)`
   shows only 2-9. Off again: the next launch uses every core.
