@@ -301,6 +301,52 @@ def fsr4_xmx_missing(home: str) -> list[str]:
     return need
 
 
+IMPORT_FROM = ("Downloads", "Desktop", "Documents")
+
+
+def fsr4_xmx_import(home: str, depth: int = 3) -> dict:
+    """nitec's two files from where a download lands, into ~/fsr4-xmx, so FSR 4.1.2 needs no folder made by hand
+    (maintainer, 2026-11-05: "make it seamless"). ClawDeck doesn't download or ship them (no license to: they are
+    shared in the OptiScaler Discord). Taken only as a pair, from one folder or one .zip, since a game's own
+    amd_fidelityfx_upscaler_dx12.dll has the same name: both files next to each other are nitec's build."""
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    if all(os.path.isfile(os.path.join(xdir, f)) for f in FSR4_XMX_FILES):
+        return {"ok": True, "imported": False, "dir": xdir}
+    import zipfile
+    want = {f.lower() for f in FSR4_XMX_FILES}
+    for top in IMPORT_FROM:
+        root = os.path.join(home, top)
+        base = root.rstrip(os.sep).count(os.sep)
+        for r, d, f in os.walk(root):
+            if r.count(os.sep) - base >= depth:
+                d[:] = []
+            lo = {x.lower(): x for x in f}
+            if want <= set(lo):
+                os.makedirs(xdir, exist_ok=True)
+                for name in FSR4_XMX_FILES:
+                    shutil.copy2(os.path.join(r, lo[name.lower()]), os.path.join(xdir, name))
+                userexec.chown_tree(xdir, home)
+                log.info("FSR 4.1.2 XMX files taken from %s", r)
+                return {"ok": True, "imported": True, "from": r, "dir": xdir}
+            for z in (x for x in f if x.lower().endswith(".zip")):
+                try:
+                    with zipfile.ZipFile(os.path.join(r, z)) as zf:
+                        members = {os.path.basename(m).lower(): m for m in zf.namelist() if not m.endswith("/")}
+                        if not want <= set(members):
+                            continue
+                        os.makedirs(xdir, exist_ok=True)
+                        for name in FSR4_XMX_FILES:
+                            with zf.open(members[name.lower()]) as src, open(os.path.join(xdir, name), "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+                except (OSError, zipfile.BadZipFile) as e:
+                    log.info("FSR 4.1.2 XMX: %s: %s", z, e)
+                    continue
+                userexec.chown_tree(xdir, home)
+                log.info("FSR 4.1.2 XMX files taken from %s", os.path.join(r, z))
+                return {"ok": True, "imported": True, "from": os.path.join(r, z), "dir": xdir}
+    return {"ok": True, "imported": False, "dir": xdir}
+
+
 def _proton_cabinet(home: str) -> str | None:
     for p in sorted(glob.glob(os.path.join(home, ".local/share/Steam/steamapps/common/Proton*/files/lib/wine/x86_64-windows/cabinet.dll")), reverse=True):
         return p
