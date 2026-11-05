@@ -12,6 +12,11 @@ copy in the plugin as the fallback offline:
                vendor, with their Steam app ids. ClawDeck follows its Intel column: a game OptiClick lists as "Not
                Supported" on Intel Arc isn't recommended. OptiClick's per-game recipes (which DLL to hook, its ini)
                come from its signed-in service and are not public, so they are not used.
+  OptiScaler   OptiScaler's own Compatibility List (its wiki, GPL-3.0 project, community entries): per game whether
+               it works, the inputs, and notes ("Requires REFramework"). A game's detailed entry (one wiki page) is
+               fetched when the game is opened in Per-game: which file names load OptiScaler there ("Filename":
+               dxgi.dll, winmm.dll, ...), in the order the entry gives them, plus its known issues. This is the
+               public record other installers (Decky Framegen, OptiClick's recipes) follow too.
 """
 from __future__ import annotations
 
@@ -28,6 +33,9 @@ log = logging.getLogger("clawdeck.livedb")
 
 GAMES_URL = "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/assets/games.json"
 OPTICLICK_URL = "https://raw.githubusercontent.com/wiki/onehoon/OptiClick/Supported-Game-List.md"
+OPTISCALER_COMPAT_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md"
+OPTISCALER_PAGE_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/{slug}.asciidoc"
+OPTISCALER_FILE = "optiscaler-compat.md"
 REFRESH_S = 12 * 3600
 GAMES_FILE = "games.json"
 OPTICLICK_FILE = "opticlick-supported.md"
@@ -89,6 +97,17 @@ def refresh(cache_dir: str, bundled_games: str, force: bool = False, get=_get) -
                 out["opticlick"] = "no games in the page, kept"
         except (OSError, ValueError) as e:
             out["opticlick"] = f"error: {e}"
+    cp = os.path.join(cache_dir, OPTISCALER_FILE)
+    if force or not _fresh(cp):
+        try:
+            text = get(OPTISCALER_COMPAT_URL).decode("utf-8", "replace")
+            if parse_compat(text):
+                _write(cp, text.encode("utf-8"))
+                out["optiscaler"] = "updated"
+            else:
+                out["optiscaler"] = "no games in the page, kept"
+        except (OSError, ValueError) as e:
+            out["optiscaler"] = f"error: {e}"
     if out:
         log.info("per-game lists: %s", out)
     return out
@@ -157,3 +176,95 @@ def opticlick_says(entries: dict[str, dict], appid: str) -> dict:
         return {"known": True, "listed": False, "intel_ok": None}
     return {"known": True, "listed": True, "name": e["name"], "intel": e["intel"],
             "intel_ok": not e["intel"].lower().startswith("not supported")}
+
+
+# ---- OptiScaler's Compatibility List ----------------------------------------------------------------------------
+
+STATUS = {"\u2705": "works", "\u274c": "broken", "\u2796": "mixed"}
+# the proxy names ClawDeck can install OptiScaler under (optiscaler.PROXIES order is its own fallback)
+PROXY_NAMES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll", "wininet.dll")
+
+
+def parse_compat(text: str) -> dict[str, dict]:
+    """{normalized game name: {"name", "slug", "status", "inputs", "notes", "reframework"}} from the table rows
+    "| [Game](Slug) | ✅ | DLSS, FSR3.1 | ✨ | notes | images |"."""
+    out: dict[str, dict] = {}
+    for line in text.splitlines():
+        if not line.startswith("| "):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        status = next((v for k, v in STATUS.items() if k in cells[1]), None)
+        if not status:                       # header, separator, the template row's "✅/❌/➖" and other tables
+            continue
+        if "/" in cells[1]:
+            continue
+        m = re.match(r"\[([^\]]+)\]\(([^)\s]+)\)", cells[0])
+        name, slug = (m.group(1), m.group(2)) if m else (re.sub(r"[*_`]", "", cells[0]).strip(), None)
+        if not name:
+            continue
+        notes = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", cells[4]).strip()
+        out[_norm(name)] = {"name": name, "slug": slug if slug and not slug.startswith("http") else None, "status": status,
+                            "inputs": cells[2], "notes": notes, "reframework": "reframework" in cells[4].lower()}
+    return out
+
+
+def compat(cache_dir: str) -> dict[str, dict]:
+    try:
+        with open(os.path.join(cache_dir, OPTISCALER_FILE), "r", encoding="utf-8") as f:
+            return parse_compat(f.read())
+    except OSError:
+        return {}
+
+
+def find_compat(entries: dict[str, dict], name: str | None) -> dict | None:
+    """The Compatibility List row for a Steam name: exact (letters and digits only), else the one row whose name
+    the Steam name starts with or the other way round (editions: "CONTROL Ultimate Edition" / "Control")."""
+    if not name or not entries:
+        return None
+    n = _norm(name)
+    if n in entries:
+        return entries[n]
+    near = [e for k, e in entries.items() if len(k) >= 5 and (n.startswith(k) or k.startswith(n))]
+    return near[0] if len(near) == 1 else None
+
+
+def parse_page(text: str) -> dict:
+    """A game's detailed entry (AsciiDoc table): the file names OptiScaler loads as, in order, and the known
+    issues / notes as short lines."""
+    def cell(label: str) -> str:
+        m = re.search(r"\|\*\*" + label + r"\*\*\s*\n(.*?)(?=\n\s*\|\*\*|\n\|===)", text, re.S | re.I)
+        return m.group(1) if m else ""
+    files = re.findall(r"[A-Za-z0-9_]+\.(?:dll|asi)", cell("Filename"))
+    proxies = [f.lower() for f in dict.fromkeys(f.lower() for f in files) if f.lower() in PROXY_NAMES]
+    def bullets(label: str) -> list[str]:
+        out = []
+        for b in re.findall(r"^\*\s+(.+)$", cell(label), re.M):
+            if "+++<s>" in b or b.strip() in ("-", ""):          # struck out: no longer true
+                continue
+            b = re.sub(r"https?://\S+?\[([^\]]*)\]", r"\1", b)  # AsciiDoc links: their text
+            b = re.sub(r"[*_`]+", "", b)
+            out.append(re.sub(r"\s+", " ", b).strip()[:200])
+        return out
+    linux = "linux" in cell("OS").lower()
+    return {"proxies": proxies, "files": [f.lower() for f in dict.fromkeys(files)], "issues": bullets("Known Issues"),
+            "notes": bullets("Notes"), "tested_on_linux": linux}
+
+
+def game_page(cache_dir: str, slug: str | None, get=_get) -> dict | None:
+    """The detailed entry, fetched when older than REFRESH_S, else (or offline) the cached copy."""
+    if not slug or not re.fullmatch(r"[A-Za-z0-9._()&,'%-]+", slug):
+        return None
+    path = os.path.join(cache_dir, "optiscaler-pages", slug + ".asciidoc")
+    if not _fresh(path):
+        try:
+            data = get(OPTISCALER_PAGE_URL.format(slug=urllib.request.quote(slug, safe="()&,'-._")))
+            _write(path, data)
+        except OSError as e:
+            log.info("OptiScaler entry %s: %s", slug, e)
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return parse_page(f.read())
+    except OSError:
+        return None

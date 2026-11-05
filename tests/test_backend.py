@@ -1291,3 +1291,24 @@ def test_recommended_upscaler_is_fsr4_where_it_runs_and_opticlick_no_blocks(plug
     assert rec["recommended"] is False and "not supported on Intel Arc" in rec["reasons"][0]
     rec = base(); plugin._opticlick_verdict(rec, "99")
     assert "recommended" not in rec and "Not on OptiClick's supported list" in rec["reasons"][-1]
+
+
+def test_optiscaler_compat_entry_sets_hook_names_reframework_and_blocks_broken(plugin, monkeypatch, tmp_path):
+    from clawdeck import gamedb
+    g = tmp_path / "game"
+    g.mkdir()
+    (g / "nvngx_dlss.dll").write_bytes(b"x")
+    base = lambda: gamedb.recommend({"games": [], "re_engine_exes": []}, str(g))
+    wiki = {}
+    monkeypatch.setattr(type(plugin), "_wiki_for", staticmethod(lambda appid, fetch=True: wiki[appid]))
+    wiki["1"] = ({"name": "Enshrouded", "status": "works", "notes": "", "reframework": False, "slug": "Enshrouded"},
+                 {"proxies": ["winmm.dll", "dbghelp.dll"], "issues": ["FSR3 inputs don't work."], "notes": []})
+    rec = base(); plugin._optiscaler_entry(rec, "1")
+    assert rec["proxies"] == ["winmm.dll", "dbghelp.dll"] and any("winmm.dll or dbghelp.dll" in r for r in rec["reasons"])
+    assert any(r.startswith("Known: FSR3") for r in rec["reasons"]) and "recommended" not in rec
+    wiki["2"] = ({"name": "EA Sports WRC", "status": "broken", "notes": "Crashes", "reframework": False, "slug": None}, None)
+    rec = base(); plugin._optiscaler_entry(rec, "2")
+    assert rec["recommended"] is False and "not working" in rec["reasons"][0]
+    wiki["3"] = ({"name": "PRAGMATA", "status": "works", "notes": "Requires REFramework", "reframework": True, "slug": None}, None)
+    rec = base(); plugin._optiscaler_entry(rec, "3")
+    assert rec["route"] == "re_engine" and rec["launch"]["reframework"] is True and rec["re_engine"]

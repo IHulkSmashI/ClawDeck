@@ -98,7 +98,8 @@ class Plugin:
         self._health: tuple[float, list] | None = None
         # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
         asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
-        # the per-game lists, kept current (OptiClick reads its database at every start too); offline: the plugin's copy
+        # the per-game lists, kept current (OptiClick reads its database at every start too): ClawDeck's, OptiClick's
+        # supported list, OptiScaler's Compatibility List; offline: the copies from last time, else the plugin's
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
@@ -928,6 +929,7 @@ class Plugin:
         rec = gamedb.recommend(gamedb.load(self._games_path()), d)
         folder = optiscaler.main_exe_dir(d, rec["main_exes"]) if d else None
         self._opticlick_verdict(rec, appid)
+        self._optiscaler_entry(rec, appid)
         self._prefer_fsr4(rec, d, appid)
         return rec, d, folder
 
@@ -951,6 +953,40 @@ class Plugin:
             rec["reasons"].append(f"On OptiClick's supported list for Intel Arc ({oc['name']})")
         else:
             rec["reasons"].append("Not on OptiClick's supported list yet: set up from what the game ships, not tested by OptiClick")
+
+    @staticmethod
+    def _wiki_for(appid: str, fetch: bool = True) -> tuple[dict | None, dict | None]:
+        """The game's row in OptiScaler's Compatibility List and its detailed entry (hook file names, known
+        issues), matched by its Steam name."""
+        row = livedb.find_compat(livedb.compat(LISTS_DIR), xess.steam_app_name(HOME, appid))
+        page = livedb.game_page(LISTS_DIR, row.get("slug")) if row and fetch else None
+        return row, page
+
+    def _optiscaler_entry(self, rec: dict, appid: str) -> None:
+        """What OptiScaler's own Compatibility List says about this game (as OptiClick and Decky Framegen follow
+        it): not working means not recommended; "Requires REFramework" gives the Capcom setup even when the exe
+        isn't in ClawDeck's RE Engine list yet; the entry's file names are where OptiScaler goes in; its known
+        issues are shown before anything is installed."""
+        row, page = self._wiki_for(appid)
+        rec["optiscaler_wiki"] = {"row": row, "page": page}
+        if not row or rec["route"] == "own_xess":
+            return
+        if row["status"] == "broken" and rec.get("optiscaler"):
+            rec["recommended"] = False
+            rec["reasons"].insert(0, f"OptiScaler's compatibility list marks {row['name']} as not working"
+                                     + (f" ({row['notes']})" if row["notes"] else "") + ".")
+        if row["reframework"] and not rec.get("re_engine") and rec.get("optiscaler"):
+            ini = dict(rec["launch"].get("opti_ini") or {})
+            ini.pop("Spoofing_Dxgi", None)
+            rec["launch"] = {"opti": "xess", "opti_fg": "dlssg", "opti_ini": ini, "reframework": True}
+            rec.update(route="re_engine", re_engine=True, capcom=True, frame_gen="dlssg", fg_source="dlssg")
+            rec["reasons"][0] = ("OptiScaler's compatibility list: this game needs REFramework. OptiScaler (XeSS on "
+                                 "the XMX cores) with REFramework, the way OptiClick sets up Capcom games.")
+        if page and page["proxies"]:
+            rec["proxies"] = page["proxies"]
+            rec["reasons"].append(f"Loads as {' or '.join(page['proxies'])} (OptiScaler's entry for this game)")
+        for issue in (page or {}).get("issues", [])[:2]:
+            rec["reasons"].append(f"Known: {issue}")
 
     def _prefer_fsr4(self, rec: dict, d: str | None, appid: str) -> None:
         """The newest upscaler where it can run, as OptiClick does on Intel (it installs FSR 4 on XMX with
@@ -1047,8 +1083,9 @@ class Plugin:
         opti = "fsr4_xmx" if opti == "fsr4" else opti
         if opti in launchenv.FSR4_XMX and launch.get("xmx") is False:
             return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
+        _, page = await self._bg(self._wiki_for, appid)
         r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
-                           opti, opti in launchenv.FSR4_XMX, entry.get("layout") or "flat")
+                           opti, opti in launchenv.FSR4_XMX, entry.get("layout") or "flat", (page or {}).get("proxies"))
         if r.get("ok"):
             games = self.settings.setdefault("opti_games", {})
             games[str(appid)] = folder

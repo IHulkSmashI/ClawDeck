@@ -47,6 +47,11 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **OptiScaler's Compatibility List per game (2026-11-05):** the third live list. Per-game shows "Loads as winmm.dll
+  or dbghelp.dll (OptiScaler's entry for this game)" and up to two "Known: …" lines where the wiki has a detailed
+  entry; Install puts OptiScaler in under that name. Check with a game whose entry says winmm.dll (Enshrouded, DOOM
+  Eternal): the game's folder gets `winmm.dll`, the launch env `winmm=n,b`, and OptiScaler's overlay shows in game.
+
 - **Live per-game lists and FSR 4.1.2 first (2026-11-05):** at start ClawDeck fetches its games.json from main and
   OptiClick's public Supported Game List (the wiki page OptiClick itself loads), every 12 h, into
   `~/.local/share/clawdeck/lists`. Check on the Claw: that folder has `games.json` and `opticlick-supported.md`;
