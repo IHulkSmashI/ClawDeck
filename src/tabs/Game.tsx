@@ -36,7 +36,7 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
     <>
       <PanelSection title={quick ? undefined : "Game"}>
         <PanelSectionRow>
-          <Anchor id="game"><DropdownItem layout="below" label={quick ? undefined : "Game"} menuLabel="Pick a game" strDefaultLabel={games === null ? "Reading your games…" : "Pick a game"}
+          <Anchor id="game"><DropdownItem onMenuOpened={() => markPick("game")} layout="below" label={quick ? undefined : "Game"} menuLabel="Pick a game" strDefaultLabel={games === null ? "Reading your games…" : "Pick a game"}
             disabled={!options.length} rgOptions={options} selectedOption={cur}
             onChange={(o) => { markPick("game"); lastPick = String(o.data); setSel(String(o.data)); }} /></Anchor>
         </PanelSectionRow>
