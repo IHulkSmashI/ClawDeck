@@ -127,15 +127,18 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   }, [live]);
 
   const lo = st?.range?.min ?? st?.limits.min ?? 8, hi = st?.range?.max ?? st?.limits.plugged_max ?? 35;
-  const wattsOf = (id: string) => (table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
+  // Custom is always in the list (maintainer, 2026-11-05: it only appeared after moving the slider): picking it brings
+  // back the last Custom watts saved (backend apply_profile("custom")), and the PL2 control with it
+  const customW = profile === "custom" ? tdp : Math.max(lo, Math.min(st?.custom_tdp ?? tdp, hi));
+  const wattsOf = (id: string) => (id === "custom" ? customW : table[id]?.tdp != null ? Math.max(lo, Math.min(table[id].tdp!, hi)) : undefined);
   const picked = PROFILES.find((p) => p.id === profile);
   // one options array per change of the table/Custom watts: Steam's dropdown keeps the option it matched on the first
   // render, so a fresh array every poll (and labels that change after the first load) left it showing the old pick
   const profileOptions = useMemo(() => [
     ...PROFILES.map((p) => ({ data: p.id, label: wattsOf(p.id) ? `${p.short} · ${wattsOf(p.id)} W` : p.short })),
-    ...(profile === "custom" ? [{ data: "custom", label: `Custom · ${tdp} W` }] : [])],
+    { data: "custom", label: `Custom · ${customW} W` }],
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [table, lo, hi, profile === "custom", profile === "custom" ? tdp : null]);   // tdp only matters for Custom's label:
+  [table, lo, hi, customW]);   // tdp only matters for Custom's label:
   // rebuilding the options on every pick (the slider follows each profile) made a quick second pick show the first
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
