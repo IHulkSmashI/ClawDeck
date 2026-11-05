@@ -195,7 +195,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {/* layout below + full width: inline, the description takes half the Quick Access column and cuts the option
             text off ("Max · 3..."). Rendered only once the saved profile is loaded (key), so it never mounts on the
             placeholder and keeps showing that (maintainer report 2026-10-22: "has to be selected twice"). */}
-        <Anchor id="power"><DropdownItem key={st ? "loaded" : "loading"} menuLabel="Power profile" layout="below" childrenContainerWidth="max"
+        <Anchor id="power"><DropdownItem onMenuOpened={() => markPick("power")} key={st ? "loaded" : "loading"} menuLabel="Power profile" layout="below" childrenContainerWidth="max"
           selectedOption={profile} onChange={(o) => { markPick("power"); pick(o.data); }} rgOptions={profileOptions}
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
             quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} /></Anchor>

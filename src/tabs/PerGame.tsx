@@ -191,36 +191,19 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
 
   return (
     <PanelSection title={embedded ? undefined : `Per-game: ${app.name}`}>
-      <PanelSectionRow>
-        <Group title="In this game now" first />
-        <div style={{ fontSize: 12, lineHeight: "18px", color: "#b8bcbf", padding: "0 0 4px" }}>
-          <div>{ours ? "✓" : "–"} OptiScaler: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
-            : fgmodHere || gs?.opti_owner === "decky-framegen" ? "Decky Framegen's (ClawDeck leaves it alone)" : gs?.opti_owner === "other" ? "put there by another tool or by hand" : "not in the game"}</div>
-          {gs?.files?.reframework && <div>✓ REFramework (dinput8.dll)</div>}
-          <div>{wrapped ? "✓" : "–"} Launch options: {wrapped ? "ClawDeck is in them" : "ClawDeck not added yet (added when you pick below)"}</div>
-          {!quick && opts !== null && <div style={{ wordBreak: "break-all", opacity: 0.8 }}>{opts || "(empty)"}</div>}
-          <div>{xmxOn && xessOk ? "✓" : "–"} XMX driver: {xmxOn ? (xessOk ? "on for this game" : "on, but the driver check hasn't passed") : "off for this game"}</div>
-          {gs?.xmx_proof && <div style={{ color: gs.xmx_proof.state === "ok" ? "#4caf50" : gs.xmx_proof.state === "never" ? undefined : "#f44336" }}>
-            {({ ok: `✓ XMX cores used in the last launch (${gs.xmx_proof.kernels} XMX programs)`,
-                stale: "✗ Last launch didn't use the XMX cores (stock driver): restart the game",
-                never: "– XMX cores not used yet: start the game once",
-                failed: "✗ An XMX program didn't compile: the game falls back to DP4a (see ClawDeck's log)" } as const)[gs.xmx_proof.state]}</div>}
-          <div>{launch.fg ? `✓ Frame generation ${launch.fg}x (XeSS on XMX)` : "– Frame generation off"} · XeLL low latency always on</div>
-        </div>
-      </PanelSectionRow>
       {!fgmodHere && gs?.opti_owner !== "decky-framegen" && gs?.opti_owner !== "other" && (
         <PanelSectionRow>
-          <Group title="Upscaling and frame generation (XMX cores)" />
-          <Anchor id="upscaler"><DropdownItem label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
+          <Group title="Upscaling and frame generation (XMX cores)" first />
+          <Anchor id="upscaler"><DropdownItem onMenuOpened={() => markPick("upscaler")} label="Upscaler" layout="below" childrenContainerWidth="max" rgOptions={upscalers}
             selectedOption={wantUp}
             onChange={(o) => { markPick("upscaler"); setPickUp(String(o.data)); }}
             description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
               : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
-          <Anchor id="framegen"><DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
+          <Anchor id="framegen"><DropdownItem onMenuOpened={() => markPick("framegen")} label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
             selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
               quick ? undefined : "fill a 120 Hz screen from 30–40 rendered fps; keep the game's frame limit on.", quick ? undefined : "a little input lag, which low latency keeps down.")} /></Anchor>
-          <Anchor id="overlay"><DropdownItem label="OptiScaler overlay" layout="below" childrenContainerWidth="max" rgOptions={OVERLAYS}
+          <Anchor id="overlay"><DropdownItem onMenuOpened={() => markPick("overlay")} label="OptiScaler overlay" layout="below" childrenContainerWidth="max" rgOptions={OVERLAYS}
             selectedOption={wantOv} onChange={(o) => { markPick("overlay"); setPickOv(Number(o.data)); }}
             description={explain("OptiScaler's own counter at the top right, from the game's start: rendered and shown fps, the upscaler in use and \"(XeFG)\" while frame generation runs, which Steam's overlay can't tell. Saved in the game's OptiScaler settings.",
               undefined, quick ? undefined : "Detailed and Full add a few lines of text over the game.")} /></Anchor>
@@ -241,6 +224,23 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           )}
         </PanelSectionRow>
       )}
+      <PanelSectionRow>
+        <Group title="In this game now" />
+        <div style={{ fontSize: 12, lineHeight: "18px", color: "#b8bcbf", padding: "0 0 4px" }}>
+          <div>{ours ? "✓" : "–"} OptiScaler: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
+            : fgmodHere || gs?.opti_owner === "decky-framegen" ? "Decky Framegen's (ClawDeck leaves it alone)" : gs?.opti_owner === "other" ? "put there by another tool or by hand" : "not in the game"}</div>
+          {gs?.files?.reframework && <div>✓ REFramework (dinput8.dll)</div>}
+          <div>{wrapped ? "✓" : "–"} Launch options: {wrapped ? "ClawDeck is in them" : "ClawDeck not added yet (added when you pick below)"}</div>
+          {!quick && opts !== null && <div style={{ wordBreak: "break-all", opacity: 0.8 }}>{opts || "(empty)"}</div>}
+          <div>{xmxOn && xessOk ? "✓" : "–"} XMX driver: {xmxOn ? (xessOk ? "on for this game" : "on, but the driver check hasn't passed") : "off for this game"}</div>
+          {gs?.xmx_proof && <div style={{ color: gs.xmx_proof.state === "ok" ? "#4caf50" : gs.xmx_proof.state === "never" ? undefined : "#f44336" }}>
+            {({ ok: `✓ XMX cores used in the last launch (${gs.xmx_proof.kernels} XMX programs)`,
+                stale: "✗ Last launch didn't use the XMX cores (stock driver): restart the game",
+                never: "– XMX cores not used yet: start the game once",
+                failed: "✗ An XMX program didn't compile: the game falls back to DP4a (see ClawDeck's log)" } as const)[gs.xmx_proof.state]}</div>}
+          <div>{launch.fg ? `✓ Frame generation ${launch.fg}x (XeSS on XMX)` : "– Frame generation off"} · XeLL low latency always on</div>
+        </div>
+      </PanelSectionRow>
       {(fgmodHere || gs?.opti_owner === "decky-framegen" || gs?.opti_owner === "other") && (
         <PanelSectionRow>
           <Status ok={ours ? true : null}
