@@ -103,11 +103,31 @@ if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && [ -f "$RUNTIME/autotune.on" ] && com
   base="${MANGOHUD_CONFIG:-no_display}"
   export MANGOHUD_CONFIG="${base%,},output_folder=$LOGDIR,log_interval=1000,autostart_log=1,log_duration=0"
 fi
+# E-cores only for this game (Per-game, CLAWDECK_CORES=e): the game and everything it starts inherit the affinity,
+# the P-cores stay free; nothing to undo, it ends with the game. The E-cores on the L3 (Panther Lake: 2-9), not the
+# LP-E cores without one (10-13), which are slower; a chip without that split gets all its Atom cores. On Windows
+# this needs a reboot (ClawTweaks' author, r/MSIClaw 2026-11): on Linux it is per game, live.
+pre=()
+if [ "${CLAWDECK_CORES:-}" = e ] && command -v taskset >/dev/null 2>&1 && [ -r /sys/devices/cpu_atom/cpus ]; then
+  list=""; all=""
+  for part in $(tr ',' ' ' < /sys/devices/cpu_atom/cpus); do
+    a=${part%-*}; b=${part#*-}
+    for c in $(seq "$a" "$b"); do
+      all="$all,$c"
+      [ -e "/sys/devices/system/cpu/cpu$c/cache/index3" ] && list="$list,$c"
+    done
+  done
+  list=${list#,}; [ -z "$list" ] && list=${all#,}
+  if [ -n "$list" ]; then
+    echo "clawdeck: E-cores only ($list)" >&2
+    pre=(taskset -c "$list")
+  fi
+fi
 # Decky Framegen's fgmod next: run it with ClawDeck's second stage in front of the game, so files ClawDeck adds
 # (FSR 4 XMX) go in after fgmod's own and anything left from an earlier launch is cleaned up
 if [ $# -ge 2 ] && [ "$(basename "$1")" = fgmod ]; then
   fg="$1"; shift
   export CLAWDECK_STAGE=post
-  exec "$fg" "$0" "$@"
+  exec "${pre[@]}" "$fg" "$0" "$@"
 fi
-exec "$@"
+exec "${pre[@]}" "$@"

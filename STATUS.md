@@ -47,6 +47,9 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **E-cores only, per game (2026-11-05, r/MSIClaw request):** Per-game → E-cores only on, start a game: ClawDeck's log
+  line "clawdeck: E-cores only (2-9)" in the game's Proton output, and `ps -L -o psr= -p $(pgrep -f <game>.exe)`
+  shows only 2-9. Off again: the next launch uses every core.
 - **Power, from the audit of proven tools (2026-11-05):** PL2 is now PL1 + 2 W (hhd, PowerControl, PowerStation), not
   scaled to 45 W; Autotune is off by default and marked beta; MangoHud is injected only while Autotune is on; Autotune
   no longer trims the CPU ceiling. Check: CONTROL at a 35 W pick, Autotune off, frame-time graph in Steam's overlay
