@@ -47,6 +47,12 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Autotune, quieter (2026-11-04):** play CONTROL for 10 min with Autotune on. The TDP changes only in the first
+  2–3 min (no longer a full re-check every 5 min, now 20 min). A loading screen or the pause menu doesn't move the
+  TDP (ClawDeck's log: "skipped a N fps window"). At exit the toast reads "Autotune saved X W of your Y W: A of B fps,
+  saves Z W", or "still learning; nothing new saved" after a short session. `ps -L -o psr,ni -p $(pgrep -f ClawDeck)`
+  in a game shows only E-core numbers and nice 10.
+
 - **Onimusha the OptiClick way (2026-11-04, test in progress):** OptiClick's Windows install of Onimusha runs
   onehoon's REFramework fork (fork-release-15, 854e42d) as dinput8.dll, OptiScaler 0.9.5-pre4 as dxgi.dll with its
   files in `OptiScaler\` (OptiDllPath), OptiPatcher as a plugin, and XeFG fed by the game's own DLSS frame generation

@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -142,6 +142,7 @@ class Plugin:
 
     async def _unload(self):
         self.autotune.stop()
+        quiet.background(False)
         n = self.power.revert_all()
         decky.logger.info("ClawDeck unloaded, %d value(s) reverted", n)
 
@@ -556,6 +557,7 @@ class Plugin:
                                 keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"))
             result["autotune"] = "started"
+            quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
         return result
 
@@ -635,7 +637,9 @@ class Plugin:
         """Stop autotune and keep what it found for this game and power source. The power stays as it is: the caller
         reverts and sets the next limit."""
         learned = self.autotune.stop(revert=False)
-        if learned and learned.get("learned"):
+        quiet.background(False)
+        # only a finished result: a session cut short (a quick launch, a menu, still lowering) keeps the last good one
+        if learned and learned.get("learned") and learned.get("settled"):
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
         return learned
 

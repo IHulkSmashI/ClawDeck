@@ -896,7 +896,10 @@ def plugin(fake_hw, tmp_path, monkeypatch):
     """main.Plugin with real Power / Autotune / Profiles on a fake RAPL tree, a fake thermald and a fake charger.
     No background tasks: autotune's loop and the guard's are not started, the tests drive autotune's steps."""
     from clawdeck import power as pw_mod
+    from clawdeck import quiet
     m = _load_main(tmp_path, monkeypatch)
+    quiet_calls = []
+    monkeypatch.setattr(quiet, "background", lambda on, *a: quiet_calls.append(on) or True)
     root = tmp_path / "rapl"
     _w(str(root / "constraint_0_power_limit_uw"), FW_PL1)
     _w(str(root / "constraint_1_power_limit_uw"), FW_PL2)
@@ -1030,6 +1033,7 @@ def test_unplugging_during_and_after_a_game_follows_each_power_sources_pick(plug
     assert p.chip() == 20
     p.run(p.game_started("42"))
     _lower(p, 10)
+    p.autotune.session.settled = True                              # it finished learning on battery
     p.ac["plugged"] = True
     r = p.run(p.power_source_changed(True))
     assert r["changed"] and p.chip() == 35 and p.autotune.session.ceiling_tdp == 35 and p.autotune.plugged
@@ -1041,3 +1045,63 @@ def test_unplugging_during_and_after_a_game_follows_each_power_sources_pick(plug
     assert r["changed"] and p.chip() == 20                         # unplugged with no game: the battery pick
     r = p.run(p.resumed())
     assert r["reapplied"] and p.chip() == 20
+
+
+def test_autotune_skips_loading_screens_and_menus(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch)
+    seq = iter([60, 60, 60, 12, 61, 200, 60, 60])              # a loading screen (12) and an uncapped menu (200)
+    _Game(at, lambda *_: float(next(seq)))
+    for _ in range(3):
+        at._step()
+    assert s.learned.max_fps == 60
+    tdp = s.learned.tdp
+    at._step()                                                  # 12 fps: skipped, nothing changes
+    assert s.learned.tdp == tdp and s.skips == 1
+    at._step(); at._step()                                      # 61 judged (skips reset), 200 skipped
+    assert s.skips == 1 and s.phase != "measure"
+    at.session = None
+
+
+def test_autotune_three_odd_windows_in_a_row_are_the_game(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda *_: 60.0)
+    for _ in range(3):
+        at._step()
+    _Game(at, lambda *_: 15.0)                                  # settings turned way up: it stays at 15
+    for _ in range(3):
+        at._step()
+    assert s.skips == 0                                         # the third is used, not skipped
+    at.session = None
+
+
+def test_autotune_saves_only_a_finished_result(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp))
+    for _ in range(5):
+        at._step()
+    r = at.stop(revert=False)
+    assert r["settled"] is False and "still learning" in r["summary"]
+    at, s = _tuner(fake_hw, monkeypatch)
+    _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp))
+    for _ in range(25):
+        at._step()
+    r = at.stop(revert=False)
+    assert r["settled"] and r["summary"].startswith("Autotune saved 19 W of your 20 W") and "saves 1 W" in r["summary"]
+
+
+def test_quiet_moves_only_this_process_to_the_efficiency_cores(tmp_path, monkeypatch):
+    from clawdeck import quiet
+    atom = tmp_path / "cpus"
+    atom.write_text("4-7\n")
+    calls = []
+    monkeypatch.setattr(quiet.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(quiet, "_threads", lambda: [11, 12])
+    monkeypatch.setattr(quiet.os, "sched_setaffinity", lambda t, c: calls.append(("aff", t, sorted(c))))
+    monkeypatch.setattr(quiet.os, "setpriority", lambda w, t, n: calls.append(("nice", t, n)))
+    monkeypatch.setattr(quiet, "_on", False)
+    assert quiet.background(True, str(atom))
+    assert ("aff", 11, [4, 5, 6, 7]) in calls and ("nice", 12, 10) in calls
+    assert not quiet.background(True, str(atom))                # already there: nothing again
+    calls.clear()
+    assert quiet.background(False, str(atom))
+    assert ("aff", 11, list(range(8))) in calls and ("nice", 11, 0) in calls
