@@ -207,6 +207,28 @@ def install(home: str, entry: dict, allow_unpinned: bool = False) -> dict:
     return out
 
 
+def remove_for_uninstall(home: str) -> dict:
+    """ClawDeck is being uninstalled. A driver ClawDeck installed (its package under ~/.local/share/clawdeck) goes with
+    it: its own uninstall.sh takes out the session file, the shim watcher and the prefix files. Putting the session
+    file back instead (as before) left every game on a driver inside ClawDeck's folder, and deleting that folder would
+    then break them (maintainer's clean reinstall, 2026-11-05). A package the user installed themselves elsewhere gets
+    back the session-wide setup its install.sh made."""
+    from . import xmxscope
+    pkg = package_dir(home)
+    root = os.path.realpath(os.path.join(home, INSTALL_ROOT))
+    ours = bool(pkg) and os.path.realpath(pkg).startswith(root + os.sep)
+    if not ours or not os.path.isfile(os.path.join(pkg, "uninstall.sh")):
+        return {**xmxscope.restore_session(home), "ours": False}
+    r = userexec.run(["bash", os.path.join(pkg, "uninstall.sh")], home, timeout=600, cwd=pkg)
+    for f in (xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX, xmxscope.XMX_ENV, ENV_CONF):
+        try:
+            os.remove(os.path.join(home, f))
+        except FileNotFoundError:
+            pass
+    return {"ok": r["rc"] == 0, "ours": True, "package_dir": pkg,
+            **({} if r["rc"] == 0 else {"error": f"uninstall.sh exited {r['rc']}: {r['out'].strip()[-200:]}"})}
+
+
 def _find_package(d: str) -> str | None:
     for root, dirs, files in os.walk(d):
         if "install.sh" in files and "uninstall.sh" in files:
