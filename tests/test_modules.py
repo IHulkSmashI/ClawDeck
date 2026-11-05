@@ -1447,16 +1447,14 @@ def test_fsr2_and_fsr3_games_get_optiscaler_on_xmx(tmp_path, dll):
     assert "Pick FSR in the game's graphics menu" in rec["reasons"][0]
 
 
-def test_3x_4x_from_the_games_dlss_g_take_optiscaler_v10_and_its_override():
+def test_3x_4x_stay_on_optiscaler_0_9_4_and_xess_fg():
     from clawdeck import launchenv
-    two = {"opti": "xess", "opti_fg": "dlssg", "fg": 2}
-    assert not launchenv.v10(two) and launchenv.opti_ini(two)["XeFG_InterpolationCount"] == "1"
-    for fg, n in ((3, "2"), (4, "3")):
-        ini = launchenv.opti_ini({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": fg})
-        assert launchenv.v10({"opti_fg": "dlssg", "fg": fg})
-        assert ini["DLSSG_OverrideInterpolationCount"] == n and "XeFG_InterpolationCount" not in ini
-        assert ini["Libraries_OptiDllPath"] == ".\\OptiScaler" and "FSR_Fsr4Update" not in ini
-    assert not launchenv.v10({"opti_fg": "upscaler", "fg": 3})      # OptiScaler's own FG: 0.9.4's count works
+    for fg in (2, 3, 4):
+        launch = {"opti": "xess", "opti_fg": "dlssg", "fg": fg}
+        assert not launchenv.v10(launch)
+        assert launchenv.opti_ini(launch)["XeFG_InterpolationCount"] == str(fg - 1)
+        assert launchenv.compose(launch)["XESS_FG"] == str(fg)
+
 
 
 def test_fsr4_xmx_files_are_taken_from_downloads_as_a_pair_or_a_zip(tmp_path, monkeypatch):
