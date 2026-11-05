@@ -1278,3 +1278,15 @@ def test_osupdate_parses_rpm_ostree(monkeypatch):
     assert s["applies"] and s["waiting"] and "45.20261104 is available (running 44.20261012)" in s["line"]
     monkeypatch.setattr(osupdate, "_run", lambda a, t: None)
     assert osupdate.status() == {"applies": False}
+
+
+def test_gamescope_idle_hold_found_in_the_binary(tmp_path, monkeypatch):
+    from clawdeck import edid
+    exe = tmp_path / "gamescope"
+    exe.write_bytes(b"\x7fELF...adaptive_sync_idle_hold...")
+    monkeypatch.setattr(edid.shutil, "which", lambda n: str(exe))
+    monkeypatch.setattr(edid, "_idle_hold", None)
+    assert edid.gamescope_idle_hold()
+    exe.write_bytes(b"\x7fELF old gamescope")
+    monkeypatch.setattr(edid, "_idle_hold", None)
+    assert not edid.gamescope_idle_hold()
