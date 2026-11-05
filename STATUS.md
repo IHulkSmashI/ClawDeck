@@ -59,11 +59,8 @@ The four-panel UI has not been on the device yet.
   and with nitec's files in place the upscaler starts on **FSR 4.1.2** (XeSS 2 one tap away). A game OptiClick marks
   "Not Supported" on Intel shows a red line and "Install OptiScaler" refuses with that reason.
 
-- **VRR without ClawDeck's menu switching (Bazzite 45, gamescope 3.17.0, 2026-11-05):** gamescope now holds 120 Hz in
-  Steam's menus with VRR on (adaptive_sync_idle_hold), so "VRR only in games" is off by default where gamescope has
-  it. Check with VRR on in Steam: the menus and library smooth at 120 Hz (not following a shader compile's 30 fps), a
-  game unlocked (not 30/60). If the menus are choppy again, Fixes → "VRR only in games" on brings the old behaviour.
-
+- **VRR menus left to gamescope (2026-11-05):** confirmed on the Claw (Bazzite 45, gamescope 3.17): Steam's menus
+  are smooth at 120 Hz with VRR on. ClawDeck's "VRR only in games" switching is removed.
 - **Bazzite update line (2026-11-05):** Fixes shows "Bazzite up to date (kernel, Intel graphics driver, Mesa,
   gamescope)" and, while an update waits, "Bazzite 45.x is available (running 44.x) …" (rpm-ostree upgrade --check, once
   per start, nothing downloaded). After updating: "… is downloaded: restart the Claw".
@@ -95,9 +92,10 @@ The four-panel UI has not been on the device yet.
   `fg-meter-install.sh` on that branch. Steam's frame-time graph flat with VRR on, CONTROL Resonant at XeFG 2x; no
   crash with OptiScaler (the 2026-11-04 build crashed patching OptiScaler's wrapper; it now only touches DXVK's).
 
-- **E-cores only, per game (2026-11-05, r/MSIClaw request):** Per-game → E-cores only on, start a game: ClawDeck's log
-  line "clawdeck: E-cores only (2-9)" in the game's Proton output, and `ps -L -o psr= -p $(pgrep -f <game>.exe)`
-  shows only 2-9. Off again: the next launch uses every core.
+- **E-cores only removed (2026-11-05):** the kernel's hybrid scheduler places threads (maintainer: "should just be
+  automatic"); a saved per-game setting is dropped at start. XMX: automatic in every game with XeSS, XeSS-FG, XeLL or
+  OptiScaler; "every game" is switched back to that once (games without any of them lost speed on the XMX driver).
+  Check: Setup shows "XMX driver: in every game that can use the XMX cores".
 - **Power, from the audit of proven tools (2026-11-05):** PL2 is now PL1 + 2 W (hhd, PowerControl, PowerStation), not
   scaled to 45 W; Autotune is off by default and marked beta; MangoHud is injected only while Autotune is on; Autotune
   no longer trims the CPU ceiling. Check: CONTROL at a 35 W pick, Autotune off, frame-time graph in Steam's overlay

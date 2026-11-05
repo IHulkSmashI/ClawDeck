@@ -65,7 +65,7 @@ try:
                 if _r.count(_o.sep) - _game.rstrip(_o.sep).count(_o.sep) >= %(depth)d:
                     _d[:] = []
                 _lo = [x.lower() for x in _f]
-                if any(x.startswith("libxess") and x.endswith(".dll") for x in _lo) or "optiscaler.ini" in _lo:
+                if any(x.startswith(("libxess", "libxell")) and x.endswith(".dll") for x in _lo) or "optiscaler.ini" in _lo:
                     _found = True
                     break
         _want = "1" if _found else "0"
@@ -133,7 +133,8 @@ def prefix_shim(home: str, appid: str, pkg: str | None) -> dict:
 
 
 def ships_xess(game_dir: str | None) -> bool:
-    """What the generated scope script checks at launch (keep the two the same): libxess*.dll or optiscaler.ini
+    """What the generated scope script checks at launch (keep the two the same): libxess*.dll (XeSS, XeSS frame
+    generation), libxell*.dll (XeLL) or optiscaler.ini
     within DEPTH folders of the game's install folder."""
     if not game_dir or not os.path.isdir(game_dir):
         return False
@@ -142,7 +143,7 @@ def ships_xess(game_dir: str | None) -> bool:
         if r.count(os.sep) - base >= DEPTH:
             d[:] = []
         lo = [x.lower() for x in f]
-        if any(x.startswith("libxess") and x.endswith(".dll") for x in lo) or "optiscaler.ini" in lo:
+        if any(x.startswith(("libxess", "libxell")) and x.endswith(".dll") for x in lo) or "optiscaler.ini" in lo:
             return True
     return False
 
