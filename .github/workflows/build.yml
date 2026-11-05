@@ -37,7 +37,7 @@ jobs:
     needs: [backend-tests, cabinet-lzms]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: cabinet-lzms, path: bin }
       - uses: pnpm/action-setup@v6
         with: { version: 9 }
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { sparse-checkout: docs/releases }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: ClawDeck }
       # a tag with a suffix (v0.2.0-beta.1) is a pre-release; its notes come from docs/releases/<tag>.md
       - uses: softprops/action-gh-release@v3
@@ -89,7 +89,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: ClawDeck }
       - name: publish the main build on the sideload branch (for testing on a Claw before a release)
         run: |
