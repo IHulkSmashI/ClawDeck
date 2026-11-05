@@ -1312,3 +1312,18 @@ def test_optiscaler_compat_entry_sets_hook_names_reframework_and_blocks_broken(p
     wiki["3"] = ({"name": "PRAGMATA", "status": "works", "notes": "Requires REFramework", "reframework": True, "slug": None}, None)
     rec = base(); plugin._optiscaler_entry(rec, "3")
     assert rec["route"] == "re_engine" and rec["launch"]["reframework"] is True and rec["re_engine"]
+
+
+def test_autotune_gives_up_on_a_game_without_a_frame_rate(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch)
+    at.sampler.sample = lambda: autotune.Sample(t=time.monotonic(), frametime_ms=None, fps=None, gpu_mhz=1500,
+                                                gpu_max_mhz=2400, cpu_pct=40, pkg_w=20.0, gpu_busy=70,
+                                                source="presented", shown_fps=None)   # no XeLL log, no MangoHud log
+    tdp = s.learned.tdp
+    for _ in range(autotune.NO_FPS_S - 1):
+        at._step()
+    assert not s.paused and not at.status()["no_frames"]
+    at._step()
+    st = at.status()
+    assert s.paused and st["no_frames"] and s.learned.tdp == tdp     # nothing changed, the limit stays
+    at.session = None

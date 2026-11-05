@@ -279,6 +279,9 @@ class Learned:
     samples: int = 0
 
 
+NO_FPS_S = 30          # seconds without any frame rate before autotune gives up on a game
+
+
 @dataclass
 class Session:
     appid: str
@@ -306,6 +309,8 @@ class Session:
     fps_per_w: float | None = None
     source: str = "presented"
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
+    no_fps_s: int = 0                   # seconds in a row without a frame rate before the first one
+    no_frames: bool = False             # gave up: this game's frame rate can't be read
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
     skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
     settled: bool = False               # reached hold and stayed there SETTLED_WINDOWS: what it found is worth saving
@@ -472,6 +477,15 @@ class Autotune:
             self._log(s, smp)
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
+        if not smp.fps and not s.paused and s.learned.samples == 0:
+            # no frame rate at all: a game without XeSS / XeLL (the shim's log) whose MangoHud log isn't written
+            # (Onimusha without OptiScaler sat in "measure" for minutes, 2026-11-05). Give up: the limit you picked
+            # stays, nothing more is changed, and the panel says why
+            s.no_fps_s += 1
+            if s.no_fps_s >= NO_FPS_S:
+                s.paused, s.no_frames = True, True
+                self._tau(s, False)
+                log.info("autotune: no frame rate from %s after %d s: it stays out of this game", s.appid, NO_FPS_S)
         if not smp.fps or s.paused:
             return
         s.learned.samples += 1
@@ -830,7 +844,7 @@ class Autotune:
                 "saves_w": (s.ceiling_tdp - l.tdp) if (s.phase == "hold" and l.tdp is not None and s.ceiling_tdp > l.tdp) else None, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
-                "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap,
+                "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap, "no_frames": s.no_frames,
                 "learning": s.short_tau or s.phase != "hold" or s.quiet < SETTLED_WINDOWS,
                 "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,
