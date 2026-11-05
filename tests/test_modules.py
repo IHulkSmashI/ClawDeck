@@ -1567,3 +1567,20 @@ def test_uninstall_gives_a_users_own_xmx_driver_back_to_the_session(tmp_path, mo
     monkeypatch.setattr(userexec, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("not ours to remove")))
     r = xess.remove_for_uninstall(str(home))
     assert r["ok"] and not r["ours"] and (home / xmxscope.SESSION_CONF).exists()
+
+
+def test_fsr4_xmx_files_come_from_the_files_branch_not_a_release(tmp_path, monkeypatch):
+    """The files sat on the Releases page and looked like a second download (maintainer, 2026-11-05); they now come
+    from a files-only branch pinned by commit, still sha256 checked."""
+    import hashlib, json
+    from clawdeck import optiscaler, downloads
+    entry = json.load(open(os.path.join(ROOT, "assets", "versions.json")))["fsr4_xmx"]
+    assert "tag" not in entry and entry["base"].startswith("https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/")
+    data = b"x"
+    urls = []
+    def dl(url, dest, timeout=0):
+        urls.append(url); open(dest, "wb").write(data); return dest
+    monkeypatch.setattr(downloads, "download", dl)
+    fake = {**entry, "files": {"a.dll": hashlib.sha256(data).hexdigest()}}
+    assert optiscaler.fsr4_xmx_download(str(tmp_path), fake)["downloaded"] == ["a.dll"]
+    assert urls == [entry["base"] + "/a.dll"]
