@@ -83,7 +83,9 @@ class Plugin:
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         # on by default, on the charger too: the least power for (nearly) the same frames, less heat and fan noise
         # (maintainer, 2026-11-04). The switches in Power still turn either off.
-        self.settings.setdefault("autotune", True)
+        # beta: off until switched on (ClawTweaks removed its AutoTDP in 2026-07; Steam has none; maintainer
+        # 2026-11-05: "Auto tdp can be released in beta or turned off")
+        self.settings.setdefault("autotune", False)
         self.settings.setdefault("autotune_plugged", True)
         self.autotune.enabled = bool(self.settings.get("autotune"))
         self._autotune_flag(self.autotune.enabled)
