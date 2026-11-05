@@ -66,7 +66,8 @@ export default definePlugin(() => {
     name: "ClawDeck",
     // the plain title bar: everything is in Quick Access's sections now; the full view is under Setup (maintainer,
     // 2026-11-04: "is the cog still needed?")
-    titleView: <div className={staticClasses.Title}>ClawDeck</div>,
+    titleView: <div className={staticClasses.Title} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <LogoIcon size={28} /><span>ClawDeck</span></div>,
     content: <QuickPanel />,
     icon: <LogoIcon />,
     onDismount() {
