@@ -1337,3 +1337,12 @@ def test_autotune_gives_up_on_a_game_without_a_frame_rate(fake_hw, monkeypatch):
     st = at.status()
     assert s.paused and st["no_frames"] and s.learned.tdp == tdp     # nothing changed, the limit stays
     at.session = None
+
+
+def test_game_list_tags_say_what_clawdecks_optiscaler_runs(plugin):
+    p = plugin
+    assert p._game_tags({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3}) == [
+        {"text": "FSR 4.1.2", "kind": "fsr"}, {"text": "3x FG", "kind": "fg"}]
+    assert p._game_tags({"opti": "xess", "opti_fg": "off", "fg": 3}) == [{"text": "XeSS 2", "kind": "xess"}]
+    assert p._game_tags({"opti": "fsr4_xmx_lite"}) == [{"text": "FSR 4.1.2 Lite", "kind": "fsr"}]
+    assert p._game_tags({}) == []

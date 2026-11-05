@@ -23,7 +23,7 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
   const options = useMemo(() => {
     // only games ClawDeck can set up, as OptiClick lists only supported games: DLSS, FSR or XeSS inside, or in the list
     return (games ?? []).filter((g) => g.supported !== false)
-      .map((g) => ({ data: g.appid, label: <GameName appid={g.appid} name={g.appid === running?.appid ? `${g.name} (running)` : g.name} /> }));
+      .map((g) => ({ data: g.appid, label: <GameName appid={g.appid} name={g.appid === running?.appid ? `${g.name} (running)` : g.name} tags={g.tags} /> }));
   }, [games, running?.appid]);
   // the running game when it can be set up, else the last pick, else the first in the list
   const cur = options.find((o) => o.data === sel)?.data ?? options[0]?.data ?? null;
