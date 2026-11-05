@@ -1457,3 +1457,20 @@ def test_3x_4x_from_the_games_dlss_g_take_optiscaler_v10_and_its_override():
         assert ini["DLSSG_OverrideInterpolationCount"] == n and "XeFG_InterpolationCount" not in ini
         assert ini["Libraries_OptiDllPath"] == ".\\OptiScaler" and "FSR_Fsr4Update" not in ini
     assert not launchenv.v10({"opti_fg": "upscaler", "fg": 3})      # OptiScaler's own FG: 0.9.4's count works
+
+
+def test_fsr4_xmx_files_are_taken_from_downloads_as_a_pair_or_a_zip(tmp_path, monkeypatch):
+    import zipfile
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = tmp_path / "h"
+    (home / "Downloads" / "game").mkdir(parents=True)
+    (home / "Downloads" / "game" / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"a game's own")   # alone: not taken
+    assert optiscaler.fsr4_xmx_import(str(home))["imported"] is False
+    with zipfile.ZipFile(home / "Downloads" / "FSR412_XMX.zip", "w") as z:
+        z.writestr("FSR 4.1.2/amd_fidelityfx_upscaler_dx12.dll", b"nitec")
+        z.writestr("FSR 4.1.2/fsr-original.dll", b"amd")
+    r = optiscaler.fsr4_xmx_import(str(home))
+    assert r["imported"] and (home / "fsr4-xmx" / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"nitec"
+    assert (home / "fsr4-xmx" / "fsr-original.dll").read_bytes() == b"amd"
+    assert optiscaler.fsr4_xmx_import(str(home))["imported"] is False          # already there
