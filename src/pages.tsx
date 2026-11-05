@@ -37,24 +37,23 @@ export const QuickPanel: FC = () => {
   useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d && !!x?.installed)).catch(() => setSetupDone(true)); }, []);
   return (
   <HelpContext.Provider value={help}>
-    <PanelSection>
-      <PanelSectionRow>
-        <ToggleField label="Explain" checked={help} bottomSeparator="none"
-          description={help ? "What each control does, why you'd use it and what it costs." : "Show what each control does."}
-          onChange={(v) => { setHelp(v); setSetting("quick_help", v); }} />
-      </PanelSectionRow>
-    </PanelSection>
     <LastMessage />
     {setupDone === false && <FirstRun onDone={() => setSetupDone(true)} />}
     <Fold id="power" title="Power" open={!playing} summary="Profile, TDP, Autotune, fan, charge limit"><PowerTab quick /></Fold>
     {setupDone && <Fold id="game" title="Upscaling and frame generation" open={playing} summary="Game, upscaler, frame generation"><GameSection quick /></Fold>}
     <Fold id="fixes" title="Fixes" summary="VRR, face buttons, overlay watts, log"><FixesTab quick /></Fold>
-    <Fold id="setup" title="Setup" summary="XeSS XMX driver, updates"><SetupTab quick /></Fold>
-    <PanelSection>
-      <PanelSectionRow>
-        <ButtonItem layout="below" onClick={() => openPage("power")}>Open the full view</ButtonItem>
-      </PanelSectionRow>
-    </PanelSection>
+    <Fold id="setup" title="Setup" summary="XeSS XMX driver, updates, explanations, full view"><SetupTab quick />
+      <PanelSection>
+        <PanelSectionRow>
+          <ToggleField label="Explain every control" checked={help} bottomSeparator="none"
+            description={help ? "What each control does, why you'd use it and what it costs." : "Adds a short explanation under each control."}
+            onChange={(v) => { setHelp(v); setSetting("quick_help", v); }} />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={() => openPage("power")}>Full view: health check and rarely used settings</ButtonItem>
+        </PanelSectionRow>
+      </PanelSection>
+    </Fold>
   </HelpContext.Provider>
   );
 };
