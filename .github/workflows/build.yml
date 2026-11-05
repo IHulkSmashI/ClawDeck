@@ -26,7 +26,7 @@ jobs:
       - name: toolchain (mingw-w64, Wine, wimlib)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends gcc-mingw-w64-x86-64 wine64 libwine libwim-dev
+          sudo apt-get install -y -q --no-install-recommends gcc-mingw-w64-x86-64 wine wine64 libwine libwim-dev
       - run: tools/cabinet-lzms/build.sh
       - name: test under Wine
         run: tools/cabinet-lzms/test/run.sh
