@@ -11,7 +11,6 @@ import { FixesTab } from "./tabs/Fixes";
 import { GameSection } from "./tabs/Game";
 import { PowerTab } from "./tabs/Power";
 import { SetupTab } from "./tabs/Setup";
-import { runningApp } from "./steam";
 
 export const ROUTE = "/clawdeck";
 export const PAGES = ["power", "game", "fixes", "setup"] as const;
@@ -29,7 +28,6 @@ export const openPage = (page = "power") => {
  */
 export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
-  const playing = !!runningApp();     // one section open at the start: the game's while one runs, else Power
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
   // the steps show on the first start and stay until Done or Skip; without the XMX driver they come back (nothing on
@@ -39,8 +37,8 @@ export const QuickPanel: FC = () => {
   <HelpContext.Provider value={help}>
     <LastMessage />
     {setupDone === false && <FirstRun onDone={() => setSetupDone(true)} />}
-    <Fold id="power" title="Power" open={!playing} summary="Profile, TDP, Autotune, fan, charge limit"><PowerTab quick /></Fold>
-    {setupDone && <Fold id="game" title="Upscaling and frame generation" open={playing} summary="Game, upscaler, frame generation"><GameSection quick /></Fold>}
+    <Fold id="power" title="Power" summary="Profile, TDP, Autotune, fan, charge limit"><PowerTab quick /></Fold>
+    {setupDone && <Fold id="game" title="Upscaling and frame generation" summary="Game, upscaler, frame generation"><GameSection quick /></Fold>}
     <Fold id="fixes" title="Fixes" summary="VRR, face buttons, overlay watts, log"><FixesTab quick /></Fold>
     <Fold id="setup" title="Setup" summary="XeSS XMX driver, updates, explanations, full view"><SetupTab quick />
       <PanelSection>
