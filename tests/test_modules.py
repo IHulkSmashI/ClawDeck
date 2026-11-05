@@ -854,8 +854,10 @@ def test_installed_games_from_steam_manifests(tmp_path):
 
 def test_opti_ini_follows_the_frame_generation_multiplier():
     from clawdeck import launchenv
-    ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 3})
-    assert ini["XeFG_InterpolationCount"] == "2" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
+    ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "upscaler", "fg": 3})     # OptiScaler's own FG: 0.9.4's count
+    assert ini["XeFG_InterpolationCount"] == "2" and ini["FrameGen_FGInput"] == "upscaler"
+    ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 2})
+    assert ini["XeFG_InterpolationCount"] == "1" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
     assert "XeFG_InterpolationCount" not in launchenv.opti_ini({"opti": "xess", "opti_fg": "off", "fg": 3})
 
 
@@ -1052,13 +1054,13 @@ def test_capcom_ini_is_opticlicks():
 
 
 def test_non_capcom_game_is_unchanged():
-    """A DLSS game without REFramework: OptiScaler 0.9.4 lines as before, flat layout, Spoofing kept from the list."""
+    """A DLSS game without REFramework at 2x: OptiScaler 0.9.4 lines as before, flat layout, Spoofing kept from the list."""
     from clawdeck import launchenv
-    launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 3, "opti_ini": {"Spoofing_Dxgi": "false"}}
+    launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 2, "opti_ini": {"Spoofing_Dxgi": "false"}}
     assert not launchenv.capcom(launch)
     ini = launchenv.opti_ini(launch)
     assert ini == {"Upscalers_Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGInput": "dlssg",
-                   "FrameGen_FGOutput": "xefg", "Spoofing_Dxgi": "false", "XeFG_InterpolationCount": "2"}
+                   "FrameGen_FGOutput": "xefg", "Spoofing_Dxgi": "false", "XeFG_InterpolationCount": "1"}
     assert launchenv.opti_ini({"opti": "fsr4_xmx"})["FSR_Fsr4Update"] == "true"
 
 
@@ -1443,3 +1445,15 @@ def test_fsr2_and_fsr3_games_get_optiscaler_on_xmx(tmp_path, dll):
     rec = gamedb.recommend(doc, str(g))
     assert rec["route"] == "optiscaler" and rec["launch"]["opti"] == "xess" and rec["ships"]["upscaler"] == ["FSR"]
     assert "Pick FSR in the game's graphics menu" in rec["reasons"][0]
+
+
+def test_3x_4x_from_the_games_dlss_g_take_optiscaler_v10_and_its_override():
+    from clawdeck import launchenv
+    two = {"opti": "xess", "opti_fg": "dlssg", "fg": 2}
+    assert not launchenv.v10(two) and launchenv.opti_ini(two)["XeFG_InterpolationCount"] == "1"
+    for fg, n in ((3, "2"), (4, "3")):
+        ini = launchenv.opti_ini({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": fg})
+        assert launchenv.v10({"opti_fg": "dlssg", "fg": fg})
+        assert ini["DLSSG_OverrideInterpolationCount"] == n and "XeFG_InterpolationCount" not in ini
+        assert ini["Libraries_OptiDllPath"] == ".\\OptiScaler" and "FSR_Fsr4Update" not in ini
+    assert not launchenv.v10({"opti_fg": "upscaler", "fg": 3})      # OptiScaler's own FG: 0.9.4's count works

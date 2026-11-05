@@ -15,6 +15,7 @@ import asyncio
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -325,6 +326,9 @@ class Plugin:
         if key == "autotune":
             self.autotune.enabled = bool(value)
             self._autotune_flag(bool(value))
+            # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
+            # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
+            self._autotune_late = bool(value) and self.running_appid is not None
             if not value:
                 self.autotune.pause("autotune switched off")
         return True
@@ -731,6 +735,7 @@ class Plugin:
             plugged = bool(self.battery.plugged())
             self.running_appid, self.running_plugged = appid, plugged
             self._holding_pick = False
+            self._autotune_late = False
             self.power.revert_all(keep_thermald=True)   # the game starts from what was there before ClawDeck + its pick
             return self._start_game_power(appid, plugged)
 
@@ -854,7 +859,11 @@ class Plugin:
             return "off on the charger (Advanced → Autotune on the charger)"
         if self.profiles.get(self.running_appid, plugged).get("autotune") is False:
             return "off for this game"
-        return "not started"
+        if getattr(self, "_autotune_late", False):
+            return "turned on during this game: restart the game and it starts (it reads frame times from the launch)"
+        if not shutil.which("mangohud"):
+            return "MangoHud isn't installed, and Autotune reads frame times through it"
+        return "waiting for the game's first frame times (start a level, not a menu)"
 
     async def set_autotune_keep(self, pct: float) -> dict:
         """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,
@@ -1078,7 +1087,7 @@ class Plugin:
         """The OptiScaler this game gets: OptiClick's Capcom setup (v10, subfolder layout) for a Capcom RE Engine
         game, 0.9.4 for every other one."""
         v = self._versions()
-        return v["optiscaler_v10"] if launchenv.capcom(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+        return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
 
     def _ref_shas(self) -> tuple[str, ...]:
         e = self._versions().get("reframework") or {}

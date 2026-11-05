@@ -61,7 +61,15 @@ export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: b
   // menus closed"). Only a re-mount right after a change keeps them as they were: Steam's dropdown re-mounts Quick
   // Access when its menu closes, and the section in use must stay open then.
   const [open, setOpen] = useState<boolean>(() => (Date.now() - foldsAt < KEEP_MS && folds.has(id) ? folds.get(id)! : dflt));
-  const toggle = () => { const v = !open; folds.set(id, v); foldsAt = Date.now(); setOpen(v); };
+  // one press can reach the heading as both onActivate (A button / touch) and onClick: two toggles cancelled out and
+  // the press looked ignored (maintainer, 2026-11-05: "sometimes doesn't register my click"). One toggle per press.
+  const lastToggle = useRef(0);
+  const toggle = () => {
+    const now = Date.now();
+    if (now - lastToggle.current < 400) return;
+    lastToggle.current = now;
+    setOpen((o) => { const v = !o; folds.set(id, v); foldsAt = now; return v; });
+  };
   useEffect(() => { if (open) foldsAt = Date.now(); });       // using an open section keeps it open across a re-mount
   return (
     <>
