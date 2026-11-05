@@ -614,6 +614,7 @@ class Plugin:
             lim = self.settings.get("charge_limit")
             if lim and self.hw.paths.charge_limit:
                 r = fan.set_charge(self.hw.paths.charge_limit, int(lim), self.settings.get("charge_original"))
+                fan.kde_charge_limit(HOME, int(lim))
                 decky.logger.info("charge limit (%s): %s", why, r["summary"] if r["ok"] else r["error"])
         except Exception as e:                          # never stop the plugin over this
             decky.logger.warning("fan/charge reapply (%s): %s", why, e)
@@ -633,13 +634,22 @@ class Plugin:
         return r
 
     async def get_charge(self) -> dict:
-        return {**fan.charge_status(self.hw.paths.charge_limit), "setting": self.settings.get("charge_limit")}
+        st = fan.charge_status(self.hw.paths.charge_limit)
+        lim = self.settings.get("charge_limit")
+        if lim and st.get("supported") and st.get("limit") != int(lim):
+            # something else wrote the battery (KDE's helper on the way into Desktop Mode): put the limit back
+            decky.logger.info("charge limit was reset to %s by something else: back to %s", st.get("limit"), lim)
+            fan.set_charge(self.hw.paths.charge_limit, int(lim), self.settings.get("charge_original"))
+            st = fan.charge_status(self.hw.paths.charge_limit)
+        return {**st, "setting": lim}
 
     async def set_charge_limit(self, limit: int | None) -> dict:
         path = self.hw.paths.charge_limit
         if path and "charge_original" not in self.settings:   # what the battery had before ClawDeck: Off restores it
             self.settings["charge_original"] = sysfs.read_int(path)
         r = fan.set_charge(path, limit, self.settings.get("charge_original"))
+        if r.get("ok"):
+            await self._bg(fan.kde_charge_limit, HOME, None if limit is None else r["wanted"])
         if r["ok"]:
             self.settings["charge_limit"] = None if limit is None else r["wanted"]
             self._save_settings()

@@ -74,3 +74,16 @@ def test_charge_limit_and_off_restores_the_original(tmp_path):
     assert p.read_text().strip() == "50"                          # persists past revert
     assert fan.set_charge(str(p), None, 0)["ok"] and p.read_text().strip() == "0"
     assert not fan.set_charge(None, 80, 0)["ok"]
+
+
+def test_kde_charge_limit_written_and_removed(tmp_path, monkeypatch):
+    from clawdeck import fan
+    monkeypatch.setattr(fan.userexec, "chown_tree", lambda p, h: None)
+    rc = tmp_path / ".config" / "powerdevilrc"
+    rc.parent.mkdir(parents=True)
+    rc.write_text("[General]\nfoo=1\n")
+    assert fan.kde_charge_limit(str(tmp_path), 80)
+    t = rc.read_text()
+    assert "BatteryChargeStopThreshold=80" in t and "foo=1" in t
+    assert fan.kde_charge_limit(str(tmp_path), None)
+    assert "BatteryChargeStopThreshold" not in rc.read_text()
