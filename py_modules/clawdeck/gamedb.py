@@ -114,9 +114,12 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     dlss = _has(game_dir, ("nvngx_dlss.dll", "sl.dlss.dll"))
     # when the user turns frame generation on: the game's own (DLSS FG, FSR FG) if it has one, else OptiScaler's
     fg_source = ofg if ofg != "off" else "upscaler"
+    ships = shipped(game_dir)
     if xess and not re_engine:
         route, launch, opti = "own_xess", {}, False
-        why = "This game ships XeSS: use XeSS in its graphics menu; it runs on the XMX cores by itself."
+        own = ["XeSS"] + (["XeSS frame generation"] if "XeSS-FG" in ships["fg"] else []) + (["XeLL"] if "XeLL" in ships["latency"] else [])
+        why = (f"This game ships {', '.join(own[:-1]) + ' and ' + own[-1] if len(own) > 1 else own[0]}: use them in its graphics "
+               "menu; they run on the XMX cores by themselves, nothing to add.")
     elif re_engine:
         # OptiClick's Capcom setup: the game's own DLSS frame generation is what OptiScaler turns into XeSS-FG, so it
         # is the frame generation source whatever files the game ships; the wiki's Spoofing_Dxgi=false would hide
@@ -151,10 +154,26 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     return {
         "route": route, "known": bool(g), "frame_gen": ofg if opti else None, "fg_source": fg_source, "id": (g or {}).get("id"), "name": (g or {}).get("name"),
         "re_engine": re_engine, "capcom": re_engine, "capcom_tested": tested, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
-        "launch": launch, "reasons": reasons, "ini_version": doc.get("ini_version"),
+        "launch": launch, "reasons": reasons, "ships": ships, "upscaler": launch.get("opti") if opti else None, "ini_version": doc.get("ini_version"),
         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
         "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],
     }
+
+
+# what a game brings along, as OptiClick inspects a game before it installs anything
+SHIPPED = {
+    "upscaler": {"DLSS": ("nvngx_dlss.dll", "sl.dlss.dll"), "FSR": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll",
+                 "ffx_fsr2_api_x64.dll", "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_vk.dll"), "XeSS": ("libxess.dll", "libxess_dx11.dll")},
+    "fg": {"DLSS-G": ("nvngx_dlssg.dll", "sl.dlss_g.dll"), "FSR-FG": ("amd_fidelityfx_framegeneration_dx12.dll",
+           "ffx_frameinterpolation_x64.dll"), "XeSS-FG": ("libxess_fg.dll",)},
+    "latency": {"Reflex": ("sl.reflex.dll", "nvlowlatencyvk.dll"), "XeLL": ("libxell.dll",), "Anti-Lag 2": ("amd_antilag2*",)},
+}
+
+
+def shipped(game_dir: str | None) -> dict:
+    """{"upscaler": [...], "fg": [...], "latency": [...]}: the upscalers, frame generation and low-latency libraries
+    in the game's folder (not counting what ClawDeck's OptiScaler added)."""
+    return {kind: [name for name, files in d.items() if _has(game_dir, files)] for kind, d in SHIPPED.items()}
 
 
 UPSCALER_FILES = {
