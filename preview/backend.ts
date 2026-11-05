@@ -32,9 +32,12 @@ const state = {
   floor: null as null | number,
   customTdp: null as null | number,
   keep: 5,
-  launch: { xmx: true } as any,
+  launch: { xmx: true, opti: "fsr4_xmx", fg: 2, opti_fg: "dlssg", opti_overlay: 2 } as any,
   framegen: true,
-  xessInstalled: true,
+  xessInstalled: !(typeof location !== "undefined" && location.hash.includes("firstrun")),
+  setupDone: !(typeof location !== "undefined" && location.hash.includes("firstrun")),   // #firstrun: a fresh install
+  fan: "auto",
+  charge: null as null | number,
 };
 
 const ok = (extra: object = {}) => ({ ok: true, ...extra });
@@ -126,9 +129,10 @@ export const backend = {
     health: healthSummary(),
     overlay_power: { available: true, on: !!(state as any).overlayPower, files: [], battery_w: -9.9 },
   }),
-  get_setting: (k: string) => (k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : k === "autotune_plugged" ? !!(state as any).autotune_plugged : null),
+  get_setting: (k: string) => (k === "setup_done" ? state.setupDone : k === "autotune" ? state.autotune : k === "last_profile" ? state.profile : k === "autotune_plugged" ? !!(state as any).autotune_plugged : null),
   set_setting: (k: string, v: any) => {
     if (k === "autotune") state.autotune = v;
+    if (k === "setup_done") state.setupDone = v;
     if (k === "autotune_plugged") (state as any).autotune_plugged = v;
     return true;
   },
@@ -176,6 +180,14 @@ export const backend = {
         last_action: "raised CPU ceiling to 100 %: 29 → 31 fps, kept", last_delta: "CPU ceiling 100 %", last_change_s: 12,
         thermal_cap: null, thermal: thermal() }
     : { running: false, enabled: state.autotune, thermal: thermal() }),
+  // ---- fan and battery (fan.py) ----
+  get_fan: () => ({ supported: true, preset: state.fan, custom: [0, 40, 49, 58, 67, 75],
+    fans: [1, 2].map((fan) => ({ fan, rpm: state.fan === "quiet" ? 2630 : state.fan === "full" ? 5400 : 3428, enable: state.fan === "auto" ? 2 : 1,
+      temps: [47, 50, 57, 64, 71, 78], duties: [153, 163, 173, 188, 204, 214] })) }),
+  set_fan: (p: string) => { state.fan = p; return { ok: true, summary: `Fan: ${p}`, error: null }; },
+  get_charge: () => ({ supported: true, limit: state.charge ?? 0, setting: state.charge }),
+  set_charge_limit: (v: number | null) => { state.charge = v; return { ok: true, summary: v ? `Charge limit ${v} %` : "Charge limit off", error: null }; },
+  ui_log: () => undefined,
   game_started: () => ({}), game_stopped: () => ({}), power_source_changed: () => ({}), resumed: () => ({}),
 
   // ---- per game ----
@@ -186,7 +198,7 @@ export const backend = {
   },
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
-    opti_owner: null, opti_version: "0.9.4", files: { owner: "clawdeck", dll: "dxgi.dll", preset: "xess", folder: "/x", reframework: true, install_dir: "/x" }, fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
+    opti_owner: "clawdeck", opti_version: "0.9.4", xmx_proof: { state: "ok", at: 0, last_launch: 0, kernels: 14, failed: false }, files: { owner: "clawdeck", dll: "dxgi.dll", preset: "fsr4_xmx", folder: "/x", reframework: false, install_dir: "/x" }, fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
     xmx_scope: { session_wide: false, per_game: true, auto: true, protons: ["Proton 11.0"], scoped: ["Proton 11.0"], unscoped: [] },
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
@@ -207,8 +219,8 @@ export const backend = {
   game_undo_recommended: () => ({ ok: true }),
   game_set_opti: () => ({ ok: true }),
   game_choose: () => ({ ok: true, env: { CLAWDECK_XMX: "1" } }),
-  games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: null }, { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "launch" },
-    { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler" }],
+  games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: null, supported: true }, { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "launch", supported: true },
+    { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler", supported: true }],
   optiscaler_state: () => ({ version: "0.9.4", installed: true, games: 1, framegen: true, framegen_version: "v0.17" }),
   optiscaler_install: () => ({ ok: true, version: "0.9.4" }),
   xess_install: () => (state.xessInstalled
