@@ -33,7 +33,9 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
     pnpm preview                     # the panel in a browser with example data: preview/dist/ClawDeck-preview.html
 
 Tools in `tools/`. The release zip carries only the three the plugin runs (`clawdeck-launch.sh`, `selftest.py`,
-`sysfs-survey.sh`) and `assets/versions.json`; the rest are for development.
+`sysfs-survey.sh`), `assets/versions.json`, and ClawDeck's `cabinet.dll` as `bin/cabinet.dll` with its LGPL source
+(`tools/cabinet-lzms`, built and Wine-tested by CI's `cabinet-lzms` job; locally `tools/cabinet-lzms/build.sh` puts
+it in `bin/`). The rest are for development.
 
 | Tool | What it's for |
 |---|---|
@@ -44,6 +46,7 @@ Tools in `tools/`. The release zip carries only the three the plugin runs (`claw
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |
 | `upstream_watch.py` | Newest upstream versions + live canaries for ClawDeck's parsers (see below). |
+| `cabinet-lzms/` | ClawDeck's open `cabinet.dll` (Compression API LZMS decompressor, wimlib's decoder) for FSR 4 on XMX; `build.sh`, `test/run.sh` (Wine). |
 
 ## Keeping up with upstream
 

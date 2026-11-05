@@ -45,7 +45,7 @@ with XeSS): skip to O5 and tell us.
 1. In the folder of the game's `amd_fidelityfx_upscaler_dx12.dll`: rename it to `amd_fidelityfx_upscaler_dx12.dll.orig`,
    put the B Boost build there under that name, and `fsr-original.dll` = xess-xmx-linux's
    `ffx/amd_fidelityfx_upscaler_dx12.dll`, renamed.
-2. ClawDeck's `cabinet.dll` there too, and the Proton's own as `cabinet_wine.dll`:
+2. ClawDeck's `cabinet.dll` there too (`~/homebrew/plugins/ClawDeck/bin/cabinet.dll`), and the Proton's own as `cabinet_wine.dll`:
    `cp "<Proton>/files/lib/wine/x86_64-windows/cabinet.dll" <that folder>/cabinet_wine.dll`.
 3. Launch options: `WINEDLLOVERRIDES=cabinet=n,b FSR4_XMX_NO_DIALOG=1 FSR_FG=xess IGDEXT_XELL_LOG=1 %command%`
    (`FSR4_XMX_LITE=1` in front for the Lite model).

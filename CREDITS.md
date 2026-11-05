@@ -44,8 +44,16 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   `assets/games.json` (`tools/gen_games.py`), which is therefore GPL-3.0 like OptiScaler.
 - **[REFramework](https://github.com/praydog/REFramework)** by praydog (MIT) — the mod framework for Capcom RE Engine
   games that onehoon's fork (above) builds on; ClawDeck installs the fork next to the game's exe, as OptiClick does.
-- **[wimlib](https://wimlib.net)** by Eric Biggers (LGPL-2.1+) — its LZMS decoder is inside `tools/cabinet-lzms`, the
-  open `cabinet.dll` that lets the FSR 4 on XMX builds unpack their kernels under Proton without Windows' copy.
+- **[wimlib](https://wimlib.net)** by Eric Biggers (library: LGPL-2.1-or-later; some helpers MIT) — its LZMS decoder
+  (`lzms_decompress.c`, `lzms_common.c` and helpers, vendored unchanged with their license headers from commit
+  cd5e231) is inside `tools/cabinet-lzms`. That is ClawDeck's open `cabinet.dll`, which lets the FSR 4 on XMX builds
+  unpack their kernels under Proton without Windows' copy. CI also uses wimlib's LZMS compressor (`libwim-dev`) to
+  make its test data. ClawDeck ships the DLL (`bin/cabinet.dll`) with this source. It forwards the cabinet-file
+  functions to **[Wine](https://www.winehq.org)**'s own `cabinet.dll` (LGPL-2.1+), which is copied from the game's
+  Proton, not shipped.
+- **[xess-xmx-linux issue #49](https://github.com/HHHHanasak1/xess-xmx-linux/issues/49)** — where the open
+  `cabinet.dll` was proposed (LZMS via wimlib instead of Windows' copy). HHHHanasak1 asked for it to live in
+  ClawDeck.
 - **FSR 4 on XMX** by nitec and the OptiScaler community — the upscaler build ClawDeck sets up; not shipped with ClawDeck.
 - **[Bazzite](https://github.com/ublue-os/bazzite)** / Universal Blue — the image this is built and tested on.
 - **Decky Framerate** — an early reference for reading frame times in Game Mode.

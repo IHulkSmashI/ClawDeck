@@ -15,7 +15,13 @@ EXPORTS
     FDICopy                      = cabinet_wine.FDICopy                      @22
     FDIDestroy                   = cabinet_wine.FDIDestroy                   @23
     FDITruncateCabinet           = cabinet_wine.FDITruncateCabinet           @24
-    ; the Compression API decompressor (LZMS), which Wine lacks
+    ; the Compression API (Windows 8+), which Wine lacks: compressor stubs (ERROR_NOT_SUPPORTED), LZMS decompressor
+    CreateCompressor             @30
+    SetCompressorInformation     @31
+    QueryCompressorInformation   @32
+    Compress                     @33
+    ResetCompressor              @34
+    CloseCompressor              @35
     CreateDecompressor           @40
     SetDecompressorInformation   @41
     QueryDecompressorInformation @42

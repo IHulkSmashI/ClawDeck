@@ -10,6 +10,9 @@
  * (or the block itself when the stored size equals its output size). COMPRESS_RAW (0x20000000) takes one LZMS block
  * and needs the exact output size.
  *
+ * The compressor half (CreateCompressor ... CloseCompressor, ordinals 30-35) is there so the export table matches
+ * Windows', and fails with ERROR_NOT_SUPPORTED.
+ *
  * LZMS decoding: wimlib's lzms_decompress.c by Eric Biggers (LGPL-2.1+). This file: LGPL-2.1+ as well.
  */
 #include <windows.h>
@@ -120,6 +123,25 @@ BOOL WINAPI SetDecompressorInformation(HANDLE h, int cls, const void *info, SIZE
 
 BOOL WINAPI QueryDecompressorInformation(HANDLE h, int cls, void *info, SIZE_T size)
 { (void) h; (void) cls; (void) info; (void) size; return fail(ERROR_NOT_SUPPORTED); }
+
+/* The compressor half: not implemented (nothing ClawDeck supports compresses), so a caller gets a clean failure. */
+BOOL WINAPI CreateCompressor(DWORD algorithm, COMPRESS_ALLOCATION_ROUTINES *routines, HANDLE *out)
+{ (void) algorithm; (void) routines; if (out) *out = NULL; return fail(ERROR_NOT_SUPPORTED); }
+
+BOOL WINAPI SetCompressorInformation(HANDLE h, int cls, const void *info, SIZE_T size)
+{ (void) h; (void) cls; (void) info; (void) size; return fail(ERROR_NOT_SUPPORTED); }
+
+BOOL WINAPI QueryCompressorInformation(HANDLE h, int cls, void *info, SIZE_T size)
+{ (void) h; (void) cls; (void) info; (void) size; return fail(ERROR_NOT_SUPPORTED); }
+
+BOOL WINAPI Compress(HANDLE h, const void *in, SIZE_T in_size, void *out, SIZE_T out_size, SIZE_T *out_written)
+{ (void) h; (void) in; (void) in_size; (void) out; (void) out_size; if (out_written) *out_written = 0; return fail(ERROR_NOT_SUPPORTED); }
+
+BOOL WINAPI ResetCompressor(HANDLE h)
+{ (void) h; return fail(ERROR_NOT_SUPPORTED); }
+
+BOOL WINAPI CloseCompressor(HANDLE h)
+{ (void) h; return fail(ERROR_NOT_SUPPORTED); }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 { (void) reserved; if (reason == DLL_PROCESS_ATTACH) DisableThreadLibraryCalls(inst); return TRUE; }

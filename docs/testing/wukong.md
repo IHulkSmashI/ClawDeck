@@ -31,7 +31,7 @@ R5 setup (by hand for now; ClawDeck will do it per game once tested):
 1. In OptiScaler's folder in the game (where `OptiScaler.ini` is, after one R2 launch): put the B Boost build there as
    `amd_fidelityfx_upscaler_dx12.dll` (keep any original as `.orig`), and `fsr-original.dll` = xess-xmx-linux's
    `ffx/amd_fidelityfx_upscaler_dx12.dll`, renamed.
-2. ClawDeck's open `cabinet.dll` (`tools/cabinet-lzms`, no Windows file needed) into the same folder, and the
+2. ClawDeck's open `cabinet.dll` (`~/homebrew/plugins/ClawDeck/bin/cabinet.dll`, from `tools/cabinet-lzms`; no Windows file needed) into the same folder, and the
    Proton's own one next to it as `cabinet_wine.dll`:
    `cp "<Proton>/files/lib/wine/x86_64-windows/cabinet.dll" <OptiScaler's folder>/cabinet_wine.dll`
    (`<Proton>` = the one the benchmark runs with, e.g. `~/.local/share/Steam/steamapps/common/Proton - Experimental`).
