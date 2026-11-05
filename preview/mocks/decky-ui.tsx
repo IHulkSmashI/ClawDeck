@@ -95,16 +95,26 @@ export const SliderField: FC<{ label: ReactNode; description?: ReactNode; value:
     );
   };
 
-export const DropdownItem: FC<{ label: ReactNode; description?: ReactNode; rgOptions: { data: any; label: ReactNode }[]; selectedOption: any; disabled?: boolean; onChange?: (o: { data: any }) => void }> =
-  ({ label, description, rgOptions, selectedOption, disabled, onChange }) => {
-    const id = useId();
-    const idx = Math.max(0, rgOptions.findIndex((o) => o.data === selectedOption));
+// Steam's dropdown: the picked option on a button, a menu of options (labels can be any element, e.g. icons and tags)
+export const DropdownItem: FC<{ label: ReactNode; description?: ReactNode; rgOptions: { data: any; label: ReactNode }[]; selectedOption: any; disabled?: boolean; onChange?: (o: { data: any }) => void; onMenuOpened?: () => void; strDefaultLabel?: string }> =
+  ({ label, description, rgOptions, selectedOption, disabled, onChange, onMenuOpened, strDefaultLabel }) => {
+    const [open, setOpen] = useState(false);
+    const cur = rgOptions.find((o) => o.data === selectedOption);
     return (
       <div className={`qam-field qam-dropdown${disabled ? " is-disabled" : ""}`}>
-        <label className="qam-label" htmlFor={id}>{label}</label>
-        <select id={id} value={idx} disabled={disabled} onChange={(e) => onChange?.(rgOptions[Number(e.target.value)])}>
-          {rgOptions.map((o, i) => <option key={i} value={i}>{o.label as any}</option>)}
-        </select>
+        {label && <div className="qam-label">{label}</div>}
+        <button type="button" className="qam-select" disabled={disabled}
+          onClick={() => { if (!open) onMenuOpened?.(); setOpen(!open); }}>
+          <span className="qam-select-label">{cur?.label ?? strDefaultLabel ?? ""}</span><span className="qam-caret">▾</span>
+        </button>
+        {open && (
+          <div className="qam-menu">
+            {rgOptions.map((o, i) => (
+              <div key={i} className={`qam-menu-item${o.data === selectedOption ? " is-selected" : ""}`}
+                onClick={() => { setOpen(false); onChange?.(o); }}>{o.label}</div>
+            ))}
+          </div>
+        )}
         <Desc d={description} />
       </div>
     );
@@ -137,4 +147,12 @@ export const ConfirmModal: FC<{ strTitle: string; strDescription: string; strOKB
         <button type="button" className="qam-button is-primary" onClick={() => { setModal?.(null); onOK?.(); }}>{strOKButtonText}</button>
       </div>
     </div>
+  );
+
+// Quick Access is always open in the preview
+export const useQuickAccessVisible = () => true;
+
+export const DialogButton: FC<{ style?: any; disabled?: boolean; onClick?: () => void; children?: ReactNode }> =
+  ({ style, disabled, onClick, children }) => (
+    <button type="button" className="qam-button" style={style} disabled={disabled} onClick={onClick}>{children}</button>
   );

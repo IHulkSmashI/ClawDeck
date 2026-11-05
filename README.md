@@ -135,6 +135,8 @@ and **Setup**. **Explain** at the top says what each control does, why you'd use
 
 The list shows only games ClawDeck can set up (DLSS, FSR or XeSS inside), with a tag for what each one runs.
 
+<p align="center"><img src="docs/img/game-tags.png" alt="The game list with a tag for each game's upscaler and frame generation" width="40%"></p>
+
 | Pick | What it means |
 |---|---|
 | **Upscaler** | XeSS 2 is Intel's own and the fastest. FSR 4.1.2 gives the best image; Lite is faster for a little less detail. All on the XMX cores. |
