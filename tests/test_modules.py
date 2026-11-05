@@ -1258,3 +1258,23 @@ def test_v10_install_takes_fakenvapi_out_of_its_release_archive(tmp_path, monkey
     entry["extras"][1]["file_sha256"] = {"fakenvapi.dll": "0" * 64}
     r = optiscaler.install(home, entry)
     assert not r["ok"] and "sha256" in r["error"] and not optiscaler.installed(home, "10b")
+
+
+def test_osupdate_parses_rpm_ostree(monkeypatch):
+    from clawdeck import osupdate
+    out = "Note: --check and --preview may be unreliable.\nAvailableUpdate:\n        Version: 45.20261104 (2026-11-04T10:00:00Z)\n         Commit: abc\n"
+    assert osupdate.parse_check(out) == "45.20261104"
+    assert osupdate.parse_check("No updates available.") is None
+    import json as _j, subprocess as _sp
+    def run(args, timeout):
+        if args[:2] == ["rpm-ostree", "status"]:
+            return _sp.CompletedProcess(args, 0, _j.dumps({"deployments": [{"booted": True, "version": "44.20261012"}]}), "")
+        return _sp.CompletedProcess(args, 0, out, "")
+    monkeypatch.setattr(osupdate, "_run", run)
+    osupdate._cache.update(at=0.0, available=None, error=None)
+    st = osupdate.refresh(force=True)
+    assert st["available"] == "45.20261104"
+    s = osupdate.status()
+    assert s["applies"] and s["waiting"] and "45.20261104 is available (running 44.20261012)" in s["line"]
+    monkeypatch.setattr(osupdate, "_run", lambda a, t: None)
+    assert osupdate.status() == {"applies": False}

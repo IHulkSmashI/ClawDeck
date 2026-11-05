@@ -34,7 +34,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, osupdate, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -94,6 +94,8 @@ class Plugin:
         self._autotune_flag(self.autotune.enabled)
         self.running_appid: str | None = None
         self._health: tuple[float, list] | None = None
+        # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
+        asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)

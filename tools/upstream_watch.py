@@ -53,6 +53,9 @@ UPSTREAMS = {
     "Decky Loader": ("release", "SteamDeckHomebrew/decky-loader", "plugin host"),
     "@decky/ui": ("npm", "@decky/ui", "Steam UI components and typings"),
     "Bazzite": ("commit", "ublue-os/bazzite", "the OS"),
+    # Intel's XeSS SDK: the same XeSS / XeFG / XeLL libraries the Windows driver carries; a new one reaches users through
+    # the XMX package's "latest XeSS libraries" after one test (maintainer, 2026-11-05)
+    "XeSS SDK": ("release", "intel/xess", "XeSS-SR, XeSS-FG and XeLL libraries (XESS=latest in the XMX package)"),
 }
 
 

@@ -47,6 +47,10 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Bazzite update line (2026-11-05):** Fixes shows "Bazzite up to date (kernel, Intel graphics driver, Mesa,
+  gamescope)" and, while an update waits, "Bazzite 45.x is available (running 44.x) …" (rpm-ostree upgrade --check, once
+  per start, nothing downloaded). After updating: "… is downloaded: restart the Claw".
+
 - **ClawDeck's own cabinet.dll (2026-11-05, `tools/cabinet-lzms`):** FSR 4.1.2 on XMX no longer needs Windows'
   `cabinet.dll`. The plugin zip carries `bin/cabinet.dll` (built and Wine-tested in CI), and ClawDeck asks only for
   nitec's `amd_fidelityfx_upscaler_dx12.dll` and `fsr-original.dll` in `~/fsr4-xmx`. Check on the Claw with the
