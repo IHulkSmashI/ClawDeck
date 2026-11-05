@@ -1,9 +1,9 @@
-import { DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
+import { DialogButton, DropdownItem, Field, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyProfile, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
+  applyProfile, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -67,6 +67,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const latest = useLatest();
   const app = runningApp();
   const appid = app?.appid ?? null;
+  const [slot, setSlot] = useState<PowerSlot | null>(null);
 
   // Only the newest read-back may change what the profile list and the slider show, and none while a pick is still
   // on its way to the hardware: an older answer arriving late put the previous profile or watts back on screen
@@ -75,18 +76,23 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const pending = useRef(0);
   const refresh = async () => {
     const mine = ++readSeq.current;
-    const [s, auto, last, tbl, a, atp] = await Promise.all([
+    const [s, auto, last, tbl, a, atp, sl] = await Promise.all([
       getPower(), getSetting("autotune"), getSetting("last_profile"), listProfiles(), getAutotune(), getSetting("autotune_plugged"),
+      powerSlot(appid).catch(() => null),
     ]);
     if (mine !== readSeq.current) return;
-    const name = last === "dock" ? "max" : (last || "battery");
+    setSlot(sl);
+    // in a game, what that game runs with (its own pick for this power source) - not the last pick anywhere, which
+    // showed 35 W while the game ran its saved 15 W (2026-11-04)
+    const mineLast = appid && sl?.base ? sl.base : last;
+    const name = mineLast === "dock" ? "max" : (mineLast || "battery");
     setSt(s); setAutotune(auto !== false); setTable(tbl); setAt(a); setAtPlugged(atp !== false);
     if (pending.current > 0) return;
     if (lastPick && Date.now() - lastPick.at < 4000 && lastPick.profile !== name) {
       setProfile(lastPick.profile); setTdpV(lastPick.tdp); return;     // the write is still on its way
     }
     setProfile(name);
-    const w = name === "custom" ? (s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12);
+    const w = name === "custom" ? ((appid && sl?.base === "custom" ? sl.tdp : null) ?? s.custom_tdp ?? s.tdp_w ?? 12) : (tbl[name]?.tdp ?? s.tdp_w ?? 12);
     const l = s?.range?.min ?? s?.limits.min ?? 8, h = s?.range?.max ?? s?.limits.plugged_max ?? 35;
     setTdpV(Math.max(l, Math.min(w, h)));
   };
@@ -172,6 +178,16 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`
             : app ? app.name : "No game running: the profile applies when one starts"} />
         <Problem error={err} what="Power limit" />
+        {app && slot && (
+          <Field focusable bottomSeparator="none"
+            label={<span style={{ fontSize: 12, color: "#b8bcbf" }}>{slot.base
+              ? `Saved for ${app.name} · ${slot.plugged ? "plugged in" : "on battery"}: ${PROFILES.find((p) => p.id === slot.base)?.short ?? "Custom"}${slot.base === "custom" && slot.tdp ? ` ${slot.tdp} W` : ""}`
+              : `${app.name} · ${slot.plugged ? "plugged in" : "on battery"}: your last pick (pick one to save it for this game)`}</span>}
+            description={explain("A pick while a game runs is saved for that game, on battery and plugged in separately, and comes back at its next start. Unplugging switches to its other one.")}>
+            {slot.base && <DialogButton style={{ minWidth: 0, width: "auto", padding: "0 10px", height: 28 }}
+              onClick={async () => { await resetPowerSlot(app.appid); toast(`${app.name}: back to your last pick`); setSlot(await powerSlot(app.appid)); refresh(); }}>Use default</DialogButton>}
+          </Field>
+        )}
       </PanelSectionRow>
       <PanelSectionRow>
         <Group title="Autotune" />
