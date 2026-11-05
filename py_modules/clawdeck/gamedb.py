@@ -110,7 +110,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     # "any game" in Per-game; it can glitch the HUD, so it isn't the default)
     ofg = ("dlssg" if _has(game_dir, ("nvngx_dlssg.dll", "sl.dlss_g.dll")) else
            "fsrfg" if _has(game_dir, ("amd_fidelityfx_framegeneration_dx12.dll", "ffx_frameinterpolation_x64.dll")) else "off")
-    fsr31 = _has(game_dir, ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll", "ffx_fsr2_api_x64.dll"))
+    fsr31 = _has(game_dir, FSR_FILES)                  # any FSR 2 / 3 / 3.1 OptiScaler can take over
     dlss = _has(game_dir, ("nvngx_dlss.dll", "sl.dlss.dll"))
     # when the user turns frame generation on: the game's own (DLSS FG, FSR FG) if it has one, else OptiScaler's
     fg_source = ofg if ofg != "off" else "upscaler"
@@ -160,10 +160,16 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     }
 
 
+# the FSR upscaler libraries OptiScaler takes over (the names in its own sources, 2026-11-05): FSR 2 and 3 through
+# their API DLLs, FSR 3.1+ through AMD's FidelityFX DLLs, DirectX 12 and Vulkan. A game with FSR 2/3 built into its
+# exe (no DLL) can't be taken over by OptiScaler or xess-xmx-linux.
+FSR_FILES = ("ffx_fsr2_api_x64.dll", "ffx_fsr2_api_dx12_x64.dll", "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_dx12.dll",
+             "amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_vk.dll",
+             "amd_fidelityfx_upscaler_vk.dll", "amd_fidelityfx_loader_vk.dll")
+
 # what a game brings along, as OptiClick inspects a game before it installs anything
 SHIPPED = {
-    "upscaler": {"DLSS": ("nvngx_dlss.dll", "sl.dlss.dll"), "FSR": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll",
-                 "ffx_fsr2_api_x64.dll", "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_vk.dll"), "XeSS": ("libxess.dll", "libxess_dx11.dll")},
+    "upscaler": {"DLSS": ("nvngx_dlss.dll", "sl.dlss.dll"), "FSR": FSR_FILES, "XeSS": ("libxess.dll", "libxess_dx11.dll")},
     "fg": {"DLSS-G": ("nvngx_dlssg.dll", "sl.dlss_g.dll"), "FSR-FG": ("amd_fidelityfx_framegeneration_dx12.dll",
            "ffx_frameinterpolation_x64.dll"), "XeSS-FG": ("libxess_fg.dll",)},
     "latency": {"Reflex": ("sl.reflex.dll", "nvlowlatencyvk.dll"), "XeLL": ("libxell.dll",), "Anti-Lag 2": ("amd_antilag2*",)},
@@ -178,8 +184,7 @@ def shipped(game_dir: str | None) -> dict:
 
 UPSCALER_FILES = {
     "DLSS": ("nvngx_dlss.dll", "sl.dlss.dll", "nvngx_dlssd.dll"),
-    "FSR": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll", "ffx_fsr2_api_x64.dll", "ffx_fsr2_api_dx12_x64.dll",
-            "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_vk.dll"),
+    "FSR": FSR_FILES,
     "XeSS": ("libxess*",),
 }
 
