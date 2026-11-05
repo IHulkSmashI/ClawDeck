@@ -1533,3 +1533,37 @@ def test_game_latency_reports_xells_own_average(tmp_path, monkeypatch):
     r = xess.game_latency(str(tmp_path), "1", True)
     assert r["mode"] == "pacing" and r["latency_ms"] == 31.0 and "31 ms on average" in r["detail"]
     assert xess.game_latency(str(tmp_path), "1", False)["latency_ms"] == 31.0
+
+
+def test_uninstall_takes_out_the_xmx_driver_clawdeck_installed(tmp_path, monkeypatch):
+    """Maintainer's clean reinstall (2026-11-05): uninstalling ClawDeck put the session file back, so every game ran a
+    driver inside ClawDeck's folder. A driver ClawDeck installed now goes with ClawDeck (its own uninstall.sh)."""
+    from clawdeck import xess, xmxscope, userexec
+    home = tmp_path
+    pkg = home / ".local/share/clawdeck/xess-xmx-linux-20261104/xess-xmx-linux-20261104"
+    pkg.mkdir(parents=True)
+    (pkg / "uninstall.sh").write_text("#!/bin/bash\n")
+    parked = home / (xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX)
+    parked.parent.mkdir(parents=True)
+    parked.write_text(f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
+    (home / xmxscope.XMX_ENV).write_text(f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
+    calls = []
+    monkeypatch.setattr(userexec, "run", lambda cmd, h, **kw: calls.append(cmd) or {"rc": 0, "out": ""})
+    r = xess.remove_for_uninstall(str(home))
+    assert r["ok"] and r["ours"] and calls == [["bash", str(pkg / "uninstall.sh")]]
+    assert not parked.exists() and not (home / xmxscope.XMX_ENV).exists()
+    assert not (home / xmxscope.SESSION_CONF).exists()          # not put back for every game
+
+
+def test_uninstall_gives_a_users_own_xmx_driver_back_to_the_session(tmp_path, monkeypatch):
+    from clawdeck import xess, xmxscope, userexec
+    home = tmp_path
+    pkg = home / "src/xess-xmx-linux"
+    pkg.mkdir(parents=True)
+    (pkg / "uninstall.sh").write_text("#!/bin/bash\n")
+    parked = home / (xmxscope.SESSION_CONF + xmxscope.PARKED_SUFFIX)
+    parked.parent.mkdir(parents=True)
+    parked.write_text(f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
+    monkeypatch.setattr(userexec, "run", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("not ours to remove")))
+    r = xess.remove_for_uninstall(str(home))
+    assert r["ok"] and not r["ours"] and (home / xmxscope.SESSION_CONF).exists()

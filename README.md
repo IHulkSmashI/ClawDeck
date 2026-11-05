@@ -284,7 +284,10 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
    back.
 2. **Fixes:** remove the VRR fix (takes effect after a restart) and the face-button fix if you want them gone.
 3. **Power:** set Fan to **Automatic (MSI)** and Battery to **Off**.
-4. Decky → gear → ClawDeck → **Uninstall**. Power goes back to the firmware's own, and games keep starting normally.
+4. Decky → gear → ClawDeck → **Uninstall**. Power goes back to the firmware's own, the XeSS XMX driver ClawDeck
+   installed comes out, and games keep starting normally.
+5. Optional: ClawDeck's downloads stay for a reinstall (about 1 GB). To get the space back, delete
+   `~/.local/share/clawdeck` and `~/fsr4-xmx`.
 
 ---
 
