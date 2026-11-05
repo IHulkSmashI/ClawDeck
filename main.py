@@ -372,7 +372,11 @@ class Plugin:
             plugged = self.battery.plugged()
             want = self.power.clamp_tdp(int(watts), plugged)
             self.settings["last_profile"], self.settings["custom_tdp"] = "custom", want
+            slot = "plugged" if plugged else "battery"
+            self.settings[f"last_profile_{slot}"], self.settings[f"custom_tdp_{slot}"] = "custom", want
             self._save_settings()
+            if self.running_appid:                      # the game remembers it for this power source
+                self.profiles.set(self.running_appid, bool(plugged), {"base": "custom", "tdp": want, "learned": None})
             sysfs.clear_error()
             self.guard.reset()                          # the user's new limit replaces the guard's step
             ok = self.power.set_tdp(want, plugged)
@@ -391,7 +395,11 @@ class Plugin:
             # a profile picked by hand wins over the game's saved TDP: its watts are what the user just chose
             overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
             self.settings["last_profile"] = name
+            self.settings[f"last_profile_{'plugged' if plugged else 'battery'}"] = name
             self._save_settings()
+            gid = self.running_appid or appid
+            if gid:                                     # the game remembers it for this power source
+                self.profiles.set(gid, bool(plugged), {"base": name, "tdp": None, "learned": None})
             sysfs.clear_error()
             self.guard.reset()
             r = self.power.apply_profile(name, overrides, plugged)
@@ -471,7 +479,14 @@ class Plugin:
     # ---- game lifecycle (called by the frontend's Steam hooks) ------------------------------------------------------
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         prof = self.profiles.get(appid, plugged)
-        base = hw.profile_name(prof.get("base") or self.settings.get("last_profile") or ("performance" if plugged else "battery"))
+        # what you picked last for this game on this power source; else your last pick on it for any game; else the
+        # default (Battery / Performance). The default slot's base used to win every time, so a game started on
+        # battery always came back at Battery 15 W, whatever was picked in it (maintainer, 2026-11-04)
+        slot = "plugged" if plugged else "battery"
+        base = hw.profile_name(self.profiles.own(appid, plugged).get("base") or self.settings.get(f"last_profile_{slot}")
+                               or prof.get("base") or ("performance" if plugged else "battery"))
+        if not self.profiles.own(appid, plugged).get("base") and base == "custom" and self.settings.get(f"custom_tdp_{slot}"):
+            prof = {**prof, "tdp": self.settings.get(f"custom_tdp_{slot}")}
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
         if base == "custom":     # the TDP slider's value is the limit; the rest of the levers stay as they are
             base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
