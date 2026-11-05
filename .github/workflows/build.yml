@@ -70,10 +70,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: docs/releases }
       - uses: actions/download-artifact@v4
         with: { name: ClawDeck }
+      # a tag with a suffix (v0.2.0-beta.1) is a pre-release; its notes come from docs/releases/<tag>.md
       - uses: softprops/action-gh-release@v3
-        with: { files: ClawDeck.zip }
+        with:
+          files: ClawDeck.zip
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: docs/releases/${{ github.ref_name }}.md
   sideload:
     # the only job with write access, and only for pushes to main: no pull-request code ever runs with it
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
