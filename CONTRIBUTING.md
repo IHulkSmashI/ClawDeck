@@ -1,6 +1,6 @@
 # Contributing to ClawDeck
 
-ClawDeck is MIT-licensed and built in the open. Pull requests from anyone with a Claw (or any handheld) are welcome.
+ClawDeck is AGPLv3-licensed ([LICENSING.md](LICENSING.md)) and built in the open. Pull requests from anyone with a Claw (or any handheld) are welcome.
 How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is next: [STATUS.md](STATUS.md).
 
 ## Engineering rules
