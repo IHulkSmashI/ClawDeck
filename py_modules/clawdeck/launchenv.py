@@ -81,7 +81,7 @@ OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Ful
 # OptiScaler.ini sections (0.9.4, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
 INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "DLSSG", "NvngxFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
                 "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
-                "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
+                "fakenvapi", "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
                 "VSync", "Anisotropy", "Mipmap", "ProcessFilter", "Hotfix"}
 # Capcom RE Engine games, as OptiClick sets them up on Windows (its Onimusha install, read 2026-11-04) with OptiScaler
 # v10: the game's own DLSS frame generation (DLSS-G, which needs the Nvidia spoofing OptiScaler does by default on
@@ -95,6 +95,10 @@ CAPCOM_INI = {
     "FrameGen_FGNvngxReplacement": "XeFG_NVNGX",
     "Libraries_OptiDllPath": ".\\OptiScaler", "Plugins_LoadAsiPlugins": "true", "NvngxFG_DisableHudless": "true",
     "Hotfix_RestoreComputeSignature": "true",           # OptiScaler's wiki: generally required in Onimusha
+    # v10 has fakenvapi built in (the game's Reflex -> XeLL; may be what lets the game offer DLSS-G on Intel). It is
+    # the default on AMD/Intel; set anyway, since this setup depends on it. The fakenvapi.dll + fakenvapi.ini in
+    # OptiScaler/ (optiscaler_v10 extras) match OptiClick's folder; v10 itself doesn't load that file.
+    "fakenvapi_UseFakenvapi": "true",
 }
 # not for the Capcom setup: the wiki's Dxgi=false (see above), 0.9.4-only FSR switches, XeFG's own count (DLSS-G's is used)
 CAPCOM_DROP = ("Spoofing_Dxgi", "FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "XeFG_InterpolationCount")

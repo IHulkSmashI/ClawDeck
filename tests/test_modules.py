@@ -925,11 +925,14 @@ def _opti_v10_pkg(home, ver="10.0.0-pre1-20261030"):
            "[FSR]\nUpscalerIndex=auto\n\n[NvngxFG]\nDisableHudless = auto\n\n[Libraries]\nOptiDllPath=auto\n\n[Menu]\n"
            "UseHQFont=auto\nShowFps=auto\nFpsOverlayPos=auto\nFpsOverlayType=auto\n\n[Spoofing]\nDxgi=auto\n\n[Plugins]\n"
            "LoadAsiPlugins=auto\n\n[Hotfix]\nRestoreComputeSignature=auto\n")
+    from clawdeck import optiscaler as _o
+    _w(os.path.join(d, "OptiScaler", "fakenvapi.ini"), _o.FAKENVAPI_INI.rstrip("\n"))
     for f, t in (("OptiScaler.dll", "opti10"), ("OptiScaler.ini", ini), ("setup_linux.sh", "x"), ("setup_windows.bat", "x"),
                  ("Licenses/XeSS_LICENSE.txt", "l"), ("OptiScaler/libxess.dll", "xess10"), ("OptiScaler/libxess_fg.dll", "xefg"),
                  ("OptiScaler/libxell.dll", "xell"), ("OptiScaler/amd_fidelityfx_upscaler_dx12.dll", "amd-fsr4"),
                  ("OptiScaler/dlssg_to_fsr3_amd_is_better.dll", "nukem"), ("OptiScaler/D3D12_OptiScaler/D3D12Core.dll", "core"),
-                 ("OptiScaler/Streamlined_fetcher_windows.bat", "bat"), ("OptiScaler/plugins/OptiPatcher.asi", "op")):
+                 ("OptiScaler/Streamlined_fetcher_windows.bat", "bat"), ("OptiScaler/plugins/OptiPatcher.asi", "op"),
+                 ("OptiScaler/fakenvapi.dll", "fnv")):
         _w(os.path.join(d, f), t)
     return d
 
@@ -956,7 +959,12 @@ def test_versions_pin_the_capcom_setup():
     assert o10["layout"] == "subfolder" and o10["tag"] == "nightly-20261030"
     assert o10["sha256"] == "db4fe2deae7edd9f6657f5cb223edc694ebdec62b52f15a3a59913f8b656c176"
     assert o10["url"].endswith("/nightly-20261030/OptiScaler_v10.0.0-pre1_20261030.7z")
-    assert [x["dest"] for x in o10["extras"]] == ["OptiScaler/plugins/OptiPatcher.asi"]
+    assert o10["extras"][0]["dest"] == "OptiScaler/plugins/OptiPatcher.asi"
+    fnv = o10["extras"][1]
+    assert fnv["name"] == "fakenvapi" and "/FakeMichau/fakenvapi/releases/download/v1.4.1/" in fnv["url"]
+    assert fnv["sha256"] == "e1239f74f458e3bafd7e86fb6c02557abb267499650580c4bfbdd60815304ddd"
+    assert fnv["files"] == {"fakenvapi.dll": "OptiScaler/fakenvapi.dll"} and fnv["ini"] == "OptiScaler/fakenvapi.ini"
+    assert fnv["file_sha256"]["fakenvapi.dll"] == "373e73dc06e2d66e90083fde3bc99ef5c1ed0bef98d1f7eda56c8b073269c3f1"
     assert v["optiscaler"]["version"] == "0.9.4" and "layout" not in v["optiscaler"]       # everything else unchanged
     with open(os.path.join(ROOT, "assets", "upstream.lock.json"), encoding="utf-8") as f:
         lock = json.load(f)
@@ -972,7 +980,7 @@ def test_capcom_ini_is_opticlicks():
             "FrameGen_Enabled": "true", "FrameGen_FGInput": "DLSSG", "FrameGen_FGOutput": "XeFG",
             "FrameGen_FGNvngxReplacement": "XeFG_NVNGX", "Libraries_OptiDllPath": ".\\OptiScaler",
             "Menu_FpsOverlayType": "2", "Plugins_LoadAsiPlugins": "true", "NvngxFG_DisableHudless": "true",
-            "DLSSG_OverrideInterpolationCount": "1", "Hotfix_RestoreComputeSignature": "true"}
+            "DLSSG_OverrideInterpolationCount": "1", "Hotfix_RestoreComputeSignature": "true", "fakenvapi_UseFakenvapi": "true"}
     assert {k: ini.get(k) for k in want} == want
     assert "Spoofing_Dxgi" not in ini and "XeFG_InterpolationCount" not in ini and "FramerateLimit" not in str(ini)
     assert "Spoofing_Dxgi" not in launchenv.compose(launch)                  # nor through the launch environment
@@ -1017,11 +1025,15 @@ def test_capcom_layout_round_trip_leaves_the_folder_exactly_as_it_was(tmp_path, 
     assert (g / "dxgi.dll").read_text().strip() == "opti10" and (g / "OptiScaler" / "libxess.dll").read_text().strip() == "xess10"
     assert (g / "OptiScaler" / "plugins" / "OptiPatcher.asi").exists() and (g / "OptiScaler" / "D3D12_OptiScaler" / "D3D12Core.dll").exists()
     assert not (g / "OptiScaler" / "Streamlined_fetcher_windows.bat").exists() and not (g / "Licenses").exists()
+    fnv = (g / "OptiScaler" / "fakenvapi.ini").read_text()
+    assert (g / "OptiScaler" / "fakenvapi.dll").exists() and not (g / "fakenvapi.dll").exists()
+    assert [l for l in fnv.splitlines() if l] == ["[fakenvapi]", "enable_logs=1", "enable_trace_logs=0", "force_latencyflex=0", "force_reflex=0"]
     ini = _ini((g / "OptiScaler.ini").read_text())
     assert ini["Libraries_OptiDllPath"] == ".\\OptiScaler" and ini["FrameGen_FGOutput"] == "XeFG" and ini["NvngxFG_DisableHudless"] == "true"
     assert ini["Spoofing_Dxgi"] == "auto" and ini["DLSSG_OverrideInterpolationCount"] == "1" and ini["Plugins_LoadAsiPlugins"] == "true"
     m = json.loads((g / ".clawdeck-optiscaler" / "manifest.json").read_text())
     assert m["layout"] == "subfolder" and "OptiScaler" in m["dirs"]
+    assert {"OptiScaler/fakenvapi.dll", "OptiScaler/fakenvapi.ini"} <= set(m["added"])
     # FSR 4.1.2 on XMX: nitec's two files into OptiScaler/, cabinet next to the exe; then back to XeSS
     x = tmp_path / "fsr4-xmx"
     for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
@@ -1146,3 +1158,44 @@ def test_capcom_subfolder_files_dont_count_as_the_games(tmp_path, monkeypatch):
     _w(g / "OnimushaWotS.exe", "x")
     assert optiscaler.patch(home, str(g), "10.0.0-pre1-20261030", {}, layout="subfolder")["ok"]
     assert not gamedb._has(str(g), ("libxess*",)) and not gamedb._has(str(g), ("amd_fidelityfx_upscaler_dx12.dll",))
+
+
+def test_v10_install_takes_fakenvapi_out_of_its_release_archive(tmp_path, monkeypatch):
+    """optiscaler.install with the v10 entry: OptiPatcher as a file, fakenvapi.dll out of fakenvapi's .7z (its own
+    sha256 checked) and OptiClick's fakenvapi.ini, all in OptiScaler/ of the package."""
+    import hashlib, shutil, subprocess
+    from clawdeck import optiscaler
+    if not (shutil.which("7z") or shutil.which("7za")):
+        pytest.skip("needs 7z")
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    src = tmp_path / "src"
+    _w(src / "opti" / "OptiScaler.dll", "o")
+    _w(src / "opti" / "OptiScaler.ini", "[Upscalers]")
+    _w(src / "fnv" / "fakenvapi.dll", "fnv-1.4.1")
+    _w(src / "fnv" / "fakenvapi.ini", "theirs")
+    seven = shutil.which("7z") or shutil.which("7za")
+    files = {}
+    for name, d in (("opti.7z", "opti"), ("fakenvapi-v1.4.1.7z", "fnv")):
+        subprocess.run([seven, "a", "-y", str(tmp_path / name), "."], cwd=src / d, check=True, capture_output=True)
+        files[name] = str(tmp_path / name)
+    _w(tmp_path / "OptiPatcher.asi", "op")
+    files["OptiPatcher.asi"] = str(tmp_path / "OptiPatcher.asi")
+    sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+    monkeypatch.setattr(downloads, "download", lambda url, dest, timeout=60.0: shutil.copyfile(files[os.path.basename(url)], dest) and dest)
+    entry = {"version": "10", "url": "https://x/opti.7z", "sha256": sha(files["opti.7z"]), "layout": "subfolder", "extras": [
+        {"name": "OptiPatcher", "url": "https://x/OptiPatcher.asi", "sha256": sha(files["OptiPatcher.asi"]), "dest": "OptiScaler/plugins/OptiPatcher.asi"},
+        {"name": "fakenvapi", "url": "https://x/fakenvapi-v1.4.1.7z", "sha256": sha(files["fakenvapi-v1.4.1.7z"]),
+         "files": {"fakenvapi.dll": "OptiScaler/fakenvapi.dll"}, "file_sha256": {"fakenvapi.dll": sha(src / "fnv" / "fakenvapi.dll")},
+         "ini": "OptiScaler/fakenvapi.ini"}]}
+    home = str(tmp_path / "home")
+    r = optiscaler.install(home, entry)
+    assert r["ok"], r
+    pkg = optiscaler.package_dir(home, "10")
+    assert open(os.path.join(pkg, "OptiScaler", "fakenvapi.dll")).read().strip() == "fnv-1.4.1"
+    assert open(os.path.join(pkg, "OptiScaler", "fakenvapi.ini")).read() == optiscaler.FAKENVAPI_INI
+    assert optiscaler.extras_ready(home, entry) and optiscaler.install(home, entry)["already"]
+    # a fakenvapi.dll that doesn't match its pin installs nothing
+    entry["version"] = "10b"
+    entry["extras"][1]["file_sha256"] = {"fakenvapi.dll": "0" * 64}
+    r = optiscaler.install(home, entry)
+    assert not r["ok"] and "sha256" in r["error"] and not optiscaler.installed(home, "10b")
