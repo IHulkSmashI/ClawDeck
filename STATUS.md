@@ -47,6 +47,10 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **E-cores only, per game (2026-11-05, r/MSIClaw request):** Per-game → E-cores only on, start a game: ClawDeck's log
+  line "clawdeck: E-cores only (2-9)" in the game's Proton output, and `ps -L -o psr= -p $(pgrep -f <game>.exe)`
+  shows only 2-9. Off again: the next launch uses every core.
+
 - **Temperature guard steps back up (2026-11-04):** after "thermal: stepped to N W", once the package is under 80 °C
   the TDP climbs 2 W every 30 s back to your limit and the line goes away (it used to stay stepped down until a new
   pick or the game closed: 21 W at 55 °C with a 35 W limit).
