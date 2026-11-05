@@ -79,7 +79,7 @@ if [ -f "$xmxenv" ] && [ "${CLAWDECK_XMX:-}" != 0 ]; then
   want="${CLAWDECK_XMX:-}"
   [ -z "$want" ] && [ -f "$HOME/.local/share/clawdeck/xmx-every-game" ] && want=1
   if [ -z "$want" ] && [ -d "${STEAM_COMPAT_INSTALL_PATH:-/nonexistent}" ] && \
-     [ -n "$(find "$STEAM_COMPAT_INSTALL_PATH" -maxdepth 5 \( -iname 'libxess*.dll' -o -iname 'optiscaler.ini' \) -print -quit 2>/dev/null)" ]; then
+     [ -n "$(find "$STEAM_COMPAT_INSTALL_PATH" -maxdepth 5 \( -iname 'libxess*.dll' -o -iname 'libxell*.dll' -o -iname 'optiscaler.ini' \) -print -quit 2>/dev/null)" ]; then
     want=1
   fi
   if [ "$want" = 1 ]; then

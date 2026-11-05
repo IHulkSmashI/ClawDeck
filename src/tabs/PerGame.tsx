@@ -293,10 +293,6 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             description={explain("Runs the game with Intel's current XeSS (SDK 3.0.2) instead of the older copy it ships; its files are swapped while it runs and put back when it exits.",
               "a game with XeSS older than 2.0.2.68 shows XeSS as DP4a or hides XeSS frame generation (Cyberpunk 2077).")}
             onChange={(v) => save({ xess_latest: v || null } as any)} />
-          <ToggleField label="E-cores only" checked={launch.cores === "e"}
-            description={explain("Runs this game on the efficiency cores only and leaves the two performance cores free: cooler and longer on battery in games that don't need the P-cores. Live, per game, undone when the game exits (on Windows this needs a reboot).",
-              "CPU-heavy games lose frames: compare with it off.", "takes effect at the next launch.")}
-            onChange={(v) => save({ cores: v ? "e" : null } as any)} />
           <DropdownItem label="FSR games without OptiScaler (xess-xmx-linux's FSR route)" layout="below" childrenContainerWidth="max" disabled={!installed || !newPkg} rgOptions={FSR_OPTIONS} selectedOption={launch.fsr ?? "off"}
             onChange={(o) => save({ fsr: o.data === "off" ? null : o.data } as any)}
             description={explain(newPkg ? "For a game with FSR 3.1+ and no XeSS: its FSR runs on XeSS on the XMX cores, with multi-frame generation. Pick FSR in the game's menu as usual."
