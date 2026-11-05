@@ -15,8 +15,11 @@ on 10 s windows of rendered fps that restart after every change, one change per 
   2. balance: one lever at a time toward the side that holds the game back (GPU-bound: CPU ceiling -10 % to give the
      GPU the shared budget, then GPU floor +100 MHz; CPU-bound: CPU boost on, CPU ceiling 100 %, drop a GPU floor).
      A lever stays only if it raises fps by BALANCE_GAIN; otherwise it is undone and balancing ends;
-  3. lower: TDP -1 W while the rendered fps stays within KEEP of max_fps. The first miss is measured again; a second
-     miss goes back up to the last TDP that held. At a new TDP the balance is tried once more (the bottleneck can
+  3. lower: TDP down while the rendered fps stays within the margin of max_fps (KEEP % or KEEP_FPS, whichever is
+     more): -BIG_STEP_W while clearly above the line (in the upper half of the band) and the last step was flat, then -1 W. Plateau knee: a step that
+     cost <= FLAT_FPS_PER_W per watt is flat, so a miss just after it is taken as noise and lowering goes on; near the
+     line a 1 W step that costs > STEEP_FPS_PER_W per watt is past the knee, so it holds there. Otherwise the first
+     miss is measured again; a second miss goes back up to the last TDP that held. At a new TDP the balance is tried once more (the bottleneck can
      move as watts drop); if a lever helps, lowering goes on from there;
   4. hold: watch. Below the line for two windows -> +1 W. A sustained shift of SHIFT either way (a new area, changed
      graphics settings), a change of the frame-generation multiplier, or RESCAN_S on the clock -> measure again.
@@ -52,6 +55,11 @@ BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (on
 WINDOW_S = 10           # seconds of fps behind every decision
 MAX_WINDOWS = 3         # windows whose median is the most the set TDP gives
 KEEP_PCT = 5            # lowest TDP whose fps stays within this % of the most (user setting, 2-15)
+KEEP_FPS = 2.0          # ... or within this many fps, whichever is more: at 30-60 fps, giving up ~2 fps is fine when
+                        # it saves watts (maintainer, 2026-11-04: "lose 1-2 fps, save 5-10 W: save the watts")
+BIG_STEP_W = 3          # TDP step while clearly above the line and the last step was flat: 35 -> 20 W in few windows
+FLAT_FPS_PER_W = 0.2    # a step that cost at most this per watt is a plateau: a miss right after it is noise
+STEEP_FPS_PER_W = 1.0   # near the line, a 1 W step that costs more than this is past the knee: stop there
 BALANCE_GAIN = 0.02     # a CPU/GPU lever stays only if it adds this much fps
 SHIFT = 0.15            # a sustained change this large (two windows) means a new scene: measure again
 RESCAN_S = 300          # and every this long anyway
@@ -284,6 +292,8 @@ class Session:
     tau_refused: bool = False           # the firmware refused it once: don't retry every window
     eff_trial: bool = False             # GPU efficiency mode on trial at the TDP floor (judged on the next window)
     eff_tried: bool = False             # tried once this measurement
+    last_good: tuple | None = None      # (tdp, fps) of the last TDP that held the line: where a miss goes back to
+    fine: bool = False                  # a big step overshot once: 1 W steps from here
     history: list[Sample] = field(default_factory=list)
 
 
@@ -469,8 +479,12 @@ class Autotune:
             log.info("autotune settled: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
     # ---- the phases ----------------------------------------------------------------------------------------------
+    def _margin(self, s: Session) -> float:
+        m = s.learned.max_fps or 0
+        return max(m * s.keep_pct / 100, KEEP_FPS) if m else 0.0
+
     def _line(self, s: Session) -> float:
-        return (s.learned.max_fps or 0) * (1 - s.keep_pct / 100)
+        return (s.learned.max_fps or 0) - self._margin(s)
 
     def _did(self, s: Session, action: str, delta: str) -> None:
         s.last_action, s.last_delta, s.last_change_at = action, delta, time.monotonic()
@@ -479,7 +493,7 @@ class Autotune:
     def _remeasure(self, s: Session, why: str) -> None:
         l = s.learned
         s.phase, s.max_runs, s.misses, s.balance_undo = "measure", [], 0, None
-        s.balance_tried, s.eff_trial, s.eff_tried = set(), False, False
+        s.balance_tried, s.eff_trial, s.eff_tried, s.last_good, s.fine = set(), False, False, None, False
         s.window, s.watts, s.shown = [], [], []
         top = self._top(s)
         if l.tdp != top:
@@ -561,17 +575,31 @@ class Autotune:
 
     def _lower(self, s: Session, fps: float) -> None:
         l = s.learned
-        if fps >= self._line(s):
+        line, margin = self._line(s), self._margin(s)
+        prev = s.last_good
+        # fps lost per watt saved since the last TDP that held (None at the first step)
+        cost = None if not prev or prev[0] <= l.tdp else max(0.0, prev[1] - fps) / (prev[0] - l.tdp)
+        flat = cost is not None and cost <= FLAT_FPS_PER_W
+        if fps >= line or (flat and fps >= line - margin / 2):
             s.misses, l.fps = 0, fps
+            if (cost is not None and fps < line + margin and cost > STEEP_FPS_PER_W
+                    and prev and prev[0] - l.tdp <= 1):
+                s.phase = "hold"                           # past the knee: the next watt costs more than it saves
+                self._did(s, f"holding at {l.tdp} W: the last watt cost {cost:.1f} fps", "knee")
+                s.last_good = (l.tdp, fps)
+                return
+            s.last_good = (l.tdp, fps)
             if l.tdp <= s.floor_tdp:
                 s.phase = "hold"
                 self._try_efficiency(s)                    # on the line at the floor: the GPU's efficiency mode next
                 return
-            w = l.tdp - 1
+            # clearly above the line (the upper half of the band) and the last step was flat: a bigger step
+            step = BIG_STEP_W if not s.fine and fps >= line + margin / 2 and (cost is None or cost <= FLAT_FPS_PER_W) else 1
+            w, was = max(s.floor_tdp, l.tdp - step), l.tdp
             if self._tdp(l, w):
                 s.balance_tried = set()                    # the bottleneck can move as watts drop: try again here
                 s.phase = "balance"
-                self._did(s, f"lowered TDP to {w} W ({fps:.0f} fps, {100 * fps / l.max_fps:.0f} % of {l.max_fps:.0f})", "−1 W")
+                self._did(s, f"lowered TDP to {w} W ({fps:.0f} fps, {100 * fps / l.max_fps:.0f} % of {l.max_fps:.0f})", f"−{was - w} W")
             else:
                 s.phase = "hold"
             return
@@ -579,9 +607,19 @@ class Autotune:
         if s.misses < 2:
             return                                         # one window can be a heavier patch of the map: again
         s.misses = 0
-        w = min(self._top(s), l.tdp + 1)
+        if prev and prev[0] - l.tdp > 1 and not s.fine:
+            # a big step went past the line: back to 1 W under the last TDP that held, and on in 1 W steps
+            s.fine = True
+            w, was = prev[0] - 1, l.tdp
+            if self._tdp(l, w):
+                s.phase = "balance"
+                s.balance_tried = set()
+                self._did(s, f"{fps:.0f} fps at {was} W is below {line:.0f}: trying {w} W", f"+{w - was} W")
+            return
+        back = prev[0] if prev and prev[0] > l.tdp else l.tdp + 1
+        w, was = min(self._top(s), back), l.tdp
         if w != l.tdp and self._tdp(l, w):
-            self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: back up to {w} W, holding", "+1 W")
+            self._did(s, f"{fps:.0f} fps is below {line:.0f}: back up to {w} W, holding", f"+{w - was} W")
         s.phase = "hold"
 
     def _try_efficiency(self, s: Session) -> None:
@@ -730,7 +768,8 @@ class Autotune:
         r = lambda v: None if v is None else round(v, 1)
         return {"running": True, "enabled": self.enabled, "appid": s.appid, "paused": s.paused, "phase": s.phase,
                 "learned": l.__dict__, "bound": l.bound, "tdp": l.tdp, "ceiling_tdp": s.ceiling_tdp,
-                "floor_tdp": s.floor_tdp, "keep_pct": s.keep_pct, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
+                "floor_tdp": s.floor_tdp, "keep_pct": s.keep_pct, "keep_fps": KEEP_FPS,
+                "saves_w": (s.ceiling_tdp - l.tdp) if (s.phase == "hold" and l.tdp is not None and s.ceiling_tdp > l.tdp) else None, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
                 "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap,

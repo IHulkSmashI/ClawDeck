@@ -80,7 +80,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     ]);
     if (mine !== readSeq.current) return;
     const name = last === "dock" ? "max" : (last || "battery");
-    setSt(s); setAutotune(!!auto); setTable(tbl); setAt(a); setAtPlugged(!!atp);
+    setSt(s); setAutotune(auto !== false); setTable(tbl); setAt(a); setAtPlugged(atp !== false);
     if (pending.current > 0) return;
     if (lastPick && Date.now() - lastPick.at < 4000 && lastPick.profile !== name) {
       setProfile(lastPick.profile); setTdpV(lastPick.tdp); return;     // the write is still on its way
@@ -147,7 +147,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (appid ? "Autotune on: waiting for frame times (is ClawDeck in the launch options?)" : "Autotune on: starts with the next game")
     : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
-    : `Autotune: ${at.ceiling_tdp} W max → using ${at.tdp} W · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "");
+    : `Autotune: ${at.ceiling_tdp} W max → using ${at.tdp} W · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "") + (at.saves_w ? ` · saves ~${at.saves_w} W` : "");
   const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
   const atDetail = running
     ? `${bound} · ${phase}${at?.last_action ? ` · ${at.last_action}${at.last_change_s != null ? ` (${ago(at.last_change_s)})` : ""}` : ""}` : undefined;
@@ -176,7 +176,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       <PanelSectionRow>
         <Group title="Autotune" />
         <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP 1 W at a time while the game stays within ${st?.autotune_keep ?? 5} % of them. On battery only (Advanced turns it on plugged in). Counts rendered frames, not the ones frame generation adds.`,
+          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP (3 W steps on a plateau, then 1 W) while the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60 (${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
       </PanelSectionRow>
@@ -230,15 +230,15 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
                 quick ? undefined : "profiles set it for you.", "Fastest uses more battery at idle.")} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <SliderField label="Autotune: keep within (%)" value={st.autotune_keep ?? 5} min={2} max={15} step={1} showValue
+            <SliderField label="Autotune: give up at most (% of the frames, 2 fps minimum)" value={st.autotune_keep ?? 5} min={2} max={15} step={1} showValue
               onChange={(v) => latest("keep", () => setAutotuneKeep(v), (r) => { toast(r.summary); refresh(); })}
-              description={explain("How many of the most frames the TDP gives Autotune may trade for power (5 % of 60 fps = 3 fps).",
+              description={explain("How many of the most frames the TDP gives Autotune may trade for power: 5 % of 60 fps = 3 fps; at 30 fps it's 2 fps. 1–2 fps for 5–10 W is usually worth it.",
                 quick ? undefined : "smaller keeps more frames; larger saves more battery.", undefined)} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label="Autotune when plugged in" checked={atPlugged}
               onChange={async (v) => { setAtPlugged(v); await setSetting("autotune_plugged", v); toast(v ? "Autotune also runs on the charger, from the next game" : "Autotune runs on battery only, from the next game"); }}
-              description={explain("Off by default: on the charger there's no battery to save, and a frame limit already lets the chip lower its own power.",
+              description={explain("On by default: on the charger it still saves heat and fan noise for nearly the same frames.",
                 quick ? undefined : "a quieter, cooler Claw when docked.", "fewer frames than the plugged-in profile could give.")} />
           </PanelSectionRow>
           <PanelSectionRow>

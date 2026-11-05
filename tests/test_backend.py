@@ -332,8 +332,8 @@ def test_autotune_one_slow_window_is_measured_again_not_acted_on(fake_hw, monkey
     _Game(at, lambda *_: float(next(seq)))
     for _ in range(7):
         at._step()
-    # 40 fps once at 18 W was measured again, not acted on: the next window held the line, so lowering went on
-    assert s.learned.tdp == 17 and s.phase == "balance" and s.last_delta == "−1 W"
+    # 40 fps once was measured again, not acted on: the next window held the line, so lowering went on
+    assert s.learned.tdp < 18 and s.phase == "balance" and s.last_delta.startswith("−")
     at.session = None
 
 
@@ -409,7 +409,7 @@ def test_autotune_a_new_scene_or_the_clock_measures_again(fake_hw, monkeypatch):
     at, s = _tuner(fake_hw, monkeypatch)
     fps = {"v": 60.0}
     _Game(at, lambda tdp, *_: fps["v"] if tdp >= 19 else fps["v"] * 0.8)
-    for _ in range(8):
+    for _ in range(14):
         at._step()
     assert s.phase == "hold" and s.learned.tdp == 19
     fps["v"] = 40.0                                             # a much heavier area
@@ -451,11 +451,12 @@ def test_autotune_pause_stops_changes(fake_hw, monkeypatch):
     _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp))
     for _ in range(4):
         at._step()
-    assert s.learned.tdp == 19
+    t = s.learned.tdp
+    assert t < 20                                               # it lowered (a 3 W step from the top)
     at.pause()
     for _ in range(5):
         at._step()
-    assert s.learned.tdp == 19
+    assert s.learned.tdp == t
     at.session = None
 
 
@@ -837,3 +838,50 @@ def test_efficiency_sweep_knee_and_percentile():
     assert es.knee(rows)["tdp_w"] == 12
     assert es.knee([{"tdp_w": 10, "avg_fps": 40}, {"tdp_w": 12, "avg_fps": 50}])["tdp_w"] == 12   # never flattens: the top
     assert es.knee([]) is None
+
+
+# ---- autotune efficiency (maintainer 2026-11-04: lose 1-2 fps, save 5-10 W) ------------------------------------------
+def _run(at, n):
+    for _ in range(n):
+        at._step()
+
+
+def test_autotune_plateau_goes_low_with_big_steps(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=35)
+    # a plateau: 60 fps at 35 W, 59 at 22 W, then steep below (3 fps per watt)
+    _Game(at, lambda tdp, *_: 60.0 - (35 - tdp) / 13.0 if tdp >= 22 else 59.0 - 3.0 * (22 - tdp))
+    steps = []
+    orig = at._did
+    at._did = lambda sess, a, d: (steps.append(d), orig(sess, a, d))[1]
+    _run(at, 80)
+    assert s.learned.tdp <= 23 and s.phase == "hold"
+    assert s.learned.fps >= 57                                  # lost at most ~3 fps (5 % of 60)
+    assert "−3 W" in steps                                      # big steps while clearly above the line
+    st = at.status()
+    assert st["saves_w"] and st["saves_w"] >= 12
+    at.session = None
+
+
+def test_autotune_steep_curve_stops_early(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=35)
+    _Game(at, lambda tdp, *_: min(60.0, 2.5 * tdp))            # 60 fps needs 24 W; every watt below costs 2.5 fps
+    _run(at, 80)
+    assert 23 <= s.learned.tdp <= 25 and s.learned.fps >= 57 and s.phase == "hold"
+    at.session = None
+
+
+def test_autotune_low_fps_game_keeps_two_fps(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30)
+    _Game(at, lambda tdp, *_: min(30.0, 1.0 * tdp + 8))         # 30 fps from 22 W, -1 fps per watt below
+    _run(at, 80)
+    # 5 % of 30 is 1.5 fps, so the 2 fps rule decides: 28 fps at 20 W is the lowest that holds
+    assert s.learned.tdp == 20 and s.phase == "hold"
+    at.session = None
+
+
+def test_autotune_frame_limited_holds_the_limit_at_the_floor(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=35)
+    _Game(at, lambda tdp, *_: 40.0 if tdp >= 12 else 40.0 - 4 * (12 - tdp))   # a 40 fps limit, reached from 12 W
+    _run(at, 80)
+    assert s.learned.tdp >= s.floor_tdp and s.learned.tdp <= 13 and s.learned.fps >= 38
+    at.session = None
