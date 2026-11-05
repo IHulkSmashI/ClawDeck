@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -115,6 +115,10 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                               "steamos-manager logs every split-lock hit from Steam (thousands a minute) for a crash reporter "
                               "Bazzite doesn't have; the 50 MB journal then erases earlier boots within minutes",
                     "fix": None if ql["installed"] else "quiet_split_lock_log"})
+    ou = osupdate.status()
+    if ou.get("applies"):
+        out.append({"id": "os_update", "title": "Bazzite up to date (kernel, Intel graphics driver, Mesa, gamescope)",
+                    "ok": not ou["waiting"], "optional": True, "detail": ou["line"], "fix": None})
     others = stack.other_plugins(home)
     if others["power"]:
         out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,
