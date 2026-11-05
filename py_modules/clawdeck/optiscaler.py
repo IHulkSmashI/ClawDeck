@@ -95,11 +95,60 @@ def _unpack(arc: str, dest: str) -> str | None:
     return "; ".join(tried) or "no unpacker for .7z on this system (7z or bsdtar)"
 
 
+# fakenvapi.ini with OptiClick's values (its Windows Onimusha install, OptiScaler\fakenvapi.ini, 2026-11-04): the
+# game's own Reflex setting decides (force_reflex=0), no LatencyFlex
+FAKENVAPI_INI = ("[fakenvapi]\nenable_logs=1\nenable_trace_logs=0\nforce_latencyflex=0\nforce_reflex=0\n")
+EXTRA_INIS = {"fakenvapi": FAKENVAPI_INI}
+
+
+def extra_dests(x: dict) -> list[str]:
+    """Where an extra lands in the package: one file (dest), or files taken out of its archive (files) plus the
+    ini ClawDeck writes for it (ini)."""
+    if "dest" in x:
+        return [x["dest"]]
+    return list((x.get("files") or {}).values()) + ([x["ini"]] if x.get("ini") else [])
+
+
+def extras_ready(home: str, entry: dict) -> bool:
+    d = package_dir(home, entry["version"])
+    return all(os.path.isfile(os.path.join(d, p)) for x in entry.get("extras", []) for p in extra_dests(x))
+
+
+def _extra(x: dict, pkg: str, work: str) -> None:
+    """One extra into the unpacked package: a single file (OptiPatcher), or chosen files out of a release archive
+    (fakenvapi's .7z), each with its own pinned sha256."""
+    if "dest" in x:
+        dest = os.path.join(pkg, x["dest"])
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        _get(x["url"], x["sha256"], dest)
+        return
+    arc = _get(x["url"], x["sha256"], os.path.join(work, os.path.basename(x["url"])))
+    out = os.path.join(work, "extra-" + x["name"])
+    shutil.rmtree(out, ignore_errors=True)
+    err = _unpack(arc, out)
+    if err:
+        raise ValueError(f"unpacking {x['name']}: {err}")
+    for src, to in (x.get("files") or {}).items():
+        p = os.path.join(out, src)
+        want = (x.get("file_sha256") or {}).get(src)
+        if not os.path.isfile(p) or (want and downloads.sha256_of(p) != want.lower()):
+            raise ValueError(f"{src} from {os.path.basename(x['url'])} is missing or doesn't match its pinned sha256")
+        dest = os.path.join(pkg, to)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(p, dest)
+    if x.get("ini"):
+        dest = os.path.join(pkg, x["ini"])
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(EXTRA_INIS[x["name"]])
+
+
 def install(home: str, entry: dict) -> dict:
-    """entry (versions.json "optiscaler"): {version, url, sha256, extras: [{name, url, sha256, dest}]}."""
+    """entry (versions.json "optiscaler"): {version, url, sha256, extras: [{name, url, sha256, dest} or
+    {name, url, sha256, files: {in archive: in package}, file_sha256, ini}]}."""
     ver = entry["version"]
     d = package_dir(home, ver)
-    if installed(home, ver) and all(os.path.isfile(os.path.join(d, x["dest"])) for x in entry.get("extras", [])):
+    if installed(home, ver) and extras_ready(home, entry):
         return {"ok": True, "already": True, "version": ver, "dir": d}
     work = os.path.join(home, ROOT, ".download")
     try:
@@ -113,9 +162,7 @@ def install(home: str, entry: dict) -> dict:
         if not os.path.isfile(os.path.join(tmp, "OptiScaler.dll")):
             return {"ok": False, "error": "the OptiScaler archive has no OptiScaler.dll"}
         for x in entry.get("extras", []):
-            dest = os.path.join(tmp, x["dest"])
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            _get(x["url"], x["sha256"], dest)
+            _extra(x, tmp, work)
         shutil.rmtree(d, ignore_errors=True)
         os.replace(tmp, d)
         userexec.chown_tree(os.path.join(home, ROOT), home)
