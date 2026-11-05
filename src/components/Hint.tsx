@@ -54,11 +54,15 @@ export const Group: FC<{ title: ReactNode; first?: boolean }> = ({ title, first 
  * part in use is open (maintainer, 2026-11-04: "it's just so long"). Open or closed is remembered on this device; the
  * state also lives outside the component, so a Quick Access re-mount keeps it. */
 const folds = new Map<string, boolean>();
+let foldsAt = 0;
+const KEEP_MS = 10000;
 export const Fold: FC<{ id: string; title: string; summary?: ReactNode; open?: boolean; children: ReactNode }> = ({ id, title, summary, open: dflt = false, children }) => {
-  // remembered while ClawDeck runs (a Quick Access re-mount keeps it), not across starts: every start opens one
-  // section only, the one the caller says (maintainer, 2026-11-04: "every time it starts, all closed but one")
-  const [open, setOpen] = useState<boolean>(() => (folds.has(id) ? folds.get(id)! : dflt));
-  const toggle = () => { const v = !open; folds.set(id, v); setOpen(v); };
+  // every time Quick Access opens, all sections are closed (maintainer, 2026-11-05: "always open ClawDeck with all 4
+  // menus closed"). Only a re-mount right after a change keeps them as they were: Steam's dropdown re-mounts Quick
+  // Access when its menu closes, and the section in use must stay open then.
+  const [open, setOpen] = useState<boolean>(() => (Date.now() - foldsAt < KEEP_MS && folds.has(id) ? folds.get(id)! : dflt));
+  const toggle = () => { const v = !open; folds.set(id, v); foldsAt = Date.now(); setOpen(v); };
+  useEffect(() => { if (open) foldsAt = Date.now(); });       // using an open section keeps it open across a re-mount
   return (
     <>
       <PanelSection>

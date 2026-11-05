@@ -7,7 +7,7 @@ import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { Anchor, explain, Group, markPick, Note, Problem, Status, useExplanations } from "../components/Hint";
-import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper } from "../steam";
+import { getLaunchOptions, hasFgmod, hasWrapper, runningApp, setLaunchOptions, withFgmod, withoutFgmod, withWrapper, withoutWrapper } from "../steam";
 
 const toast = (body: string) => notify(body);
 
@@ -130,12 +130,21 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || wantOv < 0 ? null : wantOv);
     if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
-    if (r.ok && Object.keys(r.env ?? {}).length && opts !== null && !hasWrapper(opts) && gs?.wrapper) {
+    const needsWrapper = Object.keys(r.env ?? {}).length > 0;
+    if (r.ok && needsWrapper && opts !== null && !hasWrapper(opts) && gs?.wrapper) {
       setLaunchOptions(app.appid, withWrapper(opts, gs.wrapper.replace(/ %command%$/, "")));
+    }
+    // OptiScaler taken out and nothing else of ClawDeck's left for this game: the launch options go back to what they
+    // were (maintainer, 2026-11-05: "the run command remains"). With something left (its own XeSS on XMX, low latency
+    // set by hand), the wrapper stays, and the toast says why.
+    let kept = false;
+    if (r.ok && upscaler === "own" && opts !== null && hasWrapper(opts)) {
+      if (needsWrapper) kept = true; else setLaunchOptions(app.appid, withoutWrapper(opts));
     }
     const up = UPSCALERS.find((u) => u.data === upscaler)?.label ?? upscaler;
     const full = r.ok ? `${app.name}: ${up}${fg ? `, frame generation ${fg}x` : ""}. ${upscaler === "own" ? "" : "In the game's menu pick DLSS (or FSR). "}From the next launch.` : `Not saved: ${r.error}`;
-    notify(full, r.ok ? (upscaler === "own" ? { title: `${app.name}: OptiScaler removed`, body: "Back to the game's own files" }
+    notify(full + (kept ? " ClawDeck stays in the launch options for this game's own XeSS on the XMX cores (Per-game → XMX switch)." : ""),
+      r.ok ? (upscaler === "own" ? { title: `${app.name}: OptiScaler removed`, body: kept ? "Launch options kept: its XeSS runs on XMX" : "Back to the game's own files and launch options" }
       : { title: `${app.name}: ${up}${fg ? ` + ${fg}x` : ""} ✓`, body: "Start the game, pick DLSS in its menu" })
       : { title: `${app.name}: not done`, body: "Reason at the top of ClawDeck" });
     load();
