@@ -65,6 +65,9 @@ The four-panel UI has not been on the device yet.
   (pwm1/pwm2_enable read 2 again). The choice survives closing a game, a restart and sleep.
 - **Charge limit (Power → Battery):** at 80 % the battery stops charging at 80 % on the charger
   (`charge_control_end_threshold` reads 80); Off writes back the value it had (0 = no limit). Survives a restart.
+- **Autotune, efficiency (on by default, on the charger too):** CONTROL on battery and plugged in, from 35 W: note
+  where it settles (Power shows "saves ~Z W"), the fps lost against the start (should be at most ~2–3 fps), and how
+  long it takes to settle (3 W steps on a plateau, then 1 W). Check it holds a frame limit with the least power.
 - **REFramework pinned (nightly 01433, sha256 b3ff4f49…):** installed with OptiScaler in RE Engine games without a
   question now. Onimusha: the game starts, REFramework loads, DLSS → XeSS on XMX.
 - **FSR 4.1.2 picks index 6:** OptiScaler lists AMD's 4.0.2 first with the B Boost files; ClawDeck now writes
