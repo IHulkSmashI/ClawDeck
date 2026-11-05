@@ -80,6 +80,10 @@ class Plugin:
         os.makedirs(mangohud_dir, exist_ok=True)
         userexec.chown_tree(mangohud_dir, HOME)
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
+        # on by default, on the charger too: the least power for (nearly) the same frames, less heat and fan noise
+        # (maintainer, 2026-11-04). The switches in Power still turn either off.
+        self.settings.setdefault("autotune", True)
+        self.settings.setdefault("autotune_plugged", True)
         self.autotune.enabled = bool(self.settings.get("autotune"))
         self._autotune_flag(self.autotune.enabled)
         self.running_appid: str | None = None
