@@ -64,6 +64,6 @@ commit cd5e231, with their license headers unchanged:
   it isn't linked with libntfs-3g. This DLL isn't.
 
 All of these are compatible with LGPL-2.1-or-later for the DLL as a whole. (wimlib's library is LGPL-2.1+, not v3:
-its GPLv3+ option covers the programs.) The rest of ClawDeck is MIT. The DLL is a separate library that ClawDeck copies
+its GPLv3+ option covers the programs.) The rest of ClawDeck is AGPLv3. The DLL is a separate library that ClawDeck copies
 into game folders, never linked into ClawDeck's code. The plugin zip carries this folder's source next to
 `bin/cabinet.dll`.
