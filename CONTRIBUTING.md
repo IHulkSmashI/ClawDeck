@@ -9,7 +9,8 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
   asyncio task at 1 Hz. Budget: under 0.5 % CPU and under 30 MB RSS over a 2-hour run, flat RSS over a 4-hour soak
   (`tools/soak.py`), measured before every release.
 - **Fail safe.** Every sysfs write goes through `clawdeck.sysfs.write`, so it is recorded and revertible. A failed
-  write reverts. Everything reverts when the game closes. Nothing persists across reboot except the
+  write reverts. Everything a game and Autotune changed reverts when the game closes, and the limit the user picked for
+  that power source (if any) goes back on the chip; unloading the plugin reverts that too. Nothing persists across reboot except the
   charge limit and, when the user turns them on, the 30–120 Hz VRR range (an EDID override with its own Undo) and
   the Claw 8 EX face-button override for InputPlumber (kept on uninstall, so the buttons keep working; the health
   check says when InputPlumber's own config makes it unnecessary).

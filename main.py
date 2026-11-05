@@ -93,6 +93,7 @@ class Plugin:
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
         self._guard_task: asyncio.Task | None = None
         self.running_plugged: bool | None = None
+        self._holding_pick = False             # no game runs and ClawDeck holds the user's pick (menus) on the chip
         decky.logger.info("ClawDeck on %s (%s), kernel %s", self.hw.model["name"], self.hw.product, self.hw.kernel)
         self._install_wrapper()
         # XeSS on XMX per game: a session-wide driver file from an earlier install (ClawDeck 0.1, or install.sh run
@@ -343,6 +344,10 @@ class Plugin:
     async def get_power(self) -> dict:
         st = self.power.status()
         st["custom_tdp"] = self.settings.get("custom_tdp")
+        # your limit (the pick) and what Autotune runs under it now: the slider shows the first, the status line both
+        s = self.autotune.session
+        st["limit_w"] = s.ceiling_tdp if s is not None else None
+        st["autotune_w"] = s.learned.tdp if s is not None and not s.paused else None
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
         st["thermal"] = self.guard.status()
@@ -350,9 +355,11 @@ class Plugin:
 
     def _limit_result(self, name: str, applied: dict, failed: list, plugged) -> dict:
         """Read back after a profile or a TDP-slider change. With autotune running the limit is its ceiling and the
-        hardware reads what autotune uses under it, so that is what is checked."""
+        hardware reads what autotune uses under it, so that is what is checked (right after a pick autotune starts
+        over at the new limit, so the two are the same)."""
         want = applied.get("tdp")
-        at_w = self.autotune.set_ceiling(want) if want is not None and self.autotune.running() else None
+        s = self.autotune.session
+        at_w = s.learned.tdp if want is not None and s is not None else None
         expect = at_w if at_w is not None else want
         st = self.power.status()
         r = {"profile": name, "applied": applied, "failed": failed, "limit_w": want, "autotune_w": at_w,
@@ -382,17 +389,21 @@ class Plugin:
             if self.running_appid:                      # the game remembers it for this power source
                 self.profiles.set(self.running_appid, bool(plugged), {"base": "custom", "tdp": want, "learned": None})
             sysfs.clear_error()
-            self.guard.reset()                          # the user's new limit replaces the guard's step
-            ok = self.power.set_tdp(want, plugged)
-            self._ensure_guard()
-            return self._limit_result("Custom", {"tdp": want} if ok else {}, [] if ok else ["tdp"], plugged)
+            r = self._apply_pick_now(bool(plugged))     # the guard's step and autotune's learned TDP start over
+            ok = r.get("applied", {}).get("tdp") is not None
+            return self._limit_result("Custom", {"tdp": r["applied"]["tdp"]} if ok else {}, [] if ok else ["tdp"], plugged)
 
     async def power_slot(self, appid: str | None = None) -> dict:
-        """What the running game remembers for this power source (Power's "Saved for <game>" line)."""
-        gid = str(appid or self.running_appid or "")
+        """What the running game remembers for this power source (Power's "Saved for <game>" line), and `pick`: the
+        limit that applies now on this power source (the game's own pick, else your last pick on it, else the default),
+        which is what the profile list and the slider show. The game ClawDeck set up wins over the UI's guess."""
+        gid = str(self.running_appid or appid or "")
         plugged = bool(self.battery.plugged())
         own = self.profiles.own(gid, plugged) if gid else {}
-        return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp")}
+        pk = self._pick(gid or None, plugged)
+        return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp"),
+                "running": self.running_appid is not None,
+                "pick": {"profile": pk["profile"], "tdp": pk["tdp"], "from": pk["from"]}}
 
     async def reset_power_slot(self, appid: str | None = None) -> dict:
         """Forget this game's pick for this power source: it follows the last pick for all games again."""
@@ -404,7 +415,7 @@ class Plugin:
         r = {"ok": True}
         if self.running_appid == gid:
             async with self._power_lock:
-                r = {"ok": True, **self._start_game_power(gid, plugged)}
+                r = {"ok": True, **self._restart_game_power(gid, plugged)}
         return r
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
@@ -412,12 +423,11 @@ class Plugin:
         and `error` in red; `read` is what the hardware reports after the write."""
         name = hw.profile_name(name)
         if name == "custom":
-            return await self.set_tdp(int(self.settings.get("custom_tdp") or self.power.read_tdp() or 17))
+            slot = "plugged" if self.battery.plugged() else "battery"
+            return await self.set_tdp(int(self.settings.get(f"custom_tdp_{slot}") or self.settings.get("custom_tdp")
+                                          or self.power.read_tdp() or 17))
         async with self._power_lock:
             plugged = self.battery.plugged()
-            prof = self.profiles.get(appid, bool(plugged)) if appid else {}
-            # a profile picked by hand wins over the game's saved TDP: its watts are what the user just chose
-            overrides = {k: v for k, v in prof.items() if k in POWER_KEYS and k != "tdp"}
             self.settings["last_profile"] = name
             self.settings[f"last_profile_{'plugged' if plugged else 'battery'}"] = name
             self._save_settings()
@@ -425,9 +435,9 @@ class Plugin:
             if gid:                                     # the game remembers it for this power source
                 self.profiles.set(gid, bool(plugged), {"base": name, "tdp": None, "learned": None})
             sysfs.clear_error()
-            self.guard.reset()
-            r = self.power.apply_profile(name, overrides, plugged)
-            self._ensure_guard()
+            # in a game: the game starts over from the pick (autotune measures again at its watts, nothing learned at
+            # the old limit pulls it down); else the pick goes on the chip and stays after games too
+            r = self._apply_pick_now(bool(plugged))
             out = self._limit_result(name.capitalize(), r["applied"], r["failed"], plugged)
         return {**out, "profile": name}
 
@@ -501,21 +511,39 @@ class Plugin:
         return hw.profiles_for(self.hw.model_key)
 
     # ---- game lifecycle (called by the frontend's Steam hooks) ------------------------------------------------------
-    def _start_game_power(self, appid: str, plugged: bool) -> dict:
-        prof = self.profiles.get(appid, plugged)
-        # what you picked last for this game on this power source; else your last pick on it for any game; else the
-        # default (Battery / Performance). The default slot's base used to win every time, so a game started on
-        # battery always came back at Battery 15 W, whatever was picked in it (maintainer, 2026-11-04)
+    def _pick(self, appid: str | None, plugged: bool) -> dict:
+        """The limit the user picked for this power source, as the menus show it and the chip gets it: the game's own
+        pick (saved when it was made while the game ran), else the last pick on this power source for any game, else
+        the default (Battery / Performance). The default slot's base used to win every time, so a game started on
+        battery always came back at Battery 15 W, whatever was picked in it (maintainer, 2026-11-04).
+        Returns profile (a name or "custom"), tdp (the watts it sets here), from (game / last / default), and what
+        power.apply_profile needs (apply, overrides) plus the merged profile (prof: autotune, learned)."""
         slot = "plugged" if plugged else "battery"
-        base = hw.profile_name(self.profiles.own(appid, plugged).get("base") or self.settings.get(f"last_profile_{slot}")
-                               or prof.get("base") or ("performance" if plugged else "battery"))
-        if not self.profiles.own(appid, plugged).get("base") and base == "custom" and self.settings.get(f"custom_tdp_{slot}"):
+        own = self.profiles.own(appid, plugged) if appid else {}
+        prof = self.profiles.get(appid or "", plugged)
+        if own.get("base"):
+            base, src = own["base"], "game"
+        elif self.settings.get(f"last_profile_{slot}"):
+            base, src = self.settings[f"last_profile_{slot}"], "last"
+        else:
+            base, src = prof.get("base") or ("performance" if plugged else "battery"), "default"
+        base = hw.profile_name(base)
+        if src != "game" and base == "custom" and self.settings.get(f"custom_tdp_{slot}"):
             prof = {**prof, "tdp": self.settings.get(f"custom_tdp_{slot}")}
         overrides = {k: v for k, v in prof.items() if k in POWER_KEYS}
+        apply = base
         if base == "custom":     # the TDP slider's value is the limit; the rest of the levers stay as they are
-            base, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
+            apply, overrides = "", {**overrides, "tdp": overrides.get("tdp") or self.settings.get("custom_tdp")}
+        w = overrides.get("tdp") or hw.profiles_for(self.hw.model_key).get(base, {}).get("tdp")
+        return {"profile": base, "tdp": None if w is None else self.power.clamp_tdp(int(w), plugged), "from": src,
+                "apply": apply, "overrides": overrides, "prof": prof}
+
+    def _start_game_power(self, appid: str, plugged: bool) -> dict:
+        pk = self._pick(appid, plugged)
+        prof = pk["prof"]
         self.guard.reset()
-        result = self.power.apply_profile(base, overrides, plugged)
+        result = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
+        result["limit_w"] = result["applied"].get("tdp")
         # autotune is for battery: plugged in it only runs when the user asked for that too (Advanced)
         if self.settings.get("autotune") and prof.get("autotune", True) and (not plugged or self.settings.get("autotune_plugged")):
             # the picked limit (profile or slider) is the set TDP autotune measures at and works under; its floor is
@@ -527,8 +555,46 @@ class Plugin:
                                 keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"))
             result["autotune"] = "started"
-        self._ensure_guard()
+        self._held_or_release(result)
         return result
+
+    def _held_or_release(self, result: dict) -> None:
+        """A TDP is held: the temperature guard watches it. None could be set: thermald back in charge."""
+        if result["applied"].get("tdp") is None and self.autotune.session is None:
+            self.power.release_thermald()
+        self._ensure_guard()
+
+    def _restart_game_power(self, appid: str, plugged: bool) -> dict:
+        """The running game from a clean start on this power source: autotune's levers and the guard's step back to
+        what was there before ClawDeck (thermald stays stopped: the limit is set again at once), then the user's pick
+        and a fresh autotune at that limit. Used after a pick in the game, Use default, unplugging and resume."""
+        self.autotune.stop(revert=False)
+        self.power.revert_all(keep_thermald=True)
+        return self._start_game_power(appid, plugged)
+
+    def _apply_idle_pick(self, plugged: bool) -> dict | None:
+        """No game runs: the limit you picked for this power source goes (back) on the chip, as the menus show it. If
+        you never picked one on this power source, the chip keeps the firmware's limits and thermald runs as usual.
+        Every write still goes through sysfs.write, so unloading the plugin reverts it."""
+        slot = "plugged" if plugged else "battery"
+        if not self.settings.get(f"last_profile_{slot}"):
+            self._holding_pick = False
+            self.power.release_thermald()
+            return None
+        pk = self._pick(None, plugged)
+        self.guard.reset()
+        r = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
+        self._holding_pick = True
+        self._held_or_release(r)
+        return {**r, "limit_w": r["applied"].get("tdp"), "pick": {"profile": pk["profile"], "tdp": pk["tdp"]}}
+
+    def _apply_pick_now(self, plugged: bool) -> dict:
+        """A pick was just saved (profile list or slider): the running game starts over from it, else it goes on the
+        chip as it is."""
+        if self.running_appid:
+            self.running_plugged = plugged
+            return self._restart_game_power(self.running_appid, plugged)
+        return self._apply_idle_pick(plugged) or {"applied": {}, "failed": ["tdp"]}
 
     # ---- temperature guard (findings §21): only while thermald is paused --------------------------------------------
     def _floor_w(self) -> int:
@@ -565,43 +631,59 @@ class Plugin:
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged))
 
     def _save_learned(self, appid: str, plugged: bool) -> dict | None:
-        learned = self.autotune.stop()
+        """Stop autotune and keep what it found for this game and power source. The power stays as it is: the caller
+        reverts and sets the next limit."""
+        learned = self.autotune.stop(revert=False)
         if learned and learned.get("learned"):
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
         return learned
 
     async def game_started(self, appid: str) -> dict:
         appid = str(appid)
-        if self.running_appid and self.running_appid != appid:
-            # a second game (or a launcher) started while one runs: save what the first one learned before switching
-            self._save_learned(self.running_appid, bool(self.running_plugged))
-        plugged = bool(self.battery.plugged())
-        self.running_appid, self.running_plugged = appid, plugged
-        return self._start_game_power(appid, plugged)
+        async with self._power_lock:
+            if self.running_appid and self.running_appid != appid:
+                # a second game (or a launcher) started while one runs: save what the first one learned first
+                self._save_learned(self.running_appid, bool(self.running_plugged))
+            plugged = bool(self.battery.plugged())
+            self.running_appid, self.running_plugged = appid, plugged
+            self._holding_pick = False
+            self.power.revert_all(keep_thermald=True)   # the game starts from what was there before ClawDeck + its pick
+            return self._start_game_power(appid, plugged)
 
     async def game_stopped(self, appid: str) -> dict:
         appid = str(appid)
         if self.running_appid is not None and appid != self.running_appid:
             # Steam reports every app that stops (launchers): only the game ClawDeck set up counts
             return {"ignored": True}
-        plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
-        learned = self._save_learned(appid, plugged)
-        self.running_appid, self.running_plugged = None, None
-        n = self.power.revert_all()
-        self.guard.reset()                          # thermald is back; its loop ends at its next check
-        return {"reverted": n, "learned": learned}
+        async with self._power_lock:
+            plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
+            learned = self._save_learned(appid, plugged)
+            self.running_appid, self.running_plugged = None, None
+            # everything the game and autotune changed goes back, then the limit you picked for the power source the
+            # Claw is on now, not the firmware's boot limits (maintainer, 2026-11-04: "doesn't reset back to what it
+            # was set to")
+            n = self.power.revert_all(keep_thermald=True)
+            self.guard.reset()
+            idle = self._apply_idle_pick(bool(self.battery.plugged()))
+            return {"reverted": n, "learned": learned, "limit": idle}
 
     async def power_source_changed(self, plugged: bool) -> dict:
         """Steam reported AC plugged/unplugged: the running game switches to its other slot (battery / plugged), and
         autotune keeps learning in the slot that matches the new source."""
         plugged = bool(plugged)
-        if self.running_appid is None or plugged == self.running_plugged:
-            self.running_plugged = plugged if self.running_appid else None
+        if self.running_appid is None:
+            if not self._holding_pick:
+                return {"changed": False}
+            async with self._power_lock:            # no game: the pick for the new power source, as the menus show
+                self.power.revert_all(keep_thermald=True)
+                return {"changed": True, "limit": self._apply_idle_pick(plugged)}
+        if plugged == self.running_plugged:
             return {"changed": False}
         appid = self.running_appid
-        self._save_learned(appid, bool(self.running_plugged))
-        self.running_plugged = plugged
-        return {"changed": True, **self._start_game_power(appid, plugged)}
+        async with self._power_lock:
+            self._save_learned(appid, bool(self.running_plugged))
+            self.running_plugged = plugged
+            return {"changed": True, **self._restart_game_power(appid, plugged)}
 
     # ---- fan and charge limit (Power) ---------------------------------------------------------------------------------
     def _reapply_fan_charge(self, why: str) -> None:
@@ -659,12 +741,16 @@ class Plugin:
     async def resumed(self) -> dict:
         """After resume from suspend: firmware may have reset limits; re-apply the running game."""
         self._reapply_fan_charge("resume")
-        if self.running_appid is None:
-            return {"reapplied": False}
         plugged = bool(self.battery.plugged())
-        self._save_learned(self.running_appid, bool(self.running_plugged))
-        self.running_plugged = plugged
-        return {"reapplied": True, **self._start_game_power(self.running_appid, plugged)}
+        async with self._power_lock:
+            if self.running_appid is None:
+                if not self._holding_pick:
+                    return {"reapplied": False}
+                self.power.revert_all(keep_thermald=True)
+                return {"reapplied": True, "limit": self._apply_idle_pick(plugged)}
+            self._save_learned(self.running_appid, bool(self.running_plugged))
+            self.running_plugged = plugged
+            return {"reapplied": True, **self._restart_game_power(self.running_appid, plugged)}
 
     async def get_autotune(self) -> dict:
         return {**self.autotune.status(), "thermal": self.guard.status()}

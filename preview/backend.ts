@@ -160,6 +160,8 @@ export const backend = {
     return limit(name[0].toUpperCase() + name.slice(1), p[0]);
   },
   set_tdp: (w: number) => { state.profile = "custom"; state.customTdp = w; return { ...limit("Custom", w), profile: "custom" }; },
+  power_slot: () => ({ appid: scenario.game ? "2054970" : null, plugged: false, base: null, tdp: null, running: !!scenario.game,
+    pick: { profile: state.profile, tdp: state.profile === "custom" ? state.customTdp : PROFILE_TABLE[state.profile]?.[0] ?? null, from: "last" } }),
   set_cpu_turbo: (v: boolean) => { state.boost = v; return done("CPU boost", v, v); },
   set_cpu_max_pct: (v: number) => { state.cpu = v; return done("CPU ceiling", v, v, "%"); },
   set_gpu_window: (lo: number | null, hi: number | null) => {

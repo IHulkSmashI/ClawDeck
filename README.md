@@ -209,7 +209,7 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
 - **We watch upstream daily.** [`tools/upstream_watch.py`](tools/upstream_watch.py) checks every project ClawDeck
   builds on (OptiScaler, xess-xmx-linux, InputPlumber, Bazzite, ClawLab) for new versions and format changes, so we
   notice a change before it breaks a Claw.
-- **Every system change is revertible.** Power changes are undone when the game closes or the plugin is removed. The
+- **Every system change is revertible.** What a game and Autotune change is undone when the game closes (the limit you picked comes back), and everything is undone when the plugin is removed. The
   fan's Automatic and the charge limit's Off put the firmware's own settings back.
 
 ---
