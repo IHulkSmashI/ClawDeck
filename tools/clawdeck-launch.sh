@@ -67,6 +67,8 @@ if [ -f "$envfile" ]; then
     [ -n "$k" ] && [ "${k#\#}" = "$k" ] || continue
     # keep the user's own DLL overrides: ClawDeck's are added in front, not instead
     if [ "$k" = WINEDLLOVERRIDES ] && [ -n "${WINEDLLOVERRIDES:-}" ]; then v="$v;$WINEDLLOVERRIDES"; fi
+    # and the user's own DXVK options (DXVK_CONFIG takes several, separated by ;)
+    if [ "$k" = DXVK_CONFIG ] && [ -n "${DXVK_CONFIG:-}" ]; then v="$DXVK_CONFIG;$v"; fi
     export "$k=$v"
   done < "$envfile"
 fi

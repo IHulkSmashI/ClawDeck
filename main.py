@@ -845,6 +845,10 @@ class Plugin:
 
     async def get_autotune(self) -> dict:
         st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid}
+        # the running game's frame generation (ClawDeck's pick): the Power panel says what that does to Autotune
+        launch = self.profiles.get_launch(self.running_appid) if self.running_appid else {}
+        fg = launch.get("fg") or 0
+        st["game_fg"] = fg if fg >= 2 and launch.get("opti_fg") != "off" else 0
         if not st.get("running"):
             st["why"] = self._autotune_why()
         return st
