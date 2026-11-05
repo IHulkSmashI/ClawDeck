@@ -146,7 +146,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     }
     const up = UPSCALERS.find((u) => u.data === upscaler)?.label ?? upscaler;
     const full = r.ok ? `${app.name}: ${up}${fg ? `, frame generation ${fg}x` : ""}. ${upscaler === "own" ? "" : "In the game's menu pick DLSS (or FSR). "}From the next launch.` : `Not saved: ${r.error}`;
-    notify(full + (kept ? " ClawDeck stays in the launch options for this game's own XeSS on the XMX cores (Per-game → XMX switch)." : ""),
+    const refLeft = r.ok && upscaler === "own" && r.reframework_left
+      ? " A REFramework that isn't ClawDeck's (dinput8.dll, another build) is still next to the game's exe: delete it there if you don't want it." : "";
+    notify(full + (kept ? " ClawDeck stays in the launch options so this game's own XeSS runs on the XMX cores." : "") + refLeft,
       r.ok ? (upscaler === "own" ? { title: `${app.name}: OptiScaler removed`, body: kept ? "Launch options kept: its XeSS runs on XMX" : "Back to the game's own files and launch options" }
       : { title: `${app.name}: ${up}${fg ? ` + ${fg}x` : ""} ✓`, body: "Start the game, pick DLSS in its menu" })
       : { title: `${app.name}: not done`, body: "Reason at the top of ClawDeck" });
@@ -268,11 +270,6 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       )}
       <PanelSectionRow>
         <Group title="Driver and low latency" />
-        {!quick && <ToggleField label="XeSS on XMX (switch off only to troubleshoot)" checked={xmxOn} disabled={!installed}
-          description={explain(installed ? (perGame ? (scope?.every_game ? "Setup has the XMX driver on for every game: whatever XeSS, XeSS frame generation or XeLL this game has runs on the XMX cores. Switch it off here only if this game misbehaves or loses speed." : `Automatic: the XMX driver loads in games that ship XeSS or OptiScaler, or are set up for FSR on XeSS (${scope?.auto ? "this one is" : "this one isn't"}); Steam's own screen keeps Bazzite's driver. Setup can turn it on for every game.`)
-              : "On for every game once the driver is installed: the game's XeSS (or OptiScaler's) runs on the XMX cores. Off = the stock driver for this game only, if it misbehaves.")
-            : "Install the XeSS XMX driver in Setup first; from then it is on for every game.", undefined, quick ? undefined : "from the next launch; the first one compiles kernels for a minute or two, once.")}
-          onChange={(v) => save({ xmx: perGame && v === (!!scope?.auto || !!scope?.every_game) ? null : v } as any)} />}
         <Status ok={gs ? (xmxOn && xessOk ? true : (xmxOn && installed) || (!xmxOn && !wrapped) ? false : null) : null}
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
             : xmxOn ? (xessOk ? `XeSS runs on XMX (${perGame ? (launch.xmx == null ? "automatic" : "switched on for this game") : "default"})`

@@ -1416,3 +1416,17 @@ def test_patch_takes_the_games_own_proxy_name_first(tmp_path, monkeypatch):
     g2 = tmp_path / "game2"
     _w(g2 / "Game.exe", "x")
     assert optiscaler.patch(home, str(g2), "0.9.4", {}, proxies=["d3d12.dll"])["dll"] == "dxgi.dll"   # not ours: default
+
+
+def test_reframework_remove_takes_a_pinned_build_without_the_mark_and_leaves_others(tmp_path):
+    from clawdeck import downloads, reframework
+    g = tmp_path / "game"
+    g.mkdir()
+    (g / "dinput8.dll").write_bytes(b"the pinned REFramework")
+    sha = downloads.sha256_of(str(g / "dinput8.dll"))
+    assert reframework.remove(str(g))["removed"] is False and (g / "dinput8.dll").exists()   # no known builds given
+    r = reframework.remove(str(g), (sha,))
+    assert r["removed"] and r["unmarked"] and not (g / "dinput8.dll").exists()
+    (g / "dinput8.dll").write_bytes(b"some other dinput8")
+    r = reframework.remove(str(g), (sha,))
+    assert r["removed"] is False and r["present"] and (g / "dinput8.dll").exists()

@@ -81,6 +81,12 @@ class Plugin:
         self.power = power.Power(self.hw)
         self.battery = battery.Battery(self.hw)
         self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
+        # the per-game "XeSS on XMX" off switch is gone (maintainer, 2026-11-05: "the whole point of the Intel driver is
+        # to use XMX cores when you can"): a game switched off earlier goes back to automatic
+        for appid in self.profiles.games():
+            if self.profiles.get_launch(appid).get("xmx") is False:
+                self.profiles.set_launch(appid, {"xmx": None})
+                decky.logger.info("game %s: XMX switch-off dropped (the switch was removed)", appid)
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)
@@ -178,7 +184,7 @@ class Plugin:
         for appid, folder in list((self.settings.get("opti_games") or {}).items()):
             try:
                 decky.logger.info("uninstall: OptiScaler out of %s: %s, REFramework: %s", appid,
-                                  optiscaler.unpatch(folder), reframework.remove(folder))
+                                  optiscaler.unpatch(folder), reframework.remove(folder, self._ref_shas()))
             except Exception as e:
                 decky.logger.warning("uninstall: OptiScaler out of %s: %s", appid, e)
         # XeSS XMX back as xess-xmx-linux's installer left it (session-wide), the log and power counters as shipped
@@ -1065,6 +1071,10 @@ class Plugin:
         v = self._versions()
         return v["optiscaler_v10"] if launchenv.capcom(launch) and v.get("optiscaler_v10") else v["optiscaler"]
 
+    def _ref_shas(self) -> tuple[str, ...]:
+        e = self._versions().get("reframework") or {}
+        return tuple(x for x in (e.get("dll_sha256"),) if x)
+
     def _xmx_off(self, appid: str) -> bool:
         """XMX switched off for this game (Per-game): FSR 4.1.2 isn't offered then (a black screen without XMX)."""
         return self.profiles.get_launch(appid).get("xmx") is False
@@ -1146,11 +1156,13 @@ class Plugin:
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
         if upscaler == "own":
             out = await self._bg(optiscaler.unpatch, folder)
-            await self._bg(reframework.remove, folder)
+            ref = await self._bg(reframework.remove, folder, self._ref_shas())
             self.settings.setdefault("opti_games", {}).pop(str(appid), None)
             self._save_settings()
             r = await self.set_launch(appid, {**{k: None for k in self.REC_KEYS}, "fg": fg or None})
-            return {**r, "optiscaler": out}
+            # a REFramework ClawDeck doesn't know (another build, put in by hand) is left alone: say it is still there
+            left = ref.get("present") and not ref.get("removed")
+            return {**r, "optiscaler": out, "reframework_left": bool(left)}
         who = optiscaler.owner(folder)
         if who["owner"] in ("decky-framegen", "other"):
             return {"ok": False, "owner": who["owner"], "error": "this game has OptiScaler from " + (
@@ -1193,7 +1205,7 @@ class Plugin:
 
     async def game_undo_recommended(self, appid: str) -> dict:
         rec, d, folder = await self._bg(self._rec, appid)
-        removed = await self._bg(reframework.remove, folder) if folder else {"ok": True}
+        removed = await self._bg(reframework.remove, folder, self._ref_shas()) if folder else {"ok": True}
         opti = await self._bg(optiscaler.unpatch, folder) if folder else {"ok": True}
         self.settings.setdefault("opti_games", {}).pop(str(appid), None)
         self._save_settings()

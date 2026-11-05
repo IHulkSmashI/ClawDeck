@@ -230,6 +230,7 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
 | **The game crashes when you change the upscaler or frame generation in its menu** | Switching mid-game crashes some games. Quit, change it in ClawDeck, start again. |
 | **OptiScaler shows FSR 4.0.2 instead of 4.1.2** | Tap **Apply changes** in ClawDeck and restart the game. |
 | **"Decky Framegen's" or "put there by another tool"** under In this game now | ClawDeck never touches OptiScaler it didn't install (you don't need Decky Framegen: ClawDeck brings its own). Remove that one first (Stop using Decky Framegen here, then Decky Framegen → Unpatch; or delete its OptiScaler.ini and DLL), then pick again. |
+| **REFramework still loads after Uninstall OptiScaler** | ClawDeck takes out its own REFramework and any copy of the build it pins. Another REFramework (a different build put in by hand) stays, and the message says so: delete `dinput8.dll` next to the game's exe. |
 | **A message was cut off** | Steam shows one line. The whole message stays at the top of Quick Access for two minutes. |
 | **Anything else** | Setup → **Export log to Desktop**, then [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) and attach the file. |
 
