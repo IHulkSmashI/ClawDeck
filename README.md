@@ -20,6 +20,7 @@
 
 > **Test builds only, no release yet.** We test every build on a Claw 8 EX before a release appears under
 > [Releases](https://github.com/IHulkSmashI/ClawDeck/releases). Screenshots are from the preview with example data.
+> Tried it? Tell us how your games run: [Feedback](#feedback).
 
 ---
 
@@ -33,6 +34,7 @@
 6. [Troubleshooting](#troubleshooting)
 7. [Uninstall everything](#uninstall-everything)
 8. [Credits](#credits)
+9. [Feedback](#feedback)
 
 ---
 
@@ -250,8 +252,21 @@ ClawLab, InputPlumber, PowerStation, Handheld Daemon, MangoHud, Decky Loader and
 ClawTweaks and OptiClick on Windows. The full list, with what each one does for ClawDeck, is in
 [CREDITS.md](CREDITS.md).
 
-**Help:** [issues](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) · [CONTRIBUTING.md](CONTRIBUTING.md) ·
-ClawDeck is free; to support it: [ko-fi.com/gamervault](https://ko-fi.com/gamervault).
+## Feedback
+
+ClawDeck is in beta, and what you see on your Claw decides what we work on next. Everything posted here gets read
+and answered:
+
+- **How a game runs** (good or bad): [Game report](https://github.com/IHulkSmashI/ClawDeck/issues/new?template=game_report.yml),
+  a one-page form.
+- **Ideas and feature requests:** [Discussions → Ideas](https://github.com/IHulkSmashI/ClawDeck/discussions/categories/ideas),
+  where others can upvote them.
+- **Questions:** [Discussions → Q&A](https://github.com/IHulkSmashI/ClawDeck/discussions/categories/q-a).
+- **Something broke:** [Bug report](https://github.com/IHulkSmashI/ClawDeck/issues/new?template=bug_report.md), with
+  the report file from Setup.
+
+**Help:** [CONTRIBUTING.md](CONTRIBUTING.md) · ClawDeck is free; if you'd like to chip in:
+[ko-fi.com/gamervault](https://ko-fi.com/gamervault).
 
 [MIT](LICENSE). ClawDeck is a community project, not affiliated with MSI, Valve, Intel, AMD or Microsoft. "Claw" is a
 trademark of MSI.
