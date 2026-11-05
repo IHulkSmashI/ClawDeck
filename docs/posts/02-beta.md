@@ -1,30 +1,33 @@
-<!-- Reddit post for r/MSIClaw when 0.2.0 beta is tagged. The maintainer posts it; replace RELEASE_LINK. -->
+<!-- r/MSIClaw post for v0.2.0-beta.1. The maintainer posts it. -->
 
-**ClawDeck 0.2 beta is out: XeSS + frame gen + low latency on the XMX cores, on Bazzite**
+**ClawDeck beta is out: FSR 4.1.2, XeSS and frame gen on the XMX cores, on Bazzite, in one Decky plugin**
 
-Hey all, quick update on ClawDeck, the Decky plugin we've been building for the Claw on Bazzite.
+Hey all, the first ClawDeck beta is up: https://github.com/IHulkSmashI/ClawDeck/releases/tag/v0.2.0-beta.1
 
-The beta is up: RELEASE_LINK
+ClawDeck is a free Decky plugin for Intel Claws on Bazzite. Everything lives in one Quick Access panel:
 
-What's in it:
+- **FSR 4.1.2 on the XMX cores.** It downloads by itself and shows up for DirectX 12 games with DLSS or FSR. Best
+  picture we've had on the Claw.
+- **XeSS 2 on XMX** and **XeSS frame gen 2x/3x/4x**, with XeLL low latency always on. CONTROL runs 3x at around
+  140 fps shown on our 8 EX.
+- **One tap per game:** pick the game, the upscaler and frame gen, tap Install. Capcom games get REFramework so they
+  start (Onimusha works). Uninstall puts the game back exactly as it was.
+- **Power:** profiles 8–35 W, PL2, fan curves, charge limit, and Autotune (beta) to find the lowest watts that keep
+  your frame rate.
+- **Fixes:** VRR down to 30 Hz, the two MSI buttons on the 8 EX, real watts in the performance overlay.
 
-- XeSS on the XMX cores, with XeSS frame gen and low latency (XeLL). Frame pacing in CONTROL is smooth on the latest
-  Bazzite.
-- FSR 4.1.2 on XMX too. You still grab nitec's two files yourself, everything else is handled.
-- Per-game setup, OptiClick style: ClawDeck looks at what the game ships and picks the route. Capcom RE Engine games
-  get REFramework so they don't crash (Onimusha works).
-- Power: profiles, TDP slider, and PL2 control in Custom (or PL1 + 2 W like ClawTweaks). Autotune is there as a beta
-  and off by default.
-- Fixes: VRR down to 30 Hz, the face buttons on the 8 EX, and a heads up when a Bazzite update is waiting.
+Install: Decky → Developer → Install plugin from URL, and paste the ClawDeck.zip link from the release page. The
+README has the steps.
 
-Known stuff: Onimusha has some surfaces flickering (it does that on Linux without mods too), CONTROL's clouds can
-flicker with HDR on plus FSR 4 + frame gen, no gyro on the 8 EX.
+Tested on our Claw 8 EX. If you have an 8 AI+, 7 AI+ or A1M, we'd love to hear how it goes.
 
-**We really want feedback.** Which games you tried, what worked, what didn't. Comments here are fine, but the best
-place is GitHub, where every post gets an answer:
+Known stuff: RE Engine games (Onimusha, RE) have some flicker, that's Intel's Linux driver and they're on it. No gyro
+on the 8 EX.
 
-- How a game runs: https://github.com/IHulkSmashI/ClawDeck/issues/new?template=game_report.yml (one short form)
+**Feedback is what we need most.** Comments here are fine, but GitHub is where we can track it:
+
+- How a game runs: https://github.com/IHulkSmashI/ClawDeck/issues/new?template=game_report.yml
 - Ideas: https://github.com/IHulkSmashI/ClawDeck/discussions/categories/ideas
 - Questions: https://github.com/IHulkSmashI/ClawDeck/discussions/categories/q-a
 
-It's free and stays free. If you want to buy us a coffee, there's a Ko-fi link at the bottom of the GitHub page.
+It's free and stays free. There's a Ko-fi link on the GitHub page if you want to buy us a coffee.
