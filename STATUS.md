@@ -47,6 +47,13 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Onimusha the OptiClick way (2026-11-04, test in progress):** OptiClick's Windows install of Onimusha runs
+  onehoon's REFramework fork (fork-release-15, 854e42d) as dinput8.dll, OptiScaler 0.9.5-pre4 as dxgi.dll with its
+  files in `OptiScaler\` (OptiDllPath), OptiPatcher as a plugin, and XeFG fed by the game's own DLSS frame generation
+  (FGInput=DLSSG, FGOutput=XeFG). That exact set was copied into the Linux install for a test. If it works, ClawDeck's
+  Capcom setup moves to it; the forks are watched by `tools/upstream_watch.py` (onehoon REFramework, onehoon
+  OptiScaler, OptiScaler 0.9.5 previews, OptiClick).
+
 - **Power: your limit and Autotune stay in step (power-sync, 2026-11-04):** in the menus pick Custom 20 W (battery)
   and Max (plugged in). Start CONTROL on battery: the slider shows 20 W and the line under it "Autotune: using N W of
   your 20 W · saves M W · fps", following Autotune every 3 s, never back to an old value. Pick Balanced in the game:
