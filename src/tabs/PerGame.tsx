@@ -93,7 +93,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const ours = gs?.opti_owner === "clawdeck";
   // OptiClick's way: pick the upscaler and frame generation, then one Apply (or Update when a newer OptiScaler is
   // pinned): nothing is written while picking
-  const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : "xess";
+  // not set up yet: the recommended upscaler, the newest that runs here (FSR 4.1.2 on XMX where it can, as OptiClick)
+  const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : (rec?.upscaler ?? "xess");
   const nowFg = launch.fg ?? 0;
   // kept outside the component: picking in Steam's dropdown can re-mount Quick Access, which lost the pick (the
   // choice jumped back to XeSS 2 on the Claw, 2026-11-04)
@@ -210,6 +211,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             description={explain("OptiScaler's own counter at the top right, from the game's start: rendered and shown fps, the upscaler in use and \"(XeFG)\" while frame generation runs, which Steam's overlay can't tell. Saved in the game's OptiScaler settings.",
               undefined, quick ? undefined : "Detailed and Full add a few lines of text over the game.")} /></Anchor>
           <div style={{ height: 8 }} />
+          {rec?.ships && <Status ok={null} label={`In the game: ${[...rec.ships.upscaler, ...rec.ships.fg, ...rec.ships.latency].join(", ") || "no upscaler of its own"}`}
+            detail={quick ? undefined : "What the game ships (upscaler, frame generation, low latency), checked in its folder before anything is set up."} />}
+          {rec?.opticlick?.listed && rec.opticlick.intel_ok === false && <Status ok={false} label="OptiClick: not supported on Intel Arc"
+            detail="OptiClick's supported list marks this game as not working on Intel Arc, so ClawDeck doesn't recommend OptiScaler here." />}
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>

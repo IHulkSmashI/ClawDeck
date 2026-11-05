@@ -1261,3 +1261,33 @@ def test_clawdecks_cabinet_dll_next_to_the_wrapper_and_gone_after_uninstall(tmp_
     asyncio.run(p._uninstall())
     assert not (home / ".local/share/clawdeck/cabinet.dll").exists()
     assert (home / ".local/share/clawdeck/clawdeck-launch.sh").read_text() == m.PASSTHROUGH
+
+
+def test_recommended_upscaler_is_fsr4_where_it_runs_and_opticlick_no_blocks(plugin, monkeypatch, tmp_path):
+    m = type(plugin)._prefer_fsr4.__globals__          # main.py's globals (loaded under another name)
+    from clawdeck import gamedb, livedb
+    g = tmp_path / "game"
+    g.mkdir()
+    (g / "nvngx_dlss.dll").write_bytes(b"x")
+    (g / "d3d12core.dll").write_bytes(b"x")
+    base = lambda: gamedb.recommend({"games": [], "re_engine_exes": []}, str(g))
+    files = {"ready": True, "missing": [], "dir": "~/fsr4-xmx"}
+    monkeypatch.setattr(type(plugin), "_fsr4_xmx_files", staticmethod(lambda: files))
+    rec = base(); plugin._prefer_fsr4(rec, str(g), "1")
+    assert rec["launch"]["opti"] == "fsr4_xmx" and rec["upscaler"] == "fsr4_xmx" and "FSR 4.1.2" in rec["reasons"][0]
+    # XMX off for the game, or nitec's files missing: XeSS stays, and the reason says what FSR 4.1.2 needs
+    plugin.profiles.set_launch("2", {"xmx": False})
+    rec = base(); plugin._prefer_fsr4(rec, str(g), "2"); assert rec["launch"]["opti"] == "xess"
+    files.update(ready=False, missing=["fsr-original.dll"])
+    rec = base(); plugin._prefer_fsr4(rec, str(g), "1")
+    assert rec["launch"]["opti"] == "xess" and any("~/fsr4-xmx" in r for r in rec["reasons"])
+    # OptiClick says not supported on Intel Arc: not recommended, and applying it refuses with that reason
+    lists = tmp_path / "lists"; lists.mkdir()
+    (lists / livedb.OPTICLICK_FILE).write_text(
+        "| a | Titan Quest II | Not Supported | x | y |\n<!-- opticlick-supported-games-meta\n"
+        '{"games": [{"game_name_en": "Titan Quest II", "cover_steam_app_ids": ["1154030"]}]}\n-->\n')
+    monkeypatch.setitem(m, "LISTS_DIR", str(lists))
+    rec = base(); plugin._opticlick_verdict(rec, "1154030")
+    assert rec["recommended"] is False and "not supported on Intel Arc" in rec["reasons"][0]
+    rec = base(); plugin._opticlick_verdict(rec, "99")
+    assert "recommended" not in rec and "Not on OptiClick's supported list" in rec["reasons"][-1]

@@ -1290,3 +1290,60 @@ def test_gamescope_idle_hold_found_in_the_binary(tmp_path, monkeypatch):
     exe.write_bytes(b"\x7fELF old gamescope")
     monkeypatch.setattr(edid, "_idle_hold", None)
     assert not edid.gamescope_idle_hold()
+
+
+# ---- live per-game lists (livedb) --------------------------------------------------------------------------------
+OPTICLICK_PAGE = """## Newly Supported Games
+| Korean Title | English Title | Intel | AMD | NVIDIA |
+|---|---|---|---|---|
+| 컨트롤：레조넌트 | CONTROL Resonant | Intel Arc Series | Radeon iGPU*, RX 6/7/9000 Series | RTX 20/30/40/50 Series |
+| 타이탄 퀘스트 2 | Titan Quest II | Not Supported | Not Supported | RTX 20/30/40/50 Series |
+<!-- opticlick-supported-games-meta
+{"schema_version": 1, "games": [
+ {"game_name_en": "CONTROL Resonant", "game_id": "controlR", "cover_steam_app_id": "3669870", "cover_steam_app_ids": ["3669870"]},
+ {"game_name_en": "Titan Quest II", "game_id": "tq2", "cover_steam_app_ids": ["1154030"]}]}
+-->
+"""
+
+
+def test_opticlick_list_gives_the_intel_column_by_steam_app_id():
+    from clawdeck import livedb
+    e = livedb.parse_opticlick(OPTICLICK_PAGE)
+    assert e["3669870"]["intel"] == "Intel Arc Series" and e["1154030"]["intel"] == "Not Supported"
+    assert livedb.opticlick_says(e, "3669870")["intel_ok"] is True
+    assert livedb.opticlick_says(e, "1154030")["intel_ok"] is False
+    assert livedb.opticlick_says(e, "42") == {"known": True, "listed": False, "intel_ok": None}
+    assert livedb.opticlick_says({}, "42")["known"] is False
+
+
+def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
+    from clawdeck import livedb
+    bundled = tmp_path / "games.json"
+    bundled.write_text(json.dumps({"schema": 1, "generated": "2026-11-05T00:00:00Z", "games": []}))
+    newer = json.dumps({"schema": 1, "generated": "2026-11-06T00:00:00Z", "games": [{"id": "x"}]}).encode()
+    pages = {livedb.GAMES_URL: newer, livedb.OPTICLICK_URL: OPTICLICK_PAGE.encode()}
+    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: pages[u])
+    assert out == {"games": "updated", "opticlick": "updated"}
+    assert livedb.games_path(str(tmp_path / "lists"), str(bundled)).startswith(str(tmp_path / "lists"))
+    assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
+    # fresh: no second download
+    assert livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: 1 / 0) == {}
+    # another schema or an older list is never used; a failed download keeps the copy
+    other = json.dumps({"schema": 2, "generated": "2027", "games": []}).encode()
+    out = livedb.refresh(str(tmp_path / "lists"), str(bundled), force=True, get=lambda u: other if u == livedb.GAMES_URL else b"nothing")
+    assert out["games"] == "other schema, kept" and "kept" in out["opticlick"]
+    assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
+    bundled.write_text(json.dumps({"schema": 1, "generated": "2026-12-01T00:00:00Z", "games": []}))
+    assert livedb.games_path(str(tmp_path / "lists"), str(bundled)) == str(bundled)
+
+
+def test_shipped_lists_upscaler_fg_and_latency(tmp_path):
+    from clawdeck import gamedb
+    g = tmp_path / "game"
+    (g / "bin").mkdir(parents=True)
+    for f in ("libxess.dll", "libxess_fg.dll", "libxell.dll", "nvngx_dlss.dll", "sl.reflex.dll"):
+        (g / "bin" / f).write_bytes(b"x")
+    s = gamedb.shipped(str(g))
+    assert s == {"upscaler": ["DLSS", "XeSS"], "fg": ["XeSS-FG"], "latency": ["Reflex", "XeLL"]}
+    rec = gamedb.recommend({"games": [], "re_engine_exes": []}, str(g))
+    assert rec["route"] == "own_xess" and "XeSS frame generation and XeLL" in rec["reasons"][0]

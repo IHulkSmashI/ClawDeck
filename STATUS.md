@@ -47,6 +47,13 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Live per-game lists and FSR 4.1.2 first (2026-11-05):** at start ClawDeck fetches its games.json from main and
+  OptiClick's public Supported Game List (the wiki page OptiClick itself loads), every 12 h, into
+  `~/.local/share/clawdeck/lists`. Check on the Claw: that folder has `games.json` and `opticlick-supported.md`;
+  Per-game for CONTROL shows "In the game: DLSS, DLSS-G, Reflex" (or what it ships), "On OptiClick's supported list",
+  and with nitec's files in place the upscaler starts on **FSR 4.1.2** (XeSS 2 one tap away). A game OptiClick marks
+  "Not Supported" on Intel shows a red line and "Install OptiScaler" refuses with that reason.
+
 - **VRR without ClawDeck's menu switching (Bazzite 45, gamescope 3.17.0, 2026-11-05):** gamescope now holds 120 Hz in
   Steam's menus with VRR on (adaptive_sync_idle_hold), so "VRR only in games" is off by default where gamescope has
   it. Check with VRR on in Steam: the menus and library smooth at 120 Hz (not following a shader compile's 30 fps), a
