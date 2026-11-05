@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 import decky  # noqa: E402
 
 from clawdeck import (autotune, quiet, osupdate, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
-                      fan, gamedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
+                      fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_DIR = decky.DECKY_PLUGIN_SETTINGS_DIR
@@ -45,6 +45,8 @@ HOME = decky.DECKY_USER_HOME
 DESKTOP = os.path.join(HOME, "Desktop")
 VERSIONS = os.path.join(PLUGIN_DIR, "assets", "versions.json")
 GAMES = os.path.join(PLUGIN_DIR, "assets", "games.json")
+# the per-game lists fetched at start (livedb): ClawDeck's games.json from main, OptiClick's Supported Game List
+LISTS_DIR = os.path.join(HOME, ".local", "share", "clawdeck", "lists")
 POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz", "boost")
 # The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
 # deletes the plugin, so it must stay there (as a pass-through) or those games would no longer start.
@@ -96,6 +98,8 @@ class Plugin:
         self._health: tuple[float, list] | None = None
         # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
         asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
+        # the per-game lists, kept current (OptiClick reads its database at every start too); offline: the plugin's copy
+        asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
@@ -921,9 +925,49 @@ class Plugin:
 
     def _rec(self, appid: str) -> tuple[dict, str | None, str | None]:
         d = xess.steam_install_dir(HOME, appid)
-        rec = gamedb.recommend(gamedb.load(GAMES), d)
+        rec = gamedb.recommend(gamedb.load(self._games_path()), d)
         folder = optiscaler.main_exe_dir(d, rec["main_exes"]) if d else None
+        self._opticlick_verdict(rec, appid)
+        self._prefer_fsr4(rec, d, appid)
         return rec, d, folder
+
+    @staticmethod
+    def _games_path() -> str:
+        return livedb.games_path(LISTS_DIR, GAMES)
+
+    @staticmethod
+    def _opticlick_verdict(rec: dict, appid: str) -> None:
+        """OptiClick's Supported Game List on this game (Intel Arc column). Not supported there: not recommended,
+        and the reason says so; not in the list: set up the same way, marked as not on OptiClick's list."""
+        oc = livedb.opticlick_says(livedb.opticlick(LISTS_DIR), appid)
+        rec["opticlick"] = oc
+        if not oc["known"] or rec["route"] == "own_xess":
+            return
+        if oc["listed"] and oc["intel_ok"] is False:
+            rec["recommended"] = False
+            rec["reasons"].insert(0, "OptiClick lists this game as not supported on Intel Arc: ClawDeck doesn't "
+                                     "recommend OptiScaler here. You can still pick an upscaler by hand.")
+        elif oc["listed"]:
+            rec["reasons"].append(f"On OptiClick's supported list for Intel Arc ({oc['name']})")
+        else:
+            rec["reasons"].append("Not on OptiClick's supported list yet: set up from what the game ships, not tested by OptiClick")
+
+    def _prefer_fsr4(self, rec: dict, d: str | None, appid: str) -> None:
+        """The newest upscaler where it can run, as OptiClick does on Intel (it installs FSR 4 on XMX with
+        OptiScaler): FSR 4.1.2 on the XMX cores when the game is DirectX 12, XMX is on and nitec's files are there.
+        Not for Capcom RE Engine games (black picture in Onimusha, 2026-11-04) or games with their own XeSS."""
+        launch = rec.get("launch") or {}
+        if not rec.get("optiscaler") or rec.get("re_engine") or launch.get("opti") != "xess" or self._xmx_off(appid):
+            return
+        if not d or not gamedb.is_dx12(d, rec.get("main_exes")):
+            return
+        files = self._fsr4_xmx_files()
+        if files["ready"]:
+            launch["opti"] = "fsr4_xmx"
+            rec["upscaler"] = "fsr4_xmx"
+            rec["reasons"][0] = rec["reasons"][0].replace("into XeSS on the XMX cores", "into FSR 4.1.2 on the XMX cores (the newest; XeSS 2 is one tap away)")
+        else:
+            rec["reasons"].append("FSR 4.1.2 (newer than XeSS) would be picked here: put nitec's two files in ~/fsr4-xmx (see FSR 4.1.2 files)")
 
     async def games_list(self) -> list[dict]:
         """Installed Steam games for the Games page, with what ClawDeck has set up in each."""
@@ -944,7 +988,7 @@ class Plugin:
                 cache = json.load(f)
         except (OSError, ValueError):
             cache = {}
-        doc = gamedb.load(GAMES)
+        doc = gamedb.load(self._games_path())
         changed = False
         for g in games:
             try:
@@ -1017,6 +1061,8 @@ class Plugin:
         rec, d, folder = await self._bg(self._rec, appid)
         if not d or not folder:
             return {"ok": False, "error": "can't find this game's install folder or its exe"}
+        if rec.get("recommended") is False:
+            return {"ok": False, "error": rec["reasons"][0]}
         launch = dict(rec["launch"])
         if rec["optiscaler"]:
             who = optiscaler.owner(folder)
