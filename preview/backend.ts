@@ -221,8 +221,9 @@ export const backend = {
   game_undo_recommended: () => ({ ok: true }),
   game_set_opti: () => ({ ok: true }),
   game_choose: () => ({ ok: true, env: { CLAWDECK_XMX: "1" } }),
-  games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: null, supported: true }, { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "launch", supported: true },
-    { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler", supported: true }],
+  games_list: () => [{ appid: "2358720", name: "Black Myth: Wukong", dir: "/x", setup: "optiscaler", supported: true, tags: [{ text: "XeSS 2", kind: "xess" }, { text: "2x FG", kind: "fg" }] },
+    { appid: "3669870", name: "CONTROL Resonant", dir: "/x", setup: "optiscaler", supported: true, tags: [{ text: "FSR 4.1.2", kind: "fsr" }, { text: "3x FG", kind: "fg" }] },
+    { appid: "2638890", name: "Onimusha: Way of the Sword", dir: "/x", setup: "optiscaler", supported: true, tags: [{ text: "XeSS 2", kind: "xess" }] }],
   optiscaler_state: () => ({ version: "0.9.4", installed: true, games: 1, framegen: true, framegen_version: "v0.17" }),
   optiscaler_install: () => ({ ok: true, version: "0.9.4" }),
   xess_install: () => (state.xessInstalled
