@@ -1209,3 +1209,24 @@ def test_launch_env_e_cores_only():
     import pytest
     with pytest.raises(ValueError):
         launchenv.compose({"cores": "p"})
+
+
+def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
+    p = plugin
+    p.run(p.set_tdp(20))                                           # Custom 20 W on battery
+    pl2 = lambda: sysfs.read_int(p.power.p.rapl_pl2) // 1_000_000
+    assert pl2() == 22                                             # PL1 + 2 W
+    r = p.run(p.set_pl2(True, 30))
+    assert r["ok"] and r["pl2_w"] == 30 and pl2() == 30
+    st = p.run(p.get_power())
+    assert st["pl2_manual"] and st["pl2_set_w"] == 30 and st["pl2_max"] == 45
+    p.run(p.set_pl2(True, 99))                                     # clamped to the model's PL2
+    assert pl2() == 45
+    p.run(p.set_tdp(25))                                           # a new TDP keeps the hand-set PL2
+    assert pl2() == 45
+    p.run(p.apply_profile("battery"))                              # not Custom: PL1 + 2 W again
+    assert pl2() == sysfs.read_int(p.power.p.rapl_pl1) // 1_000_000 + 2
+    p.run(p.set_tdp(20))
+    assert pl2() == 45                                             # back to Custom: yours again
+    p.run(p.set_pl2(False))
+    assert pl2() == 22

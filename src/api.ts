@@ -9,7 +9,7 @@ export type PowerStatus = {
   rapl: { available: boolean; pl1_w: number | null; pl2_w: number | null; max_w?: number | null };
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
   hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
-  tdp_w?: number | null;
+  tdp_w?: number | null; pl2_manual?: boolean; pl2_set_w?: number | null; pl2_max?: number;
   limit_w?: number | null; autotune_w?: number | null;   // in a game with Autotune: your limit, and what it uses now
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
@@ -47,6 +47,7 @@ export type ProfileRead = { tdp_w: number | null; pl2_w: number | null; cpu_max_
 export type LimitResult = WriteResult & { profile: string; applied: any; failed: string[]; read: ProfileRead; limit_w?: number | null; autotune_w?: number | null };
 export const applyProfile = callable<[name: string, appid: string | null], LimitResult>("apply_profile");
 export const setTdp = callable<[watts: number], LimitResult>("set_tdp");
+export const setPl2 = callable<[manual: boolean, watts: number | null], WriteResult & { manual: boolean; pl2_w: number | null; read_w: number | null }>("set_pl2");
 // advanced levers (§19): each answers with what the hardware reads back
 export const setCpuTurbo = callable<[on: boolean], WriteResult>("set_cpu_turbo");
 export const setCpuMaxPct = callable<[pct: number], WriteResult>("set_cpu_max_pct");
