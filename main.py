@@ -387,6 +387,26 @@ class Plugin:
             self._ensure_guard()
             return self._limit_result("Custom", {"tdp": want} if ok else {}, [] if ok else ["tdp"], plugged)
 
+    async def power_slot(self, appid: str | None = None) -> dict:
+        """What the running game remembers for this power source (Power's "Saved for <game>" line)."""
+        gid = str(appid or self.running_appid or "")
+        plugged = bool(self.battery.plugged())
+        own = self.profiles.own(gid, plugged) if gid else {}
+        return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp")}
+
+    async def reset_power_slot(self, appid: str | None = None) -> dict:
+        """Forget this game's pick for this power source: it follows the last pick for all games again."""
+        gid = str(appid or self.running_appid or "")
+        if not gid:
+            return {"ok": False, "error": "no game running"}
+        plugged = bool(self.battery.plugged())
+        self.profiles.set(gid, plugged, {"base": None, "tdp": None, "learned": None})
+        r = {"ok": True}
+        if self.running_appid == gid:
+            async with self._power_lock:
+                r = {"ok": True, **self._start_game_power(gid, plugged)}
+        return r
+
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
         """Apply a profile and read the limits back (HARDWARE-FINDINGS §14): the UI shows `summary` in its toast
         and `error` in red; `read` is what the hardware reports after the write."""

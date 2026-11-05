@@ -125,3 +125,7 @@ export const getFan = callable<[], FanState>("get_fan");
 export const setFan = callable<[preset: string, custom?: number[] | null], WriteResult>("set_fan");
 export const getCharge = callable<[], ChargeState>("get_charge");
 export const setChargeLimit = callable<[limit: number | null], WriteResult>("set_charge_limit");
+
+export type PowerSlot = { appid: string | null; plugged: boolean; base: string | null; tdp: number | null };
+export const powerSlot = callable<[appid: string | null], PowerSlot>("power_slot");
+export const resetPowerSlot = callable<[appid: string | null], { ok: boolean; error?: string }>("reset_power_slot");
