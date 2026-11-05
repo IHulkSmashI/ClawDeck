@@ -17,7 +17,7 @@ from __future__ import annotations
 import glob
 import os
 
-from . import sysfs
+from . import userexec, sysfs
 
 POINTS = 6
 FLOOR = 40          # EC %: below this the fan spins at its minimum anyway
@@ -127,3 +127,37 @@ def set_charge(path: str | None, limit: int | None, original: int | None) -> dic
     return {"ok": ok, "what": what, "wanted": want, "read": got, "unit": "%",
             "summary": f"Charge limit {label}" if ok else f"Charge limit {label} didn't apply (reads {got})",
             "error": None if ok else (sysfs.last_error() or f"reads {got}")}
+
+
+POWERDEVIL_RC = ".config/powerdevilrc"
+
+
+def kde_charge_limit(home: str, limit: int | None) -> bool:
+    """Tell KDE's power manager the same limit. In Desktop Mode PowerDevil's charge-threshold helper writes its own
+    setting (none = 100 %) to the battery at every start, which reset ClawDeck's 80 % (Claw 8 EX, 2026-11-04: the
+    journal shows org.kde.powerdevil.chargethresholdhelper running at each switch to Desktop Mode)."""
+    import configparser
+    path = os.path.join(home, POWERDEVIL_RC)
+    cp = configparser.ConfigParser(strict=False, interpolation=None)
+    cp.optionxform = str
+    try:
+        cp.read(path, encoding="utf-8")
+    except (OSError, configparser.Error):
+        return False
+    if limit is None:
+        if cp.has_section("BatteryManagement"):
+            cp.remove_option("BatteryManagement", "BatteryChargeStopThreshold")
+            cp.remove_option("BatteryManagement", "BatteryChargeStartThreshold")
+    else:
+        if not cp.has_section("BatteryManagement"):
+            cp.add_section("BatteryManagement")
+        cp.set("BatteryManagement", "BatteryChargeStopThreshold", str(int(limit)))
+        cp.set("BatteryManagement", "BatteryChargeStartThreshold", str(max(0, int(limit) - 5)))
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            cp.write(f, space_around_delimiters=False)
+        userexec.chown_tree(path, home)
+        return True
+    except OSError:
+        return False
