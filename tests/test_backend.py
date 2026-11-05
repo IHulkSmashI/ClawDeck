@@ -1230,3 +1230,34 @@ def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
     assert pl2() == 45                                             # back to Custom: yours again
     p.run(p.set_pl2(False))
     assert pl2() == 22
+
+
+def test_clawdecks_cabinet_dll_next_to_the_wrapper_and_gone_after_uninstall(tmp_path, monkeypatch):
+    """FSR 4 on XMX: the user provides nitec's two files only; ClawDeck's own cabinet.dll (bin/, from
+    tools/cabinet-lzms) goes next to the launch wrapper at start (its Decky Framegen stage takes it from there), and an
+    uninstall removes it with the rest."""
+    import asyncio
+    m = _load_main(tmp_path, monkeypatch)
+    cab = tmp_path / "plugin" / "bin" / "cabinet.dll"
+    _w(cab, "clawdeck-lzms")
+    monkeypatch.setattr(m.optiscaler, "OWN_CABINET", str(cab))
+    monkeypatch.setattr(m.userexec, "chown_tree", lambda p, h: None)
+    home = tmp_path / "decky_user_home"
+    p = m.Plugin.__new__(m.Plugin)
+    f = p._fsr4_xmx_files()
+    assert f["missing"] == ["amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll"] and not f["ready"]
+    _w(home / "fsr4-xmx" / "amd_fidelityfx_upscaler_dx12.dll", "nitec")
+    _w(home / "fsr4-xmx" / "fsr-original.dll", "o")
+    assert p._fsr4_xmx_files() == {"dir": str(home / "fsr4-xmx"), "ready": True, "missing": []}
+    p._install_wrapper()
+    assert m.WRAPPER_CABINET == str(home / ".local/share/clawdeck/cabinet.dll")
+    assert (home / ".local/share/clawdeck/cabinet.dll").read_bytes() == cab.read_bytes()
+    assert (home / ".local/share/clawdeck/clawdeck-launch.sh").exists()
+    p.power = type("P", (), {"revert_all": lambda self: 0})()
+    p.settings = {}
+    monkeypatch.setattr(m.edid, "EDID_DIR", str(tmp_path / "noedid"))
+    for mod, fn in ((m.xmxscope, "remove_scope"), (m.xmxscope, "restore_session"), (m.quietlog, "remove"), (m.telemetry, "apply")):
+        monkeypatch.setattr(mod, fn, lambda *a: {"ok": True})
+    asyncio.run(p._uninstall())
+    assert not (home / ".local/share/clawdeck/cabinet.dll").exists()
+    assert (home / ".local/share/clawdeck/clawdeck-launch.sh").read_text() == m.PASSTHROUGH

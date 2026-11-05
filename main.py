@@ -49,10 +49,13 @@ POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz", "boost")
 # The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
 # deletes the plugin, so it must stay there (as a pass-through) or those games would no longer start.
 WRAPPER = os.path.join(HOME, ".local", "share", "clawdeck", "clawdeck-launch.sh")
+# ClawDeck's cabinet.dll (tools/cabinet-lzms) next to the wrapper, where its Decky Framegen stage takes it from for
+# FSR 4 on XMX (the wrapper doesn't know the plugin's folder). Copied at every start, removed by an uninstall.
+WRAPPER_CABINET = os.path.join(HOME, ".local", "share", "clawdeck", "cabinet.dll")
 PASSTHROUGH = "#!/bin/bash\n# ClawDeck was removed; this only starts the game. Delete it from the game's launch options when you like.\nexec \"$@\"\n"
 
 
-def _write_user_file(path: str, text: str) -> str:
+def _write_user_file(path: str, text: str | bytes) -> str:
     """Write a file in the user's home as the user would: missing folders and the file end up owned by them."""
     d = os.path.dirname(path)
     missing = []
@@ -159,6 +162,12 @@ class Plugin:
             os.chmod(WRAPPER, 0o755)
         except OSError as e:
             decky.logger.warning("could not leave the pass-through wrapper: %s", e)
+        try:
+            os.remove(WRAPPER_CABINET)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            decky.logger.warning("could not remove %s: %s", WRAPPER_CABINET, e)
         for appid, folder in list((self.settings.get("opti_games") or {}).items()):
             try:
                 decky.logger.info("uninstall: OptiScaler out of %s: %s, REFramework: %s", appid,
@@ -182,6 +191,12 @@ class Plugin:
             os.chmod(WRAPPER, 0o755)
         except OSError as e:
             decky.logger.warning("could not install the launch wrapper: %s", e)
+        try:
+            if os.path.isfile(optiscaler.OWN_CABINET):
+                with open(optiscaler.OWN_CABINET, "rb") as f:
+                    _write_user_file(WRAPPER_CABINET, f.read())
+        except OSError as e:
+            decky.logger.warning("could not put ClawDeck's cabinet.dll next to the launch wrapper: %s", e)
 
     def _load_settings(self) -> dict:
         try:
@@ -893,11 +908,10 @@ class Plugin:
     @staticmethod
     def _fsr4_xmx_files() -> dict:
         """nitec's FSR 4.1.2 XMX build, where the launch wrapper takes it from (~/fsr4-xmx). Not downloaded by
-        ClawDeck: it is shared in the OptiScaler Discord, and the user places it."""
-        d = os.path.join(HOME, "fsr4-xmx")
-        missing = [f for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll")
-                   if not os.path.isfile(os.path.join(d, f))]
-        return {"dir": d, "ready": not missing, "missing": missing}
+        ClawDeck: it is shared in the OptiScaler Discord, and the user places it (amd_fidelityfx_upscaler_dx12.dll,
+        fsr-original.dll). The cabinet.dll it needs is ClawDeck's own (tools/cabinet-lzms), not the user's."""
+        missing = optiscaler.fsr4_xmx_missing(HOME)
+        return {"dir": os.path.join(HOME, optiscaler.FSR4_XMX_DIR), "ready": not missing, "missing": missing}
 
     # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
     REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll", "opti_overlay")

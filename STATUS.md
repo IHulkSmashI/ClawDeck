@@ -47,6 +47,21 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **ClawDeck's own cabinet.dll (2026-11-05, `tools/cabinet-lzms`):** FSR 4.1.2 on XMX no longer needs Windows'
+  `cabinet.dll`. The plugin zip carries `bin/cabinet.dll` (built and Wine-tested in CI), and ClawDeck asks only for
+  nitec's `amd_fidelityfx_upscaler_dx12.dll` and `fsr-original.dll` in `~/fsr4-xmx`. Check on the Claw with the
+  sideload build:
+  1. Delete every Windows `cabinet.dll` you placed: `rm ~/fsr4-xmx/cabinet.dll ~/fsr4-xmx/cabinet_wine.dll`, and
+     `find ~/.local/share/Steam/steamapps/common -iname cabinet.dll -not -path '*/Proton*'` lists nothing.
+  2. Per-game for CONTROL Resonant: FSR 4.1.2 is offered (the note under Upscaler doesn't ask for `cabinet.dll`).
+     Pick it, Apply. Next to CONTROL's exe: `cabinet.dll` with the same sha256 as
+     `~/homebrew/plugins/ClawDeck/bin/cabinet.dll`, plus `cabinet_wine.dll` (the Proton's own). Both are listed in
+     `.clawdeck-optiscaler/manifest.json`. The launch env has `cabinet=n,b`.
+  3. Start the game: OptiScaler's menu shows FSR 4.1.2 as the upscaler, and the image is FSR 4 (not black, not
+     XeSS). `OptiScaler.log` has no LZMS / Cabinet / CreateDecompressor error.
+  4. Upscaler → the game's own (or Uninstall): `cabinet.dll` and `cabinet_wine.dll` are gone from the game folder.
+     Uninstalling ClawDeck also removes `~/.local/share/clawdeck/cabinet.dll`.
+
 - **PL2 by hand (2026-11-05, as ClawTweaks):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
   saved per power source; off: PL2 = TDP + 2 W. Check the chip reads it:
   `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw` (µW). Other profiles always use TDP + 2 W.
@@ -109,7 +124,7 @@ The four-panel UI has not been on the device yet.
      menu: Upscalers shows XeSS with Input DLSS; Frame generation shows FG Input DLSSG, FG Output XeFG. Delete opens
      REFramework's menu (no longer Insert). The OptiScaler overlay (if picked) shows "(XeFG)".
   5. FSR 4.1.2 (with nitec's files in `~/fsr4-xmx`): pick it, Apply: nitec's `amd_fidelityfx_upscaler_dx12.dll` and
-     `fsr-original.dll` land in `OptiScaler\`, `cabinet.dll` / `cabinet_wine.dll` next to the exe, the env adds
+     `fsr-original.dll` land in `OptiScaler\`, ClawDeck's `cabinet.dll` / `cabinet_wine.dll` next to the exe, the env adds
      `cabinet=n,b`. In OptiScaler: FSR 3.X with FSR 4.1.2 under FFX Upscaler. Switch XMX off for the game: FSR 4.1.2
      disappears from the list (and the backend refuses it); it was a black screen without XMX.
   6. **Uninstall OptiScaler from this game**: the folder is exactly as in step 1 (also after the game wrote its logs:
@@ -153,7 +168,7 @@ The four-panel UI has not been on the device yet.
   OptiScaler log before offering it by default.
 - **FSR 4.1.1 on XMX (nitec's B Boost), regular and Lite:** with the files in `~/fsr4-xmx`, Per-game → OptiScaler
   upscaler "FSR 4.1.1 on XMX" in a DLSS game with ClawDeck's OptiScaler: the game folder gets the B Boost
-  `amd_fidelityfx_upscaler_dx12.dll` in place of OptiScaler's own, `fsr-original.dll`, `cabinet.dll` (LZMS) and
+  `amd_fidelityfx_upscaler_dx12.dll` in place of OptiScaler's own, `fsr-original.dll`, ClawDeck's `cabinet.dll` (LZMS) and
   `cabinet_wine.dll` (all in the manifest), OptiScaler shows FSR 4 as the upscaler, the image is FSR 4. Lite vs
   regular: fps and image. Switching back to XeSS puts OptiScaler's own FSR 4 file back.
 - **VRR in the menus (2026-11-04 report: menus still choppy, VRR couldn't be switched off):** the scope now decides

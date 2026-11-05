@@ -692,8 +692,10 @@ def test_launch_wrapper_puts_fsr4_xmx_in_after_fgmod_and_takes_it_out_again(tmp_
     game = tmp_path / "common" / "Game"
     _w(game / "Game.exe", "x")
     src = tmp_path / "fsr4-xmx"
-    for f, t in (("amd_fidelityfx_upscaler_dx12.dll", "bboost"), ("fsr-original.dll", "o"), ("cabinet.dll", "lzms")):
-        _w(src / f, t)
+    for f, t in (("amd_fidelityfx_upscaler_dx12.dll", "bboost"), ("fsr-original.dll", "o"), ("cabinet.dll", "windows-cab")):
+        _w(src / f, t)                                       # a Windows cabinet.dll left there from before: not used
+    own_cab = tmp_path / ".local/share/clawdeck/cabinet.dll"  # ClawDeck's own, where the plugin puts it at start
+    _w(own_cab, "clawdeck-lzms")
     proton = tmp_path / "proton"
     _w(proton / "files/lib/wine/x86_64-windows/cabinet.dll", "wine-cab")
     fgmod = tmp_path / "fgmod" / "fgmod"                     # a stand-in: copies its own FSR 4, then runs "$@"
@@ -710,11 +712,63 @@ def test_launch_wrapper_puts_fsr4_xmx_in_after_fgmod_and_takes_it_out_again(tmp_
                          capture_output=True, text=True, env=base)
     assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "bboost", out.stderr   # over fgmod's
     assert (game / "cabinet_wine.dll").read_text().strip() == "wine-cab" and (game / "fsr-original.dll").exists()
+    assert (game / "cabinet.dll").read_text().strip() == "clawdeck-lzms"            # ClawDeck's, not the user's
     assert "FSR4_XMX_LITE=1" in out.stdout and "CLAWDECK_STAGE" not in out.stdout
     (tmp_path / "launch" / "42.env").write_text(launchenv.render(launchenv.compose({"opti": "xess"})))
     subprocess.run(["bash", wrapper, str(fgmod), "bash", "-c", "true", "x", str(game / "Game.exe")], check=True, env=base)
     assert not (game / "cabinet.dll").exists() and not (game / ".clawdeck-fsr4xmx").exists()
     assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "fgmod-fsr4"
+    # without ClawDeck's cabinet.dll (an old install): nitec's files stay out, fgmod's FSR 4 stays
+    own_cab.unlink()
+    (tmp_path / "launch" / "42.env").write_text(launchenv.render(env))
+    out = subprocess.run(["bash", wrapper, str(fgmod), "bash", "-c", "true", "x", str(game / "Game.exe")],
+                         capture_output=True, text=True, env=base)
+    assert not (game / "cabinet.dll").exists() and "cabinet.dll" in out.stderr
+    assert (game / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "fgmod-fsr4"
+
+
+def _own_cabinet(tmp_path, monkeypatch, present=True):
+    """ClawDeck's cabinet.dll (bin/cabinet.dll in the plugin zip, built from tools/cabinet-lzms) as a stand-in."""
+    from clawdeck import optiscaler
+    p = tmp_path / "plugin" / "bin" / "cabinet.dll"
+    if present:
+        _w(p, "clawdeck-lzms")
+    monkeypatch.setattr(optiscaler, "OWN_CABINET", str(p))
+    return p
+
+
+def test_fsr4_xmx_never_asks_the_user_for_cabinet_dll(tmp_path, monkeypatch):
+    """nitec's two files are all the user provides; the cabinet.dll is ClawDeck's own. A Windows cabinet.dll left
+    in ~/fsr4-xmx is not used."""
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _own_cabinet(tmp_path, monkeypatch)
+    assert optiscaler.FSR4_XMX_FILES == ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")
+    assert optiscaler.fsr4_xmx_missing(home) == ["amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll"]
+    x = tmp_path / "fsr4-xmx"
+    _w(x / "amd_fidelityfx_upscaler_dx12.dll", "nitec")
+    _w(x / "fsr-original.dll", "o")
+    _w(x / "cabinet.dll", "windows-cab")
+    assert optiscaler.fsr4_xmx_missing(home) == []
+    _opti_pkg(home)
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    assert optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)["ok"]
+    assert (g / "cabinet.dll").read_text().strip() == "clawdeck-lzms"
+    assert optiscaler.unpatch(str(g))["removed"] and not (g / "cabinet.dll").exists()
+    # a source checkout without the build: it says so, and FSR 4 isn't put in
+    _own_cabinet(tmp_path / "none", monkeypatch, present=False)
+    miss = optiscaler.fsr4_xmx_missing(home)
+    assert len(miss) == 1 and "ClawDeck's cabinet.dll" in miss[0] and "tools/cabinet-lzms" in miss[0]
+    r = optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)
+    assert not r["ok"] and "ClawDeck's cabinet.dll" in r["error"]
+    assert sorted(q.name for q in g.iterdir()) == ["Game.exe"]           # nothing half put in
+
+
+def test_own_cabinet_path_is_the_plugin_bin_folder():
+    from clawdeck import optiscaler
+    assert optiscaler.OWN_CABINET == os.path.join(os.path.realpath(ROOT), "bin", "cabinet.dll")
 
 
 def _opti_pkg(home, ver="0.9.4"):
@@ -744,13 +798,15 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert "[Hotfix]\nRestoreComputeSignature=true" in ini                     # a missing section is added
     assert (g / "plugins" / "OptiPatcher.asi").exists() and not (g / "setup_linux.sh").exists()
     assert optiscaler.owner(str(g))["owner"] == "clawdeck"
-    # FSR 4 on XMX: nitec's files instead of AMD's upscaler; then back
+    # FSR 4 on XMX: nitec's files instead of AMD's upscaler, ClawDeck's cabinet.dll next to the exe; then back
     x = tmp_path / "fsr4-xmx"
-    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet_wine.dll"):
         _w(x / f, "nitec-" + f)
+    _own_cabinet(tmp_path, monkeypatch)
     assert optiscaler.patch(home, str(g), "0.9.4", {}, "fsr4_xmx", fsr4_xmx=True)["ok"]
     assert (g / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "nitec-amd_fidelityfx_upscaler_dx12.dll"
-    assert (g / "cabinet.dll").exists() and (g / "cabinet_wine.dll").exists()
+    assert (g / "cabinet.dll").read_text().strip() == "clawdeck-lzms" and (g / "cabinet_wine.dll").exists()
+    assert "cabinet.dll" in json.loads((g / ".clawdeck-optiscaler" / "manifest.json").read_text())["added"]
     assert optiscaler.patch(home, str(g), "0.9.4", {}, "xess")["ok"]
     assert not (g / "cabinet.dll").exists() and (g / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "amd-fsr4"
     for f in ("OptiScaler.log", "fakenvapi.log", "D3D12_Optiscaler/cache.bin"):   # written by them while the game ran
@@ -851,8 +907,9 @@ def test_fsr4_xmx_picks_4_1_2_in_optiscaler(tmp_path, monkeypatch):
     home = str(tmp_path)
     _opti_pkg(home)
     x = tmp_path / "fsr4-xmx"
-    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll"):
         _w(x / f, "nitec-" + f)
+    _own_cabinet(tmp_path, monkeypatch)
     g = tmp_path / "game"
     _w(g / "Game.exe", "x")
     assert optiscaler.patch(home, str(g), "0.9.4", launchenv.opti_ini({"opti": "fsr4_xmx", "fg": 2, "opti_fg": "dlssg"}), "fsr4_xmx", fsr4_xmx=True)["ok"]
@@ -1036,12 +1093,14 @@ def test_capcom_layout_round_trip_leaves_the_folder_exactly_as_it_was(tmp_path, 
     assert {"OptiScaler/fakenvapi.dll", "OptiScaler/fakenvapi.ini"} <= set(m["added"])
     # FSR 4.1.2 on XMX: nitec's two files into OptiScaler/, cabinet next to the exe; then back to XeSS
     x = tmp_path / "fsr4-xmx"
-    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll"):
+    for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet_wine.dll"):
         _w(x / f, "nitec-" + f)
+    _own_cabinet(tmp_path, monkeypatch)
     assert optiscaler.patch(home, str(g), ver, launchenv.opti_ini({**launch, "opti": "fsr4_xmx"}), "fsr4_xmx", True, "subfolder")["ok"]
     assert (g / "OptiScaler" / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "nitec-amd_fidelityfx_upscaler_dx12.dll"
     assert (g / "OptiScaler" / "fsr-original.dll").exists() and not (g / "fsr-original.dll").exists()
-    assert (g / "cabinet.dll").exists() and (g / "cabinet_wine.dll").exists()
+    assert (g / "cabinet.dll").read_text().strip() == "clawdeck-lzms" and (g / "cabinet_wine.dll").exists()
+    assert not (g / "OptiScaler" / "cabinet.dll").exists()           # cabinet loads from the exe's folder
     assert not (g / "amd_fidelityfx_upscaler_dx12.dll").exists()
     assert optiscaler.patch(home, str(g), ver, launchenv.opti_ini(launch), "xess", layout="subfolder")["ok"]
     assert (g / "OptiScaler" / "amd_fidelityfx_upscaler_dx12.dll").read_text().strip() == "amd-fsr4"

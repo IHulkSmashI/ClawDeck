@@ -8,7 +8,8 @@ version is ClawDeck's to choose:
              ~/.local/share/clawdeck/optiscaler/<version>. Optional extras with their own sha256 (OptiPatcher).
   patch()    into the folder of the game's main exe: OptiScaler.dll under a proxy name (dxgi.dll, or the next free
              one: winmm, version, dbghelp, winhttp; OptiClick's order), OptiScaler.ini with the game's settings, the
-             libraries it ships, OptiPatcher in plugins/, and for "FSR 4 on XMX" nitec's files from ~/fsr4-xmx. Any
+             libraries it ships, OptiPatcher in plugins/, and for "FSR 4 on XMX" nitec's files from ~/fsr4-xmx with
+             ClawDeck's own cabinet.dll (tools/cabinet-lzms, in the plugin's bin/: no Windows file needed). Any
              file it replaces is moved to .clawdeck-optiscaler/backup first; everything is listed in
              .clawdeck-optiscaler/manifest.json. Proton loads the proxy through WINEDLLOVERRIDES=<name>=n,b (the
              launch wrapper sets it from the game's launch file).
@@ -18,8 +19,8 @@ Two package layouts (versions.json "layout"):
   flat       OptiScaler 0.9.4 (every game but Capcom's): its libraries, D3D12_Optiscaler/ and plugins/ next to the exe.
   subfolder  OptiScaler v10 (Capcom RE Engine games, the way OptiClick installs them on Windows): only the proxy DLL
              and OptiScaler.ini next to the exe; the libraries, D3D12_OptiScaler/ and plugins/ in OptiScaler/
-             (OptiDllPath=.\\OptiScaler). nitec's FSR 4.1.2 files go into OptiScaler/ too; cabinet.dll and
-             cabinet_wine.dll (LZMS, loaded by Wine) stay next to the exe. The folders ClawDeck creates are listed in
+             (OptiDllPath=.\\OptiScaler). nitec's FSR 4.1.2 files go into OptiScaler/ too; ClawDeck's cabinet.dll
+             (LZMS) and Wine's as cabinet_wine.dll stay next to the exe, where Wine loads them. The folders ClawDeck creates are listed in
              the manifest ("dirs"), so unpatch() takes them away with what OptiScaler wrote into them.
 
 OptiScaler from another tool (Decky Framegen's fgmod, OptiClick's files from a Windows install, by hand) is never
@@ -47,6 +48,11 @@ RUNTIME_FILES = ("OptiScaler.log", "OptiScaler.log.*", "OptiScaler*.log", "faken
                  "dlssg_to_fsr3.log", "nvngx.log")
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "winhttp.dll")
 FSR4_XMX_DIR = "fsr4-xmx"
+FSR4_XMX_FILES = ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll")   # what the user puts in ~/fsr4-xmx
+# ClawDeck's own cabinet.dll (tools/cabinet-lzms, built by CI into the plugin's bin/): the Compression API LZMS
+# decompressor nitec's build imports (Cabinet.dll ordinals 40, 43, 45), which Wine's cabinet.dll lacks. It replaces
+# the copy of Windows' cabinet.dll the user had to provide; its FDI/FCI exports forward to cabinet_wine.dll.
+OWN_CABINET = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "bin", "cabinet.dll")
 # OptiScaler's package, minus what only Windows installs need
 SKIP = {"setup_linux.sh", "setup_windows.bat", "OptiScaler.dll", "OptiScaler.ini"}
 SKIP_PREFIX = ("!!", "Licenses/")
@@ -285,6 +291,16 @@ def _put(src: str, dest: str, folder: str, added: list, backed: list, dirs: list
         added.append(rel)
 
 
+def fsr4_xmx_missing(home: str) -> list[str]:
+    """What FSR 4 on XMX still needs: nitec's two files in ~/fsr4-xmx, and ClawDeck's cabinet.dll in the plugin
+    (missing only in a source checkout where tools/cabinet-lzms/build.sh hasn't run)."""
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    need = [f for f in FSR4_XMX_FILES if not os.path.isfile(os.path.join(xdir, f))]
+    if not os.path.isfile(OWN_CABINET):
+        need.append("ClawDeck's cabinet.dll (bin/cabinet.dll: build tools/cabinet-lzms)")
+    return need
+
+
 def _proton_cabinet(home: str) -> str | None:
     for p in sorted(glob.glob(os.path.join(home, ".local/share/Steam/steamapps/common/Proton*/files/lib/wine/x86_64-windows/cabinet.dll")), reverse=True):
         return p
@@ -301,6 +317,9 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
     pkg = package_dir(home, version)
     if not installed(home, version):
         return {"ok": False, "error": f"OptiScaler {version} isn't downloaded yet"}
+    need = fsr4_xmx_missing(home) if fsr4_xmx else []
+    if need:                                  # checked before anything is written: no half-patched folder
+        return {"ok": False, "error": f"FSR 4 on XMX needs {', '.join(need)} (nitec's files go in {os.path.join(home, FSR4_XMX_DIR)})"}
     who = owner(folder)
     if who["owner"] not in (None, "clawdeck"):
         return {"ok": False, "owner": who["owner"],
@@ -338,15 +357,14 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
                 _put(os.path.join(r, x), os.path.join(folder, rel), folder, added, backed, dirs)
         # FSR 4 on XMX: nitec's upscaler instead of AMD's, with what it needs; or AMD's back when switched away.
         # The upscaler and fsr-original.dll sit where OptiScaler loads its libraries from (OptiScaler/ in the
-        # subfolder layout); cabinet.dll / cabinet_wine.dll next to the exe, where Wine loads them (cabinet=n,b).
+        # subfolder layout); ClawDeck's cabinet.dll and Wine's own as cabinet_wine.dll next to the exe, where Wine
+        # loads them (cabinet=n,b).
         xdir = os.path.join(home, FSR4_XMX_DIR)
         extra = (sub + "fsr-original.dll", "cabinet.dll", "cabinet_wine.dll")
         if fsr4_xmx:
-            need = [f for f in ("amd_fidelityfx_upscaler_dx12.dll", "fsr-original.dll", "cabinet.dll") if not os.path.isfile(os.path.join(xdir, f))]
-            if need:
-                return {"ok": False, "error": f"FSR 4 on XMX needs {', '.join(need)} in {xdir}"}
-            for f, to in (("amd_fidelityfx_upscaler_dx12.dll", sub), ("fsr-original.dll", sub), ("cabinet.dll", "")):
-                _put(os.path.join(xdir, f), os.path.join(folder, to + f), folder, added, backed, dirs)
+            for f in FSR4_XMX_FILES:
+                _put(os.path.join(xdir, f), os.path.join(folder, sub + f), folder, added, backed, dirs)
+            _put(OWN_CABINET, os.path.join(folder, "cabinet.dll"), folder, added, backed, dirs)
             wcab = os.path.join(xdir, "cabinet_wine.dll")
             wcab = wcab if os.path.isfile(wcab) else _proton_cabinet(home)
             if wcab:
