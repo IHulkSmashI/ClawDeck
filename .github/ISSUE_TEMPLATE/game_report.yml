@@ -1,0 +1,55 @@
+name: Game report
+description: How a game runs with ClawDeck (good or bad, both help)
+title: "[Game] "
+labels: ["game report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! One report per game. Good results help as much as problems: they tell other Claw owners what works.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Name as in Steam (and the store, if not Steam)
+    validations:
+      required: true
+  - type: dropdown
+    id: claw
+    attributes:
+      label: Claw
+      options: ["Claw 8 EX", "Claw 8 AI+", "Claw 7 AI+", "Claw A1M", "Other"]
+    validations:
+      required: true
+  - type: dropdown
+    id: upscaler
+    attributes:
+      label: Upscaler picked in ClawDeck
+      options: ["XeSS (XMX)", "FSR 4.1.2 (XMX)", "Game's own", "Off", "Not sure"]
+  - type: dropdown
+    id: fg
+    attributes:
+      label: Frame generation
+      options: ["Off", "2x", "3x", "4x or more", "Game's own"]
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: How it runs
+      options: ["Great", "Playable with small issues", "Bad", "Doesn't start"]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: fps, TDP, battery or plugged in, anything odd (flicker, stutter, input lag, crash)
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Bazzite version (Fixes shows it), Proton version
+  - type: textarea
+    id: report
+    attributes:
+      label: Bug report file (for problems)
+      description: ClawDeck → Setup → "Save a bug report to Desktop", then drag the file here
