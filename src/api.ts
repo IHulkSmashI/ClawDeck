@@ -108,7 +108,7 @@ export const framegenState = callable<[], FramegenState>("framegen_state");
 
 // ---- fixes -----------------------------------------------------------------------------------------------------------
 export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;
-  reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean };
+  reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean; idle_hold?: boolean };
 export type ButtonsState = { applies: boolean; ok: boolean; installed: boolean; stock_map: string | null; upstream_fixed?: boolean; legacy_hwdb: string[] };
 export type OverlayPower = { available: boolean; on: boolean; files: { path: string; mode: string; readable: boolean }[]; battery_w: number | null };
 export type QuietLog = { applies: boolean; installed: boolean; per_minute: number | null };

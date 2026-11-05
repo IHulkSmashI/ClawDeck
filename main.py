@@ -283,6 +283,7 @@ class Plugin:
     async def get_fixes(self) -> dict:
         """The Fixes panel in one call: the VRR range fix, the face-button fix, and the health check in one line."""
         vrr, checks = await asyncio.gather(self._bg(edid.status), self.get_health())
+        vrr = {**vrr, "idle_hold": await self._bg(edid.gamescope_idle_hold)}
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
                 "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()},
                 "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)}}

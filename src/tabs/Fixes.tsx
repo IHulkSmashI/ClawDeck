@@ -39,7 +39,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
   };
   const [menusFixed, setMenusFixed] = useState<boolean | null>(null);   // VRR only in games (src/vrr.ts)
   useEffect(() => { getSetting("vrr_menus_fixed").then((v) => setMenusFixed(v ?? null)); }, []);
-  const menusFixedOn = menusFixed ?? !!vrr?.wide;
+  const menusFixedOn = menusFixed ?? (!!vrr?.wide && !vrr?.idle_hold);   // gamescope 3.17+ holds 120 Hz in the menus itself
   const vrrStatus = (window as any).__clawdeckVrrScopeStatus?.();
   const b = f?.buttons;
   const problems = health.filter((h) => !h.ok && !h.optional);
@@ -67,7 +67,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <ToggleField label="VRR only in games" checked={menusFixedOn}
             onChange={async (v) => { setMenusFixed(v); await setSetting("vrr_menus_fixed", v); await (window as any).__clawdeckVrrScopeSync?.();
               toast(v ? "VRR follows the game; Steam's menus stay at 120 Hz" : "Steam's own VRR switch is in charge again"); }}
-            description={explain("On the Claw's screen: Steam's menus and library run at a fixed 120 Hz, games with VRR as you set it in Steam (30–120 Hz), as on Windows. Without it the menus follow a slow frame rate and look choppy. In a game, Steam's VRR switch stays yours. With a monitor or dock connected it stands aside: that display's VRR is whatever you set in Steam.",
+            description={explain((vrr?.idle_hold ? "Not needed with this gamescope (3.17+): it keeps Steam's menus at 120 Hz with VRR on, so this is off unless you switch it on. " : "") + "On the Claw's screen: Steam's menus and library run at a fixed 120 Hz, games with VRR as you set it in Steam (30–120 Hz), as on Windows. Without it the menus follow a slow frame rate and look choppy. In a game, Steam's VRR switch stays yours. With a monitor or dock connected it stands aside: that display's VRR is whatever you set in Steam.",
               undefined, "ClawDeck sets Steam's VRR switch for you while this is on (your saved Steam profiles don't change).")} />
           {menusFixedOn && vrrStatus && !vrrStatus.active && vrrStatus.game !== undefined && <Status ok={null} label="External display: Steam's VRR switch is in charge" />}
           {menusFixedOn && vrrStatus?.active && <Status ok={vrrStatus.error ? false : true}
