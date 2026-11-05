@@ -943,6 +943,12 @@ class Plugin:
         ClawDeck: it is shared in the OptiScaler Discord, and the user places it (amd_fidelityfx_upscaler_dx12.dll,
         fsr-original.dll). The cabinet.dll it needs is ClawDeck's own (tools/cabinet-lzms), not the user's."""
         missing = optiscaler.fsr4_xmx_missing(HOME)
+        if any(m in optiscaler.FSR4_XMX_FILES for m in missing):
+            try:                                   # downloaded but not moved yet: take them from Downloads / Desktop
+                if optiscaler.fsr4_xmx_import(HOME).get("imported"):
+                    missing = optiscaler.fsr4_xmx_missing(HOME)
+            except OSError as e:
+                decky.logger.info("FSR 4.1.2 XMX import: %s", e)
         return {"dir": os.path.join(HOME, optiscaler.FSR4_XMX_DIR), "ready": not missing, "missing": missing}
 
     # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
