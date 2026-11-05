@@ -1,11 +1,12 @@
-"""Decky Framegen (github.com/xXJSONDeruloXx/Decky-Framegen): OptiScaler per game, which Bazzite ships in its
-Portal. ClawDeck does not duplicate it: it detects it, installs it where it is missing (its release zip into Decky's
-plugin folder, the same as Decky's "install from zip"), and passes Intel presets to it per game through the
-environment variables its fgmod wrapper writes into the game's OptiScaler.ini (launchenv.py: opti, opti_xefg).
+"""Decky Framegen (github.com/xXJSONDeruloXx/Decky-Framegen) compatibility. ClawDeck installs its own pinned
+OptiScaler per game (optiscaler.py) and no longer offers Decky Framegen; this module only says whether Decky
+Framegen is installed and its ~/fgmod is set up (state), and whether a game's launch options run its fgmod
+(uses_fgmod). Such a game is Decky Framegen's: the panel shows a warning and "Stop using Decky Framegen here", and
+ClawDeck's wrapper still goes in front of fgmod ("clawdeck-launch.sh ~/fgmod/fgmod %command%") so the presets are in
+the environment when fgmod reads it.
 
-Two steps belong to Decky Framegen and stay there: "Setup OptiScaler Mod" (downloads OptiScaler into ~/fgmod) and
-OptiScaler itself. A game uses it when its launch options run ~/fgmod/fgmod; ClawDeck's wrapper goes in front of it
-("clawdeck-launch.sh ~/fgmod/fgmod %command%"), so the presets are in the environment when fgmod reads it.
+install() (its release zip into Decky's plugin folder, never overwriting) is kept for the backend and its test; no
+panel calls it.
 """
 from __future__ import annotations
 

@@ -60,8 +60,10 @@ first, and you choose which one starts. Nothing on your Windows drive changes.
 Power: leave Steam's own TDP slider (Quick Access → Performance) off while ClawDeck manages power. On the Claw 8 EX it
 may do nothing at all; ClawDeck sets the limit directly.
 
-For games that only ship DLSS or FSR, use Bazzite's own **Decky Framegen** (OptiScaler) from the Portal; for games
-with no upscaler, **decky-lsfg-vk**. ClawDeck's driver then runs their XeSS output on the XMX cores.
+For games that only ship DLSS or FSR, ClawDeck installs its own pinned **OptiScaler** into the game (Per-game →
+**Install OptiScaler in this game**); you don't need Decky Framegen. A game Decky Framegen already patched is left
+alone: ClawDeck shows a warning there and **Stop using Decky Framegen here**. For games with no upscaler, use
+**decky-lsfg-vk**. ClawDeck's driver runs the XeSS output on the XMX cores.
 
 ## XeSS on the XMX cores (optional)
 

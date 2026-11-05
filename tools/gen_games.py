@@ -4,8 +4,8 @@
 OptiClick's per-game database is private (an authenticated web service), so ClawDeck builds an open one:
 
   1. OptiScaler's GameConfigs.cpp (main branch): the per-game settings its developers ship in code, newer than the
-     OptiScaler that Decky Framegen bundles (0.9.4). ClawDeck passes them as Decky Framegen launch variables
-     (Section_Key=value), so a game gets them today. Settings wrapped in OnNvidia(...) are dropped (the Claw is
+     OptiScaler ClawDeck pins (assets/versions.json "optiscaler", 0.9.4). ClawDeck writes them into the game's
+     OptiScaler.ini (Section_Key=value, launchenv.opti_ini), so a game gets them today. Settings wrapped in OnNvidia(...) are dropped (the Claw is
      Intel); OnNonNvidia(...) ones are kept; WithXeFG(...) / WithUpscalerFGInput(...) keep their condition.
   2. Config.cpp: which [Section] Key each setting is in OptiScaler.ini.
   3. assets/games.claw.json: what ClawDeck adds by hand, by game id (Steam app id, REFramework, notes tested on a
@@ -13,8 +13,8 @@ OptiClick's per-game database is private (an authenticated web service), so Claw
 
   python3 tools/gen_games.py GameConfigs.cpp Config.cpp --ini OptiScaler.ini [--commit SHA]   writes assets/games.json
 
---ini is the OptiScaler.ini of the version Decky Framegen ships: Decky Framegen only rewrites keys that are already in
-it, so a setting newer than that version is listed under "later" (it applies once Decky Framegen ships it).
+--ini is the OptiScaler.ini of the version ClawDeck pins: a setting that version doesn't have is listed under
+"later" (it applies once ClawDeck pins an OptiScaler that has it).
 OptiScaler is GPL-3.0; the list is data derived from it and credited in CREDITS.md.
 """
 from __future__ import annotations

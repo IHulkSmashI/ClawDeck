@@ -6,9 +6,10 @@ task) or thermald is paused while ClawDeck holds a TDP (the temperature guard: o
 Power-source changes and resume arrive as events from Steam (frontend listeners).
 
 Scope: only what Bazzite and Steam's Quick Access do not already do. Four panels: Power (profile + autotune),
-Per-game (XeSS on XMX: frame generation multiplier, FSR on XeSS, latest XeSS, low latency; OptiScaler presets for
-Decky Framegen), Fixes (VRR range, face buttons, health), Setup (the XeSS driver, Decky Framegen, self-test, log
-export). OptiScaler itself stays Decky Framegen's (Bazzite's Portal); ClawDeck installs it where it is missing.
+Per-game (XeSS on XMX: frame generation multiplier, FSR on XeSS, latest XeSS, low latency; ClawDeck's own pinned
+OptiScaler per game with the recommended setup), Fixes (VRR range, face buttons, health), Setup (the XeSS driver,
+ClawDeck's OptiScaler, self-test, log export). Decky Framegen is compatibility only: a game it patched is detected
+and left alone (framegen.py, optiscaler.owner).
 """
 import asyncio
 import glob
@@ -802,7 +803,7 @@ class Plugin:
 
     async def game_status(self, appid: str) -> dict:
         """The Per-game panel in one call: the XeSS driver, what its low latency did in this game's last launch,
-        OptiScaler in the game, and Decky Framegen."""
+        OptiScaler in the game and whose it is, and Decky Framegen's state (compatibility)."""
         launch = self.profiles.get_launch(appid)
         xs, lat, op, fg = await asyncio.gather(
             self._bg(xess.state, HOME), self._bg(xess.game_latency, HOME, appid, launch.get("low_latency") is not False),
@@ -1022,7 +1023,7 @@ class Plugin:
         r = await self.set_launch(appid, {k: None for k in self.REC_KEYS})
         return {**r, "reframework": removed, "optiscaler": opti, "ok": r.get("ok", True) and opti.get("ok", True)}
 
-    # ---- Decky Framegen (OptiScaler per game) ---------------------------------------------------------------------
+    # ---- ClawDeck's OptiScaler (Setup); Decky Framegen detection for compatibility -----------------------------------
     async def set_xmx_every_game(self, on: bool) -> dict:
         r = await self._bg(xmxscope.set_every_game, HOME, bool(on))
         self.settings.setdefault("auto_fixes", {})["xmx_every_game"] = "on" if on else "off"

@@ -1,6 +1,6 @@
 # ClawDeck status
 
-Updated 2026-11-04 (0.2: xess-xmx-linux 20261104 options, Decky Framegen presets, battery-only Autotune). The plugin does only what Bazzite and Steam's Quick Access do not already do, in
+Updated 2026-11-04 (0.2: xess-xmx-linux 20261104 options, ClawDeck's own pinned OptiScaler per game, battery-only Autotune). The plugin does only what Bazzite and Steam's Quick Access do not already do, in
 four panels: **Power**, **Per-game**, **Fixes**, **Setup**. Everything below passes the backend tests against fake
 sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the browser preview.
 
@@ -10,7 +10,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 |---|---|---|---|
 | 1 | **XeSS XMX + low latency** (upstream 20261104) | done: upstream install (the fork and its XeLL driver mode are retired: upstream shipped low latency in #41); Per-game: XMX on/off, frame generation 2–8x, low latency, latest XeSS libraries, FSR games on XeSS, each with a read-back line | see Needs the maintainer → 0.2 |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
-| 3 | **OptiScaler through Decky Framegen** | done 2026-11-04: no injector of our own; Setup detects / installs Decky Framegen, Per-game adds its fgmod to the game and passes Intel presets (XeSS on XMX, FSR 4 INT8 experimental, XeSS frame generation) as fgmod env vars | see Needs the maintainer → 0.2 |
+| 3 | **ClawDeck's own OptiScaler per game** | done 2026-11-04: `optiscaler.py` installs the OptiScaler + OptiPatcher pinned in `assets/versions.json` (`optiscaler`, sha256 checked) into a game's folder, with the game's settings and the Intel presets (XeSS on XMX, FSR 4 on XMX, XeSS frame generation), and takes it out again exactly (manifest + backups). Decky Framegen is compatibility only: a game it patched is detected and left alone with a warning | see Needs the maintainer → 0.2 |
 | 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune acts on the bottleneck (§18); Advanced expander (§19) | see Needs the maintainer → Power |
 
 ## Done (code, tests)
@@ -23,7 +23,8 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
 | Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames; battery only unless "Autotune when plugged in" |
 | XeSS XMX | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | upstream release; `xmx` / `fg` / `low_latency` / `xess_latest` / `fsr` per game; shim log read per launch |
-| Decky Framegen | `framegen.py`, `launchenv.py` (`opti`, `opti_xefg`), `steam.ts` (fgmod in launch options) | Setup, Per-game | install from its release zip only when missing, never overwrites; Decky restart scheduled through systemd-run |
+| ClawDeck's OptiScaler | `optiscaler.py`, `launchenv.py` (`opti`, `opti_xefg`), `assets/versions.json` (`optiscaler`) | Setup, Per-game | pinned release + OptiPatcher, sha256 checked; patch / unpatch with a manifest and backups; never touches OptiScaler it didn't install (`owner()`) |
+| Decky Framegen compatibility | `framegen.py` (state), `optiscaler.owner()`, `steam.ts` (fgmod in launch options) | Setup, Per-game | detection only: a game Decky Framegen patched (fgmod in its launch options, or its files) shows a warning and "Stop using Decky Framegen here"; ClawDeck doesn't install or offer Decky Framegen |
 | VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
@@ -63,7 +64,7 @@ The four-panel UI has not been on the device yet.
   Lite from Quick Access: OptiScaler.ini and the files change without opening OptiScaler. Undo leaves the folder as it
   was. A game Decky Framegen patched shows the warning and isn't touched.
 - **Recommended setup per game (writes into game folders):** Onimusha → "Use the recommended setup" → REFramework
-  (`dinput8.dll` + `.clawdeck-reframework.json`) next to `OnimushaWotS.exe`, OptiScaler through fgmod with
+  (`dinput8.dll` + `.clawdeck-reframework.json`) next to `OnimushaWotS.exe`, ClawDeck's OptiScaler with
   `Hotfix_RestoreComputeSignature=true` and `Spoofing_Dxgi=false`; the game starts (no Capcom DRM stop), DLSS in its
   menu becomes XeSS on XMX, XeSS frame generation works. Check `WINEDLLOVERRIDES` in the game's environment reads
   `dinput8=n,b;,dxgi=n,b` and Wine loads both. Then pin the REFramework nightly in `assets/versions.json`. Undo
@@ -82,10 +83,10 @@ The four-panel UI has not been on the device yet.
   UpscalerIndex 6 (4.1.2). In CONTROL 4.1.2 drew a black picture in gameplay (upscaler time 0.00 ms): see the
   OptiScaler log before offering it by default.
 - **FSR 4.1.1 on XMX (nitec's B Boost), regular and Lite:** with the files in `~/fsr4-xmx`, Per-game → OptiScaler
-  upscaler "FSR 4.1.1 on XMX" in a DLSS game through fgmod: the game folder gets the B Boost
-  `amd_fidelityfx_upscaler_dx12.dll` after fgmod's copy, `fsr-original.dll`, `cabinet.dll` (LZMS) and
-  `cabinet_wine.dll`, OptiScaler shows FSR 4 as the upscaler, the image is FSR 4. Lite vs regular: fps and image.
-  Switching back to XeSS removes ClawDeck's files at the next launch (`.clawdeck-fsr4xmx`).
+  upscaler "FSR 4.1.1 on XMX" in a DLSS game with ClawDeck's OptiScaler: the game folder gets the B Boost
+  `amd_fidelityfx_upscaler_dx12.dll` in place of OptiScaler's own, `fsr-original.dll`, `cabinet.dll` (LZMS) and
+  `cabinet_wine.dll` (all in the manifest), OptiScaler shows FSR 4 as the upscaler, the image is FSR 4. Lite vs
+  regular: fps and image. Switching back to XeSS puts OptiScaler's own FSR 4 file back.
 - **VRR in the menus (2026-11-04 report: menus still choppy, VRR couldn't be switched off):** the scope now decides
   "in a game" from Decky's Router.MainRunningApp, switches VRR off only in the menus and leaves a game's VRR to
   Steam's switch. Check ClawDeck's log (`ui: vrr: …` lines) while going menus → game → menus.
@@ -175,11 +176,9 @@ The four-panel UI has not been on the device yet.
     screen; Low latency line says "working" after a minute of play (`drive_c/igdext_xell.log` has "auto: waited in"
     lines); turn it off: the line says "off" next launch. Feel the difference.
   - Latest XeSS libraries in a game with an old XeSS; FSR games → "FSR on XeSS" in an FSR 3.1 game without XeSS.
-  - Setup → Install Decky Framegen on a Claw without it: Decky restarts by itself and Decky Framegen shows up; tap its
-    Setup OptiScaler Mod, then Setup shows "OptiScaler … ready". With it already installed: the button isn't offered.
-  - In a DLSS game: Use OptiScaler in this game → launch options read `…clawdeck-launch.sh ~/fgmod/fgmod %command%`;
-    OptiScaler upscaler = XeSS on XMX → OptiScaler's overlay (Insert) shows XeSS; FSR 4 INT8 → shows FSR 4, note the
-    cost. OptiScaler frame generation: XeSS → frames generated? If not, which FG input does Decky Framegen set?
+  - Decky Framegen compatibility: a game Decky Framegen patched (fgmod in its launch options) shows "OptiScaler:
+    Decky Framegen's, in this game" and isn't touched; "Stop using Decky Framegen here" takes fgmod out of the launch
+    options, then Decky Framegen → Unpatch, and the recommended setup is offered again.
   - Autotune: on the charger it no longer starts unless "Autotune when plugged in" (Advanced) is on.
 - **XeSS install "file not found"** (brief): the backend now reports the exact step and reason (download: URL and
   HTTP code; archive: what it unpacked where; install.sh: exit code and its last lines) in the toast and the red

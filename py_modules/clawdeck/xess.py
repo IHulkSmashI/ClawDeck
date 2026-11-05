@@ -16,8 +16,8 @@ environment variables its Proton hook reads, so they reach a game through ClawDe
 
 ClawDeck reads that state, downloads a release into ~/.local/share/clawdeck (the package must stay where it was
 unpacked) and runs its install.sh / uninstall.sh as the desktop user (never as root). Any XeSS library loaded in a
-prefix goes through the shim, so OptiScaler's bundled libxess / libxess_fg / libxell (Bazzite's Decky Framegen
-puts them next to a game) run on XMX too; optiscaler_in() tells the Per-game panel when that is the case.
+prefix goes through the shim, so OptiScaler's bundled libxess / libxess_fg / libxell (ClawDeck's own OptiScaler,
+or Decky Framegen's, puts them next to a game) run on XMX too; optiscaler_in() tells the Per-game panel when that is the case.
 """
 from __future__ import annotations
 
@@ -261,7 +261,8 @@ def installed_games(home: str) -> list[dict]:
 
 
 def optiscaler_in(home: str, appid: str) -> dict:
-    """Is OptiScaler (Bazzite's Decky Framegen, or by hand) in this game? Read-only: ClawDeck never puts it there.
+    """Is OptiScaler (ClawDeck's own, Decky Framegen's, or by hand) in this game? Read-only: this only looks;
+    optiscaler.py puts ClawDeck's in and owner() says whose it is.
     Its bundled XeSS libraries run on XMX through the same shim as a game's own."""
     d = steam_install_dir(home, appid)
     if not d:
