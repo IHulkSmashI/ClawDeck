@@ -2,7 +2,10 @@
 # Install the latest main build of ClawDeck on this Claw (Decky plugin dir), from the sideload branch CI publishes.
 # Usage: bash update-from-main.sh   (asks for sudo once; restarts Decky Loader)
 set -euo pipefail
-URL=https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/sideload
+# the sideload branch's newest commit, so GitHub's raw cache (up to 5 minutes) can't hand out the build before it;
+# the branch name if GitHub's API can't be reached
+SHA=$(curl -fsSL https://api.github.com/repos/IHulkSmashI/ClawDeck/commits/sideload 2>/dev/null | sed -n 's/^  "sha": "\([0-9a-f]\{40\}\)".*/\1/p' | head -1)
+URL=https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/${SHA:-sideload}
 DEST=${DECKY_PLUGINS:-$HOME/homebrew/plugins}
 tmp=$(mktemp -d)
 curl -fsSL "$URL/ClawDeck.zip" -o "$tmp/ClawDeck.zip"
