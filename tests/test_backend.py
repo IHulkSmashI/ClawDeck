@@ -565,6 +565,7 @@ def test_guard_steps_a_plain_held_tdp_to_the_users_floor_only_while_thermald_is_
     t = tmp_path / "pkg_temp"
     _w(t, 97000)
     p.hw, p.power, p.settings = fake_hw, pw, {"autotune_floor": 12}
+    p.running_appid, p.profiles = None, profiles.Profiles(str(tmp_path / "profiles.json"))
     p.battery = type("B", (), {"plugged": lambda self: False})()
     p.autotune = autotune.Autotune(fake_hw, pw, "/nonexistent")          # autotune off: no session
     p.guard = thermal.Guard(str(t), "x86_pkg_temp")
@@ -1107,3 +1108,28 @@ def test_quiet_moves_only_this_process_to_the_efficiency_cores(tmp_path, monkeyp
     calls.clear()
     assert quiet.background(False, str(atom), str(tmp_path / "sys"))
     assert ("aff", 11, list(range(8))) in calls and ("nice", 11, 0) in calls
+
+
+def test_thermal_guard_steps_back_up_to_your_limit_once_cool(tmp_path):
+    t = tmp_path / "temp"
+    g = thermal.Guard(str(t), "x86_pkg_temp")
+    tdp = {"w": 35}
+    set_w = lambda w: tdp.update(w=w) or True
+    check = lambda c: (_w(t, int(c * 1000)), g.check(tdp["w"], 8, set_w, limit_w=35))[1]
+    assert check(97) == 33 and check(93) == 31 and check(85) is None     # hot, then under 90: stops at 31 W
+    assert check(85) is None and check(85) is None and tdp["w"] == 31    # 80-90: holds, no climbing yet
+    assert check(70) is None and check(70) is None and check(70) == 33    # 30 s under 80: +2 W
+    assert g.status()["line"] == "thermal: stepped to 33 W"
+    assert check(70) is None and check(81) is None and check(70) is None  # a warm check starts the count over
+    assert check(70) is None and check(70) == 35 and g.stepped_w is None  # back at your limit: the step is gone
+    assert g.status()["line"] is None
+    assert check(60) is None and tdp["w"] == 35                           # nothing to recover: left alone
+
+
+def test_autotune_thermal_release_lifts_the_cap_and_measures_again(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=25)
+    assert at.thermal_step(19) and s.thermal_cap == 19
+    assert at.thermal_release(21) and s.thermal_cap == 21 and s.learned.tdp == 19
+    assert at.thermal_release(25) and s.thermal_cap is None and s.phase == "measure" and s.learned.tdp == 25
+    assert not at.thermal_release(25)
+    at.session = None

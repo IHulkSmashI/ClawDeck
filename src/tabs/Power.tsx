@@ -190,7 +190,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
             quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
-          detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C. Picking a profile or moving the slider sets it again.`
+          detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C, then back up 2 W every 30 s once under 80 °C, to your limit.`
             : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`
             : app ? app.name : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
             : "No game running: this limit is on the chip now, and comes back when a game closes"} />

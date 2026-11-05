@@ -628,10 +628,15 @@ class Plugin:
         async with self._power_lock:
             if not self.power.thermald_paused():
                 return None
+            plugged = bool(self.battery.plugged())
             if self.autotune.session is not None:
-                return self.guard.check(self.autotune.session.learned.tdp, self._floor_w(), self.autotune.thermal_step)
-            plugged = self.battery.plugged()
-            return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged))
+                sess = self.autotune.session
+                return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
+                                        limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release)
+            # your limit for this power source (the game's pick, or the last one): where stepping back up stops
+            limit = self._pick(self.running_appid, plugged)["tdp"]
+            return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
+                                    limit_w=limit)
 
     def _save_learned(self, appid: str, plugged: bool) -> dict | None:
         """Stop autotune and keep what it found for this game and power source. The power stays as it is: the caller
