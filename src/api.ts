@@ -65,7 +65,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
 // ---- per game ------------------------------------------------------------------------------------------------------
 export type FsrRoute = "off" | "xess" | "fg" | "inject";
 export type OptiPreset = "off" | "xess" | "fsr4" | "fsr4_xmx" | "fsr4_xmx_lite";
-export type Launch = { opti_overlay?: number | null; opti_fg?: string | null; opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
+export type Launch = { opti_overlay?: number | null; opti_fg?: string | null; opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean; cores?: "all" | "e" | null };
 export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
 export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch_any");
 export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
