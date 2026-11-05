@@ -222,8 +222,10 @@ ClawDeck is free. If you'd like to chip in: [ko-fi.com/gamervault](https://ko-fi
 
 ## Credits
 
-ClawDeck uses open-source work from xess-xmx-linux, OptiScaler, nitec's FSR 4 build, REFramework and others: the full
-list is in [CREDITS.md](CREDITS.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+A big thank you to [HHHHanasak1](https://github.com/HHHHanasak1), whose
+[xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) puts XeSS on the XMX cores under Linux.
+
+Open-source licenses of the parts ClawDeck uses: [CREDITS.md](CREDITS.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [AGPLv3](LICENSE) (see [LICENSING.md](LICENSING.md)). A community project, not affiliated with MSI, Valve, Intel, AMD
 or Microsoft. "Claw" is a trademark of MSI.
