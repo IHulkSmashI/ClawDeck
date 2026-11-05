@@ -10,6 +10,7 @@ export type PowerStatus = {
   tdp: { mode: string; custom_tdp: number; boost: boolean; ready: boolean } | null;
   hhd: boolean; msi_firmware: boolean; tdp_backend: string | null; firmware_tdp: { pl1_w: number | null; pl2_w: number | null } | null;
   tdp_w?: number | null;
+  limit_w?: number | null; autotune_w?: number | null;   // in a game with Autotune: your limit, and what it uses now
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
   custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number; thermal?: Thermal;
@@ -23,7 +24,7 @@ export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: strin
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
   source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
   last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced";
-  thermal_cap?: number | null; thermal?: Thermal; learning?: boolean; pl1_window_s?: number | null };
+  thermal_cap?: number | null; thermal?: Thermal; learning?: boolean; pl1_window_s?: number | null; plugged?: boolean | null };
 
 /** What every write answers: what was asked, what the hardware reads back, and why it failed (shown in red). */
 export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any; unit?: string; summary: string; error: string | null };
@@ -126,6 +127,9 @@ export const setFan = callable<[preset: string, custom?: number[] | null], Write
 export const getCharge = callable<[], ChargeState>("get_charge");
 export const setChargeLimit = callable<[limit: number | null], WriteResult>("set_charge_limit");
 
-export type PowerSlot = { appid: string | null; plugged: boolean; base: string | null; tdp: number | null };
+/** base/tdp: what the game saved for this power source itself; pick: the limit that applies now on this power source
+ *  (the game's own pick, else the last pick on it, else the default): what the profile list and the slider show. */
+export type PowerSlot = { appid: string | null; plugged: boolean; base: string | null; tdp: number | null; running?: boolean;
+  pick?: { profile: string; tdp: number | null; from: "game" | "last" | "default" } };
 export const powerSlot = callable<[appid: string | null], PowerSlot>("power_slot");
 export const resetPowerSlot = callable<[appid: string | null], { ok: boolean; error?: string }>("reset_power_slot");

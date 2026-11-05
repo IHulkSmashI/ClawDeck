@@ -46,6 +46,14 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **Power: your limit and Autotune stay in step (power-sync, 2026-11-04):** in the menus pick Custom 20 W (battery)
+  and Max (plugged in). Start CONTROL on battery: the slider shows 20 W and the line under it "Autotune: using N W of
+  your 20 W · saves M W · fps", following Autotune every 3 s, never back to an old value. Pick Balanced in the game:
+  the chip reads 17 W at once and Autotune measures again from 17 W; the next start of CONTROL comes back at Balanced.
+  Quit the game: the chip reads 17 W again (RAPL PL1), not the firmware's 25 W; with nothing picked on a power source
+  it reads the firmware's value and thermald is running again (`systemctl is-active thermald`). Plug in during and
+  after the game: Max 35 W both times; unplug with no game: back to the battery pick. Unloading ClawDeck in Decky puts
+  PL1 back to the firmware's value and starts thermald.
 - **ClawDeck's own OptiScaler (writes into game folders; replaces Decky Framegen for new setups):** Games → a DLSS
   game (Wukong, after moving it off the NTFS card) → Use the recommended setup: OptiScaler 0.9.4 downloads (55 MB,
   sha256 checked), lands next to the exe as dxgi.dll (or the next free proxy name) with OptiScaler.ini, OptiPatcher in
