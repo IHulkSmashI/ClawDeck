@@ -27,9 +27,8 @@
 
 ## One plugin, the whole Claw
 
-On Windows, a Claw owner ends up with a pile of tools: ClawTweaks for power and fans, OptiClick for OptiScaler, ClawLab
-for the VRR range, Intel's driver for XMX and frame generation. On Bazzite, ClawDeck does all of it, from one panel in
-Quick Access, with no terminal after the install.
+Upscaling, frame generation, power, fans and the fixes the Claw needs, from one panel in Quick Access, with no
+terminal after the install.
 
 - 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores (nitec's build, shared with his
   OK). ClawDeck downloads it for you and offers it in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
@@ -85,9 +84,7 @@ MSI button). The panel is four headings that fold open and shut: **Power**, **Up
 **Fixes** and **Setup**. When ClawDeck starts, one is open: Upscaling and frame generation while a game runs,
 otherwise Power. **Explain** at the top shows what each control does, why you'd use it and what it costs.
 
-It's inspired by [ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks) and
-[OptiClick](https://github.com/onehoon/OptiClick) on Windows. It's an independent project and uses none of their code. It
-reads OptiClick's public supported-game list and OptiScaler's public compatibility list to decide what each game
+It reads OptiClick's public supported-game list and OptiScaler's public compatibility list to decide what each game
 gets.
 
 ### Power
@@ -101,7 +98,7 @@ gets.
 | **Battery** | Charge limit: Off (charges to 100 %), 80 %, 90 % or Custom (50–100 %). Keeps the battery healthier on the charger. Steam doesn't offer this on the Claw. |
 | **Advanced** | CPU boost, CPU ceiling, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |
 
-### Upscaling and frame generation (one game at a time, like OptiClick)
+### Upscaling and frame generation (one game at a time)
 
 Pick a game from the list. Only games ClawDeck can set up are listed: games with DLSS, FSR or XeSS inside, or in the
 per-game list. Then:
@@ -135,7 +132,7 @@ ClawDeck in the launch options, the XMX driver, and **"XMX cores used in the las
 
 | Fix | What it does and why |
 |---|---|
-| **VRR fix 30–120 Hz** | The Claw's screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. This is ClawLab's fix, the one Windows users install. It needs one restart. |
+| **VRR fix 30–120 Hz** | The Claw's screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. This is ClawLab's fix. It needs one restart. |
 | **Face buttons** (Claw 8 EX) | The two MSI buttons do nothing in Game Mode on current Bazzite. The fix maps them: left = Steam menu, right = Quick Access. |
 | **Performance overlay** | Real watts in Steam's performance overlay. Linux hides the power counter by default; ClawDeck opens it at boot. |
 | **System log** | Silences a split-lock log flood (thousands of lines a minute) that cost battery and erased crash logs. |
@@ -294,8 +291,8 @@ If they don't appear, the note under the Upscaler says why: not a DirectX 12 gam
 ## Credits
 
 ClawDeck stands on the work of many projects: xess-xmx-linux, OptiScaler, nitec's FSR 4 build, REFramework,
-ClawLab, InputPlumber, PowerStation, Handheld Daemon, MangoHud, Decky Loader and Bazzite. The feature set takes after
-ClawTweaks and OptiClick on Windows. The full list, with what each one does for ClawDeck, is in
+ClawLab, ClawTweaks, OptiClick, InputPlumber, PowerStation, Handheld Daemon, MangoHud, Decky Loader and Bazzite. The
+full list, with what each one does for ClawDeck, is in
 [CREDITS.md](CREDITS.md).
 
 ## Feedback
