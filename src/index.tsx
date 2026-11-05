@@ -1,11 +1,10 @@
-import { DialogButton, Focusable, Router, staticClasses } from "@decky/ui";
+import { Router, staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
-import { MdSettings } from "react-icons/md";
 
 import { uiLog, displayExternal, gameStarted, gameStopped, getChanges, getFixes, getSetting, powerSourceChanged, resumed } from "./api";
 import { startVrrScope, VrrScope } from "./vrr";
 import { LogoIcon } from "./components/LogoIcon";
-import { FullPage, openPage, QuickPanel, ROUTE } from "./pages";
+import { FullPage, QuickPanel, ROUTE } from "./pages";
 
 declare const SteamClient: any;
 
@@ -96,16 +95,9 @@ export default definePlugin(() => {
 
   return {
     name: "ClawDeck",
-    // the same title bar Decky plugins use, with a settings button that opens the full page (as "More details" does)
-    titleView: (
-      <Focusable style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-        <div className={staticClasses.Title}>ClawDeck</div>
-        <DialogButton aria-label="All ClawDeck settings" onClick={() => openPage("power")}
-          style={{ width: "auto", minWidth: 0, height: 28, padding: "0 10px", display: "flex", alignItems: "center" }}>
-          <MdSettings />
-        </DialogButton>
-      </Focusable>
-    ),
+    // the plain title bar: everything is in Quick Access's sections now; the full view is under Setup (maintainer,
+    // 2026-11-04: "is the cog still needed?")
+    titleView: <div className={staticClasses.Title}>ClawDeck</div>,
     content: <QuickPanel />,
     icon: <LogoIcon />,
     onDismount() {
