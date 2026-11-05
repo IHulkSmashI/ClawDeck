@@ -46,10 +46,10 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Group title="Screen (VRR)" first />
         <Status ok={vrr ? (vrr.wide ? true : vrr.supported ? false : null) : null}
           label={vrr?.range ? `VRR range: ${vrr.range[0]}–${vrr.range[1]} Hz` : "VRR range unknown"}
-          detail={vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, ClawLab-validated` : undefined)} />
+          detail={vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, validated` : undefined)} />
         {vrr && (vrr.supported || vrr.wide) && (
           <ButtonItem layout="below" disabled={busy}
-            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. ClawLab's fix (the one Windows users install), for the exact panels ClawLab validated.", undefined, "a restart; the previous boot entry always starts without it.")}
+            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known.", undefined, "a restart; the previous boot entry always starts without it.")}
             onClick={() => confirmRestart(want ? "Remove the VRR fix?" : "Install the VRR fix 30–120 Hz?",
               want ? "ClawDeck removes its corrected screen description. Takes a minute or two, then restart."
                 : "ClawDeck gives the GPU driver a corrected description of this screen, so VRR works from 30 Hz instead of 48. Takes a minute or two, then restart.",

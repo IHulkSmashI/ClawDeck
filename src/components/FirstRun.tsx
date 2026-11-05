@@ -58,7 +58,7 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
         <PanelSectionRow>
           <Group title="Step 2 of 2" />
           <Status ok={vrrDone ? true : null} label={`VRR 30–120 Hz: ${vrr.wide ? "installed" : vrr.pending === "on" ? "installed, restart to use it" : "not installed"}`}
-            detail="The screen can do VRR from 30 Hz but says 48, so games below 48 fps judder. ClawLab's fix, the one Windows users install. Needs one restart." />
+            detail="The screen can do VRR from 30 Hz but says 48, so games below 48 fps judder. Needs one restart." />
           {!vrrDone && (
             <ButtonItem layout="below" disabled={!!busy} onClick={installVrr}>
               {busy === "vrr" ? "Installing…" : "Install the VRR fix"}
