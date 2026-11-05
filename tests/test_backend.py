@@ -1147,3 +1147,50 @@ def test_get_autotune_says_why_it_is_not_running(plugin):
     assert st["game"] == "42" and not st["running"] and st["why"].startswith("off on the charger")
     p.settings["autotune"] = False
     assert p.run(p.get_autotune())["why"] == "off"
+
+
+def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_path, monkeypatch):
+    """Per-game → Install OptiScaler in Onimusha: v10 in OptiScaler/, onehoon's REFramework, dxgi + dinput8 overrides;
+    FSR 4.1.2 refused while XMX is off; Uninstall leaves the game folder as it was."""
+    import asyncio
+    from clawdeck import downloads, optiscaler, reframework, xess, xmxscope
+    p = plugin
+    p._install_lock = asyncio.Lock()
+    home = str(tmp_path / "decky_user_home")
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda a, b: None)
+    monkeypatch.setattr(reframework.userexec, "chown_tree", lambda a, b: None)
+    v = p._versions()
+    v["reframework"].pop("dll_sha256")                  # the stand-in dinput8.dll below isn't the real one
+    monkeypatch.setattr(p, "_versions", lambda: v)
+    pkg = optiscaler.package_dir(home, v["optiscaler_v10"]["version"])
+    for f in ("OptiScaler.dll", "OptiScaler/libxess.dll", "OptiScaler/amd_fidelityfx_upscaler_dx12.dll", v["optiscaler_v10"]["extras"][0]["dest"]):
+        _w(os.path.join(pkg, f), f)
+    _w(os.path.join(pkg, "OptiScaler.ini"), "[FrameGen]\nFGInput=auto\n\n[Spoofing]\nDxgi=auto\n")
+    game = tmp_path / "steam" / "Onimusha"
+    _w(game / "OnimushaWotS.exe", "x")
+    _w(game / "nvngx_dlss.dll", "x")
+    before = sorted(str(q.relative_to(game)) for q in game.rglob("*"))
+    monkeypatch.setattr(xess, "steam_install_dir", lambda h, a: str(game))
+    monkeypatch.setattr(xmxscope, "prefix_shim", lambda *a: {"placed": False})
+    monkeypatch.setattr(p, "_fsr4_xmx_files", lambda: {"dir": "x", "ready": True, "missing": []})
+    ref = tmp_path / "ref"
+    _w(ref / "dinput8.dll", "onehoon")
+    got = []
+    monkeypatch.setattr(downloads, "fetch", lambda e, w, a=False: got.append(e["repo"]) or {"tag": e["tag"], "repo": e["repo"], "archive": "REFramework.zip", "dir": str(ref)})
+    p.settings["opti_games"] = {}
+    p.profiles.set_launch("2638890", {"xmx": False})
+    r = p.run(p.game_choose("2638890", "fsr4_xmx", 2))
+    assert not r["ok"] and "XMX" in r["error"] and not (game / "OptiScaler.ini").exists()
+    rec = p.run(p.game_recommend("2638890"))
+    assert rec["capcom"] and rec["fsr4"]["xmx"] is False
+    p.profiles.set_launch("2638890", {"xmx": None})
+    r = p.run(p.game_choose("2638890", "xess", 2))
+    assert r["ok"], r
+    assert got == ["onehoon/REFramework"] and (game / "dinput8.dll").exists() and (game / "OptiScaler" / "libxess.dll").exists()
+    assert (game / "re2_fw_config.txt").read_text() == "REFrameworkConfig_MenuKey_V2=46\n"
+    ini = (game / "OptiScaler.ini").read_text()
+    assert "FGInput=DLSSG" in ini and "Dxgi=auto" in ini and "OptiDllPath=.\\OptiScaler" in ini
+    assert r["env"]["WINEDLLOVERRIDES"] == "dxgi=n,b;dinput8=n,b;" and "Spoofing_Dxgi" not in r["env"]
+    assert optiscaler.owner(str(game))["version"] == v["optiscaler_v10"]["version"]
+    r = p.run(p.game_choose("2638890", "own", 0))
+    assert r["ok"] and sorted(str(q.relative_to(game)) for q in game.rglob("*")) == before

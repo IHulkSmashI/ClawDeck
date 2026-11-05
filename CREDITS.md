@@ -22,16 +22,22 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   install started from, and its `Section_Key` ini form and Proton defaults (OptiPatcher loading, HQ font off) are
   followed. Games it patched are detected and left alone; nothing of its code is copied.
 - **[OptiScaler](https://github.com/optiscaler/OptiScaler)** — the upscaler / frame generation swap ClawDeck installs
-  per game (its pinned release, unchanged).
+  per game (its pinned release, unchanged). Capcom RE Engine games get the v10 build from the
+  **[OptiScaler nightly](https://github.com/optiscaler/OptiScaler-nightly)** releases (pinned with its sha256), installed
+  in the `OptiScaler\` subfolder layout the v10 package ships.
 - **OptiPatcher** — the OptiScaler plugin ClawDeck puts in a game's `plugins/` folder; the pinned build (sha256
   checked) comes from [OptiScaler-Bleeding-Edge](https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge)'s releases.
-- **[OptiClick](https://github.com/onehoon/OptiClick)** — the Windows tool whose one-tap, per-game OptiScaler setup
-  ClawDeck's "Use the recommended setup" follows (match by exe, REFramework for RE Engine games, per-game ini
-  values). OptiClick's own game data is private; no code or data is shared.
+- **[OptiClick](https://github.com/onehoon/OptiClick)** by onehoon — the Windows tool whose one-tap, per-game OptiScaler
+  setup ClawDeck's "Use the recommended setup" follows (match by exe, REFramework for RE Engine games, per-game ini
+  values). ClawDeck's Capcom setup is OptiClick's working Onimusha install used as the reference (its files, its
+  OptiScaler.ini lines, its `OptiScaler\` layout). OptiClick's own game data is private; no code or data is shared.
+- **[REFramework fork](https://github.com/onehoon/REFramework)** by onehoon (MIT, from praydog's REFramework) — the
+  build OptiClick installs for Capcom games and ClawDeck installs as `dinput8.dll` (release 15, pinned with its
+  sha256), downloaded from its releases, not shipped with ClawDeck.
 - **OptiScaler's per-game settings** (`OptiScaler/misc/GameConfigs.cpp`, `Config.cpp`) — the source of
   `assets/games.json` (`tools/gen_games.py`), which is therefore GPL-3.0 like OptiScaler.
-- **[REFramework](https://github.com/praydog/REFramework)** by praydog (MIT) — installed next to Capcom RE Engine
-  games, as OptiClick does; downloaded from its nightly release, not shipped with ClawDeck.
+- **[REFramework](https://github.com/praydog/REFramework)** by praydog (MIT) — the mod framework for Capcom RE Engine
+  games that onehoon's fork (above) builds on; ClawDeck installs the fork next to the game's exe, as OptiClick does.
 - **[wimlib](https://wimlib.net)** by Eric Biggers (LGPL-2.1+) — its LZMS decoder is inside `tools/cabinet-lzms`, the
   open `cabinet.dll` that lets the FSR 4 on XMX builds unpack their kernels under Proton without Windows' copy.
 - **FSR 4 on XMX** by nitec and the OptiScaler community — the upscaler build ClawDeck sets up; not shipped with ClawDeck.

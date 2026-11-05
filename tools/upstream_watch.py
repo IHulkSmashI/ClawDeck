@@ -35,13 +35,14 @@ UPSTREAMS = {
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
     "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "compatibility only: games it patched are detected and left alone (framegen.py)"),
     "OptiScaler": ("release", "optiscaler/OptiScaler", "ClawDeck's own OptiScaler per game (optiscaler.py; pinned with sha256)"),
-    "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "the v10 line OptiClick uses for some games; FSR 4.1.2 model selection"),
+    "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "Capcom RE Engine games: ClawDeck's OptiScaler v10 in the OptiScaler/ subfolder (optiscaler.py; pinned with sha256)"),
     "OptiPatcher": ("release", "xXJSONDeruloXx/OptiScaler-Bleeding-Edge", "OptiPatcher.asi next to OptiScaler (pinned with sha256)"),
-    "REFramework nightly": ("release", "praydog/REFramework-nightly", "Capcom RE Engine games (reframework.py; pinned with sha256)"),
     # OptiClick's own forks (onehoon): its Windows install of Onimusha (2026-11-04) runs this REFramework fork with
     # OptiScaler 0.9.5-pre4 and XeFG from the game's DLSS-G; the fork's notes: "custom OptiScaler with this custom
-    # REF", Capcom games only. New releases are checked here before ClawDeck's Capcom setup is bumped.
-    "REFramework (onehoon fork)": ("prerelease", "onehoon/REFramework", "the REFramework OptiClick installs for Capcom games"),
+    # REF", Capcom games only. ClawDeck pins the fork's release 15 (with OptiScaler v10 instead of 0.9.5-pre4, which
+    # isn't published); praydog's nightly is no longer installed, so it isn't watched. New releases are checked here
+    # before ClawDeck's Capcom setup is bumped.
+    "REFramework (onehoon fork)": ("prerelease", "onehoon/REFramework", "Capcom RE Engine games: the REFramework OptiClick installs (reframework.py; pinned with sha256)"),
     "OptiScaler (onehoon fork)": ("prerelease", "onehoon/OptiScaler", "the custom OptiScaler build onehoon's REFramework fork is made for"),
     "OptiScaler 0.9.5 previews": ("prerelease", "optiscaler/OptiScaler", "0.9.5-pre builds; OptiClick uses 0.9.5-pre4 for Onimusha"),
     "OptiClick": ("prerelease", "onehoon/OptiClick", "reference: what OptiClick installs per game (its download manifest)"),

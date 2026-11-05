@@ -6,7 +6,9 @@ For a game, match() finds its entry by the game's executables (OptiScaler's own 
 
   * ClawDeck's own OptiScaler (optiscaler.py) with XeSS on XMX and XeSS frame generation (Intel's own, as on Windows);
   * the game's OptiScaler settings from the list, written into its OptiScaler.ini ([Section] Key = Section_Key);
-  * Capcom RE Engine games: REFramework (dinput8.dll) next to OptiScaler, or Capcom's anti-tamper stops the game.
+  * Capcom RE Engine games: OptiClick's Capcom setup (onehoon's REFramework as dinput8.dll, OptiScaler v10 in the
+    OptiScaler/ subfolder, the game's DLSS frame generation turned into XeSS-FG; launchenv.capcom), or Capcom's
+    anti-tamper stops the game. games.json "capcom" says which of them were tested on a Claw.
 """
 from __future__ import annotations
 
@@ -55,29 +57,38 @@ def is_re_engine(doc: dict, exes: list[str]) -> bool:
 
 
 def _ours(folder: str) -> set[str]:
-    """Files ClawDeck's OptiScaler added to this folder (its manifest), which the game didn't ship: OptiScaler brings
-    libxess.dll and AMD's FSR DLLs, and counting them turned CONTROL into "ships XeSS" once set up (2026-11-04).
-    A file the game had and OptiScaler replaced (backed up) still counts as the game's."""
+    """Files ClawDeck's OptiScaler added below this folder (its manifest), which the game didn't ship, as absolute
+    paths: OptiScaler brings libxess.dll and AMD's FSR DLLs (in OptiScaler/ with v10), and counting them turned
+    CONTROL into "ships XeSS" once set up (2026-11-04). A file the game had and OptiScaler replaced (backed up) still
+    counts as the game's."""
     try:
         with open(os.path.join(folder, ".clawdeck-optiscaler", "manifest.json"), "r", encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError):
         return set()
     backed = {str(x).lower() for x in m.get("backed") or []}
-    return {str(x).lower() for x in m.get("added") or [] if str(x).lower() not in backed and "/" not in str(x)}
+    return {os.path.join(folder, *str(x).split("/")).lower() for x in m.get("added") or [] if str(x).lower() not in backed}
 
 
 def _has(game_dir: str | None, names: tuple[str, ...]) -> bool:
     if not game_dir or not os.path.isdir(game_dir):
         return False
     base = game_dir.rstrip(os.sep).count(os.sep)
+    ours: set[str] = set()
     for r, d, f in os.walk(game_dir):
         if r.count(os.sep) - base >= DEPTH:
             d[:] = []
-        lo = {x.lower() for x in f} - _ours(r)
+        ours |= _ours(r)                       # os.walk is top-down: a manifest is read before the folders below it
+        lo = {x.lower() for x in f if os.path.join(r, x).lower() not in ours}
         if any(n in lo or (n.endswith("*") and any(x.startswith(n[:-1]) for x in lo)) for n in names):
             return True
     return False
+
+
+def capcom_tested(doc: dict, exes: list[str]) -> str | None:
+    """Where OptiClick's Capcom setup was seen working for this game (games.json "capcom" "tested"), else None."""
+    tested = {k.lower(): v for k, v in ((doc.get("capcom") or {}).get("tested") or {}).items()}
+    return next((tested[e] for e in exes if e in tested), None)
 
 
 def recommend(doc: dict, game_dir: str | None) -> dict:
@@ -107,10 +118,16 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         route, launch, opti = "own_xess", {}, False
         why = "This game ships XeSS: use XeSS in its graphics menu; it runs on the XMX cores by itself."
     elif re_engine:
+        # OptiClick's Capcom setup: the game's own DLSS frame generation is what OptiScaler turns into XeSS-FG, so it
+        # is the frame generation source whatever files the game ships; the wiki's Spoofing_Dxgi=false would hide
+        # DLSS-G (it needs the Nvidia spoofing), so it is left out here
         route, opti = "re_engine", True
+        ofg = fg_source = "dlssg"
+        ini.pop("Spoofing_Dxgi", None)
         launch = {"opti": "xess", "opti_fg": ofg, "opti_ini": ini, "reframework": True}
         why = ("Capcom RE Engine: OptiScaler (XeSS on the XMX cores) with REFramework, which keeps Capcom's "
-               "anti-tamper from stopping the game. Pick DLSS in the game's graphics menu.")
+               "anti-tamper from stopping the game. In the game's graphics menu turn on DLSS and DLSS Frame "
+               "Generation: OptiScaler makes them XeSS and XeSS frame generation.")
     else:
         # DLSS and FSR games alike, as OptiClick does: OptiScaler takes the game's DLSS or FSR and runs XeSS (or FSR
         # 4.1.1) on the XMX cores. FSR-only games used xess-xmx-linux's own FSR route before; OptiScaler offers the
@@ -125,11 +142,15 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
                        else "OptiScaler's list has this game; no extra settings needed")
     if later and opti:
         reasons.append(f"Not yet possible with the OptiScaler ClawDeck pins ({doc.get('ini_version') or '?'}): {', '.join(later)}")
-    if (g or {}).get("quirks") and opti:
+    if (g or {}).get("quirks") and opti and not re_engine:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
+    tested = capcom_tested(doc, exes) if re_engine else None
+    if re_engine:
+        reasons.append(f"The way OptiClick sets up Capcom games, tested on a Claw: {tested}" if tested else
+                       "The way OptiClick sets up Capcom games; not tested on a Claw in this game yet")
     return {
         "route": route, "known": bool(g), "frame_gen": ofg if opti else None, "fg_source": fg_source, "id": (g or {}).get("id"), "name": (g or {}).get("name"),
-        "re_engine": re_engine, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
+        "re_engine": re_engine, "capcom": re_engine, "capcom_tested": tested, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
         "launch": launch, "reasons": reasons, "ini_version": doc.get("ini_version"),
         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
         "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],

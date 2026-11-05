@@ -13,11 +13,12 @@
   "note": "v0.17 (OptiScaler 0.9.4, FSR 4 variants) installed and opened on the Claw 8 EX 2026-11-04. OptiScaler per game (Bazzite ships it in the Portal); ClawDeck installs it only where it is missing, and passes Intel presets to it through its environment variables"
  },
  "reframework": {
-  "repo": "praydog/REFramework-nightly",
-  "tag": "nightly-01433-d4611aef1d63effd3a736bdf9404ea702428017d",
+  "repo": "onehoon/REFramework",
+  "tag": "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866",
   "asset_glob": "REFramework.zip",
-  "note": "Capcom RE Engine games: dinput8.dll next to the game's exe (one zip for every game). Nightly 01433 (2026-10-21), installed with OptiScaler without asking (maintainer, 2026-11-04); Onimusha test on a Claw still to confirm.",
-  "sha256": "b3ff4f497be6f108ef494c2c02156b61b8d04f3171378ecc0dc28c218ee296b3"
+  "sha256": "538666f011a9ca54d38e87815a6227066daa32bb0349c392c98543268aaa9a64",
+  "dll_sha256": "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98",
+  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, OptiClick calls it REFramework 0.1.0.69) next to the game's exe. onehoon's fork (OptiClick's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: OptiClick's working Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet."
  },
  "optiscaler": {
   "version": "0.9.4",
@@ -32,5 +33,23 @@
    }
   ],
   "note": "ClawDeck's own OptiScaler (optiscaler.py): the same release and OptiPatcher build Decky Framegen v0.17 pins, with the same sha256."
+ },
+ "optiscaler_v10": {
+  "version": "10.0.0-pre1-20261030",
+  "repo": "optiscaler/OptiScaler-nightly",
+  "tag": "nightly-20261030",
+  "asset": "OptiScaler_v10.0.0-pre1_20261030.7z",
+  "url": "https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261030/OptiScaler_v10.0.0-pre1_20261030.7z",
+  "sha256": "db4fe2deae7edd9f6657f5cb223edc694ebdec62b52f15a3a59913f8b656c176",
+  "layout": "subfolder",
+  "extras": [
+   {
+    "name": "OptiPatcher",
+    "url": "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/bins-for-optipatcher-rolling/OptiPatcher_rolling.asi",
+    "sha256": "88b9e1be3559737cd205fdf5f2c8550cf1923fb1def4c603e5bf03c3e84131b1",
+    "dest": "OptiScaler/plugins/OptiPatcher.asi"
+   }
+  ],
+  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. OptiClick's Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4)."
  }
 }
