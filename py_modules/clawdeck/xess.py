@@ -237,6 +237,20 @@ def steam_install_dir(home: str, appid: str) -> str | None:
     return None
 
 
+def steam_app_name(home: str, appid: str) -> str | None:
+    """The game's name from its appmanifest, as Steam shows it."""
+    if not str(appid).isdigit():
+        return None
+    libs = [os.path.join(home, STEAM)]
+    for m in re.finditer(r'"path"\s+"([^"]+)"', sysfs.read(os.path.join(home, STEAM, "steamapps", "libraryfolders.vdf")) or ""):
+        libs.append(m.group(1).replace("\\\\", "/"))
+    for lib in libs:
+        m = re.search(r'"name"\s+"([^"]+)"', sysfs.read(os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf")) or "")
+        if m:
+            return m.group(1)
+    return None
+
+
 TOOLS = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common Redistributables|SteamVR)", re.I)
 
 
