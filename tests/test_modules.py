@@ -1430,3 +1430,16 @@ def test_reframework_remove_takes_a_pinned_build_without_the_mark_and_leaves_oth
     (g / "dinput8.dll").write_bytes(b"some other dinput8")
     r = reframework.remove(str(g), (sha,))
     assert r["removed"] is False and r["present"] and (g / "dinput8.dll").exists()
+
+
+@pytest.mark.parametrize("dll", ["ffx_fsr2_api_x64.dll", "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_upscaler_vk.dll"])
+def test_fsr2_and_fsr3_games_get_optiscaler_on_xmx(tmp_path, dll):
+    from clawdeck import gamedb
+    g = tmp_path / "game"
+    g.mkdir()
+    (g / dll).write_bytes(b"x")
+    doc = {"games": [], "re_engine_exes": []}
+    assert gamedb.support(doc, str(g)) == {"ok": True, "via": ["FSR"]}
+    rec = gamedb.recommend(doc, str(g))
+    assert rec["route"] == "optiscaler" and rec["launch"]["opti"] == "xess" and rec["ships"]["upscaler"] == ["FSR"]
+    assert "Pick FSR in the game's graphics menu" in rec["reasons"][0]
