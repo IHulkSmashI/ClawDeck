@@ -17,6 +17,8 @@ Framegen's fgmod reads from the environment, so a game Decky Framegen patched st
                                     inject -> FSR=xess FSR_FG=inject: XeSS-FG for a game with FSR upscaling and no
                                               FSR frame generation
   xess_latest  bool                 XESS=latest: Intel's current XeSS libraries instead of the game's older ones
+  cores        all | e              e -> CLAWDECK_CORES=e: the game runs on the E-cores only (the launch wrapper's
+                                    taskset), the P-cores left free; per game, live, undone when the game exits
   low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
   opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
                                     OptiScaler upscaler for this game: XeSS on XMX, FSR 4 INT8 (experimental on
@@ -74,7 +76,7 @@ OPTI_FG = {
     "upscaler": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "upscaler", "FrameGen_FGOutput": "xefg"},  # any game
 }
 KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll",
-        "opti_overlay"}
+        "opti_overlay", "cores"}
 # OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
 # generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
 OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
@@ -143,6 +145,11 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     if route not in FSR_ROUTES:
         raise ValueError(f"unknown FSR route {route!r}")
     env.update(FSR_ROUTES[route])
+    cores = launch.get("cores")
+    if cores not in (None, "all", "e"):
+        raise ValueError(f"cores must be all or e, not {cores!r}")
+    if cores == "e":
+        env["CLAWDECK_CORES"] = "e"
     if launch.get("xess_latest"):
         env["XESS"] = "latest"
     # low latency (XeLL) is always on: an old "off" choice is ignored (maintainer, 2026-11-04)

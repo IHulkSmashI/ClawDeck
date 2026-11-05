@@ -1199,3 +1199,13 @@ def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_pat
     assert optiscaler.owner(str(game))["version"] == v["optiscaler_v10"]["version"]
     r = p.run(p.game_choose("2638890", "own", 0))
     assert r["ok"] and sorted(str(q.relative_to(game)) for q in game.rglob("*")) == before
+
+
+def test_launch_env_e_cores_only():
+    from clawdeck import launchenv
+    assert launchenv.compose({"cores": "e"})["CLAWDECK_CORES"] == "e"
+    assert "CLAWDECK_CORES" not in launchenv.compose({"cores": "all"})
+    assert "CLAWDECK_CORES" not in launchenv.compose({})
+    import pytest
+    with pytest.raises(ValueError):
+        launchenv.compose({"cores": "p"})
