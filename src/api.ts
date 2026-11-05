@@ -83,7 +83,8 @@ export type GameStatus = { xmx_proof?: XmxProof; launch: Launch; xess: XessState
   opti_version?: string | null;
   files?: { owner: string | null; version?: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
-export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[] };
+export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[];
+  tags?: { text: string; kind: "fsr" | "xess" | "fg" }[] };
 export const gamesList = callable<[], GameEntry[]>("games_list");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
