@@ -3,7 +3,7 @@ import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
+  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setPl2, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -199,6 +199,13 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
             quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
             quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
+        {custom && !quick && <ToggleField label="Set PL2 yourself" checked={!!st?.pl2_manual}
+          description={explain(st?.pl2_manual ? "PL2, the short-burst limit, is the slider below instead of your TDP + 2 W." : `PL2, the short-burst limit, follows your TDP: ${tdp + 2} W (TDP + 2 W, as Handheld Daemon and PowerControl do).`,
+            "a higher PL2 gives the CPU and graphics short bursts above the TDP: snappier loading, more heat, and frame times can get less even.")}
+          onChange={async (v) => { const r = await setPl2(v, v ? (st?.pl2_set_w ?? tdp + 2) : null); toast(r.summary); refresh(); }} />}
+        {custom && !quick && st?.pl2_manual && <SliderField label="PL2 (W)" value={Math.max(tdp, st?.pl2_set_w ?? tdp + 2)} min={tdp} max={st?.pl2_max ?? 45} step={1} showValue
+          onChange={(w) => latest("pl2", () => setPl2(true, w), (r) => { toast(r.summary); refresh(); })}
+          description={explain(`From your TDP (${tdp} W) to ${st?.pl2_max ?? 45} W, saved for ${slot?.plugged ? "plugged in" : "battery"}.`)} />}
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C, then back up 2 W every 30 s once under 80 °C, to your limit.`
             : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`

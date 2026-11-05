@@ -47,6 +47,10 @@ The four-panel UI has not been on the device yet.
 
 ## Needs the maintainer
 
+- **PL2 by hand (2026-11-05, as ClawTweaks):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
+  saved per power source; off: PL2 = TDP + 2 W. Check the chip reads it:
+  `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw` (µW). Other profiles always use TDP + 2 W.
+
 - **XeFG even flips (xess-xmx-linux branch xefg-flip-metering, test build fg-meter-test-build, 2026-11-05):** the
   shim spaces XeFG's presents itself, since on Intel XeFG leaves pacing to the Windows driver and nothing does it on
   Linux. Off by default. With `IGDEXT_FG_METER=1` (added to `~/.local/share/clawdeck/xmx.env` for the test) the log

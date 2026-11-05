@@ -355,6 +355,10 @@ class Plugin:
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
         st["thermal"] = self.guard.status()
+        slot = "plugged" if self.battery.plugged() else "battery"
+        st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
+        st["pl2_set_w"] = self.settings.get(f"pl2_w_{slot}")
+        st["pl2_max"] = self.hw.model["tdp"].get("sppt_max", 45)
         return st
 
     def _limit_result(self, name: str, applied: dict, failed: list, plugged) -> dict:
@@ -396,6 +400,34 @@ class Plugin:
             r = self._apply_pick_now(bool(plugged))     # the guard's step and autotune's learned TDP start over
             ok = r.get("applied", {}).get("tdp") is not None
             return self._limit_result("Custom", {"tdp": r["applied"]["tdp"]} if ok else {}, [] if ok else ["tdp"], plugged)
+
+    def _pl2_for(self, pk: dict, plugged: bool) -> None:
+        """PL2 by hand (ClawTweaks' switch): only with the Custom profile, per power source; otherwise PL1 + 2 W."""
+        slot = "plugged" if plugged else "battery"
+        w = self.settings.get(f"pl2_w_{slot}") if self.settings.get("pl2_manual") and pk.get("profile") == "custom" else None
+        self.power.pl2_w = int(w) if w else None
+
+    async def set_pl2(self, manual: bool, watts: int | None = None) -> dict:
+        """Power → Custom: "Set PL2 yourself" on (with its watts, for this power source) or off (PL2 = PL1 + 2 W, as
+        Handheld Daemon / PowerControl / PowerStation do). Applied at once to the current pick."""
+        async with self._power_lock:
+            plugged = bool(self.battery.plugged())
+            slot = "plugged" if plugged else "battery"
+            self.settings["pl2_manual"] = bool(manual)
+            if watts is not None:
+                hi = self.hw.model["tdp"].get("sppt_max", 45)
+                self.settings[f"pl2_w_{slot}"] = max(self.hw.model["tdp"]["min"], min(int(watts), hi))
+            self._save_settings()
+            sysfs.clear_error()
+            r = self._apply_pick_now(plugged)
+            st = self.power.status()
+            got = st.get("pl2_w")
+            want = self.power.pl2_w
+            ok = r.get("applied", {}).get("tdp") is not None and (want is None or got is None or round(got) == want or
+                                                                   round(got) == max(r["applied"]["tdp"], want))
+            line = (f"PL2 {round(got)} W" if got is not None else "PL2 set") + (" (yours)" if want is not None else " (PL1 + 2 W)")
+            return {"ok": ok, "manual": bool(manual), "pl2_w": want, "read_w": got, "summary": line,
+                    "error": None if ok else (sysfs.last_error() or "the chip didn't take that PL2")}
 
     async def power_slot(self, appid: str | None = None) -> dict:
         """What the running game remembers for this power source (Power's "Saved for <game>" line), and `pick`: the
@@ -546,6 +578,7 @@ class Plugin:
         pk = self._pick(appid, plugged)
         prof = pk["prof"]
         self.guard.reset()
+        self._pl2_for(pk, plugged)
         result = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
         result["limit_w"] = result["applied"].get("tdp")
         # autotune is for battery: plugged in it only runs when the user asked for that too (Advanced)
@@ -588,6 +621,7 @@ class Plugin:
             return None
         pk = self._pick(None, plugged)
         self.guard.reset()
+        self._pl2_for(pk, plugged)
         r = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
         self._holding_pick = True
         self._held_or_release(r)
