@@ -3,7 +3,7 @@ import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyProfile, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
+  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -100,6 +100,15 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const atRef = useRef<AutotuneStatus | null>(null);
   atRef.current = at;
   useEffect(() => { refresh(); }, []);
+  // a game runs but ClawDeck wasn't told (Decky restarted during the game, an update): tell it now, once, so the
+  // game's power pick and Autotune start without quitting the game
+  const resynced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!appid || !at || at.game === appid || resynced.current === appid) return;
+    resynced.current = appid;
+    uiLog(`power: ${appid} runs but the backend has ${at.game ?? "no game"}: reporting it`);
+    gameStarted(appid).then(() => refreshRef.current()).catch(() => undefined);
+  }, [appid, at?.game]);
   // while the panel is open in a game (Autotune on), or the temperature guard is acting, the live line follows along:
   // one cheap call every 3 s, only while visible. When Autotune starts, stops, gets a new limit or the power source
   // changes, everything is read again, so nothing stale stays on screen
@@ -161,7 +170,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     ? `${Math.round(at.avg_fps)} fps${at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : ""}` +
       (at.source === "rendered" && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
   const atLine = !autotune ? "Autotune off"
-    : !at?.running ? (appid ? "Autotune on: waiting for frame times (is ClawDeck in the launch options?)" : "Autotune on: starts with the next game")
+    : !at?.running ? (!appid ? "Autotune on: starts with the next game"
+      : at?.why && at.why !== "not started" ? `Autotune: ${at.why}` : "Autotune on: starting…")
     : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
     : `Autotune on · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "");
   // the live line under the slider: your limit (the slider) and what Autotune runs the chip at under it now

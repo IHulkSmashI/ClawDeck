@@ -1133,3 +1133,17 @@ def test_autotune_thermal_release_lifts_the_cap_and_measures_again(fake_hw, monk
     assert at.thermal_release(25) and s.thermal_cap is None and s.phase == "measure" and s.learned.tdp == 25
     assert not at.thermal_release(25)
     at.session = None
+
+
+def test_get_autotune_says_why_it_is_not_running(plugin):
+    p = plugin
+    p.settings["autotune"] = True
+    p.settings["autotune_plugged"] = False
+    st = p.run(p.get_autotune())
+    assert not st["running"] and st["why"] == "no game reported to ClawDeck yet" and st["game"] is None
+    p.ac["plugged"] = True
+    p.run(p.game_started("42"))
+    st = p.run(p.get_autotune())
+    assert st["game"] == "42" and not st["running"] and st["why"].startswith("off on the charger")
+    p.settings["autotune"] = False
+    assert p.run(p.get_autotune())["why"] == "off"
