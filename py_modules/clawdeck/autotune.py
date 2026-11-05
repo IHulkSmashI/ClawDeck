@@ -23,6 +23,9 @@ on 10 s windows of rendered fps that restart after every change, one change per 
      move as watts drop); if a lever helps, lowering goes on from there;
   4. hold: watch. Below the line for two windows -> +1 W. A sustained shift of SHIFT either way (a new area, changed
      graphics settings), a change of the frame-generation multiplier, or RESCAN_S on the clock -> measure again.
+A window far from the game's usual fps (a loading screen, a menu, a pause) or with a load hitch in it is skipped, not
+decided on; three in a row are taken as real. Only a finished result (hold, settled) is saved for the game; a session
+cut short keeps the last good one. While a game runs the loop runs on the E-cores at nice 10 (quiet.py).
 Frames per watt (rendered fps / package power) is shown; it is not what is chased: it improves all the way down to
 the minimum TDP, which is why the rule is "within KEEP of the most", not "the best ratio".
 
@@ -63,7 +66,11 @@ FLAT_FPS_PER_W = 0.2    # a step that cost at most this per watt is a plateau: a
 STEEP_FPS_PER_W = 1.0   # near the line, a 1 W step that costs more than this is past the knee: stop there
 BALANCE_GAIN = 0.02     # a CPU/GPU lever stays only if it adds this much fps
 SHIFT = 0.15            # a sustained change this large (two windows) means a new scene: measure again
-RESCAN_S = 300          # and every this long anyway
+RESCAN_S = 1200         # and every this long anyway. Was 300 s: every 5 min it went back to the full TDP and down
+                        # again, ~2 min of changes in every 5 (the maintainer saw it as stutter, 2026-11-04)
+OFF_LO, OFF_HI = 0.35, 2.5  # a window this far from the game's usual fps is a loading screen, menu or pause: skipped
+DIP = 0.4               # ... and so is one with a second below this share of its average (a load hitch in the window)
+MAX_SKIPS = 3           # three such windows in a row are real (new settings, a much lighter or heavier game): used
 XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer counts
 LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_S, so a window sees sustained power
 SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
@@ -231,6 +238,17 @@ class Sampler:
                       shown_fps=shown, source=src)
 
 
+def summary(s: Session) -> str:
+    """One line for the toast at game exit: what autotune found, or that it didn't get far enough to save it."""
+    l = s.learned
+    if not s.settled or not l.max_fps:
+        return "Autotune was still learning; nothing new saved. It goes on next time."
+    fps = l.fps or l.max_fps
+    saved = (l.ceiling or s.ceiling_tdp) - l.tdp
+    return (f"Autotune saved {l.tdp} W of your {l.ceiling or s.ceiling_tdp} W: {fps:.0f} of {l.max_fps:.0f} fps"
+            + (f", saves {saved} W" if saved > 0 else ""))
+
+
 def classify(s: Sample) -> str:
     if s.gpu_busy is not None:      # a real load figure beats guessing from the clock
         if s.gpu_busy >= 90 and (s.cpu_pct is None or s.cpu_pct < 60):
@@ -289,6 +307,8 @@ class Session:
     source: str = "presented"
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
+    skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
+    settled: bool = False               # reached hold and stayed there SETTLED_WINDOWS: what it found is worth saving
     short_tau: bool = False             # the PL1 time window is LEARN_TAU_US right now (findings §22.2)
     tau_refused: bool = False           # the firmware refused it once: don't retry every window
     eff_trial: bool = False             # GPU efficiency mode on trial at the TDP floor (judged on the next window)
@@ -325,6 +345,7 @@ class Autotune:
                     keep_pct=float(keep_pct or KEEP_PCT), phase="hold" if reuse else "measure")
         s.measured_at = time.monotonic() if reuse else None
         s.quiet = SETTLED_WINDOWS if reuse else 0           # a saved result is already learned: keep the boost window
+        s.settled = bool(reuse)
         self.session = s
         self.sampler.set_prefix(xell_log)
         self._apply(l)
@@ -401,7 +422,8 @@ class Autotune:
         if s:
             if revert:
                 self.power.revert_all()
-            return {"learned": s.learned.__dict__, "samples": len(s.history)}
+            return {"learned": s.learned.__dict__, "samples": len(s.history), "settled": s.settled,
+                    "summary": summary(s)}
         return None
 
     def _apply(self, l: Learned) -> None:
@@ -447,6 +469,9 @@ class Autotune:
         if len(s.window) < s.settle:
             return                                       # judge a setting on a full window of its own numbers
         fps = sum(s.window) / len(s.window)
+        if self._not_gameplay(s, fps, min(s.window)):
+            s.window, s.watts, s.shown = [], [], []
+            return
         s.avg_fps, s.low_fps = fps, min(s.window)
         s.fps_per_w = fps / (sum(s.watts) / len(s.watts)) if s.watts else None
         self._multiplier(s)
@@ -463,6 +488,8 @@ class Autotune:
         else:
             self._hold(s, fps)
         s.quiet = 0 if s.last_change_at != changed_at else s.quiet + 1
+        if s.phase == "hold" and s.quiet >= SETTLED_WINDOWS:
+            s.settled = True
         self._tau(s, s.phase != "hold" or s.quiet < SETTLED_WINDOWS)
 
     def _tau(self, s: Session, learning: bool) -> None:
@@ -481,6 +508,20 @@ class Autotune:
             self.power.restore_pl1_window()
             s.short_tau = False
             log.info("autotune settled: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
+
+    def _not_gameplay(self, s: Session, fps: float, low: float) -> bool:
+        """A loading screen, a menu or a pause is not the game: deciding on it is how 11 fps in a loading screen once
+        sent the TDP back up (Onimusha, 2026-11-04). Such a window is skipped, unless MAX_SKIPS in a row say it is the
+        game now."""
+        ref = s.learned.fps or s.learned.max_fps
+        off = bool(ref) and not (ref * OFF_LO <= fps <= ref * OFF_HI)
+        if (off or low < fps * DIP) and s.skips + 1 < MAX_SKIPS:
+            s.skips += 1
+            log.info("autotune: skipped a %.0f fps window (low %.0f%s): loading, menu or pause", fps, low,
+                     f", usual {ref:.0f}" if ref else "")
+            return True
+        s.skips = 0
+        return False
 
     # ---- the phases ----------------------------------------------------------------------------------------------
     def _margin(self, s: Session) -> float:
