@@ -127,6 +127,17 @@ INI_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")     # Decky Fra
 INI_VAL_RE = re.compile(r"^(true|false|auto|-?[0-9]+(\.[0-9]+)?)$")
 
 
+# 3x / 4x through OptiScaler's XeFG: Proton 11.0's DXVK reports the Claw's GPU as an AMD one as soon as a game loads
+# XeSS ("Detected XeSS usage, hiding Intel GPU Vendor" -> vendor 0x1002). XeSS frame generation then runs its
+# cross-vendor path, never asks the Control Library for the multi-frame override (xess-xmx-linux's ControlLib.dll,
+# XESS_FG), and caps itself at 2x: the game greys out 3x/4x. DXVK's own customVendorId wins over that hiding, so the
+# game sees the Intel GPU again and XeSS-FG offers 3x/4x, as with Intel Graphics Software's override (CONTROL
+# Resonant on the Claw 8 EX, 2026-11-05: 2x before, 3x with this). OptiScaler games only: they run OptiScaler's own
+# XeSS 2.0.2.68 set, which DXVK's upstream lists as safe to show the Intel GPU to; a game's own older XeSS-FG (1.1)
+# crashes with it (xess-xmx-linux docs/games.md, Cyberpunk 2077).
+SHOW_INTEL = "dxgi.customVendorId = 8086"
+
+
 def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
     env: dict[str, str] = {}
     x = launch.get("xmx")
@@ -148,6 +159,9 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
     if fg:
         env["XESS_FG"] = str(fg)
+    if fg >= 3 and launch.get("opti") not in (None, "off") and (launch.get("opti_fg") not in (None, "off")
+                                                               or launch.get("opti_xefg")):
+        env["DXVK_CONFIG"] = SHOW_INTEL
     route = launch.get("fsr") or "off"
     if route not in FSR_ROUTES:
         raise ValueError(f"unknown FSR route {route!r}")

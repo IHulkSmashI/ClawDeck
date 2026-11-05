@@ -1151,6 +1151,16 @@ def test_get_autotune_says_why_it_is_not_running(plugin):
     assert p.run(p.get_autotune())["why"] == "off"
 
 
+def test_get_autotune_says_the_running_game_has_frame_generation(plugin):
+    p = plugin
+    p.profiles.set_launch("42", {"opti": "xess", "opti_fg": "dlssg", "fg": 3})
+    assert p.run(p.get_autotune())["game_fg"] == 0            # no game running
+    p.run(p.game_started("42"))
+    assert p.run(p.get_autotune())["game_fg"] == 3
+    p.profiles.set_launch("42", {"opti_fg": "off"})
+    assert p.run(p.get_autotune())["game_fg"] == 0
+
+
 def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_path, monkeypatch):
     """Per-game → Install OptiScaler in Onimusha: v10 in OptiScaler/, onehoon's REFramework, dxgi + dinput8 overrides;
     FSR 4.1.2 refused while XMX is off; Uninstall leaves the game folder as it was."""

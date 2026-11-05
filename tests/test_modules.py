@@ -87,6 +87,17 @@ def test_launch_wrapper_reads_env_file(tmp_path):
     assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "IGDEXT_TRACE=1" in out   # the user's own overrides are kept
 
 
+def test_launch_wrapper_keeps_the_users_own_dxvk_options(tmp_path):
+    import subprocess
+    (tmp_path / "launch").mkdir()
+    (tmp_path / "launch" / "42.env").write_text("DXVK_CONFIG=dxgi.customVendorId = 8086\n")
+    out = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], capture_output=True, text=True,
+                         env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path),
+                              "SteamAppId": "42", "DXVK_CONFIG": "dxgi.maxFrameRate = 60",
+                              "CLAWDECK_NO_MANGOHUD": "1"}).stdout
+    assert "DXVK_CONFIG=dxgi.maxFrameRate = 60;dxgi.customVendorId = 8086" in out
+
+
 def test_profiles_launch_slot(tmp_path):
     p = profiles.Profiles(str(tmp_path / "p.json"))
     p.set_launch("7", {"xmx": False, "fg": 3})
@@ -1454,6 +1465,18 @@ def test_3x_4x_stay_on_optiscaler_0_9_4_and_xess_fg():
         assert not launchenv.v10(launch)
         assert launchenv.opti_ini(launch)["XeFG_InterpolationCount"] == str(fg - 1)
         assert launchenv.compose(launch)["XESS_FG"] == str(fg)
+
+
+def test_3x_4x_through_optiscaler_show_the_intel_gpu_to_xess_fg():
+    """Proton 11.0's DXVK hides the Intel GPU from XeSS games; XeSS-FG then caps itself at 2x (CONTROL, 2026-11-05)."""
+    from clawdeck import launchenv
+    show = "dxgi.customVendorId = 8086"
+    assert launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3})["DXVK_CONFIG"] == show
+    assert launchenv.compose({"opti": "xess", "opti_xefg": True, "fg": 4})["DXVK_CONFIG"] == show
+    # 2x needs no override; a game's own XeSS (no OptiScaler) keeps DXVK's hiding (its older XeSS-FG crashes)
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "dlssg", "fg": 2})
+    assert "DXVK_CONFIG" not in launchenv.compose({"fg": 4, "xess_latest": True})
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "off", "fg": 3})
 
 
 

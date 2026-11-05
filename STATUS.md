@@ -45,6 +45,11 @@ setting and 37 W after revert; CPU/GPU ceilings; charge threshold; face buttons;
 fixed the same day: backend not root (§13), MSI firmware TDP attributes ignored (§12), no CA store (§15).
 The four-panel UI has not been on the device yet.
 
+2026-11-05, Claw 8 EX, Bazzite, Proton 11.0: CONTROL Resonant at 3x on OptiScaler 0.9.4 (FSR 4.1.2 on XMX, XeFG,
+about 146 fps shown) once DXVK showed the Intel GPU (`DXVK_CONFIG=dxgi.customVendorId = 8086`; Proton 11.0 hides it
+from XeSS games and XeSS-FG then caps at 2x). Autotune reads CONTROL's base frame rate; Quick Access menus smooth;
+sleep/wake several times fine.
+
 ## Needs the maintainer
 
 - **OptiScaler's Compatibility List per game (2026-11-05):** the third live list. Per-game shows "Loads as winmm.dll
