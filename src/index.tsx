@@ -23,7 +23,7 @@ export default definePlugin(() => {
         }).catch(() => { /* backend logs it */ });
       } else {
         gameStopped(appid).then((r: any) => {
-          if (r?.learned?.learned) toaster.toast({ title: "ClawDeck autotune", body: `Saved: ${r.learned.learned.tdp} W, ${r.learned.learned.bound}-bound` });
+          if (r?.learned?.summary) toaster.toast({ title: "ClawDeck autotune", body: r.learned.summary });
         }).catch(() => { /* backend logs it */ });
       }
     });
