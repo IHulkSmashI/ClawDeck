@@ -119,7 +119,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files && fsr4Xmx);
   const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.2 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.2 isn't offered: this game isn't DirectX 12."
     : !fsr4Xmx ? "FSR 4.1.2 isn't offered: XMX is off for this game, and FSR 4.1.2 needs the XMX cores (a black screen without them)."
-    : !rec.fsr4.files ? `FSR 4.1.2 appears once nitec's two files (or their zip) are in Downloads: ClawDeck picks them up by itself.` : "";
+    : !rec.fsr4.files ? `FSR 4.1.2's files aren't in place yet: reinstall ClawDeck, or put nitec's two files (or their zip) in Downloads.` : "";
   const upscalers = UPSCALERS.filter((u) => u.data === "xess" || (fsr4Ok && u.data.startsWith("fsr4")));
   const optiVer = gs?.opti_version ?? null;
   const outdated = !!(ours && optiVer && gs?.files?.version && gs.files.version !== optiVer);

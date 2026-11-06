@@ -1645,3 +1645,25 @@ def test_device_report_reads_names_only(tmp_path):
     hm = tmp_path / "class/hwmon/hwmon0"; hm.mkdir(parents=True); (hm / "name").write_text("oxp_ec\n"); (hm / "pwm1").write_text("0\n")
     r = health.device_report(str(tmp_path))
     assert r["dmi"]["product_name"] == "ONEXPLAYER 3" and r["hwmon"] == [{"name": "oxp_ec", "controls": ["pwm1"]}]
+
+
+def test_fsr4_files_come_inside_the_plugin_and_are_checked(tmp_path):
+    """Maintainer, 2026-11-06: the FSR 4.1.2 files are part of the build; nothing to download."""
+    import hashlib
+    from clawdeck import optiscaler
+    plugin, home = tmp_path / "plugin", tmp_path / "home"
+    (plugin / "bin/fsr4-xmx").mkdir(parents=True); home.mkdir()
+    good, bad = b"good", b"tampered"
+    (plugin / "bin/fsr4-xmx/a.dll").write_bytes(good)
+    (plugin / "bin/fsr4-xmx/b.dll").write_bytes(bad)
+    entry = {"files": {"a.dll": hashlib.sha256(good).hexdigest(), "b.dll": hashlib.sha256(b"other").hexdigest()}}
+    r = optiscaler.fsr4_xmx_from_plugin(str(home), str(plugin), entry)
+    assert r["copied"] == ["a.dll"] and r["missing"] == ["b.dll"] and not r["ok"]
+    assert (home / "fsr4-xmx/a.dll").read_bytes() == good and not (home / "fsr4-xmx/b.dll").exists()
+    entry["files"]["b.dll"] = hashlib.sha256(bad).hexdigest()
+    assert optiscaler.fsr4_xmx_from_plugin(str(home), str(plugin), entry) == {"ok": True, "copied": ["b.dll"], "missing": [], "dir": str(home / "fsr4-xmx")}
+
+
+def test_the_build_packages_the_fsr4_files():
+    wf = open(os.path.join(ROOT, ".github", "workflows", "build.yml")).read()
+    assert "tools/fetch_fsr4.py out/ClawDeck/bin/fsr4-xmx" in wf

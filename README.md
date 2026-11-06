@@ -27,8 +27,8 @@
 
 ## One plugin, the whole Claw
 
-- 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores. ClawDeck downloads it for
-  you and offers it in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
+- 🔥 **FSR 4.1.2 on the XMX cores.** AMD's best upscaler, rebuilt for Intel's AI cores. It comes with ClawDeck,
+  nothing extra to download, and shows in DirectX 12 games with DLSS or FSR: the best image the Claw can get.
 - ⚡ **XeSS 2 on XMX**, the real Intel path, not the slower DP4a fallback Linux gives you out of the box.
 - 🎞️ **XeSS frame generation, 2x to 4x,** with **XeLL low latency always on**, so the extra frames don't cost you the
   feel.
@@ -116,8 +116,8 @@ The face-button fix and the log fix apply on their own.
 To change something later: pick again and tap **Apply changes**, then restart the game.
 
 **DLSS on an Intel chip?** The game's DLSS option is only the input: the game hands OptiScaler the data it would give
-DLSS, and OptiScaler runs XeSS or FSR 4.1.2 on the XMX cores with it. FSR 4.1.2 downloads by itself the first time
-(about 100 MB) and shows for DirectX 12 games.
+DLSS, and OptiScaler runs XeSS or FSR 4.1.2 on the XMX cores with it. FSR 4.1.2 comes with ClawDeck and shows for DirectX 12
+games.
 
 ---
 

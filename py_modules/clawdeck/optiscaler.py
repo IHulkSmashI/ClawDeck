@@ -373,6 +373,33 @@ def fsr4_xmx_download(home: str, entry: dict) -> dict:
     return {"ok": True, "downloaded": got, "dir": xdir}
 
 
+FSR4_BUNDLED = os.path.join("bin", "fsr4-xmx")      # inside the plugin: the build puts the files there
+
+
+def fsr4_xmx_from_plugin(home: str, plugin_dir: str, entry: dict) -> dict:
+    """The FSR 4.1.2 XMX files that came inside ClawDeck.zip (the build adds them, sha256 checked: nothing to download,
+    maintainer 2026-11-06) copied to ~/fsr4-xmx, where the launch wrapper takes them from. Each one is checked again
+    against versions.json; a file already in place with the right sha256 is left as it is."""
+    src = os.path.join(plugin_dir, FSR4_BUNDLED)
+    xdir = os.path.join(home, FSR4_XMX_DIR)
+    got, missing = [], []
+    for name, sha in (entry.get("files") or {}).items():
+        dest, here = os.path.join(xdir, name), os.path.join(src, name)
+        if os.path.isfile(dest) and downloads.sha256_of(dest) == sha:
+            continue
+        if not os.path.isfile(here) or downloads.sha256_of(here) != sha:
+            missing.append(name)
+            continue
+        os.makedirs(xdir, exist_ok=True)
+        shutil.copyfile(here, dest + ".new")
+        os.replace(dest + ".new", dest)
+        got.append(name)
+    if got:
+        userexec.chown_tree(xdir, home)
+        log.info("FSR 4.1.2 XMX files from the plugin: %s", ", ".join(got))
+    return {"ok": not missing, "copied": got, "missing": missing, "dir": xdir}
+
+
 def _proton_cabinet(home: str) -> str | None:
     for p in sorted(glob.glob(os.path.join(home, ".local/share/Steam/steamapps/common/Proton*/files/lib/wine/x86_64-windows/cabinet.dll")), reverse=True):
         return p

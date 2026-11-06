@@ -977,10 +977,13 @@ class Plugin:
         try:
             if not any(m in optiscaler.FSR4_XMX_FILES for m in optiscaler.fsr4_xmx_missing(HOME)):
                 return
+            entry = self._versions().get("fsr4_xmx")
+            # inside ClawDeck.zip since 0.2.0-beta.2: nothing to download
+            if entry and optiscaler.fsr4_xmx_from_plugin(HOME, PLUGIN_DIR, entry).get("ok"):
+                return
             if optiscaler.fsr4_xmx_import(HOME).get("imported"):
                 return
-            entry = self._versions().get("fsr4_xmx")
-            if entry:
+            if entry:                               # an older zip, or a build without them: the download as before
                 decky.logger.info("FSR 4.1.2 XMX: %s", optiscaler.fsr4_xmx_download(HOME, entry))
         except Exception as e:                    # offline, or the release isn't there: Downloads still works
             decky.logger.info("FSR 4.1.2 XMX download: %s", e)
