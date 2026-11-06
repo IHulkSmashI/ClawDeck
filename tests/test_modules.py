@@ -973,7 +973,7 @@ def test_profiles_own_slot_is_only_the_games(tmp_path):
     assert p.own("1", False) == {"base": "max"} and p.own("1", True) == {}
 
 
-# ---- Capcom RE Engine games: OptiClick's setup (OptiScaler v10 in OptiScaler/, onehoon's REFramework) ---------------
+# ---- Capcom RE Engine games: the Capcom setup (OptiScaler v10 in OptiScaler/, onehoon's REFramework) ---------------
 def _snapshot(d):
     out = {}
     for r, ds, fs in os.walk(d):
@@ -1041,7 +1041,7 @@ def test_versions_pin_the_capcom_setup():
     assert lock["REFramework (onehoon fork)"] == ref["tag"] and lock["OptiScaler nightly (v10)"] == o10["tag"]
 
 
-def test_capcom_ini_is_opticlicks():
+def test_capcom_ini_matches_the_capcom_setup():
     from clawdeck import launchenv
     launch = {"opti": "xess", "opti_fg": "dlssg", "fg": 2, "reframework": True, "opti_overlay": 2,
               "opti_ini": {"Hotfix_RestoreComputeSignature": "true", "Spoofing_Dxgi": "false"}}     # an older saved profile
@@ -1055,7 +1055,7 @@ def test_capcom_ini_is_opticlicks():
     assert "Spoofing_Dxgi" not in ini and "XeFG_InterpolationCount" not in ini and "FramerateLimit" not in str(ini)
     assert "Spoofing_Dxgi" not in launchenv.compose(launch)                  # nor through the launch environment
     assert launchenv.opti_ini({**launch, "fg": 4})["DLSSG_OverrideInterpolationCount"] == "3"
-    assert launchenv.opti_ini({**launch, "fg": None})["DLSSG_OverrideInterpolationCount"] == "2"   # OptiClick's
+    assert launchenv.opti_ini({**launch, "fg": None})["DLSSG_OverrideInterpolationCount"] == "2"   # the tested value
     off = launchenv.opti_ini({**launch, "opti_fg": "off", "fg": None})
     assert off["FrameGen_Enabled"] == "false" and "DLSSG_OverrideInterpolationCount" not in off
     lite = launchenv.opti_ini({**launch, "opti": "fsr4_xmx_lite"})
@@ -1234,7 +1234,7 @@ def test_capcom_subfolder_files_dont_count_as_the_games(tmp_path, monkeypatch):
 
 def test_v10_install_takes_fakenvapi_out_of_its_release_archive(tmp_path, monkeypatch):
     """optiscaler.install with the v10 entry: OptiPatcher as a file, fakenvapi.dll out of fakenvapi's .7z (its own
-    sha256 checked) and OptiClick's fakenvapi.ini, all in OptiScaler/ of the package."""
+    sha256 checked) and the tested fakenvapi.ini, all in OptiScaler/ of the package."""
     import hashlib, shutil, subprocess
     from clawdeck import optiscaler
     if not (shutil.which("7z") or shutil.which("7za")):
@@ -1306,7 +1306,7 @@ def test_gamescope_idle_hold_found_in_the_binary(tmp_path, monkeypatch):
 
 
 # ---- live per-game lists (livedb) --------------------------------------------------------------------------------
-OPTICLICK_PAGE = """## Newly Supported Games
+SUPPORTED_LIST_PAGE = """## Newly Supported Games
 | Korean Title | English Title | Intel | AMD | NVIDIA |
 |---|---|---|---|---|
 | 컨트롤：레조넌트 | CONTROL Resonant | Intel Arc Series | Radeon iGPU*, RX 6/7/9000 Series | RTX 20/30/40/50 Series |
@@ -1319,14 +1319,14 @@ OPTICLICK_PAGE = """## Newly Supported Games
 """
 
 
-def test_opticlick_list_gives_the_intel_column_by_steam_app_id():
+def test_supported_list_gives_the_intel_column_by_steam_app_id():
     from clawdeck import livedb
-    e = livedb.parse_opticlick(OPTICLICK_PAGE)
+    e = livedb.parse_supported_list(SUPPORTED_LIST_PAGE)
     assert e["3669870"]["intel"] == "Intel Arc Series" and e["1154030"]["intel"] == "Not Supported"
-    assert livedb.opticlick_says(e, "3669870")["intel_ok"] is True
-    assert livedb.opticlick_says(e, "1154030")["intel_ok"] is False
-    assert livedb.opticlick_says(e, "42") == {"known": True, "listed": False, "intel_ok": None}
-    assert livedb.opticlick_says({}, "42")["known"] is False
+    assert livedb.supported_list_says(e, "3669870")["intel_ok"] is True
+    assert livedb.supported_list_says(e, "1154030")["intel_ok"] is False
+    assert livedb.supported_list_says(e, "42") == {"known": True, "listed": False, "intel_ok": None}
+    assert livedb.supported_list_says({}, "42")["known"] is False
 
 
 def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
@@ -1334,18 +1334,18 @@ def test_live_lists_refresh_and_newer_games_json_wins(tmp_path):
     bundled = tmp_path / "games.json"
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-11-05T00:00:00Z", "games": []}))
     newer = json.dumps({"schema": 1, "generated": "2026-11-06T00:00:00Z", "games": [{"id": "x"}]}).encode()
-    pages = {livedb.GAMES_URL: newer, livedb.OPTICLICK_URL: OPTICLICK_PAGE.encode(), livedb.OPTISCALER_COMPAT_URL: COMPAT_PAGE.encode()}
+    pages = {livedb.GAMES_URL: newer, livedb.SUPPORTED_LIST_URL: SUPPORTED_LIST_PAGE.encode(), livedb.OPTISCALER_COMPAT_URL: COMPAT_PAGE.encode()}
     out = livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: pages[u])
-    assert out == {"games": "updated", "opticlick": "updated", "optiscaler": "updated"}
+    assert out == {"games": "updated", "supported_list": "updated", "optiscaler": "updated"}
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)).startswith(str(tmp_path / "lists"))
-    assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
+    assert "1154030" in livedb.supported_list(str(tmp_path / "lists"))
     # fresh: no second download
     assert livedb.refresh(str(tmp_path / "lists"), str(bundled), get=lambda u: 1 / 0) == {}
     # another schema or an older list is never used; a failed download keeps the copy
     other = json.dumps({"schema": 2, "generated": "2027", "games": []}).encode()
     out = livedb.refresh(str(tmp_path / "lists"), str(bundled), force=True, get=lambda u: other if u == livedb.GAMES_URL else b"nothing")
-    assert out["games"] == "other schema, kept" and "kept" in out["opticlick"] and "kept" in out["optiscaler"]
-    assert "1154030" in livedb.opticlick(str(tmp_path / "lists"))
+    assert out["games"] == "other schema, kept" and "kept" in out["supported_list"] and "kept" in out["optiscaler"]
+    assert "1154030" in livedb.supported_list(str(tmp_path / "lists"))
     bundled.write_text(json.dumps({"schema": 1, "generated": "2026-12-01T00:00:00Z", "games": []}))
     assert livedb.games_path(str(tmp_path / "lists"), str(bundled)) == str(bundled)
 

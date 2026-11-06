@@ -30,7 +30,7 @@ const CHARGE_OPTIONS = [
 const kept: { fan?: string; charge?: string; chargePct?: number } = {};
 const snap = (d: number) => (d <= 0 ? 0 : d < 40 ? (d < 20 ? 0 : 40) : Math.min(100, Math.round(d)));
 
-/** Power → Fan and Battery: ClawTweaks' fan presets for the Claw (MSI's EC through the kernel's msi-wmi-platform
+/** Power → Fan and Battery: Fan presets for the Claw (MSI's EC through the kernel's msi-wmi-platform
  * driver) and the battery charge limit. Both stay as set across games and restarts; "Automatic" / "Off" undo them. */
 export const FanBattery: FC<{ quick?: boolean }> = ({ quick }) => {
   useExplanations();

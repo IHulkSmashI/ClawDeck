@@ -5,7 +5,7 @@
                      "onimushawots.exe", "onimushawots_demo.exe", "kunitsugami.exe", "kunitsugamidemo.exe", "drdr.exe",
                      "pragmata.exe", "pragmata_sketchbook.exe", "monster_hunter_stories_3_twisted_reflection.exe"],
   "capcom": {
-    "_comment": "Every game in re_engine_exes gets OptiClick's Capcom setup (onehoon's REFramework, OptiScaler v10 in the OptiScaler/ subfolder, DLSS-G to XeSS-FG; launchenv.capcom). tested: seen working on a Claw, with where and when. untested: games known to have DLSS frame generation the setup relies on, not run on a Claw yet; the rest of re_engine_exes is untested too.",
+    "_comment": "Every game in re_engine_exes gets the Capcom setup (onehoon's REFramework, OptiScaler v10 in the OptiScaler/ subfolder, DLSS-G to XeSS-FG; launchenv.capcom). tested: seen working on a Claw, with where and when. untested: games known to have DLSS frame generation the setup relies on, not run on a Claw yet; the rest of re_engine_exes is untested too.",
     "tested": {"onimushawots.exe": "Onimusha: Way of the Sword, Claw 8 EX on Bazzite, 2026-11-04"},
     "untested": ["dd2.exe", "dd2ccs.exe", "onimushawots_demo.exe"]
   },

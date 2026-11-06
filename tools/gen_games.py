@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gen_games.py - build assets/games.json, ClawDeck's per-game OptiScaler list, from OptiScaler's own sources.
 
-OptiClick's per-game database is private (an authenticated web service), so ClawDeck builds an open one:
+per-game databases elsewhere are private (authenticated web services), so ClawDeck builds an open one:
 
   1. OptiScaler's GameConfigs.cpp (main branch): the per-game settings its developers ship in code, newer than the
      OptiScaler ClawDeck pins (assets/versions.json "optiscaler", 0.9.4). ClawDeck writes them into the game's
@@ -9,7 +9,7 @@ OptiClick's per-game database is private (an authenticated web service), so Claw
      Intel); OnNonNvidia(...) ones are kept; WithXeFG(...) / WithUpscalerFGInput(...) keep their condition.
   2. Config.cpp: which [Section] Key each setting is in OptiScaler.ini.
   3. assets/games.claw.json: what ClawDeck adds by hand, by game id (Steam app id, REFramework, notes tested on a
-     Claw). It wins over 1. Its "re_engine_exes" and "capcom" (which Capcom games OptiClick's setup was tested in)
+     Claw). It wins over 1. Its "re_engine_exes" and "capcom" (which Capcom games the Capcom setup was tested in)
      are copied as they are.
 
   python3 tools/gen_games.py GameConfigs.cpp Config.cpp --ini OptiScaler.ini [--commit SHA]   writes assets/games.json

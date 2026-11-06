@@ -111,7 +111,7 @@ fi
 # E-cores only for this game (Per-game, CLAWDECK_CORES=e): the game and everything it starts inherit the affinity,
 # the P-cores stay free; nothing to undo, it ends with the game. The E-cores on the L3 (Panther Lake: 2-9), not the
 # LP-E cores without one (10-13), which are slower; a chip without that split gets all its Atom cores. On Windows
-# this needs a reboot (ClawTweaks' author, r/MSIClaw 2026-11): on Linux it is per game, live.
+# this needs a reboot (r/MSIClaw 2026-11): on Linux it is per game, live.
 pre=()
 if [ "${CLAWDECK_CORES:-}" = e ] && command -v taskset >/dev/null 2>&1 && [ -r /sys/devices/cpu_atom/cpus ]; then
   list=""; all=""
