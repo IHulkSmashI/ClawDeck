@@ -57,6 +57,9 @@ jobs:
           test -s bin/cabinet.dll && cp -r bin out/ClawDeck/
           cp -r tools/cabinet-lzms out/ClawDeck/tools/ && rm -rf out/ClawDeck/tools/cabinet-lzms/out
           cp assets/versions.json assets/games.json out/ClawDeck/assets/
+          # nitec's FSR 4.1.2 XMX files inside the zip (pinned in versions.json, sha256 checked): one install, nothing
+          # to download afterwards
+          python3 tools/fetch_fsr4.py out/ClawDeck/bin/fsr4-xmx
           cp CREDITS.md out/ClawDeck/
           rm -rf out/ClawDeck/py_modules/clawdeck/__pycache__
           (cd out && zip -qr ../ClawDeck.zip ClawDeck)
