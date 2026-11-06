@@ -1,0 +1,27 @@
+From cf47aada5bd3fe2882f0924f733679bbefa3e334 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 01:11:31 -0500
+Subject: [PATCH 2/4] api.ts: cores in the Launch type
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ src/api.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/api.ts b/src/api.ts
+index b63a6b2..f14e38c 100644
+--- a/src/api.ts
++++ b/src/api.ts
+@@ -65,7 +65,7 @@ export const getAutotune = callable<[], AutotuneStatus>("get_autotune");
+ // ---- per game ------------------------------------------------------------------------------------------------------
+ export type FsrRoute = "off" | "xess" | "fg" | "inject";
+ export type OptiPreset = "off" | "xess" | "fsr4" | "fsr4_xmx" | "fsr4_xmx_lite";
+-export type Launch = { opti_overlay?: number | null; opti_fg?: string | null; opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean };
++export type Launch = { opti_overlay?: number | null; opti_fg?: string | null; opti_ini?: Record<string, string> | null; reframework?: boolean | null; xmx?: boolean | null; fg?: number; fsr?: FsrRoute; xess_latest?: boolean; low_latency?: boolean; opti?: OptiPreset; opti_xefg?: boolean; cores?: "all" | "e" | null };
+ export const getLaunch = callable<[appid: string], { launch: Launch; env: Record<string, string>; wrapper: string; error?: string | null }>("get_launch");
+ export const setLaunch = callable<[appid: string, values: Partial<Launch>], { ok: boolean; error?: string; launch: Launch; env: Record<string, string>; wrapper: string }>("set_launch_any");
+ export type XessState = { installed: boolean; package_dir: string | null; version: string | null; source: { repo: string; tag: string } | null; drivers: string[];
+-- 
+2.43.0
+

@@ -1,0 +1,28 @@
+From 078136682d56308df1c918d636fa4ab6dcbacb4b Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 01:09:34 -0500
+Subject: [PATCH 4/4] CREDITS: PL2 = PL1 + 2 W from hhd, PowerControl and
+ PowerStation
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ CREDITS.md | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/CREDITS.md b/CREDITS.md
+index 046a96c..aa822f4 100644
+--- a/CREDITS.md
++++ b/CREDITS.md
+@@ -11,6 +11,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
+ - **[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)** — the plugin system ClawDeck runs in.
+ - **[PowerControl](https://github.com/mengmeet/PowerControl)** — Intel xe/i915 GPU clock paths, RAPL package domain,
+   intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
++- **PL2 = PL1 + 2 W** follows Handheld Daemon (`adjustor/core/rapl.py`), PowerControl (`cpu.py`) and PowerStation
++  (`intel_apu_database.toml`, max_boost 2.0); found in the 2026-11-05 audit of proven TDP tools.
+ - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
+   suspend/resume) and Decky patterns.
+ - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
+-- 
+2.43.0
+

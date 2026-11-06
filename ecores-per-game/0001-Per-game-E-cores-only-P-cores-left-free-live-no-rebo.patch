@@ -1,0 +1,144 @@
+From 82a8e09b7d5bc47e7607bf9cc842a68b2f485155 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 01:10:55 -0500
+Subject: [PATCH 1/4] Per-game: E-cores only (P-cores left free), live, no
+ reboot
+
+Asked for on r/MSIClaw ("a toggle to hide the P cores as E cores, like Motion
+Assistant"); on Windows it needs a reboot, so other tools skipped it. On Linux the
+launch wrapper runs the game under taskset on the E-cores with an L3 (Panther
+Lake 2-9; LP-E cores 10-13 left out as slower). It ends with the game.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ STATUS.md                        |  4 ++++
+ py_modules/clawdeck/launchenv.py |  9 ++++++++-
+ src/tabs/PerGame.tsx             |  4 ++++
+ tests/test_backend.py            | 10 ++++++++++
+ tools/clawdeck-launch.sh         | 24 ++++++++++++++++++++++--
+ 5 files changed, 48 insertions(+), 3 deletions(-)
+
+diff --git a/STATUS.md b/STATUS.md
+index 902d112..42b2edd 100644
+--- a/STATUS.md
++++ b/STATUS.md
+@@ -47,6 +47,10 @@ The four-panel UI has not been on the device yet.
+ 
+ ## Needs the maintainer
+ 
++- **E-cores only, per game (2026-11-05, r/MSIClaw request):** Per-game → E-cores only on, start a game: ClawDeck's log
++  line "clawdeck: E-cores only (2-9)" in the game's Proton output, and `ps -L -o psr= -p $(pgrep -f <game>.exe)`
++  shows only 2-9. Off again: the next launch uses every core.
++
+ - **Temperature guard steps back up (2026-11-04):** after "thermal: stepped to N W", once the package is under 80 °C
+   the TDP climbs 2 W every 30 s back to your limit and the line goes away (it used to stay stepped down until a new
+   pick or the game closed: 21 W at 55 °C with a 35 W limit).
+diff --git a/py_modules/clawdeck/launchenv.py b/py_modules/clawdeck/launchenv.py
+index ebe5160..f1c210c 100644
+--- a/py_modules/clawdeck/launchenv.py
++++ b/py_modules/clawdeck/launchenv.py
+@@ -17,6 +17,8 @@ Framegen's fgmod reads from the environment, so a game Decky Framegen patched st
+                                     inject -> FSR=xess FSR_FG=inject: XeSS-FG for a game with FSR upscaling and no
+                                               FSR frame generation
+   xess_latest  bool                 XESS=latest: Intel's current XeSS libraries instead of the game's older ones
++  cores        all | e              e -> CLAWDECK_CORES=e: the game runs on the E-cores only (the launch wrapper's
++                                    taskset), the P-cores left free; per game, live, undone when the game exits
+   low_latency  bool (default on)    off -> IGDEXT_XELL_CAP=off (the shim's low latency with frame generation)
+   opti         off | xess | fsr4 | fsr4_xmx | fsr4_xmx_lite
+                                     OptiScaler upscaler for this game: XeSS on XMX, FSR 4 INT8 (experimental on
+@@ -74,7 +76,7 @@ OPTI_FG = {
+     "upscaler": {"FrameGen_Enabled": "true", "FrameGen_FGInput": "upscaler", "FrameGen_FGOutput": "xefg"},  # any game
+ }
+ KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "opti_dll",
+-        "opti_overlay"}
++        "opti_overlay", "cores"}
+ # OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
+ # generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
+ OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
+@@ -143,6 +145,11 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
+     if route not in FSR_ROUTES:
+         raise ValueError(f"unknown FSR route {route!r}")
+     env.update(FSR_ROUTES[route])
++    cores = launch.get("cores")
++    if cores not in (None, "all", "e"):
++        raise ValueError(f"cores must be all or e, not {cores!r}")
++    if cores == "e":
++        env["CLAWDECK_CORES"] = "e"
+     if launch.get("xess_latest"):
+         env["XESS"] = "latest"
+     # low latency (XeLL) is always on: an old "off" choice is ignored (maintainer, 2026-11-04)
+diff --git a/src/tabs/PerGame.tsx b/src/tabs/PerGame.tsx
+index f4771b4..0cb081b 100644
+--- a/src/tabs/PerGame.tsx
++++ b/src/tabs/PerGame.tsx
+@@ -279,6 +279,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
+             description={explain("Runs the game with Intel's current XeSS (SDK 3.0.2) instead of the older copy it ships; its files are swapped while it runs and put back when it exits.",
+               "a game with XeSS older than 2.0.2.68 shows XeSS as DP4a or hides XeSS frame generation (Cyberpunk 2077).")}
+             onChange={(v) => save({ xess_latest: v || null } as any)} />
++          <ToggleField label="E-cores only" checked={launch.cores === "e"}
++            description={explain("Runs this game on the efficiency cores only and leaves the two performance cores free: cooler and longer on battery in games that don't need the P-cores. Live, per game, undone when the game exits (on Windows this needs a reboot).",
++              "CPU-heavy games lose frames: compare with it off.", "takes effect at the next launch.")}
++            onChange={(v) => save({ cores: v ? "e" : null } as any)} />
+           <DropdownItem label="FSR games without OptiScaler (xess-xmx-linux's FSR route)" layout="below" childrenContainerWidth="max" disabled={!installed || !newPkg} rgOptions={FSR_OPTIONS} selectedOption={launch.fsr ?? "off"}
+             onChange={(o) => save({ fsr: o.data === "off" ? null : o.data } as any)}
+             description={explain(newPkg ? "For a game with FSR 3.1+ and no XeSS: its FSR runs on XeSS on the XMX cores, with multi-frame generation. Pick FSR in the game's menu as usual."
+diff --git a/tests/test_backend.py b/tests/test_backend.py
+index f8ba2dd..d6ad873 100644
+--- a/tests/test_backend.py
++++ b/tests/test_backend.py
+@@ -1197,3 +1197,13 @@ def test_onimusha_one_tap_is_the_capcom_setup_and_fsr4_needs_xmx(plugin, tmp_pat
+     assert optiscaler.owner(str(game))["version"] == v["optiscaler_v10"]["version"]
+     r = p.run(p.game_choose("2638890", "own", 0))
+     assert r["ok"] and sorted(str(q.relative_to(game)) for q in game.rglob("*")) == before
++
++
++def test_launch_env_e_cores_only():
++    from clawdeck import launchenv
++    assert launchenv.compose({"cores": "e"})["CLAWDECK_CORES"] == "e"
++    assert "CLAWDECK_CORES" not in launchenv.compose({"cores": "all"})
++    assert "CLAWDECK_CORES" not in launchenv.compose({})
++    import pytest
++    with pytest.raises(ValueError):
++        launchenv.compose({"cores": "p"})
+diff --git a/tools/clawdeck-launch.sh b/tools/clawdeck-launch.sh
+index 932d08d..8c997cd 100755
+--- a/tools/clawdeck-launch.sh
++++ b/tools/clawdeck-launch.sh
+@@ -100,11 +100,31 @@ if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && command -v mangohud >/dev/null 2>&1;
+   base="${MANGOHUD_CONFIG:-no_display}"
+   export MANGOHUD_CONFIG="${base%,},output_folder=$LOGDIR,log_interval=1000,autostart_log=1,log_duration=0"
+ fi
++# E-cores only for this game (Per-game, CLAWDECK_CORES=e): the game and everything it starts inherit the affinity,
++# the P-cores stay free; nothing to undo, it ends with the game. The E-cores on the L3 (Panther Lake: 2-9), not the
++# LP-E cores without one (10-13), which are slower; a chip without that split gets all its Atom cores. On Windows
++# this needs a reboot (other tools' author, r/MSIClaw 2026-11): on Linux it is per game, live.
++pre=()
++if [ "${CLAWDECK_CORES:-}" = e ] && command -v taskset >/dev/null 2>&1 && [ -r /sys/devices/cpu_atom/cpus ]; then
++  list=""; all=""
++  for part in $(tr ',' ' ' < /sys/devices/cpu_atom/cpus); do
++    a=${part%-*}; b=${part#*-}
++    for c in $(seq "$a" "$b"); do
++      all="$all,$c"
++      [ -e "/sys/devices/system/cpu/cpu$c/cache/index3" ] && list="$list,$c"
++    done
++  done
++  list=${list#,}; [ -z "$list" ] && list=${all#,}
++  if [ -n "$list" ]; then
++    echo "clawdeck: E-cores only ($list)" >&2
++    pre=(taskset -c "$list")
++  fi
++fi
+ # Decky Framegen's fgmod next: run it with ClawDeck's second stage in front of the game, so files ClawDeck adds
+ # (FSR 4 XMX) go in after fgmod's own and anything left from an earlier launch is cleaned up
+ if [ $# -ge 2 ] && [ "$(basename "$1")" = fgmod ]; then
+   fg="$1"; shift
+   export CLAWDECK_STAGE=post
+-  exec "$fg" "$0" "$@"
++  exec "${pre[@]}" "$fg" "$0" "$@"
+ fi
+-exec "$@"
++exec "${pre[@]}" "$@"
+-- 
+2.43.0
+

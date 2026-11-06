@@ -1,0 +1,85 @@
+From d08ae2c32b4cbcd5230ae587f08d682e70b6bdd3 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 18:30:40 -0500
+Subject: [PATCH 2/2] Reddit update draft: FSR 4.1.2, Proton 11.0 XMX fix, VRR
+ re-arm, fan and charge limit, overlay, folds
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ docs/posts/02-update-2026-11-04.md | 36 +++++++++++++++++++++++-------
+ 1 file changed, 28 insertions(+), 8 deletions(-)
+
+diff --git a/docs/posts/02-update-2026-11-04.md b/docs/posts/02-update-2026-11-04.md
+index b143238..112af34 100644
+--- a/docs/posts/02-update-2026-11-04.md
++++ b/docs/posts/02-update-2026-11-04.md
+@@ -10,6 +10,9 @@ so no release yet.
+ - Every upscaler and frame generation choice runs on the Claw's XMX (matrix) cores, through xess-xmx-linux's
+   patched driver.
+ - XeLL low latency is always on. With OptiScaler, ClawDeck also forces the game's Reflex on so XeLL always runs.
++- **Fixed: Valve's Proton 11.0 got no XMX at all.** The XMX driver's helper only reached games on Proton Experimental
++  or GE-Proton, so a game on Proton 11.0 quietly ran XeSS the slow way (DP4a). ClawDeck now gives every game it sets
++  up the helper, whichever Proton it runs on.
+ - The XMX driver is loaded per game, never for Steam's own screen. Loading it system-wide gave us a black screen at
+   boot.
+ - Frame generation now goes **up to 4x** (we said up to 8x before). Intel supports up to 4x; above that the lag
+@@ -20,14 +23,19 @@ Quick Access → ClawDeck → Game. The list shows only games we can set up, mea
+ inside. Pick one and you get:
+ - **In this game now:** what's actually there. OptiScaler or not (and as which DLL), REFramework, ClawDeck in the
+   launch options, the XMX driver.
+-- **Upscaler:** XeSS 2, or FSR 4.1.1 / FSR 4.1.1 Lite (nitec's build of FSR 4 for Intel's XMX cores). FSR 4.1.1
++- **Upscaler:** XeSS 2, or FSR 4.1.2 / FSR 4.1.2 Lite (nitec's build of FSR 4 for Intel's XMX cores). FSR 4.1.2
+   only shows for DirectX 12 games, and only once you've put nitec's files in `~/fsr4-xmx`. We can't redistribute
+-  those; they're in the OptiScaler Discord.
+-- **Frame generation:** Off / 2x / 3x / 4x. It uses the game's own frame generation when the game has one.
++  those; they're in the OptiScaler Discord. ClawDeck picks 4.1.2 in OptiScaler for you (OptiScaler lists AMD's
++  4.0.2 first). FSR 4.1.2 on Linux is still being tested: XeSS 2 is the safe pick for now.
++- **Frame generation:** Off / 2x / 3x / 4x. It uses the game's own frame generation when the game has one. Turn
++  the game's frame generation on in its menu once, then restart the game: switching it mid-game can crash it.
++- **OptiScaler overlay:** Off / FPS / Simple / Detailed / Full. It's OptiScaler's own counter, saved in the game's
++  settings, and it shows the upscaler in use and "(XeFG)" while frame generation runs, which Steam's overlay can't.
+ - **One button:** Install OptiScaler in this game → Apply changes → Update when a newer OptiScaler is out, plus
+-  Uninstall. The game's original files are backed up and come back on Uninstall.
+-- **Capcom RE Engine games** (Onimusha, Resident Evil, MH Wilds…) also get REFramework. Without it, Capcom's
+-  anti-tamper stops the game when OptiScaler is in.
++  Uninstall. Every Apply writes exactly what you picked. Uninstall removes everything ClawDeck and OptiScaler put
++  there (logs and caches too) and puts the game's original files back.
++- **Capcom RE Engine games** (Onimusha, Resident Evil, MH Wilds…) also get REFramework, automatically, no
++  question. Without it, Capcom's anti-tamper stops the game when OptiScaler is in.
+ - **Per-game fixes:** come from OptiScaler's own public per-game settings (98 games). We don't have the supported-games list's
+   database: it's private and stays OneHoon's.
+ - **In-game help:** step-by-step instructions, including how to map a back button to Insert to open OptiScaler's
+@@ -41,7 +49,15 @@ makes it 30–120 Hz. The catch: with VRR on in Steam's menus, the screen follow
+ compiling shaders at 30 fps made the whole library run at 30 Hz, and it looked choppy and smeared. So "VRR only
+ in games" turns VRR off in Steam's menus (a steady 120 Hz) and leaves it to you in games, as Windows does. Steam's
+ own VRR switch still works in a game. With a dock or monitor connected, ClawDeck stays out of it: that display's
+-VRR is whatever you set in Steam.
++VRR is whatever you set in Steam. Fixed since the test build: switched back on as a game started, VRR didn't take,
++and the game sat locked at 30 or 60 fps until you flicked Steam's VRR switch by hand. ClawDeck now does that flick
++itself once the game is showing (you may see one short flicker).
++
++**New in Power**
++- **Fan:** Automatic (MSI's own curve), Quiet, Cooling, Full speed, or your own six-point curve under Advanced. The
++  presets are the ones other tools uses. Automatic puts MSI's curve back.
++- **Battery charge limit:** Off, 80 %, 90 % or your own (50–100 %). It keeps the battery from sitting at 100 % on
++  the charger. Steam doesn't offer this on the Claw.
+ 
+ **Other fixes**
+ - **Face buttons:** the Claw 8 EX's two MSI buttons work in Game Mode. The fix installs itself and can be removed
+@@ -53,7 +69,11 @@ VRR is whatever you set in Steam.
+ - **Slow drives:** a warning when a game sits on an NTFS/exFAT drive (a Windows-formatted SD card). Linux reads
+   those slowly, which shows up as stutter and pop-in.
+ - **Power:** the profile list and the TDP slider now always show your last pick.
+-- **Simpler panel:** Power, then Game, then Fixes and Setup. The full view (gear at the top right) is three pages.
++- **Simpler panel:** first start walks you through the two setup steps (XMX driver, VRR fix). After that, Quick
++  Access is four headings (Power, Upscaling and frame generation, Fixes, Setup) that fold open and shut; one is open
++  at start. Picking from a list keeps you where you were.
++- **Messages that fit:** Steam cuts notifications to one line, so ClawDeck's are short now, and the whole message
++  stays at the top of Quick Access for two minutes.
+ 
+ **Not possible (yet)**
+ - **Gyro on the 7/8 AI+ and 8 EX:** the sensor hub needs MSI firmware Linux doesn't have, so no plugin can add it.
+-- 
+2.43.0
+

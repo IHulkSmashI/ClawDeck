@@ -1,0 +1,199 @@
+From 70629052b046110c5ade2ebcde8a6afbfcc6afb1 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 01:09:17 -0500
+Subject: [PATCH 3/4] Power: PL2 = PL1 + 2 W, Autotune beta and off by default,
+ MangoHud only with Autotune
+
+From an audit against the proven tools (hhd, PowerControl, PowerStation, Handheld
+Companion, SimpleDeckyTDP, other tools):
+- PL2 = PL1 + 2 W as hhd (adjustor/core/rapl.py), PowerControl (cpu.py) and
+  PowerStation (max_boost 2.0) do; ClawDeck scaled it to 45 W at 35 W, so the
+  package burst and got clamped (a likely source of noisy frame times).
+- Autotune off by default and labelled beta (other tools removed its AutoTDP; Steam
+  has none; the maintainer OK'd shipping it as beta or off).
+- The launch wrapper injects MangoHud only while Autotune is on (its log is only
+  for Autotune; Steam's overlay is already mangoapp).
+- Autotune no longer trims the CPU ceiling (max_perf_pct): no proven tool does it
+  and it hurts frame pacing.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ STATUS.md                       |  8 ++++++++
+ main.py                         |  4 +++-
+ py_modules/clawdeck/autotune.py |  6 ++----
+ py_modules/clawdeck/power.py    |  9 +++++----
+ src/tabs/Power.tsx              |  2 +-
+ tests/test_backend.py           | 18 ++++++++++--------
+ tests/test_maintenance.py       |  2 +-
+ tests/test_modules.py           |  6 +++---
+ tools/clawdeck-launch.sh        |  5 ++++-
+ 9 files changed, 37 insertions(+), 23 deletions(-)
+
+diff --git a/STATUS.md b/STATUS.md
+index 902d112..04573fc 100644
+--- a/STATUS.md
++++ b/STATUS.md
+@@ -47,6 +47,14 @@ The four-panel UI has not been on the device yet.
+ 
+ ## Needs the maintainer
+ 
++- **Power, from the audit of proven tools (2026-11-05):** PL2 is now PL1 + 2 W (hhd, PowerControl, PowerStation), not
++  scaled to 45 W; Autotune is off by default and marked beta; MangoHud is injected only while Autotune is on; Autotune
++  no longer trims the CPU ceiling. Check: CONTROL at a 35 W pick, Autotune off, frame-time graph in Steam's overlay
++  compared with before (it was noisy at 45 fps); the chip reads PL2 = 37 W (`cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw`).
++  Still to test on the Claw (audit): `platform_profile` → `custom` with the MSI firmware attributes (what steamos-manager
++  and PowerControl do), MSR PL1 = MMIO PL1 with thermald left running, TCC offset / PTC instead of the software guard,
++  `gamescope --version` (3.17 holds the refresh rate in the menus: the VRR scope's off/on flicks can go).
++
+ - **Temperature guard steps back up (2026-11-04):** after "thermal: stepped to N W", once the package is under 80 °C
+   the TDP climbs 2 W every 30 s back to your limit and the line goes away (it used to stay stepped down until a new
+   pick or the game closed: 21 W at 55 °C with a 35 W limit).
+diff --git a/main.py b/main.py
+index 3ea2d6d..31e2adf 100644
+--- a/main.py
++++ b/main.py
+@@ -83,7 +83,9 @@ class Plugin:
+         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
+         # on by default, on the charger too: the least power for (nearly) the same frames, less heat and fan noise
+         # (maintainer, 2026-11-04). The switches in Power still turn either off.
+-        self.settings.setdefault("autotune", True)
++        # beta: off until switched on (other tools removed its AutoTDP in 2026-07; Steam has none; maintainer
++        # 2026-11-05: "Auto tdp can be released in beta or turned off")
++        self.settings.setdefault("autotune", False)
+         self.settings.setdefault("autotune_plugged", True)
+         self.autotune.enabled = bool(self.settings.get("autotune"))
+         self._autotune_flag(self.autotune.enabled)
+diff --git a/py_modules/clawdeck/autotune.py b/py_modules/clawdeck/autotune.py
+index b9861ba..9160007 100644
+--- a/py_modules/clawdeck/autotune.py
++++ b/py_modules/clawdeck/autotune.py
+@@ -583,10 +583,8 @@ class Autotune:
+             if self._gpu_active() == "power_saving":
+                 out.append(("gpu_base", lambda: self._gpu_profile(l, "base"), lambda: self._gpu_profile(l, "power_saving"),
+                             "turned GPU efficiency mode off (clocks up faster)", "GPU efficiency off"))
+-            if p.cpu_max_perf_pct and l.cpu_max_pct - 10 >= CPU_MIN_PCT:
+-                was = l.cpu_max_pct
+-                out.append(("cpu_down", lambda w=was: self._cpu(l, w - 10), lambda w=was: self._cpu(l, w),
+-                            f"lowered CPU ceiling to {was - 10} % (power to the GPU)", "−10 % CPU"))
++            # no CPU-ceiling trim (max_perf_pct): no proven tool does it and it hurts frame pacing (audit 2026-11-05);
++            # PL2 = PL1 + 2 W already keeps CPU bursts from taking the GPU's budget
+             rpe, top = self._gpu_limits()
+             nxt = (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ
+             if p.gpu_min_freq and (top is None or nxt <= top):
+diff --git a/py_modules/clawdeck/power.py b/py_modules/clawdeck/power.py
+index 163055e..d82a947 100644
+--- a/py_modules/clawdeck/power.py
++++ b/py_modules/clawdeck/power.py
+@@ -134,10 +134,11 @@ class Power:
+         return False
+ 
+     def _sppt_for(self, watts: int, lim: dict) -> int:
+-        ceiling = max(lim["plugged_max"], lim["battery_max"])
+-        if self.boost:
+-            return min(max(round(watts * lim["sppt_max"] / ceiling), watts + 1), lim["sppt_max"])
+-        return min(watts + 1, lim["sppt_max"])   # boost off: PL2 one watt over PL1, as other tools does from a single slider
++        # PL2 = PL1 + 2 W, as every proven Intel TDP tool does: Handheld Daemon (adjustor/core/rapl.py), PowerControl
++        # (cpu.py), PowerStation (intel_apu_database max_boost 2.0); Handheld Companion uses PL2 = PL1 (+1 W on Lunar
++        # Lake). ClawDeck used to scale PL2 up to 45 W (35 W -> 45 W): the package burst, then got clamped, and CPU
++        # bursts took the GPU's share - noisy frame times (audit 2026-11-05). Boost off: +1 W, as other tools does.
++        return min(watts + (2 if self.boost else 1), lim["sppt_max"])
+ 
+     def _set_rapl(self, watts: int, lim: dict) -> bool:
+         # thermald re-applies the platform's DPTF power table to this RAPL domain every few seconds (polling mode):
+diff --git a/src/tabs/Power.tsx b/src/tabs/Power.tsx
+index 287d9de..1e9ea30 100644
+--- a/src/tabs/Power.tsx
++++ b/src/tabs/Power.tsx
+@@ -218,7 +218,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
+       </PanelSectionRow>
+       <PanelSectionRow>
+         <Group title="Autotune" />
+-        <ToggleField label="Autotune" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
++        <ToggleField label="Autotune (beta)" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
+           description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP (3 W steps on a plateau, then 1 W) while the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60 (${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
+             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
+         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
+diff --git a/tests/test_backend.py b/tests/test_backend.py
+index f8ba2dd..94dfba5 100644
+--- a/tests/test_backend.py
++++ b/tests/test_backend.py
+@@ -339,18 +339,20 @@ def test_autotune_one_slow_window_is_measured_again_not_acted_on(fake_hw, monkey
+ 
+ def test_autotune_keeps_a_cpu_gpu_lever_only_if_it_helps(fake_hw, monkeypatch):
+     at, s = _tuner(fake_hw, monkeypatch)
+-    # GPU-bound: giving the GPU the CPU's share helps once (100 -> 90 %), not twice
+-    _Game(at, lambda tdp, cpu, *_: (52.0 if cpu <= 90 else 50.0) if tdp == 20 else 30.0, cpu_pct=35, gpu_busy=97)
++    # GPU-bound: a higher GPU floor helps once (+4 %), the second step doesn't and is undone. The CPU ceiling is never
++    # trimmed any more (no proven tool does it; it hurts frame pacing)
++    _Game(at, lambda tdp, cpu, gmin, *_: (52.0 if gmin else 50.0) if tdp == 20 else 30.0, cpu_pct=35, gpu_busy=97)
+     for _ in range(3):
+         at._step()
+     assert s.learned.max_fps == 50
+-    at._step()                                                  # trying CPU ceiling 90 %
+-    assert s.learned.cpu_max_pct == 90 and "trying" in s.last_action
+-    at._step()                                                  # +4 %: kept, the set TDP gives 52 now; next: 80 %
+-    assert s.learned.max_fps == 52 and s.learned.cpu_max_pct == 80
++    at._step()
++    assert s.learned.gpu_min_mhz and "trying" in s.last_action and "GPU floor" in s.last_action
++    first = s.learned.gpu_min_mhz
++    at._step()                                                  # +4 %: kept; the next step is tried
++    assert s.learned.max_fps == 52 and s.learned.gpu_min_mhz == first + autotune.GPU_STEP_MHZ
+     at._step()                                                  # no gain: undone
+-    assert s.learned.cpu_max_pct == 90 and "undone" in s.last_action
+-    assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 90
++    assert s.learned.gpu_min_mhz == first and "undone" in s.last_action
++    assert s.learned.cpu_max_pct == 100
+     at.session = None
+ 
+ 
+diff --git a/tests/test_maintenance.py b/tests/test_maintenance.py
+index 5b2b2c4..8fedf7b 100644
+--- a/tests/test_maintenance.py
++++ b/tests/test_maintenance.py
+@@ -91,7 +91,7 @@ def test_tdp_boost_off_keeps_pl2_one_watt_over(tmp_path, monkeypatch):
+     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 21, 21]
+     pw.boost = True
+     pw.set_tdp(20, plugged=False)
+-    assert sysfs.read_int(p.msi_pl2) == 26
++    assert sysfs.read_int(p.msi_pl2) == 22                       # PL2 = PL1 + 2 W (hhd, PowerControl, PowerStation)
+ 
+ 
+ def test_tar_with_a_link_outside_is_refused(tmp_path):
+diff --git a/tests/test_modules.py b/tests/test_modules.py
+index 7c532f5..c8f310c 100644
+--- a/tests/test_modules.py
++++ b/tests/test_modules.py
+@@ -197,10 +197,10 @@ def test_tdp_through_msi_firmware_when_no_hhd(tmp_path, monkeypatch):
+     pw = power.Power(_hardware(p))
+     assert pw.tdp_backend() == "msi-firmware"
+     assert pw.set_tdp(15, plugged=False)
+-    # EX: 35 W ceiling, 45 W boost -> boost scales 15 * 45/35 = 19 W; PL3 never above the boost limit
+-    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [15, 19, 19]
++    # PL2 = PL1 + 2 W as the proven tools do; PL3 never above the boost limit
++    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [15, 17, 17]
+     assert pw.set_tdp(99, plugged=True)                         # clamped to the plugged ceiling
+-    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 45, 45]
++    assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [35, 37, 37]
+     pw.revert_all()
+     assert [sysfs.read_int(x) for x in (p.msi_pl1, p.msi_pl2, p.msi_pl3)] == [20, 30, 40]
+ 
+diff --git a/tools/clawdeck-launch.sh b/tools/clawdeck-launch.sh
+index 932d08d..e8934e3 100755
+--- a/tools/clawdeck-launch.sh
++++ b/tools/clawdeck-launch.sh
+@@ -94,7 +94,10 @@ if [ -n "${IGDEXT_XELL_LOG:-}" ] && [ -d "${STEAM_COMPAT_DATA_PATH:-/nonexistent
+     [ -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" ] && mv -f "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f" "$STEAM_COMPAT_DATA_PATH/pfx/drive_c/$f.prev"
+   done
+ fi
+-if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && command -v mangohud >/dev/null 2>&1; then
++# MangoHud's frame-time log is only for Autotune: inject it only while Autotune is on (<runtime>/autotune.on, written
++# by the plugin). It used to go into every wrapped game, on top of Steam's own overlay (mangoapp) - one more layer in
++# every present for nothing when Autotune is off (audit 2026-11-05)
++if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && [ -f "$RUNTIME/autotune.on" ] && command -v mangohud >/dev/null 2>&1; then
+   export MANGOHUD=1
+   # keep the user's own MANGOHUD_CONFIG keys if any were set; no_display keeps the overlay off unless they want it
+   base="${MANGOHUD_CONFIG:-no_display}"
+-- 
+2.43.0
+

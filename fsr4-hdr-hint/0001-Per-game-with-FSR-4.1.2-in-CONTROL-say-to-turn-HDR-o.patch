@@ -1,0 +1,32 @@
+From 17e4fa6135b7ef6c7a33d3559e2b226b235d1ba0 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 09:10:00 -0500
+Subject: [PATCH] Per-game: with FSR 4.1.2 in CONTROL, say to turn HDR off
+
+xess-xmx-linux's author saw the clouds flicker in CONTROL with HDR on with FSR 4
+and XeSS frame generation (issue #49). Cyberpunk's HUD-less image is already
+handled by OptiScaler's own Cyberpunk quirk (CyberpunkHudlessState).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ src/tabs/PerGame.tsx | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/tabs/PerGame.tsx b/src/tabs/PerGame.tsx
+index 0cb081b..1dfdfc6 100644
+--- a/src/tabs/PerGame.tsx
++++ b/src/tabs/PerGame.tsx
+@@ -201,6 +201,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
+             onChange={(o) => { markPick("upscaler"); setPickUp(String(o.data)); }}
+             description={fsr4Why ? <>{fsr4Why}{explain(" XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")}</>
+               : explain("XeSS 2: Intel's own, the fastest here. FSR 4.1.2: AMD's FSR 4 as nitec built it for Intel's matrix cores, the best image; Lite is faster for a little less detail.")} /></Anchor>
++          {wantUp.startsWith("fsr4_xmx") && /control/i.test(app?.name ?? "") && <Status ok={null}
++            label="FSR 4.1.2 in CONTROL: turn HDR off"
++            detail="With HDR on, the clouds flicker with FSR 4 and XeSS frame generation (seen by xess-xmx-linux's author, 2026-11). Turn HDR off in the game's display settings." />}
+           <Anchor id="framegen"><DropdownItem label="Frame generation" layout="below" childrenContainerWidth="max" rgOptions={FRAMEGENS} disabled={!installed}
+             selectedOption={wantFg} onChange={(o) => { markPick("framegen"); setPickFg(Number(o.data)); }}
+             description={explain("XeSS frame generation on the XMX cores, with XeLL low latency: 2x adds one frame per rendered one, 3x two, 4x three. It uses the game's own frame generation when the game has one.",
+-- 
+2.43.0
+

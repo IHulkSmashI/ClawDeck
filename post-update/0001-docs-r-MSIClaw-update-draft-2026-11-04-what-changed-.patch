@@ -1,0 +1,87 @@
+From b01fae0049ae61e591c10242a0422337069b508f Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 16:49:32 -0500
+Subject: [PATCH 1/2] docs: r/MSIClaw update draft (2026-11-04): what changed,
+ the options, why VRR only in games
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ docs/posts/02-update-2026-11-04.md | 65 ++++++++++++++++++++++++++++++
+ 1 file changed, 65 insertions(+)
+ create mode 100644 docs/posts/02-update-2026-11-04.md
+
+diff --git a/docs/posts/02-update-2026-11-04.md b/docs/posts/02-update-2026-11-04.md
+new file mode 100644
+index 0000000..b143238
+--- /dev/null
++++ b/docs/posts/02-update-2026-11-04.md
+@@ -0,0 +1,65 @@
++<!-- DRAFT for r/MSIClaw (the maintainer posts it). Written as "we". -->
++
++**ClawDeck update: what changed since the first post (thanks for the feedback, keep it coming)**
++
++ClawDeck is our free, open-source Decky plugin for the MSI Claw on Bazzite / SteamOS. It's inspired by other tools and
++the supported-games list on Windows, but it's independent of them and uses none of their code or data. It's still a test build,
++so no release yet.
++
++**Everything on the XMX cores**
++- Every upscaler and frame generation choice runs on the Claw's XMX (matrix) cores, through xess-xmx-linux's
++  patched driver.
++- XeLL low latency is always on. With OptiScaler, ClawDeck also forces the game's Reflex on so XeLL always runs.
++- The XMX driver is loaded per game, never for Steam's own screen. Loading it system-wide gave us a black screen at
++  boot.
++- Frame generation now goes **up to 4x** (we said up to 8x before). Intel supports up to 4x; above that the lag
++  isn't worth it.
++
++**Per game, the supported-games list style**
++Quick Access → ClawDeck → Game. The list shows only games we can set up, meaning games with DLSS, FSR or XeSS
++inside. Pick one and you get:
++- **In this game now:** what's actually there. OptiScaler or not (and as which DLL), REFramework, ClawDeck in the
++  launch options, the XMX driver.
++- **Upscaler:** XeSS 2, or FSR 4.1.1 / FSR 4.1.1 Lite (nitec's build of FSR 4 for Intel's XMX cores). FSR 4.1.1
++  only shows for DirectX 12 games, and only once you've put nitec's files in `~/fsr4-xmx`. We can't redistribute
++  those; they're in the OptiScaler Discord.
++- **Frame generation:** Off / 2x / 3x / 4x. It uses the game's own frame generation when the game has one.
++- **One button:** Install OptiScaler in this game → Apply changes → Update when a newer OptiScaler is out, plus
++  Uninstall. The game's original files are backed up and come back on Uninstall.
++- **Capcom RE Engine games** (Onimusha, Resident Evil, MH Wilds…) also get REFramework. Without it, Capcom's
++  anti-tamper stops the game when OptiScaler is in.
++- **Per-game fixes:** come from OptiScaler's own public per-game settings (98 games). We don't have the supported-games list's
++  database: it's private and stays OneHoon's.
++- **In-game help:** step-by-step instructions, including how to map a back button to Insert to open OptiScaler's
++  menu.
++- ClawDeck now ships its own OptiScaler (0.9.4 + OptiPatcher, pinned and checksum-verified), so Decky Framegen
++  isn't needed. Games Decky Framegen already set up are left alone, with a warning.
++
++**VRR: why only in games**
++The Claw's screen can do VRR from 30 Hz, but it reports 48. Our VRR fix (the panel list's, the one Windows users install)
++makes it 30–120 Hz. The catch: with VRR on in Steam's menus, the screen follows the menus' frame rate. A game
++compiling shaders at 30 fps made the whole library run at 30 Hz, and it looked choppy and smeared. So "VRR only
++in games" turns VRR off in Steam's menus (a steady 120 Hz) and leaves it to you in games, as Windows does. Steam's
++own VRR switch still works in a game. With a dock or monitor connected, ClawDeck stays out of it: that display's
++VRR is whatever you set in Steam.
++
++**Other fixes**
++- **Face buttons:** the Claw 8 EX's two MSI buttons work in Game Mode. The fix installs itself and can be removed
++  in Fixes.
++- **Watts in the overlay:** Steam's performance overlay can show real watts. Linux hides the power counter by
++  default; ClawDeck opens it at boot.
++- **Split-lock log flood:** silenced. On Bazzite, SteamOS Manager wrote thousands of log lines a minute, which
++  cost battery and erased crash logs.
++- **Slow drives:** a warning when a game sits on an NTFS/exFAT drive (a Windows-formatted SD card). Linux reads
++  those slowly, which shows up as stutter and pop-in.
++- **Power:** the profile list and the TDP slider now always show your last pick.
++- **Simpler panel:** Power, then Game, then Fixes and Setup. The full view (gear at the top right) is three pages.
++
++**Not possible (yet)**
++- **Gyro on the 7/8 AI+ and 8 EX:** the sensor hub needs MSI firmware Linux doesn't have, so no plugin can add it.
++  The A1M and A8 have gyro through InputPlumber.
++- **Back buttons:** Steam shows four because InputPlumber presents the Claw as a Steam Deck controller. The Claw's
++  two land on two of them: press each in Steam's controller test to see which, and ignore the other two.
++
++Tested on the Claw 8 EX only. Owners of other Claws: Setup → "Save a hardware survey" and send it to us, and
++we'll add your model. Issues and logs: [GitHub link].
+-- 
+2.43.0
+

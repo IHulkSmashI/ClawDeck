@@ -1,0 +1,179 @@
+From c0faba1a0b82ba9f371bfa84337057c43b0be0d1 Mon Sep 17 00:00:00 2001
+From: IHulkSmashI <227083792+IHulkSmashI@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 16:34:36 -0500
+Subject: [PATCH] Game list: only games ClawDeck can set up, as the supported-games list lists
+ only supported games
+
+A game shows when it ships DLSS, FSR 2/3/3.1 or XeSS (looked for 6 folders deep, where Unreal keeps its DLSS
+plugin) or is in the per-game list. The answer is cached per game until its folder changes (walking an SD card is
+slow). A running game that has none says so instead.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019jJLUgw5uVPaAcLuRF5SqW
+---
+ main.py                       | 31 +++++++++++++++++++++++++++++++
+ py_modules/clawdeck/gamedb.py | 21 ++++++++++++++++++++-
+ src/api.ts                    |  2 +-
+ src/tabs/Game.tsx             | 17 +++++++++++++----
+ tests/test_modules.py         |  8 ++++++++
+ 5 files changed, 73 insertions(+), 6 deletions(-)
+
+diff --git a/main.py b/main.py
+index 5f7f7e9..39864db 100644
+--- a/main.py
++++ b/main.py
+@@ -666,12 +666,43 @@ class Plugin:
+     async def games_list(self) -> list[dict]:
+         """Installed Steam games for the Games page, with what ClawDeck has set up in each."""
+         games = await self._bg(xess.installed_games, HOME)
++        games = await self._bg(self._with_support, games)
+         ours = self.settings.get("opti_games") or {}
+         for g in games:
+             launch = self.profiles.get_launch(g["appid"])
+             g["setup"] = "optiscaler" if g["appid"] in ours else "launch" if launch else None
+         return games
+ 
++    def _with_support(self, games: list[dict]) -> list[dict]:
++        """Which installed games ClawDeck can set up (the Game list shows only those, as the supported-games list does). Walking a
++        game folder is slow on an SD card, so the answer is kept per game until its folder changes."""
++        path = os.path.join(RUNTIME_DIR, "support-cache.json")
++        try:
++            with open(path, "r", encoding="utf-8") as f:
++                cache = json.load(f)
++        except (OSError, ValueError):
++            cache = {}
++        doc = gamedb.load(GAMES)
++        changed = False
++        for g in games:
++            try:
++                stamp = int(os.stat(g["dir"]).st_mtime)
++            except OSError:
++                stamp = 0
++            c = cache.get(g["appid"])
++            if not c or c.get("stamp") != stamp:
++                c = {**gamedb.support(doc, g["dir"]), "stamp": stamp}
++                cache[g["appid"]] = c
++                changed = True
++            g["supported"], g["via"] = c["ok"], c["via"]
++        if changed:
++            try:
++                with open(path, "w", encoding="utf-8") as f:
++                    json.dump(cache, f)
++            except OSError:
++                pass
++        return games
++
+     async def game_recommend(self, appid: str) -> dict:
+         rec, d, folder = await self._bg(self._rec, appid)
+         launch = self.profiles.get_launch(appid)
+diff --git a/py_modules/clawdeck/gamedb.py b/py_modules/clawdeck/gamedb.py
+index 037f706..a7f83b2 100644
+--- a/py_modules/clawdeck/gamedb.py
++++ b/py_modules/clawdeck/gamedb.py
+@@ -13,7 +13,7 @@ from __future__ import annotations
+ import json
+ import os
+ 
+-DEPTH = 4
++DEPTH = 6
+ KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
+ 
+ 
+@@ -121,3 +121,22 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
+         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
+         "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],
+     }
++
++
++UPSCALER_FILES = {
++    "DLSS": ("nvngx_dlss.dll", "sl.dlss.dll", "nvngx_dlssd.dll"),
++    "FSR": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll", "ffx_fsr2_api_x64.dll", "ffx_fsr2_api_dx12_x64.dll",
++            "ffx_fsr3upscaler_x64.dll", "amd_fidelityfx_vk.dll"),
++    "XeSS": ("libxess*",),
++}
++
++
++def support(doc: dict, game_dir: str | None) -> dict:
++    """Can ClawDeck set this game up? Yes when it is in the per-game list, or ships an upscaler OptiScaler takes over
++    (DLSS, FSR 2/3/3.1) or XeSS of its own. Unreal games often keep DLSS in a plugin folder, which DEPTH covers."""
++    if not game_dir or not os.path.isdir(game_dir):
++        return {"ok": False, "via": []}
++    via = [k for k, names in UPSCALER_FILES.items() if _has(game_dir, names)]
++    if match(doc, exes_in(game_dir)):
++        via.append("list")
++    return {"ok": bool(via), "via": via}
+diff --git a/src/api.ts b/src/api.ts
+index db09af0..27ecb46 100644
+--- a/src/api.ts
++++ b/src/api.ts
+@@ -78,7 +78,7 @@ export type GameStatus = { launch: Launch; xess: XessState; latency: LatencyStat
+   fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null;
+   files?: { owner: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
+ export const gameStatus = callable<[appid: string], GameStatus>("game_status");
+-export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null };
++export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[] };
+ export const gamesList = callable<[], GameEntry[]>("games_list");
+ export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
+   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
+diff --git a/src/tabs/Game.tsx b/src/tabs/Game.tsx
+index 3a15868..1671568 100644
+--- a/src/tabs/Game.tsx
++++ b/src/tabs/Game.tsx
+@@ -17,13 +17,16 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
+   const [sel, setSel] = useState<string | null>(running?.appid ?? lastPick);
+   useEffect(() => { gamesList().then(setGames).catch(() => setGames([])); }, []);
+   useEffect(() => { if (running?.appid && !lastPick) setSel(running.appid); }, [running?.appid]);
++  useEffect(() => { if (games && !sel) { const first = games.find((g) => g.supported !== false); if (first && !running) setSel(first.appid); } }, [games]);
+ 
+   const options = useMemo(() => {
+-    const list = (games ?? []).map((g) => ({ data: g.appid, label: g.appid === running?.appid ? `${g.name} (running)` : g.name }));
+-    if (running && !list.some((o) => o.data === running.appid)) list.unshift({ data: running.appid, label: `${running.name} (running)` });
+-    return list;
++    // only games ClawDeck can set up, as the supported-games list lists only supported games: DLSS, FSR or XeSS inside, or in the list
++    return (games ?? []).filter((g) => g.supported !== false)
++      .map((g) => ({ data: g.appid, label: g.appid === running?.appid ? `${g.name} (running)` : g.name }));
+   }, [games, running?.appid]);
+   const picked = options.find((o) => o.data === sel);
++  const hidden = (games ?? []).filter((g) => g.supported === false);
++  const runningUnsupported = !!running && hidden.some((g) => g.appid === running.appid);
+   const name = (games ?? []).find((g) => g.appid === sel)?.name ?? (running?.appid === sel ? running?.name : null) ?? "";
+ 
+   return (
+@@ -34,11 +37,17 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
+             disabled={!options.length} rgOptions={options} selectedOption={picked ? sel : null}
+             onChange={(o) => { lastPick = String(o.data); setSel(String(o.data)); }} />
+         </PanelSectionRow>
++        {runningUnsupported && (
++          <PanelSectionRow><Note>{running!.name} has no DLSS, FSR or XeSS for OptiScaler to use, so there's nothing to set up for it (Power above still applies).</Note></PanelSectionRow>
++        )}
++        {!quick && hidden.length > 0 && (
++          <PanelSectionRow><Note>{hidden.length} installed game{hidden.length === 1 ? "" : "s"} without DLSS, FSR or XeSS not listed: {hidden.map((g) => g.name).join(", ")}.</Note></PanelSectionRow>
++        )}
+         {!sel && games !== null && (
+           <PanelSectionRow><Note>{options.length ? "Pick a game to set up XeSS, FSR 4 and frame generation on the XMX cores." : "No installed Steam games found."}</Note></PanelSectionRow>
+         )}
+       </PanelSection>
+-      {sel && name && <PerGameTab key={sel} quick={quick} embedded pick={{ appid: sel, name }} />}
++      {sel && name && picked && <PerGameTab key={sel} quick={quick} embedded pick={{ appid: sel, name }} />}
+     </>
+   );
+ };
+diff --git a/tests/test_modules.py b/tests/test_modules.py
+index fcf7fcd..c23d919 100644
+--- a/tests/test_modules.py
++++ b/tests/test_modules.py
+@@ -796,3 +796,11 @@ def test_opti_ini_follows_the_frame_generation_multiplier():
+     ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 3})
+     assert ini["XeFG_InterpolationCount"] == "2" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
+     assert "XeFG_InterpolationCount" not in launchenv.opti_ini({"opti": "xess", "opti_fg": "off", "fg": 3})
++
++
++def test_support_needs_an_upscaler_or_a_list_entry(tmp_path):
++    from clawdeck import gamedb
++    doc = gamedb.load(os.path.join(os.path.dirname(__file__), "..", "assets", "games.json"))
++    assert gamedb.support(doc, _game(tmp_path, "c", ["CONTROLResonant.exe", "nvngx_dlss.dll", "amd_fidelityfx_upscaler_dx12.dll"]))["via"][:2] == ["DLSS", "FSR"]
++    assert gamedb.support(doc, _game(tmp_path, "u", ["G/Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll", "G.exe"]))["ok"]
++    assert not gamedb.support(doc, _game(tmp_path, "b", ["Brotato.exe", "data.pck"]))["ok"]          # nothing to hook
+-- 
+2.43.0
+
