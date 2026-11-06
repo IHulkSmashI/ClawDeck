@@ -2,7 +2,7 @@
 
 **ClawDeck beta is out: FSR 4.1.2, XeSS and frame gen on the XMX cores, on Bazzite, in one Decky plugin**
 
-Hey all, the first ClawDeck beta is up: https://github.com/IHulkSmashI/ClawDeck/releases/tag/v0.2.0-beta.1
+Hey all, the ClawDeck beta is up: https://github.com/IHulkSmashI/ClawDeck/releases/tag/v0.2.0-beta.2
 
 ClawDeck is a free Decky plugin for Intel Claws on Bazzite. Everything lives in one Quick Access panel:
 

@@ -52,6 +52,11 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**v0.2.0-beta.2 released (2026-11-06):** tested on the Claw 8 EX before release: FSR 4.1.2 files filled
+`~/fsr4-xmx` from the plugin (no download, sha256 identical), device line and capabilities right. The old
+`fsr4-xmx-4.1.2` release and tag are deleted, so beta 1 can no longer download the FSR files: beta 1 users update to
+beta 2.
+
 **Device-aware ClawDeck + ONEXPLAYER 3 beta (2026-11-06), needs testers on hardware we don't own:**
 - Claw 8 EX: first run still shows both steps; Fan, Charge limit, Fixes unchanged; Setup shows the device.
 - Claw A1M / A8 (no XMX): no XMX driver step, no FSR 4.1.2 offered; XeSS 2 still installs.
