@@ -1,10 +1,10 @@
 """Wider VRR range for the Claw's own screen: 30-120 Hz instead of the 48-120 Hz the panel's EDID announces.
 
 The panel itself refreshes down to 30 Hz, but its EDID (the description the screen hands the GPU driver) says 48.
-Below 48 fps the driver then holds each frame for a whole 48 Hz refresh, which judders. ClawLab's Intel VRR Range Fix
+Below 48 fps the driver then holds each frame for a whole 48 Hz refresh, which judders. The Intel VRR range fix
 (github.com/Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory, MIT) fixes this on Windows with an EDID override; this
 module is the same fix for Linux, with the same safety rule: it only touches the exact panels and the exact factory
-EDIDs ClawLab validated (matched by SHA-256), and only the range bytes ClawLab changes.
+validated EDIDs (matched by SHA-256), and only the range bytes the fix changes.
 
 What changes, and nothing else:
   - base block bytes 95/96 (the monitor range descriptor's min/max vertical rate) and, on the Claw 8 AI+ / 8 EX
@@ -37,7 +37,7 @@ FW_DIR = "/etc/firmware"
 EDID_DIR = f"{FW_DIR}/edid"
 CONNECTOR = "eDP-1"
 
-# From ClawLab's MSI-Claw-VRR-Fix.ps1 panel catalog. Physical = the factory EDID, as the kernel reads it.
+# From the validated panel catalog. Physical = the factory EDID, as the kernel reads it.
 PANELS: dict[str, dict] = {
     "CSW0801": {"models": "Claw 8 AI+ / 8 EX AI+", "panel": "PN8007QB1-2", "length": 256,
                 "range_offsets": [(95, 96), (142, 143)],
@@ -63,7 +63,7 @@ def panel_id(edid: bytes) -> str:
 
 
 def canonical(edid: bytes, length: int) -> bytes | None:
-    """ClawLab's normalisation: exact length, or a 128-byte EDID padded with one all-zero block."""
+    """The normalisation: exact length, or a 128-byte EDID padded with one all-zero block."""
     if len(edid) == length:
         return edid
     if length == 128 and len(edid) == 256 and edid[126] == 0 and not any(edid[128:]):

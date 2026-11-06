@@ -34,7 +34,7 @@ Launch options `%command%`, in the game: FSR (3.1) upscaling, Frame Interpolatio
 | O2 | `FSR=xess FSR_FG=inject IGDEXT_XELL_LOG=1 %command%` (`FSR_FG=xess` instead if O1 found a framegeneration DLL) | FSR upscaling | XeSS SR + XeSS frame generation on XMX through the game's FSR, low latency on; no OptiScaler, no REFramework |
 | O3 | O2 with `IGDEXT_XELL_CAP=off` in front | same | low latency off: compare the `xell latency` lines with O2 |
 | O4 | FSR 4 on XMX (below) | FSR upscaling | FSR 4 (B Boost) upscaling + XeSS frame generation + low latency, all on XMX |
-| O5 | only if O4 can't work: OptiScaler + REFramework (below) | DLSS or FSR, Frame Interpolation on | the OptiClick route |
+| O5 | only if O4 can't work: OptiScaler + REFramework (below) | DLSS or FSR, Frame Interpolation on | the Capcom route |
 
 ### O4 setup (FSR 4 on XMX + XeSS frame generation)
 
@@ -54,7 +54,7 @@ with XeSS): skip to O5 and tell us.
 
 If the game refuses to start after step 1 (Capcom's DRM checking its files), undo and go to O5.
 
-### O5 setup (OptiScaler + REFramework, the OptiClick route)
+### O5 setup (OptiScaler + REFramework, the Capcom route)
 
 1. REFramework nightly for this game (praydog/REFramework-nightly, the Onimusha asset): its `dinput8.dll` next to
    the game exe. Change REFramework's menu key from Insert (OptiScaler uses it) to Delete.
@@ -68,4 +68,4 @@ If the game refuses to start after step 1 (Capcom's DRM checking its files), und
 ## What to send back
 
 The `~/oni-O<n>.txt` files, each run's average fps, and anything wrong (stutter, flicker, HUD ghosting, a crash, the
-game refusing to start). Windows comparison: the same benchmark with OptiClick, same TDP and preset.
+game refusing to start). Windows comparison: the same benchmark, same TDP and preset.

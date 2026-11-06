@@ -9,7 +9,7 @@ Two kinds of checks:
   versions  the newest release / commit of each upstream, compared with assets/upstream.lock.json (the versions last
             tested with ClawDeck). New ones are listed so they get tested.
   canaries  the formats ClawDeck reads from upstream, read live: the xess-xmx-linux release asset, Handheld Daemon's
-            MSI keys, Bazzite's Claw hardware handling, ClawLab's panel list, InputPlumber's Claw 8 EX map (the
+            MSI keys, Bazzite's Claw hardware handling, the validated panel list, InputPlumber's Claw 8 EX map (the
             face-button fix is needed only while it is still `claw2`). A failed canary means a ClawDeck parser
             needs fixing before users notice.
 Only the standard library; GITHUB_TOKEN (set in CI) raises the API limit.
@@ -30,7 +30,7 @@ ISSUE_TITLE = "Upstream watch: new versions to test"
 
 # name -> (kind, source, credit/why). kind: release | prerelease | commit | npm
 UPSTREAMS = {
-    "ClawLab VRR Range Fix": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
+    "VRR panel list": ("release", "Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                               "validated Claw panels for the 30-120 Hz VRR range (edid.py)"),
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
     "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "compatibility only: games it patched are detected and left alone (framegen.py)"),
@@ -38,15 +38,15 @@ UPSTREAMS = {
     "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "Capcom RE Engine games: ClawDeck's OptiScaler v10 in the OptiScaler/ subfolder (optiscaler.py; pinned with sha256)"),
     "fakenvapi": ("release", "FakeMichau/fakenvapi", "Capcom games: fakenvapi.dll in OptiScaler/ next to v10 (optiscaler.py; pinned with sha256)"),
     "OptiPatcher": ("release", "xXJSONDeruloXx/OptiScaler-Bleeding-Edge", "OptiPatcher.asi next to OptiScaler (pinned with sha256)"),
-    # OptiClick's own forks (onehoon): its Windows install of Onimusha (2026-11-04) runs this REFramework fork with
+    # onehoon's forks: its Windows install of Onimusha (2026-11-04) runs this REFramework fork with
     # OptiScaler 0.9.5-pre4 and XeFG from the game's DLSS-G; the fork's notes: "custom OptiScaler with this custom
     # REF", Capcom games only. ClawDeck pins the fork's release 15 (with OptiScaler v10 instead of 0.9.5-pre4, which
     # isn't published); praydog's nightly is no longer installed, so it isn't watched. New releases are checked here
     # before ClawDeck's Capcom setup is bumped.
-    "REFramework (onehoon fork)": ("prerelease", "onehoon/REFramework", "Capcom RE Engine games: the REFramework OptiClick installs (reframework.py; pinned with sha256)"),
+    "REFramework (onehoon fork)": ("prerelease", "onehoon/REFramework", "Capcom RE Engine games: the REFramework the tested setup installs (reframework.py; pinned with sha256)"),
     "OptiScaler (onehoon fork)": ("prerelease", "onehoon/OptiScaler", "the custom OptiScaler build onehoon's REFramework fork is made for"),
-    "OptiScaler 0.9.5 previews": ("prerelease", "optiscaler/OptiScaler", "0.9.5-pre builds; OptiClick uses 0.9.5-pre4 for Onimusha"),
-    "OptiClick": ("prerelease", "onehoon/OptiClick", "reference: what OptiClick installs per game (its download manifest)"),
+    "OptiScaler 0.9.5 previews": ("prerelease", "optiscaler/OptiScaler", "0.9.5-pre builds; used in a working Windows install 0.9.5-pre4 for Onimusha"),
+    "Supported-games list": ("prerelease", "onehoon/OptiClick", "reference: what gets installed per game (download manifest)"),
     "Handheld Daemon": ("release", "hhd-dev/hhd", "TDP, fans, controller when installed"),
     "InputPlumber": ("release", "ShadowBlip/InputPlumber", "controller on current Bazzite"),
     "PowerStation": ("release", "ShadowBlip/PowerStation", "power on current Bazzite"),
@@ -116,7 +116,7 @@ def canaries() -> list[tuple[str, bool, str]]:
         return True, "still claw2: ClawDeck's face-button override is still needed" if stock else "changed upstream: check whether buttons.py's override can go"
     check("InputPlumber's Claw 8 EX map", claw8ex_map)
 
-    def clawlab_panels():
+    def vrr_panels():
         from clawdeck import edid
         src = raw("Zendo-GIT/Intel-Handheld-and-ARC-GPU-laboratory",
                   "utilities/msi-claw-8-intel-vrr-range-fix/MSI-Claw-VRR-Fix.ps1").lower()
@@ -124,7 +124,7 @@ def canaries() -> list[tuple[str, bool, str]]:
         offsets = "minimum = 95; maximum = 96" in src and "minimum = 142; maximum = 143" in src
         return not missing and offsets, ("same panels and range offsets" if not missing and offsets else
                                          f"changed: panels {missing or 'ok'}, offsets {'ok' if offsets else 'moved'}")
-    check("ClawLab still validates the panels and range bytes edid.py uses", clawlab_panels)
+    check("Still validated: the panels and range bytes edid.py uses", vrr_panels)
 
     def hhd_keys():
         msi = raw("hhd-dev/hhd", "src/adjustor/drivers/msi/settings.yml")

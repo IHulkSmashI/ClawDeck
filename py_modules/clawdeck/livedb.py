@@ -1,5 +1,5 @@
 """The per-game lists, kept current without a ClawDeck update (maintainer, 2026-11-05: "always looking at the
-database", as OptiClick does on Windows).
+database").
 
 Two lists, each fetched at most every REFRESH_S in the background at start (main.py) and kept in CACHE_DIR, with the
 copy in the plugin as the fallback offline:
@@ -7,16 +7,16 @@ copy in the plugin as the fallback offline:
   games.json   ClawDeck's own list (OptiScaler's per-game fixes, the Capcom RE Engine exes that need REFramework,
                what was tested on a Claw): assets/games.json on ClawDeck's main branch. Used only when its schema
                matches and it is newer (generated later) than the plugin's copy.
-  OptiClick    OptiClick's public Supported Game List, the wiki page OptiClick itself loads at start
-               (supported_games_meta.json in its cache names this URL): which games OptiClick supports, per GPU
-               vendor, with their Steam app ids. ClawDeck follows its Intel column: a game OptiClick lists as "Not
-               Supported" on Intel Arc isn't recommended. OptiClick's per-game recipes (which DLL to hook, its ini)
+  supported    the public supported-games list (a wiki page)
+               (supported_games_meta.json in its cache names this URL): which games are supported, per GPU
+               vendor, with their Steam app ids. ClawDeck follows its Intel column: a game listed as "Not
+               Supported" on Intel Arc isn't recommended. Per-game recipes (which DLL to hook, its ini)
                come from its signed-in service and are not public, so they are not used.
   OptiScaler   OptiScaler's own Compatibility List (its wiki, GPL-3.0 project, community entries): per game whether
                it works, the inputs, and notes ("Requires REFramework"). A game's detailed entry (one wiki page) is
                fetched when the game is opened in Per-game: which file names load OptiScaler there ("Filename":
                dxgi.dll, winmm.dll, ...), in the order the entry gives them, plus its known issues. This is the
-               public record other installers (Decky Framegen, OptiClick's recipes) follow too.
+               public record other installers (Decky Framegen, private per-game recipes) follow too.
 """
 from __future__ import annotations
 
@@ -32,13 +32,13 @@ from . import tls
 log = logging.getLogger("clawdeck.livedb")
 
 GAMES_URL = "https://raw.githubusercontent.com/IHulkSmashI/ClawDeck/main/assets/games.json"
-OPTICLICK_URL = "https://raw.githubusercontent.com/wiki/onehoon/OptiClick/Supported-Game-List.md"
+SUPPORTED_LIST_URL = "https://raw.githubusercontent.com/wiki/onehoon/OptiClick/Supported-Game-List.md"
 OPTISCALER_COMPAT_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md"
 OPTISCALER_PAGE_URL = "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/{slug}.asciidoc"
 OPTISCALER_FILE = "optiscaler-compat.md"
 REFRESH_S = 12 * 3600
 GAMES_FILE = "games.json"
-OPTICLICK_FILE = "opticlick-supported.md"
+SUPPORTED_LIST_FILE = "supported-games.md"
 
 
 def _get(url: str, timeout: float = 20.0) -> bytes:
@@ -86,17 +86,17 @@ def refresh(cache_dir: str, bundled_games: str, force: bool = False, get=_get) -
                 out["games"] = "other schema, kept"
         except (OSError, ValueError) as e:
             out["games"] = f"error: {e}"
-    op = os.path.join(cache_dir, OPTICLICK_FILE)
+    op = os.path.join(cache_dir, SUPPORTED_LIST_FILE)
     if force or not _fresh(op):
         try:
-            text = get(OPTICLICK_URL).decode("utf-8", "replace")
-            if parse_opticlick(text):
+            text = get(SUPPORTED_LIST_URL).decode("utf-8", "replace")
+            if parse_supported_list(text):
                 _write(op, text.encode("utf-8"))
-                out["opticlick"] = "updated"
+                out["supported_list"] = "updated"
             else:
-                out["opticlick"] = "no games in the page, kept"
+                out["supported_list"] = "no games in the page, kept"
         except (OSError, ValueError) as e:
-            out["opticlick"] = f"error: {e}"
+            out["supported_list"] = f"error: {e}"
     cp = os.path.join(cache_dir, OPTISCALER_FILE)
     if force or not _fresh(cp):
         try:
@@ -127,13 +127,13 @@ def games_path(cache_dir: str, bundled: str) -> str:
     return bundled
 
 
-# ---- OptiClick's Supported Game List ----------------------------------------------------------------------------
+# ---- the public supported-games list ----------------------------------------------------------------------------
 
 def _norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
-def parse_opticlick(text: str) -> dict[str, dict]:
+def parse_supported_list(text: str) -> dict[str, dict]:
     """{steam app id: {"name", "intel", "amd", "nvidia", "game_id"}} from the wiki page: the table's GPU columns,
     joined by English title to the page's metadata block (game ids, Steam app ids)."""
     support: dict[str, tuple[str, str, str]] = {}
@@ -159,16 +159,16 @@ def parse_opticlick(text: str) -> dict[str, dict]:
     return out
 
 
-def opticlick(cache_dir: str) -> dict[str, dict]:
+def supported_list(cache_dir: str) -> dict[str, dict]:
     try:
-        with open(os.path.join(cache_dir, OPTICLICK_FILE), "r", encoding="utf-8") as f:
-            return parse_opticlick(f.read())
+        with open(os.path.join(cache_dir, SUPPORTED_LIST_FILE), "r", encoding="utf-8") as f:
+            return parse_supported_list(f.read())
     except OSError:
         return {}
 
 
-def opticlick_says(entries: dict[str, dict], appid: str) -> dict:
-    """What OptiClick's list says about this game on Intel Arc: listed or not, supported or not."""
+def supported_list_says(entries: dict[str, dict], appid: str) -> dict:
+    """What the list says about this game on Intel Arc: listed or not, supported or not."""
     e = entries.get(str(appid))
     if not entries:
         return {"known": False, "listed": False, "intel_ok": None}

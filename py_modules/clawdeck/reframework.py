@@ -1,8 +1,8 @@
-"""REFramework for Capcom RE Engine games (praydog/REFramework, MIT; onehoon's fork for OptiClick's Capcom setup).
+"""REFramework for Capcom RE Engine games (praydog/REFramework, MIT; onehoon's fork for the Capcom setup).
 
 Capcom's anti-tamper stops an RE Engine game when OptiScaler swaps its upscaler unless REFramework is loaded too
-(Onimusha: Way of the Sword on the Claw 8 EX, 2026-11-04). OptiClick installs REFramework as dinput8.dll next to the
-game's exe; ClawDeck does the same with the build OptiClick uses, onehoon's fork (assets/versions.json
+(Onimusha: Way of the Sword on the Claw 8 EX, 2026-11-04). the tested setup installs REFramework as dinput8.dll next to the
+game's exe; ClawDeck does the same with the build used in a working Windows install, onehoon's fork (assets/versions.json
 "reframework", sha256 checked), whose notes say to use it with OptiScaler in Capcom games. Proton loads it through
 WINEDLLOVERRIDES=dinput8=n,b (launchenv: reframework).
 

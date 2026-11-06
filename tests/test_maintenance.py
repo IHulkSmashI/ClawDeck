@@ -1,4 +1,4 @@
-"""Release downloads, the system-change check, and the ClawTweaks
+"""Release downloads, the system-change check, and the
 extras (CPU energy mode, TDP boost)."""
 import os
 import sys
@@ -57,7 +57,7 @@ def test_changes_first_run_then_diff(tmp_path):
     assert [(c["what"], c["from"], c["to"]) for c in got] == [("Kernel", "6.19.4", "6.19.6"), ("Mesa", "26.2.1", "26.2.3")]
 
 
-# ---- ClawTweaks extras: CPU energy mode, TDP boost -----------------------------------------------------------------
+# ---- Extras: CPU energy mode, TDP boost -----------------------------------------------------------------
 def test_epp_written_to_every_cpu_and_profiles_set_it(tmp_path, monkeypatch):
     monkeypatch.setattr(hhd, "available", lambda: False)
     epp = []

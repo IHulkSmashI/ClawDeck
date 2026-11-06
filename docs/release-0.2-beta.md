@@ -35,7 +35,7 @@ other Claws via the hardware survey.
 ## 4. Docs and post
 - [ ] README guide matches what's on screen (screenshots re-taken on the Claw if the preview differs).
 - [ ] CREDITS.md lists every upstream (OptiScaler, OptiPatcher, nitec's FSR 4.1.2 build, xess-xmx-linux, REFramework,
-      ClawLab, InputPlumber, ClawTweaks presets, OptiClick inspiration, wimlib for cabinet.dll, fakenvapi).
+      InputPlumber, wimlib for cabinet.dll, fakenvapi).
 - [ ] Feedback paths live: Discussions on (Ideas, Q&A), the Game report form opens, README → Feedback links work.
 - [ ] Reddit post (docs/posts/02-beta.md) with the release link; posted by the
       maintainer.

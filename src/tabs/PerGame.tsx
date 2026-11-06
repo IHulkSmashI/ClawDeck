@@ -91,9 +91,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
 
 
   const ours = gs?.opti_owner === "clawdeck";
-  // OptiClick's way: pick the upscaler and frame generation, then one Apply (or Update when a newer OptiScaler is
+  // pick the upscaler and frame generation, then one Apply (or Update when a newer OptiScaler is
   // pinned): nothing is written while picking
-  // not set up yet: the recommended upscaler, the newest that runs here (FSR 4.1.2 on XMX where it can, as OptiClick)
+  // not set up yet: the recommended upscaler, the newest that runs here (FSR 4.1.2 on XMX where it can)
   const nowUp = ours ? (launch.opti === "fsr4" ? "fsr4_xmx" : launch.opti ?? "xess") : (rec?.upscaler ?? "xess");
   const nowFg = launch.fg ?? 0;
   // kept outside the component: picking in Steam's dropdown can re-mount Quick Access, which lost the pick (the
@@ -110,7 +110,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
   const wantOv = pickOv ?? nowOv;
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg || wantOv !== nowOv;
-  // FSR 4.1.2 only where it can run, as OptiClick shows only what the game and the hardware support
+  // FSR 4.1.2 only where it can run: only what the game and the hardware support
   // never without XMX: nitec's FSR 4.1.2 drew a black screen on the stock driver (Onimusha, Claw 8 EX, 2026-11-04)
   // only an explicit "XMX off" for the game hides it: before OptiScaler is set up the per-game XMX driver reads as off
   // (nothing in the game uses XeSS yet), and picking an OptiScaler upscaler is what switches it on (launchenv: opti
@@ -163,7 +163,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     load();
   };
 
-  // how to use it in the game; Capcom RE Engine games (REFramework) are set up as OptiClick does: the game's DLSS and
+  // how to use it in the game; Capcom RE Engine games (REFramework) are set up so the game's DLSS and
   // DLSS Frame Generation become XeSS and XeSS frame generation, and REFramework's menu moves to Delete
   const fsr4Now = (launch.opti ?? "xess").startsWith("fsr4_xmx");
   const capcom = !!launch.reframework;
@@ -210,8 +210,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           <div style={{ height: 8 }} />
           {rec?.ships && <Status ok={null} label={`In the game: ${[...rec.ships.upscaler, ...rec.ships.fg, ...rec.ships.latency].join(", ") || "no upscaler of its own"}`}
             detail={quick ? undefined : "What the game ships (upscaler, frame generation, low latency), checked in its folder before anything is set up."} />}
-          {rec?.opticlick?.listed && rec.opticlick.intel_ok === false && <Status ok={false} label="OptiClick: not supported on Intel Arc"
-            detail="OptiClick's supported list marks this game as not working on Intel Arc, so ClawDeck doesn't recommend OptiScaler here." />}
+          {rec?.supported_list?.listed && rec.supported_list.intel_ok === false && <Status ok={false} label="Not supported on Intel Arc"
+            detail="The public supported-games list marks this game as not working on Intel Arc, so ClawDeck doesn't recommend OptiScaler here." />}
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
@@ -249,7 +249,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             detail={explain(ours ? `Upscaler and frame generation below; the game's own files are kept and come back with Undo.${xmxOn && xessOk ? " Its XeSS runs on XMX through the driver above." : ""}`
               : fgmodHere || gs?.opti_owner === "decky-framegen"
                 ? "Decky Framegen manages OptiScaler here. ClawDeck's upscaler presets still reach it, but the recommended setup, REFramework and its own OptiScaler wait until Decky Framegen is removed from this game (below, then Decky Framegen → Unpatch)."
-                : "OptiScaler files ClawDeck didn't put there (OptiClick's from a Windows install, or by hand). ClawDeck leaves them alone; remove OptiScaler.ini and its DLL to let ClawDeck set the game up.")} />
+                : "OptiScaler files ClawDeck didn't put there (from a Windows install, or by hand). ClawDeck leaves them alone; remove OptiScaler.ini and its DLL to let ClawDeck set the game up.")} />
           {fgmodHere && opts !== null && (
             <ButtonItem layout="below" onClick={() => setFgmod(false)}>Stop using Decky Framegen here</ButtonItem>
           )}

@@ -1,4 +1,4 @@
-"""ClawDeck's per-game OptiScaler list (assets/games.json, built by tools/gen_games.py): what OptiClick looks up on
+"""ClawDeck's per-game OptiScaler list (assets/games.json, built by tools/gen_games.py): what ClawDeck looks up on
 Windows, from an open source anyone can check and extend.
 
 For a game, match() finds its entry by the game's executables (OptiScaler's own exe names, and Unreal projects as
@@ -6,7 +6,7 @@ For a game, match() finds its entry by the game's executables (OptiScaler's own 
 
   * ClawDeck's own OptiScaler (optiscaler.py) with XeSS on XMX and XeSS frame generation (Intel's own, as on Windows);
   * the game's OptiScaler settings from the list, written into its OptiScaler.ini ([Section] Key = Section_Key);
-  * Capcom RE Engine games: OptiClick's Capcom setup (onehoon's REFramework as dinput8.dll, OptiScaler v10 in the
+  * Capcom RE Engine games: the Capcom setup (onehoon's REFramework as dinput8.dll, OptiScaler v10 in the
     OptiScaler/ subfolder, the game's DLSS frame generation turned into XeSS-FG; launchenv.capcom), or Capcom's
     anti-tamper stops the game. games.json "capcom" says which of them were tested on a Claw.
 """
@@ -86,7 +86,7 @@ def _has(game_dir: str | None, names: tuple[str, ...]) -> bool:
 
 
 def capcom_tested(doc: dict, exes: list[str]) -> str | None:
-    """Where OptiClick's Capcom setup was seen working for this game (games.json "capcom" "tested"), else None."""
+    """Where the Capcom setup was seen working for this game (games.json "capcom" "tested"), else None."""
     tested = {k.lower(): v for k, v in ((doc.get("capcom") or {}).get("tested") or {}).items()}
     return next((tested[e] for e in exes if e in tested), None)
 
@@ -121,7 +121,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         why = (f"This game ships {', '.join(own[:-1]) + ' and ' + own[-1] if len(own) > 1 else own[0]}: use them in its graphics "
                "menu; they run on the XMX cores by themselves, nothing to add.")
     elif re_engine:
-        # OptiClick's Capcom setup: the game's own DLSS frame generation is what OptiScaler turns into XeSS-FG, so it
+        # the Capcom setup: the game's own DLSS frame generation is what OptiScaler turns into XeSS-FG, so it
         # is the frame generation source whatever files the game ships; the wiki's Spoofing_Dxgi=false would hide
         # DLSS-G (it needs the Nvidia spoofing), so it is left out here
         route, opti = "re_engine", True
@@ -132,7 +132,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
                "anti-tamper from stopping the game. In the game's graphics menu turn on DLSS and DLSS Frame "
                "Generation: OptiScaler makes them XeSS and XeSS frame generation.")
     else:
-        # DLSS and FSR games alike, as OptiClick does: OptiScaler takes the game's DLSS or FSR and runs XeSS (or FSR
+        # DLSS and FSR games alike: OptiScaler takes the game's DLSS or FSR and runs XeSS (or FSR
         # 4.1.1) on the XMX cores. FSR-only games used xess-xmx-linux's own FSR route before; OptiScaler offers the
         # same XeSS plus FSR 4.1.2, with one set of choices for every game (maintainer, 2026-11-04).
         route, opti = "optiscaler", True
@@ -149,8 +149,8 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
     tested = capcom_tested(doc, exes) if re_engine else None
     if re_engine:
-        reasons.append(f"The way OptiClick sets up Capcom games, tested on a Claw: {tested}" if tested else
-                       "The way OptiClick sets up Capcom games; not tested on a Claw in this game yet")
+        reasons.append(f"The Capcom setup, tested on a Claw: {tested}" if tested else
+                       "The Capcom setup; not tested on a Claw in this game yet")
     return {
         "route": route, "known": bool(g), "frame_gen": ofg if opti else None, "fg_source": fg_source, "id": (g or {}).get("id"), "name": (g or {}).get("name"),
         "re_engine": re_engine, "capcom": re_engine, "capcom_tested": tested, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
@@ -167,7 +167,7 @@ FSR_FILES = ("ffx_fsr2_api_x64.dll", "ffx_fsr2_api_dx12_x64.dll", "ffx_fsr3upsca
              "amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_vk.dll",
              "amd_fidelityfx_upscaler_vk.dll", "amd_fidelityfx_loader_vk.dll")
 
-# what a game brings along, as OptiClick inspects a game before it installs anything
+# what a game brings along inspects a game before it installs anything
 SHIPPED = {
     "upscaler": {"DLSS": ("nvngx_dlss.dll", "sl.dlss.dll"), "FSR": FSR_FILES, "XeSS": ("libxess.dll", "libxess_dx11.dll")},
     "fg": {"DLSS-G": ("nvngx_dlssg.dll", "sl.dlss_g.dll"), "FSR-FG": ("amd_fidelityfx_framegeneration_dx12.dll",

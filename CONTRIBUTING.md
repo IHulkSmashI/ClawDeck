@@ -58,7 +58,7 @@ ClawDeck depends on a lot of other people's projects, and each one can change un
    Downloads go over HTTPS from the project's own releases, with a checksum check where one is published.
 2. **Every day, on GitHub** (`.github/workflows/upstream-watch.yml` → `tools/upstream_watch.py`): the newest version
    of every upstream is compared with `assets/upstream.lock.json` (what was last tested), and ClawDeck's own parsers
-   run against live upstream data (the xess-xmx-linux release asset, InputPlumber's Claw 8 EX map, ClawLab's panel
+   run against live upstream data (the xess-xmx-linux release asset, InputPlumber's Claw 8 EX map, the panel list's panel
    list, Handheld Daemon's keys, Bazzite's Claw handling).
    Anything new or broken opens the "Upstream watch" issue; a broken canary also turns the run red.
 3. **On every system update, on the Claw** (`py_modules/clawdeck/changes.py`): a new kernel, Mesa, controller

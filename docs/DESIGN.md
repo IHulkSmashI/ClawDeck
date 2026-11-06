@@ -15,7 +15,7 @@ them). Priority, in order; nothing lower starts until the line above works on th
    game's settings and the Intel presets (XeSS on XMX, FSR 4 on XMX, XeSS frame generation) and takes them out again
    exactly (manifest + backups). The version is ClawDeck's to choose and test. Decky Framegen is compatibility only:
    a game it patched (fgmod in the launch options, or its files) is detected and left alone with a warning.
-   Capcom RE Engine games get OptiClick's Capcom setup instead (`optiscaler_v10` in the `OptiScaler\` subfolder,
+   Capcom RE Engine games get the Capcom setup instead (`optiscaler_v10` in the `OptiScaler\` subfolder,
    onehoon's REFramework, the game's DLSS-G turned into XeSS-FG; `launchenv.capcom`); every other game 0.9.4.
    Lossless Scaling stays decky-lsfg-vk's.
 4. **Power + autotune** — profiles through RAPL-MMIO, as a dropdown plus the Autotune switch.
@@ -45,7 +45,7 @@ py_modules/clawdeck/
    framegen.py  Decky Framegen compatibility: is it installed, fgmod state (read-only; ClawDeck doesn't install it)
    launchenv.py per-game <runtime>/launch/<appid>.env: XMX off, XESS_FG, IGDEXT_XELL_CAP=off, XESS=latest, FSR routes,
                 OptiScaler presets (read by the wrapper)
-   edid.py      ClawLab's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
+   edid.py      the panel list's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
    buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91
    health.py    checks + one-line summary + the bug report
    changes.py   what changed since the last start (kernel, Mesa, OS, controller service, XeSS, Decky)

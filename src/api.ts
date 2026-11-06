@@ -91,7 +91,7 @@ export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" |
   ini_version: string | null; opti_owner?: string | null; frame_gen?: string | null;
   capcom?: boolean; capcom_tested?: string | null; upscaler?: string | null; recommended?: boolean;
   ships?: { upscaler: string[]; fg: string[]; latency: string[] };
-  opticlick?: { known: boolean; listed: boolean; intel_ok: boolean | null; name?: string; intel?: string };
+  supported_list?: { known: boolean; listed: boolean; intel_ok: boolean | null; name?: string; intel?: string };
   fsr4?: { dx12: boolean; files: boolean; missing: string[]; dir: string; xmx?: boolean }; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };
 export const gameRecommend = callable<[appid: string], Recommendation>("game_recommend");
 export const gameApplyRecommended = callable<[appid: string, allowUnpinned: boolean], { ok: boolean; error?: string; next?: string; env?: Record<string, string> }>("game_apply_recommended");

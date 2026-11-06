@@ -25,7 +25,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | XeSS XMX | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | upstream release; `xmx` / `fg` / `low_latency` / `xess_latest` / `fsr` per game; shim log read per launch |
 | ClawDeck's OptiScaler | `optiscaler.py`, `launchenv.py` (`opti`, `opti_xefg`), `assets/versions.json` (`optiscaler`) | Setup, Per-game | pinned release + OptiPatcher, sha256 checked; patch / unpatch with a manifest and backups; never touches OptiScaler it didn't install (`owner()`) |
 | Decky Framegen compatibility | `framegen.py` (state), `optiscaler.owner()`, `steam.ts` (fgmod in launch options) | Setup, Per-game | detection only: a game Decky Framegen patched (fgmod in its launch options, or its files) shows a warning and "Stop using Decky Framegen here"; ClawDeck doesn't install or offer Decky Framegen |
-| VRR range fix | `edid.py` | Fixes | ClawLab's validated panels only; `drm.edid_firmware` + initramfs-etc |
+| VRR range fix | `edid.py` | Fixes | the panel list's validated panels only; `drm.edid_firmware` + initramfs-etc |
 | Face buttons (EX) | `buttons.py` | Fixes | InputPlumber override, `claw8ex` map |
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
@@ -58,10 +58,10 @@ sleep/wake several times fine.
   Eternal): the game's folder gets `winmm.dll`, the launch env `winmm=n,b`, and OptiScaler's overlay shows in game.
 
 - **Live per-game lists and FSR 4.1.2 first (2026-11-05):** at start ClawDeck fetches its games.json from main and
-  OptiClick's public Supported Game List (the wiki page OptiClick itself loads), every 12 h, into
-  `~/.local/share/clawdeck/lists`. Check on the Claw: that folder has `games.json` and `opticlick-supported.md`;
-  Per-game for CONTROL shows "In the game: DLSS, DLSS-G, Reflex" (or what it ships), "On OptiClick's supported list",
-  and with nitec's files in place the upscaler starts on **FSR 4.1.2** (XeSS 2 one tap away). A game OptiClick marks
+  the public supported-games list, every 12 h, into
+  `~/.local/share/clawdeck/lists`. Check on the Claw: that folder has `games.json` and `supported-games.md`;
+  Per-game for CONTROL shows "In the game: DLSS, DLSS-G, Reflex" (or what it ships), "On the public supported-games list",
+  and with nitec's files in place the upscaler starts on **FSR 4.1.2** (XeSS 2 one tap away). A game the list marks
   "Not Supported" on Intel shows a red line and "Install OptiScaler" refuses with that reason.
 
 - **VRR menus left to gamescope (2026-11-05):** confirmed on the Claw (Bazzite 45, gamescope 3.17): Steam's menus
@@ -85,7 +85,7 @@ sleep/wake several times fine.
   4. Upscaler → the game's own (or Uninstall): `cabinet.dll` and `cabinet_wine.dll` are gone from the game folder.
      Uninstalling ClawDeck also removes `~/.local/share/clawdeck/cabinet.dll`.
 
-- **PL2 by hand (2026-11-05, as ClawTweaks):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
+- **PL2 by hand (2026-11-05):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
   saved per power source; off: PL2 = TDP + 2 W. Check the chip reads it:
   `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw` (µW). Other profiles always use TDP + 2 W.
 
@@ -119,14 +119,14 @@ sleep/wake several times fine.
   saves Z W", or "still learning; nothing new saved" after a short session. `ps -L -o psr,ni -p $(pgrep -f ClawDeck)`
   in a game shows only cores 10-13 (the LP-E cores) and nice 10.
 
-- **Onimusha the OptiClick way (2026-11-05, writes into game folders; test before the next release):** Capcom RE
-  Engine games now get exactly what OptiClick installs on Windows: onehoon's REFramework fork (release 15, the
-  23252480-byte `dinput8.dll`) and OptiScaler **v10** (nightly-20261030; OptiClick's 0.9.5-pre4 isn't on GitHub) in the
-  `OptiScaler\` subfolder layout, with OptiClick's ini (DLSS-G in, XeFG out). Every other game stays on 0.9.4.
+- **Onimusha's Capcom setup (2026-11-05, writes into game folders; test before the next release):** Capcom RE
+  Engine games now get exactly what the tested setup installs on Windows: onehoon's REFramework fork (release 15, the
+  23252480-byte `dinput8.dll`) and OptiScaler **v10** (nightly-20261030; 0.9.5-pre4 isn't on GitHub) in the
+  `OptiScaler\` subfolder layout, with the tested ini (DLSS-G in, XeFG out). Every other game stays on 0.9.4.
   1. Start clean: in Onimusha's folder (`steamapps/common/<Onimusha>/`, next to `OnimushaWotS.exe`) there is no
      `dinput8.dll`, `dxgi.dll`, `OptiScaler.ini`, `OptiScaler\` or `re2_fw_config.txt` (move the files from tonight's
      hand test out first; ClawDeck leaves OptiScaler it didn't install alone and says so).
-  2. ClawDeck → Games → Onimusha: the reasons read "The way OptiClick sets up Capcom games, tested on a Claw". Upscaler
+  2. ClawDeck → Games → Onimusha: the reasons read "The Capcom setup, tested on a Claw". Upscaler
      XeSS 2, Frame generation 2x → **Install OptiScaler in this game** (one tap; the first time downloads about 72 MB
      of OptiScaler and 13 MB of REFramework, both sha256-checked).
   3. The folder now has, next to the exe: `dxgi.dll` (OptiScaler), `OptiScaler.ini`, `dinput8.dll` (REFramework),
@@ -135,11 +135,11 @@ sleep/wake several times fine.
      amd_fidelityfx_*, dlssg_to_fsr3_amd_is_better.dll, `fakenvapi.dll` (v1.4.1, 415232 bytes) with `fakenvapi.ini`
      (enable_logs=1, enable_trace_logs=0, force_latencyflex=0, force_reflex=0), `D3D12_OptiScaler\` and
      `plugins\OptiPatcher.asi`. No OptiScaler library and no fakenvapi next to the exe. (v10 has fakenvapi built
-     in, `[fakenvapi] UseFakenvapi=true`, and doesn't load the file; it is there because OptiClick's folder has it.
+     in, `[fakenvapi] UseFakenvapi=true`, and doesn't load the file; it is there because the tested folder has it.
      Check OptiScaler.log for the low-latency line: the game's Reflex should become XeLL.) `OptiScaler.ini` has Dx11Upscaler=fsr31_12, Dx12Upscaler=xess,
      VulkanUpscaler=xess, [FrameGen] Enabled=true, FGInput=DLSSG, FGOutput=XeFG, FGNvngxReplacement=XeFG_NVNGX,
      [DLSSG] OverrideInterpolationCount=1 (2x; 3x writes 2, 4x writes 3; OptiScaler counts generated frames, so
-     OptiClick's =2 on Windows ran 3x there), [NvngxFG] DisableHudless=true,
+     =2 ran 3x there on Windows), [NvngxFG] DisableHudless=true,
      OptiDllPath=.\OptiScaler, LoadAsiPlugins=true, RestoreComputeSignature=true, and [Spoofing] Dxgi=auto (the
      wiki's Dxgi=false is left out on purpose: DLSS-G needs the spoofing). The game's launch environment
      (`~/homebrew/data/ClawDeck/launch/2638890.env`) has `WINEDLLOVERRIDES=dxgi=n,b;dinput8=n,b;` and no
@@ -177,7 +177,7 @@ sleep/wake several times fine.
   (XeFG InterpolationCount) with Reflex forced on through fakenvapi (XeLL). Switch the upscaler to FSR 4.1.1 XMX and
   Lite from Quick Access: OptiScaler.ini and the files change without opening OptiScaler. Undo leaves the folder as it
   was. A game Decky Framegen patched shows the warning and isn't touched.
-- **Recommended setup per game (writes into game folders):** Onimusha: see "Onimusha the OptiClick way" above.
+- **Recommended setup per game (writes into game folders):** Onimusha: see "Onimusha's Capcom setup" above.
   CONTROL → the recommendation is "FSR on XeSS" (no OptiScaler).
 - **Fan presets (Power → Fan, msi-wmi-platform hwmon):** Quiet / Cooling / Full speed / Custom each change the fans'
   rpm audibly (Quiet: off at idle), the "Fans now" line follows; Automatic puts MSI's own control back

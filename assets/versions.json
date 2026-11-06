@@ -18,7 +18,7 @@
   "asset_glob": "REFramework.zip",
   "sha256": "538666f011a9ca54d38e87815a6227066daa32bb0349c392c98543268aaa9a64",
   "dll_sha256": "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98",
-  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, OptiClick calls it REFramework 0.1.0.69) next to the game's exe. onehoon's fork (OptiClick's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: OptiClick's working Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet."
+  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet."
  },
  "optiscaler": {
   "version": "0.9.4",
@@ -62,7 +62,7 @@
     "ini": "OptiScaler/fakenvapi.ini"
    }
   ],
-  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. OptiClick's Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with OptiClick's fakenvapi.ini, as in OptiClick's folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw."
+  "note": "Capcom RE Engine games only (optiscaler.py layout 'subfolder'): OptiScaler.dll as the proxy and OptiScaler.ini next to the exe, everything else in OptiScaler\\ (OptiDllPath), OptiPatcher in OptiScaler\\plugins. a working Windows Onimusha install uses 0.9.5-pre4, which isn't published on GitHub; this public v10 nightly ran Onimusha with onehoon's REFramework on a Claw 8 EX on Bazzite (2026-11-04). Every other game stays on 'optiscaler' (0.9.4). fakenvapi v1.4.1 (FakeMichau) goes in OptiScaler\\ with the tested fakenvapi.ini, as in the tested folder: its fakenvapi.dll (415232 bytes) is byte-identical to the one OptiScaler 0.9.4 ships. OptiScaler v10 has fakenvapi built in ([fakenvapi] UseFakenvapi, set to true) and doesn't load the file; it is there to match the setup tested on the Claw."
  },
  "fsr4_xmx": {
   "repo": "IHulkSmashI/ClawDeck",
@@ -71,6 +71,6 @@
    "amd_fidelityfx_upscaler_dx12.dll": "a609f609a3ef29ddff59adfbd27dc417bf68fcd865383b2529987a7eff1081ac",
    "fsr-original.dll": "aad4fccccb29084a655f9a4f9f613bd22c8c03fb4a0f8840148cc6543b4ccace"
   },
-  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files OptiClick installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04)."
+  "note": "nitec's FSR 4.1.2 build for the XMX cores (OptiScaler community), shared with ClawDeck with nitec's OK (maintainer, 2026-11-05), the same files the tested setup installs on Intel (its Archives/Custom/FSR4_XMX). Hosted on ClawDeck's fsr4-xmx-files branch, pinned by commit (not on the Releases page); downloaded into ~/fsr4-xmx when missing, each sha256 checked (the maintainer's working copy on the Claw 8 EX, 2026-11-04)."
  }
 }

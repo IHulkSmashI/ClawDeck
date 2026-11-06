@@ -8,7 +8,7 @@ import { explain, Group, Problem, Status, useExplanations } from "../components/
 
 const toast = (body: string) => notify(body);
 
-/** What the hardware gets wrong out of the box: the VRR range (ClawLab's EDID fix), the Claw 8 EX face buttons, and
+/** What the hardware gets wrong out of the box: the VRR range, the Claw 8 EX face buttons, and
  *  the health check in one line. Install / remove buttons, not toggles: each one is a change to the system. */
 export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
   useExplanations();
