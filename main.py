@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, osupdate, battery, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, osupdate, battery, screen, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -133,6 +133,8 @@ class Plugin:
             decky.logger.warning("XeSS XMX per game: %s", e)
         await self._first_fixes()
         self.fan_hw = fan.find_hwmon()
+        self.caps = hw.capabilities(self.hw, fan.kind(self.fan_hw))
+        decky.logger.info("device capabilities: %s", self.caps)
         self._reapply_fan_charge("start")
         if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
             r = telemetry.apply(True)
@@ -174,6 +176,8 @@ class Plugin:
         self.autotune.stop()
         quiet.background(False)
         n = self.power.revert_all()
+        if self.settings.get("sdr_nits") is not None and self._caps().get("hdr_brightness"):
+            screen.set_nits(HOME, None)          # gamescope's own brightness back
         decky.logger.info("ClawDeck unloaded, %d value(s) reverted", n)
 
     async def _uninstall(self):
@@ -247,7 +251,32 @@ class Plugin:
 
     # ---- setup / health ----------------------------------------------------------------------------------------------
     async def get_hardware(self) -> dict:
-        return {**self.hw.to_dict(), "stack": stack.detect(), "other_plugins": stack.other_plugins(HOME)}
+        return {**self.hw.to_dict(), "caps": self._caps(), "stack": stack.detect(), "other_plugins": stack.other_plugins(HOME)}
+
+    def _caps(self) -> dict:
+        if getattr(self, "caps", None) is None:
+            self.caps = hw.capabilities(self.hw, fan.kind(getattr(self, "fan_hw", None)))
+        return self.caps
+
+    def _no_xmx(self) -> bool:
+        """This chip has no XMX cores (MSI Claw A1M, Claw A8): no XMX driver, no FSR 4.1.2 on XMX. An unknown device
+        (None) is left to the driver's own self-test."""
+        return self._caps().get("xmx") is False
+
+    async def get_brightness(self) -> dict:
+        """The OLED brightness ClawDeck can set where Steam's slider does nothing (ONEXPLAYER 3, screen.py)."""
+        if not self._caps().get("hdr_brightness"):
+            return {"supported": False}
+        return {**await self._bg(screen.get, HOME), "saved": self.settings.get("sdr_nits")}
+
+    async def set_brightness(self, nits: int | None = None) -> dict:
+        if not self._caps().get("hdr_brightness"):
+            return {"ok": False, "error": "not on this device"}
+        r = await self._bg(screen.set_nits, HOME, nits)
+        if r["ok"]:
+            self.settings["sdr_nits"] = r["wanted"]
+            self._save_settings()
+        return r
 
     async def get_health(self, force: bool = False) -> list:
         """The checks run programs and read files, so a result is reused for two minutes (the Quick Access panel asks
@@ -1042,7 +1071,7 @@ class Plugin:
         OptiScaler): FSR 4.1.2 on the XMX cores when the game is DirectX 12, XMX is on and nitec's files are there.
         Not for Capcom RE Engine games (black picture in Onimusha, 2026-11-04) or games with their own XeSS."""
         launch = rec.get("launch") or {}
-        if not rec.get("optiscaler") or rec.get("re_engine") or launch.get("opti") != "xess" or self._xmx_off(appid):
+        if not rec.get("optiscaler") or rec.get("re_engine") or launch.get("opti") != "xess" or self._xmx_off(appid) or self._no_xmx():
             return
         if not d or not gamedb.is_dx12(d, rec.get("main_exes")):
             return
@@ -1121,7 +1150,7 @@ class Plugin:
                           fsr4["ready"], fsr4["missing"])
         return {**rec, "dir": d, "folder": folder, "applied": applied, "opti_owner": who["owner"],
                 "fsr4": {"dx12": dx12, "files": fsr4["ready"], "missing": fsr4["missing"], "dir": fsr4["dir"],
-                         "xmx": not self._xmx_off(appid)},
+                         "xmx": not self._xmx_off(appid) and not self._no_xmx()},
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
 
     def _opti_entry(self, launch: dict) -> dict:
@@ -1332,6 +1361,8 @@ class Plugin:
 
     async def xess_install(self, allow_unpinned: bool = False) -> dict:
         self._health = None
+        if self._no_xmx():
+            return {"ok": False, "error": f"{self._caps().get('device')} has no XMX cores: XeSS runs on its general path without this driver"}
         if self._install_lock.locked():
             return {"ok": False, "busy": True, "error": "already installing; wait for the first one to finish"}
         async with self._install_lock:

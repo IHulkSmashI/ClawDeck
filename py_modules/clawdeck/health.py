@@ -134,6 +134,27 @@ def summary(checks: list[dict]) -> dict:
             "line": "All checks pass" if not problems else f"{len(problems)} to fix: " + " · ".join(c["title"] for c in problems)}
 
 
+def device_report(root: str = "/sys") -> dict:
+    """What a new handheld exposes, read-only, so ClawDeck can be wired to it from an owner's log (ONEXPLAYER 3,
+    2026-11-06): DMI names, hwmon drivers and their controls, backlights, batteries and what they accept, the
+    platform profile. Reads names and capabilities only, never changes anything."""
+    import glob
+    def rd(p):
+        return sysfs.read(p)
+    out = {"dmi": {k: rd(f"{root}/class/dmi/id/{k}") for k in ("sys_vendor", "product_name", "board_name", "board_vendor", "bios_version")},
+           "hwmon": [], "backlight": [], "power_supply": [], "platform_profile": rd(f"{root}/firmware/acpi/platform_profile_choices")}
+    for h in sorted(glob.glob(f"{root}/class/hwmon/hwmon*")):
+        files = sorted(os.path.basename(f) for f in glob.glob(f"{h}/*") if os.path.isfile(f))
+        out["hwmon"].append({"name": rd(f"{h}/name"), "controls": [f for f in files if f.startswith(("pwm", "fan"))][:24]})
+    for b in sorted(glob.glob(f"{root}/class/backlight/*")):
+        out["backlight"].append({"name": os.path.basename(b), "max": rd(f"{b}/max_brightness"), "now": rd(f"{b}/brightness")})
+    for ps in sorted(glob.glob(f"{root}/class/power_supply/*")):
+        files = sorted(os.path.basename(f) for f in glob.glob(f"{ps}/*") if os.path.isfile(f))
+        out["power_supply"].append({"name": os.path.basename(ps), "type": rd(f"{ps}/type"),
+                                    "charge_controls": [f for f in files if f.startswith("charge_")]})
+    return out
+
+
 def collect_logs(hardware: hw.Hardware, home: str, dest: str) -> str:
     """One-tap diagnostic bundle for a bug report: hardware, paths, health, versions. No personal data beyond the
     username in paths."""
@@ -146,6 +167,7 @@ def collect_logs(hardware: hw.Hardware, home: str, dest: str) -> str:
         "health": checks(hardware, home),
         "hhd_state": hhd.get_state() if hhd.available() else None,
         "sysfs_touched": sysfs.touched(),
+        "device": device_report(),
     }
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "w", encoding="utf-8") as f:

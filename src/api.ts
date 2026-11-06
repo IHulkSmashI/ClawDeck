@@ -18,7 +18,10 @@ export type PowerStatus = {
 /** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
 export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; line: string | null; stepped_s: number | null };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
-export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
+// what this device can do (hw.capabilities): ClawDeck only offers what works on it
+export type Caps = { device: string; known: boolean; vendor: string | null; beta: boolean; xmx: boolean | null;
+  fan: "msi" | "oxp" | null; charge_limit: boolean; face_buttons: boolean; hdr_brightness: boolean };
+export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; caps?: Caps; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; no_frames?: boolean; game_fg?: number; last?: any;
   phase?: "measure" | "balance" | "lower" | "hold"; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number; keep_fps?: number; saves_w?: number | null;
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
@@ -124,10 +127,14 @@ export type Changes = { first_run: boolean; changed: { what: string; key: string
 export const getChanges = callable<[], Changes>("get_changes");
 
 // fan presets and the battery charge limit (fan.py)
-export type FanState = { supported: boolean; preset?: string; custom?: number[];
+export type FanState = { supported: boolean; preset?: string; custom?: number[]; kind?: "msi" | "oxp"; presets?: string[];
   fans?: { fan: number; rpm: number | null; enable: number | null; temps: (number | null)[]; duties: (number | null)[] }[] };
 export type ChargeState = { supported: boolean; limit?: number | null; setting?: number | null };
 export const getFan = callable<[], FanState>("get_fan");
+// OLED brightness where Steam's slider does nothing (ONEXPLAYER 3: gamescope's SDR-on-HDR level, screen.py)
+export type BrightnessState = { supported: boolean; nits?: number | null; min?: number; max?: number; saved?: number | null; error?: string };
+export const getBrightness = callable<[], BrightnessState>("get_brightness");
+export const setBrightness = callable<[nits: number | null], WriteResult>("set_brightness");
 export const setFan = callable<[preset: string, custom?: number[] | null], WriteResult>("set_fan");
 export const getCharge = callable<[], ChargeState>("get_charge");
 export const setChargeLimit = callable<[limit: number | null], WriteResult>("set_charge_limit");

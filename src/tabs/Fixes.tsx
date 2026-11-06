@@ -4,6 +4,7 @@ import { FC, useEffect, useState } from "react";
 
 import { getFixes, getHealth, runFix, setWideVrr, Fixes, Health } from "../api";
 import { confirmRestart } from "../components/confirm";
+import { Brightness } from "../components/Brightness";
 import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
 
 const toast = (body: string) => notify(body);
@@ -58,6 +59,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         )}
       </PanelSectionRow>
+      <Brightness />
       {b?.applies && (
         <PanelSectionRow>
           <Group title="Face buttons" />

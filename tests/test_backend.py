@@ -1346,3 +1346,14 @@ def test_game_list_tags_say_what_clawdecks_optiscaler_runs(plugin):
     assert p._game_tags({"opti": "xess", "opti_fg": "off", "fg": 3}) == [{"text": "XeSS 2", "kind": "xess"}]
     assert p._game_tags({"opti": "fsr4_xmx_lite"}) == [{"text": "FSR 4.1.2 Lite", "kind": "fsr"}]
     assert p._game_tags({}) == []
+
+
+def test_no_xmx_chip_gets_no_xmx_driver_and_no_fsr4(plugin):
+    p = plugin
+    p.caps = {"device": "MSI Claw A1M", "xmx": False}
+    r = p.run(p.xess_install())
+    assert not r["ok"] and "no XMX cores" in r["error"]
+    assert p._no_xmx()
+    p.caps = {"device": "ONEXPLAYER 3", "xmx": True, "hdr_brightness": False}
+    assert not p._no_xmx()
+    assert p.run(p.get_brightness()) == {"supported": False}

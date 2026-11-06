@@ -2,7 +2,7 @@ import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
 import { notify } from "./notify";
 import { FC, useEffect, useState } from "react";
 
-import { getFixes, setSetting, setWideVrr, xessInstall, xessState, Fixes, XessState } from "../api";
+import { getFixes, getHardware, setSetting, setWideVrr, xessInstall, xessState, Fixes, Hardware, XessState } from "../api";
 import { confirmUntested } from "./confirm";
 import { Group, Note, Status } from "./Hint";
 
@@ -14,10 +14,14 @@ const toast = (body: string) => notify(body);
 export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
   const [x, setX] = useState<XessState | null>(null);
   const [f, setF] = useState<Fixes | null>(null);
+  const [hw, setHw] = useState<Hardware | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const load = async () => { const [a, b] = await Promise.all([xessState(), getFixes()]); setX(a); setF(b); };
+  const load = async () => { const [a, b, h] = await Promise.all([xessState(), getFixes(), getHardware()]); setX(a); setF(b); setHw(h); };
   useEffect(() => { load(); }, []);
-  const driverOk = !!x?.installed;
+  // the device first (maintainer, 2026-11-06): a chip without XMX cores (Claw A1M, Claw A8) gets no driver step,
+  // a screen ClawDeck has no VRR fix for gets no VRR step
+  const noXmx = hw?.caps?.xmx === false;
+  const driverOk = !!x?.installed || noXmx;
   const vrr = f?.vrr;
   const vrrDone = !!vrr && (vrr.wide || vrr.pending === "on" || !vrr.supported);
   const finish = async () => { await setSetting("setup_done", true); onDone(); };
@@ -42,10 +46,16 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
   return (
     <PanelSection title="Set up ClawDeck">
       <PanelSectionRow>
-        <Note>Two steps, once. After that this panel shows Power and your games.</Note>
+        <Note>A step or two, once. After that this panel shows Power and your games.</Note>
       </PanelSectionRow>
-      <PanelSectionRow>
-        <Group title="Step 1 of 2" first />
+      {hw && (
+        <PanelSectionRow>
+          <Status ok={hw.known ? true : null} label={`This is a ${hw.model.name}${hw.caps?.beta ? " (beta)" : ""}`}
+            detail={hw.known ? `${hw.model.soc} · ${hw.model.gpu}${noXmx ? " · no XMX cores: XeSS runs on the regular graphics cores" : ""}` : "Not in ClawDeck's list yet: only what this device supports is shown"} />
+        </PanelSectionRow>
+      )}
+      {!noXmx && <PanelSectionRow>
+        <Group title={vrr?.supported ? "Step 1 of 2" : "Step 1"} first />
         <Status ok={driverOk ? true : null} label={`XeSS XMX driver: ${driverOk ? "installed" : "not installed"}`}
           detail="Runs XeSS, FSR 4.1.2, frame generation and XeLL on the XMX cores, per game (never for Steam's own screen)." />
         {!driverOk && (
@@ -53,10 +63,10 @@ export const FirstRun: FC<{ onDone: () => void }> = ({ onDone }) => {
             {busy === "xess" ? "Installing… (a minute or two)" : "Install the XeSS XMX driver"}
           </ButtonItem>
         )}
-      </PanelSectionRow>
+      </PanelSectionRow>}
       {vrr?.supported && (
         <PanelSectionRow>
-          <Group title="Step 2 of 2" />
+          <Group title={noXmx ? "Step 1" : "Step 2 of 2"} />
           <Status ok={vrrDone ? true : null} label={`VRR 30–120 Hz: ${vrr.wide ? "installed" : vrr.pending === "on" ? "installed, restart to use it" : "not installed"}`}
             detail="The screen can do VRR from 30 Hz but says 48, so games below 48 fps judder. Needs one restart." />
           {!vrrDone && (

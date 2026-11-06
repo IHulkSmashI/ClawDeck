@@ -52,6 +52,10 @@ export const FanBattery: FC<{ quick?: boolean }> = ({ quick }) => {
   if (!fs?.supported && !cs?.supported) return null;
 
   const fanNow = fanPick ?? fs?.preset ?? "auto";
+  // only the presets this fan takes (an ONEXPLAYER fan: Automatic, Cooling, Full speed)
+  const oxp = fs?.kind === "oxp";
+  const fanOptions = FAN_OPTIONS.filter((o) => !fs?.presets || fs.presets.includes(o.data))
+    .map((o) => (o.data === "auto" && oxp ? { ...o, label: "Automatic" } : o));
   const curve = custom ?? fs?.custom ?? [0, 40, 40, 45, 60, 75];
   const temps = fs?.fans?.[0]?.temps ?? [];
   const rpm = (fs?.fans ?? []).map((f) => f.rpm ?? "?").join(" / ");
@@ -87,11 +91,12 @@ export const FanBattery: FC<{ quick?: boolean }> = ({ quick }) => {
       {fs?.supported && (
         <PanelSectionRow>
           <Group title="Fan" />
-          <Anchor id="fan"><DropdownItem label={quick ? undefined : "Fan"} layout="below" childrenContainerWidth="max" rgOptions={FAN_OPTIONS}
+          <Anchor id="fan"><DropdownItem label={quick ? undefined : "Fan"} layout="below" childrenContainerWidth="max" rgOptions={fanOptions}
             selectedOption={fanNow} onChange={(o) => { markPick("fan"); pickFan(String(o.data)); }}
-            description={explain(FAN_DOES[fanNow] ?? "", quick ? undefined : "Steam has no fan control for the Claw.",
+            description={explain(oxp ? (fanNow === "auto" ? "The handheld's own fan control, as it ships." : fanNow === "cooling" ? "The fan at a steady 70 %: cooler, so the chip holds its clocks longer." : FAN_DOES[fanNow] ?? "")
+              : FAN_DOES[fanNow] ?? "", quick ? undefined : "Steam has no fan control for this handheld.",
               fanNow === "full" ? "loud" : fanNow === "quiet" ? "warmer: the chip may lower its clocks sooner in heavy games" : undefined)} /></Anchor>
-          <Status ok={fanErr ? false : null} label={`Fans now: ${rpm} rpm`} detail={fs.fans?.[0]?.enable === 1 ? "Following ClawDeck's fan table" : "MSI automatic"} />
+          <Status ok={fanErr ? false : null} label={`Fans now: ${rpm} rpm`} detail={fs.fans?.[0]?.enable === 1 ? (oxp ? "At ClawDeck's fixed speed" : "Following ClawDeck's fan table") : oxp ? "Automatic" : "MSI automatic"} />
           <Problem error={fanErr} what="Fan" />
         </PanelSectionRow>
       )}

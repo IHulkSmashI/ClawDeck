@@ -31,11 +31,46 @@ LABELS = {"auto": "Automatic (MSI)", "quiet": "Quiet", "cooling": "Cooling", "fu
 CHARGE_PRESETS = {"off": None, "80": 80, "90": 90}
 
 
+# OneXPlayer: the kernel's oxpec driver (hwmon "oxp_ec") has one fan, pwm1 (0-255) and pwm1_enable (1 = manual,
+# 2 = the EC's automatic control), no tables. Only fixed speeds that can't overheat the chip are offered (no Quiet,
+# no custom curve): Cooling 70 %, Full 100 %; Automatic hands it back to the EC (the revert).
+OXP_PRESETS: dict[str, int | None] = {"auto": None, "cooling": 70, "full": 100}
+
+
 def find_hwmon(root: str = "/sys/class/hwmon") -> str | None:
     for h in sorted(glob.glob(os.path.join(root, "hwmon*"))):
-        if sysfs.read(os.path.join(h, "name")) == "msi_wmi_platform" and os.path.exists(os.path.join(h, "pwm1_enable")):
+        if sysfs.read(os.path.join(h, "name")) in ("msi_wmi_platform", "oxp_ec") and os.path.exists(os.path.join(h, "pwm1_enable")):
             return h
     return None
+
+
+def kind(h: str | None) -> str | None:
+    """"msi" (six-point tables per fan), "oxp" (one fan, fixed speeds) or None."""
+    if not h:
+        return None
+    return "oxp" if sysfs.read(os.path.join(h, "name")) == "oxp_ec" else "msi"
+
+
+def presets_for(h: str | None) -> list[str]:
+    return list(OXP_PRESETS) if kind(h) == "oxp" else [*PRESETS, "custom"]
+
+
+def _apply_oxp(h: str, preset: str) -> dict:
+    what = "Fan"
+    if preset not in OXP_PRESETS:
+        return {"ok": False, "what": what, "summary": f"{LABELS.get(preset, preset)} isn't offered on this fan", "error": f"preset {preset!r} not on oxp_ec"}
+    duty = OXP_PRESETS[preset]
+    sysfs.clear_error()
+    if duty is None:
+        ok = sysfs.write(os.path.join(h, "pwm1_enable"), 2, persist=True)
+    else:
+        ok = sysfs.write(os.path.join(h, "pwm1_enable"), 1, persist=True) and sysfs.write(os.path.join(h, "pwm1"), to_pwm(duty), persist=True)
+    en = sysfs.read_int(os.path.join(h, "pwm1_enable"))
+    ok = ok and en == (2 if duty is None else 1) and (duty is None or to_pct(sysfs.read_int(os.path.join(h, "pwm1"))) == duty)
+    label = "Automatic" if duty is None else LABELS.get(preset, preset)
+    return {"ok": ok, "what": what, "wanted": preset, "read": status(h), "unit": "",
+            "summary": f"Fan: {label}" if ok else f"Fan: {label} didn't apply",
+            "error": None if ok else (sysfs.last_error() or "the fan reads back different")}
 
 
 def fans(h: str) -> list[int]:
@@ -63,7 +98,12 @@ def to_pct(pwm: int | None) -> int | None:
 def status(h: str | None) -> dict:
     if not h:
         return {"supported": False}
-    out = {"supported": True, "fans": []}
+    out = {"supported": True, "fans": [], "kind": kind(h), "presets": presets_for(h)}
+    if kind(h) == "oxp":
+        out["fans"].append({"fan": 1, "rpm": sysfs.read_int(os.path.join(h, "fan1_input")),
+                            "enable": sysfs.read_int(os.path.join(h, "pwm1_enable")),
+                            "duty": to_pct(sysfs.read_int(os.path.join(h, "pwm1")))})
+        return out
     for n in fans(h):
         out["fans"].append({
             "fan": n,
@@ -80,6 +120,8 @@ def apply(h: str | None, preset: str, custom: list[int] | None = None) -> dict:
     what = "Fan"
     if not h:
         return {"ok": False, "what": what, "summary": "Fan control isn't available on this kernel", "error": "no msi_wmi_platform fan control"}
+    if kind(h) == "oxp":
+        return _apply_oxp(h, preset)
     if preset != "custom" and preset not in PRESETS:
         return {"ok": False, "what": what, "summary": f"Unknown fan preset {preset}", "error": f"unknown preset {preset!r}"}
     duties = [snap(x) for x in (custom or [])] if preset == "custom" else PRESETS[preset]

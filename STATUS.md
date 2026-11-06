@@ -52,6 +52,14 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Device-aware ClawDeck + ONEXPLAYER 3 beta (2026-11-06), needs testers on hardware we don't own:**
+- Claw 8 EX: first run still shows both steps; Fan, Charge limit, Fixes unchanged; Setup shows the device.
+- Claw A1M / A8 (no XMX): no XMX driver step, no FSR 4.1.2 offered; XeSS 2 still installs.
+- ONEXPLAYER 3 (HHHHanasak1 / r/Bazzite owners): matched as "ONEXPLAYER 3 (beta)"; TDP 5-40 W through RAPL; Fan
+  Automatic / Cooling 70 % / Full (needs the oxpec driver: hwmon `oxp_ec`); charge limit; Fixes → Screen brightness
+  moves the picture in Game Mode; no face-button or VRR fix offered. Their Setup → Export log carries a `device`
+  section (DMI, hwmon, backlight, batteries) to wire the rest from.
+
 - **OptiScaler's Compatibility List per game (2026-11-05):** the third live list. Per-game shows "Loads as winmm.dll
   or dbghelp.dll (OptiScaler's entry for this game)" and up to two "Known: …" lines where the wiki has a detailed
   entry; Install puts OptiScaler in under that name. Check with a game whose entry says winmm.dll (Enshrouded, DOOM

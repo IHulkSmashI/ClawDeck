@@ -34,7 +34,15 @@ MODELS: dict[str, dict] = {
                 "vrr": [30, 120]},
     "MS-1T8K": {"name": "MSI Claw A8", "soc": "AMD Ryzen Z2 Extreme", "gpu": "Radeon 890M", "xmx": False,
                 "tdp": {"min": 7, "battery_max": 35, "plugged_max": 35, "sppt_max": 40}, "panel_hz": [60, 120]},
+    # ONEXPLAYER 3 (ONE-NETBOOK): DMI board and product "ONEXPLAYER 3". Panther Lake like the Claw 8 EX, an 8.8"
+    # 1920x1200 144 Hz OLED. TDP 3-40 W sustained, 42 W boost through the same RAPL limits (OXP3 users' Decky
+    # plugins, 2026-10/11); the xess-xmx-linux driver was developed on one. Not tested by us: beta.
+    "ONEXPLAYER 3": {"name": "ONEXPLAYER 3", "vendor": "oxp", "beta": True, "soc": "Panther Lake", "gpu": "Arc B390 (Xe3)",
+                     "xmx": True, "tdp": {"min": 5, "battery_max": 35, "plugged_max": 40, "sppt_max": 42},
+                     "panel_hz": [60, 144], "oled": True},
 }
+for _row in MODELS.values():
+    _row.setdefault("vendor", "msi")
 
 # recommended profiles per model, watts (TDP = PL1 sustained; the boost limit PL2 follows from it). Six steps, lowest
 # to highest power (HARDWARE-FINDINGS §17): battery saver and battery (longest play time), balanced (heavier games,
@@ -266,6 +274,23 @@ def detect() -> Hardware:
         gpu_driver = os.path.basename(drv) if drv else None
     return Hardware(product=product, model=model, known=known, kernel=platform.release(), cpu_model=cpu_model,
                     gpu_driver=gpu_driver, paths=paths, model_id=model_id)
+
+
+def capabilities(h: "Hardware", fan_kind: str | None = None) -> dict:
+    """What this device can do, so ClawDeck only offers what works on it (maintainer, 2026-11-06: "identify the device
+    first before presenting the options"). xmx: True / False from the model table; None on an unknown device (the XMX
+    driver's own self-test decides). The MSI-only parts (face buttons, MSI fan tables) need an MSI Claw."""
+    m = h.model
+    vendor = m.get("vendor") if h.known else None
+    return {
+        "device": m.get("name"), "known": h.known, "vendor": vendor, "beta": bool(m.get("beta")) or not h.known,
+        "xmx": m.get("xmx") if h.known else None,
+        "fan": fan_kind, "charge_limit": bool(h.paths.charge_limit),
+        "face_buttons": h.model_id == "MS-1T91",
+        # gamescope runs the OXP3's OLED in HDR10, where the panel ignores its backlight: brightness is gamescope's
+        # SDR-on-HDR level instead (screen.py)
+        "hdr_brightness": vendor == "oxp",
+    }
 
 
 def profiles_for(product: str) -> dict[str, dict]:

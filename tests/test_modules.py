@@ -1584,3 +1584,64 @@ def test_fsr4_xmx_files_come_from_the_files_branch_not_a_release(tmp_path, monke
     fake = {**entry, "files": {"a.dll": hashlib.sha256(data).hexdigest()}}
     assert optiscaler.fsr4_xmx_download(str(tmp_path), fake)["downloaded"] == ["a.dll"]
     assert urls == [entry["base"] + "/a.dll"]
+
+
+def _fake_hw(model_id, product="", charge=None):
+    from clawdeck import hw
+    key, model = hw.match_model(model_id, product)
+    known = model is not None
+    return hw.Hardware(product=product or model_id, model=model or {"name": "Unknown", "xmx": False, "tdp": {}}, known=known,
+                       kernel="x", cpu_model="", gpu_driver="xe", paths=hw.Paths(charge_limit=charge), model_id=key)
+
+
+def test_device_is_identified_before_options_are_offered():
+    """Maintainer, 2026-11-06: identify the device first; only offer what it can do."""
+    from clawdeck import hw
+    ex = hw.capabilities(_fake_hw("MS-1T91", charge="/c"), "msi")
+    assert ex["xmx"] is True and ex["face_buttons"] and ex["vendor"] == "msi" and not ex["beta"] and ex["charge_limit"]
+    a1m = hw.capabilities(_fake_hw("MS-1T41"))
+    assert a1m["xmx"] is False and not a1m["face_buttons"]          # Meteor Lake: no XMX cores
+    assert hw.capabilities(_fake_hw("MS-1T8K"))["xmx"] is False     # Claw A8 (AMD)
+    oxp = hw.capabilities(_fake_hw("ONEXPLAYER 3", "ONEXPLAYER 3"), "oxp")
+    assert oxp["xmx"] is True and oxp["vendor"] == "oxp" and oxp["beta"] and oxp["hdr_brightness"] and not oxp["face_buttons"]
+    unknown = hw.capabilities(_fake_hw("Something Else"))
+    assert unknown["xmx"] is None and unknown["beta"] and not unknown["known"]   # the driver's self-test decides
+
+
+def test_oxp3_is_matched_by_its_dmi_name_with_its_power_range():
+    from clawdeck import hw
+    key, m = hw.match_model("ONEXPLAYER 3", "ONEXPLAYER 3")
+    assert key == "ONEXPLAYER 3" and m["tdp"]["plugged_max"] == 40 and m["tdp"]["sppt_max"] == 42 and m["panel_hz"][-1] == 144
+
+
+def test_oxp_fan_takes_only_safe_fixed_speeds_and_automatic(tmp_path, monkeypatch):
+    from clawdeck import fan, sysfs
+    h = tmp_path / "hwmon3"; h.mkdir()
+    (h / "name").write_text("oxp_ec\n"); (h / "pwm1_enable").write_text("2\n"); (h / "pwm1").write_text("0\n"); (h / "fan1_input").write_text("2100\n")
+    monkeypatch.setattr(sysfs, "write", lambda p, v, persist=False: (open(p, "w").write(f"{v}\n"), True)[1])
+    assert fan.find_hwmon(str(tmp_path)) == str(h) and fan.kind(str(h)) == "oxp"
+    assert fan.presets_for(str(h)) == ["auto", "cooling", "full"]
+    assert not fan.apply(str(h), "quiet")["ok"]                    # no quiet / custom on a fan without a curve
+    r = fan.apply(str(h), "full")
+    assert r["ok"] and (h / "pwm1_enable").read_text().strip() == "1" and (h / "pwm1").read_text().strip() == "255"
+    r = fan.apply(str(h), "auto")
+    assert r["ok"] and (h / "pwm1_enable").read_text().strip() == "2"
+
+
+def test_screen_brightness_float_encoding_and_steams_display(tmp_path):
+    from clawdeck import screen
+    assert screen.cardinal_to_nits(screen.nits_to_cardinal(203)) == 203.0
+    uid = os.getuid()
+    for pid, name, env in (("10", "bash", b"DISPLAY=:9\0"), ("11", "gamescope-wl", b"X=1\0"),
+                           ("12", "steam", b"DISPLAY=:1\0GAMESCOPE_WAYLAND_DISPLAY=gamescope-0\0XAUTHORITY=/x\0")):
+        d = tmp_path / pid; d.mkdir(); (d / "comm").write_text(name + "\n"); (d / "environ").write_bytes(env)
+    assert screen.x_env(uid, str(tmp_path)) == {"DISPLAY": ":1", "XAUTHORITY": "/x"}
+
+
+def test_device_report_reads_names_only(tmp_path):
+    from clawdeck import health
+    (tmp_path / "class/dmi/id").mkdir(parents=True)
+    (tmp_path / "class/dmi/id/product_name").write_text("ONEXPLAYER 3\n")
+    hm = tmp_path / "class/hwmon/hwmon0"; hm.mkdir(parents=True); (hm / "name").write_text("oxp_ec\n"); (hm / "pwm1").write_text("0\n")
+    r = health.device_report(str(tmp_path))
+    assert r["dmi"]["product_name"] == "ONEXPLAYER 3" and r["hwmon"] == [{"name": "oxp_ec", "controls": ["pwm1"]}]
