@@ -1,7 +1,7 @@
 <#
   MSI Claw 8 EX on Windows: can this chip be undervolted? READ-ONLY: it changes nothing.
 
-  Asks the processor, through PawnIO's signed IntelMSR module (the driver ClawTweaks installs):
+  Asks the processor, through PawnIO's signed IntelMSR module:
     1. MSR 0x194 (FLEX_RATIO) bit 20: is the overclocking interface locked by the firmware?
     2. The overclocking mailbox (MSR 0x150), "read capabilities" and "read voltage offset" for each
        voltage plane (CPU cores, GPU, cache, system agent). These are the same read commands ThrottleStop
@@ -24,7 +24,7 @@ foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO
     if ($loc -and (Test-Path (Join-Path $loc 'PawnIOLib.dll'))) { $lib = Join-Path $loc 'PawnIOLib.dll'; break }
 }
 if (-not $lib) { foreach ($p in "$env:ProgramFiles\PawnIO\PawnIOLib.dll", "${env:ProgramFiles(x86)}\PawnIO\PawnIOLib.dll") { if (Test-Path $p) { $lib = $p; break } } }
-if (-not $lib) { Write-Host "PawnIO is not installed. Install it from ClawTweaks or https://pawnio.eu, then run again."; exit 1 }
+if (-not $lib) { Write-Host "PawnIO is not installed. Install it from https://pawnio.eu, then run again."; exit 1 }
 
 $work = Join-Path $env:TEMP 'claw-msr-probe'
 New-Item -ItemType Directory -Force $work | Out-Null

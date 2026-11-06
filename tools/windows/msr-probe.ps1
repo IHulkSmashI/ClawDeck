@@ -1,6 +1,6 @@
 <#
   MSI Claw 8 EX on Windows: can the package power limit be lowered through MSR 0x610 (PawnIO, signed driver),
-  underneath whatever ClawTweaks / MSI Center set? This decides how the Windows autotune writes the TDP.
+  underneath whatever your power tool or MSI Center set? This decides how the Windows autotune writes the TDP.
 
   What it does (about 40 s, fans may spin up, nothing is left changed):
     1. reads the RAPL units (0x606), the limit (0x610) and the package energy counter (0x611)
@@ -9,7 +9,7 @@
     4. writes the original 0x610 back, reads it back, measures a third time
   Prints a table and saves it to msr-probe.txt on your Desktop.
 
-  Needs: PawnIO installed (ClawTweaks' "Install PawnIO" button, or https://pawnio.eu), and an
+  Needs: PawnIO installed (https://pawnio.eu), and an
   Administrator PowerShell:   powershell -ExecutionPolicy Bypass -File .\msr-probe.ps1
 #>
 $ErrorActionPreference = 'Stop'
@@ -33,7 +33,7 @@ if (-not $lib) {
         if (Test-Path $p) { $lib = $p; break }
     }
 }
-if (-not $lib) { Write-Host "PawnIO is not installed (no PawnIOLib.dll). Install it from ClawTweaks or https://pawnio.eu, then run again."; exit 1 }
+if (-not $lib) { Write-Host "PawnIO is not installed (no PawnIOLib.dll). Install it from https://pawnio.eu, then run again."; exit 1 }
 
 # ---- IntelMSR.bin (signed module from namazso/PawnIO.Modules 0.2.11) -----------------------------------------
 $work = Join-Path $env:TEMP 'claw-msr-probe'
@@ -145,6 +145,6 @@ try {
 $back = [Pawn]::Read(0x610)
 Say ("0x610 restored: " + (Decode $back) + $(if ($back -eq $orig) { "  (identical)" } else { "  (DIFFERENT from the original)" }))
 Say ("load after restore:         {0}" -f (Measure-Watts))
-Say ("ClawTweaks / MSI Center TDP setting at the time: write it here by hand -> ")
+Say ("Power tool / MSI Center TDP setting at the time: write it here by hand -> ")
 $out | Set-Content "$env:USERPROFILE\Desktop\msr-probe.txt"
 Write-Host "`nSaved to Desktop\msr-probe.txt"
