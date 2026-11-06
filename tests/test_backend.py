@@ -1273,7 +1273,7 @@ def test_clawdecks_cabinet_dll_next_to_the_wrapper_and_gone_after_uninstall(tmp_
     assert (home / ".local/share/clawdeck/clawdeck-launch.sh").read_text() == m.PASSTHROUGH
 
 
-def test_recommended_upscaler_is_fsr4_where_it_runs_and_opticlick_no_blocks(plugin, monkeypatch, tmp_path):
+def test_recommended_upscaler_is_fsr4_where_it_runs_and_the_supported_list_no_blocks(plugin, monkeypatch, tmp_path):
     m = type(plugin)._prefer_fsr4.__globals__          # main.py's globals (loaded under another name)
     from clawdeck import gamedb, livedb
     g = tmp_path / "game"
@@ -1291,16 +1291,16 @@ def test_recommended_upscaler_is_fsr4_where_it_runs_and_opticlick_no_blocks(plug
     files.update(ready=False, missing=["fsr-original.dll"])
     rec = base(); plugin._prefer_fsr4(rec, str(g), "1")
     assert rec["launch"]["opti"] == "xess" and any("~/fsr4-xmx" in r for r in rec["reasons"])
-    # OptiClick says not supported on Intel Arc: not recommended, and applying it refuses with that reason
+    # the public list says not supported on Intel Arc: not recommended, and applying it refuses with that reason
     lists = tmp_path / "lists"; lists.mkdir()
-    (lists / livedb.OPTICLICK_FILE).write_text(
+    (lists / livedb.SUPPORTED_LIST_FILE).write_text(
         "| a | Titan Quest II | Not Supported | x | y |\n<!-- opticlick-supported-games-meta\n"
         '{"games": [{"game_name_en": "Titan Quest II", "cover_steam_app_ids": ["1154030"]}]}\n-->\n')
     monkeypatch.setitem(m, "LISTS_DIR", str(lists))
-    rec = base(); plugin._opticlick_verdict(rec, "1154030")
-    assert rec["recommended"] is False and "not supported on Intel Arc" in rec["reasons"][0]
-    rec = base(); plugin._opticlick_verdict(rec, "99")
-    assert "recommended" not in rec and "Not on OptiClick's supported list" in rec["reasons"][-1]
+    rec = base(); plugin._supported_list_verdict(rec, "1154030")
+    assert rec["recommended"] is False and "not working on Intel Arc" in rec["reasons"][0]
+    rec = base(); plugin._supported_list_verdict(rec, "99")
+    assert "recommended" not in rec and "Not on the public supported-games list" in rec["reasons"][-1]
 
 
 def test_optiscaler_compat_entry_sets_hook_names_reframework_and_blocks_broken(plugin, monkeypatch, tmp_path):

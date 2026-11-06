@@ -46,7 +46,7 @@ HOME = decky.DECKY_USER_HOME
 DESKTOP = os.path.join(HOME, "Desktop")
 VERSIONS = os.path.join(PLUGIN_DIR, "assets", "versions.json")
 GAMES = os.path.join(PLUGIN_DIR, "assets", "games.json")
-# the per-game lists fetched at start (livedb): ClawDeck's games.json from main, OptiClick's Supported Game List
+# the per-game lists fetched at start (livedb): ClawDeck's games.json from main, the public supported-games list
 LISTS_DIR = os.path.join(HOME, ".local", "share", "clawdeck", "lists")
 POWER_KEYS = ("tdp", "cpu_max_pct", "gpu_min_mhz", "gpu_max_mhz", "boost")
 # The launch wrapper lives outside the plugin folder: Steam's launch options keep pointing at it after an uninstall
@@ -99,7 +99,7 @@ class Plugin:
         self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
         # on by default, on the charger too: the least power for (nearly) the same frames, less heat and fan noise
         # (maintainer, 2026-11-04). The switches in Power still turn either off.
-        # beta: off until switched on (ClawTweaks removed its AutoTDP in 2026-07; Steam has none; maintainer
+        # beta: off until switched on (Steam has none; maintainer
         # 2026-11-05: "Auto tdp can be released in beta or turned off")
         self.settings.setdefault("autotune", False)
         self.settings.setdefault("autotune_plugged", True)
@@ -109,7 +109,7 @@ class Plugin:
         self._health: tuple[float, list] | None = None
         # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
         asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
-        # the per-game lists, kept current (OptiClick reads its database at every start too): ClawDeck's, OptiClick's
+        # the per-game lists, kept current (read at every start): ClawDeck's, the public
         # supported list, OptiScaler's Compatibility List; offline: the copies from last time, else the plugin's
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         # FSR 4.1.2 on XMX with nothing to set up: nitec's files fetched once in the background (versions.json)
@@ -447,7 +447,7 @@ class Plugin:
             return self._limit_result("Custom", {"tdp": r["applied"]["tdp"]} if ok else {}, [] if ok else ["tdp"], plugged)
 
     def _pl2_for(self, pk: dict, plugged: bool) -> None:
-        """PL2 by hand (ClawTweaks' switch): only with the Custom profile, per power source; otherwise PL1 + 2 W."""
+        """PL2 by hand: only with the Custom profile, per power source; otherwise PL1 + 2 W."""
         slot = "plugged" if plugged else "battery"
         w = self.settings.get(f"pl2_w_{slot}") if self.settings.get("pl2_manual") and pk.get("profile") == "custom" else None
         self.power.pl2_w = int(w) if w else None
@@ -970,14 +970,14 @@ class Plugin:
                 decky.logger.info("FSR 4.1.2 XMX import: %s", e)
         return {"dir": os.path.join(HOME, optiscaler.FSR4_XMX_DIR), "ready": not missing, "missing": missing}
 
-    # ---- recommended setup per game (assets/games.json; what OptiClick does on Windows) --------------------------
+    # ---- recommended setup per game (assets/games.json) ----------------------------
     REC_KEYS = ("opti", "opti_xefg", "opti_fg", "opti_ini", "reframework", "fsr", "opti_dll", "opti_overlay")
 
     def _rec(self, appid: str) -> tuple[dict, str | None, str | None]:
         d = xess.steam_install_dir(HOME, appid)
         rec = gamedb.recommend(gamedb.load(self._games_path()), d)
         folder = optiscaler.main_exe_dir(d, rec["main_exes"]) if d else None
-        self._opticlick_verdict(rec, appid)
+        self._supported_list_verdict(rec, appid)
         self._optiscaler_entry(rec, appid)
         self._prefer_fsr4(rec, d, appid)
         return rec, d, folder
@@ -987,21 +987,21 @@ class Plugin:
         return livedb.games_path(LISTS_DIR, GAMES)
 
     @staticmethod
-    def _opticlick_verdict(rec: dict, appid: str) -> None:
-        """OptiClick's Supported Game List on this game (Intel Arc column). Not supported there: not recommended,
-        and the reason says so; not in the list: set up the same way, marked as not on OptiClick's list."""
-        oc = livedb.opticlick_says(livedb.opticlick(LISTS_DIR), appid)
-        rec["opticlick"] = oc
+    def _supported_list_verdict(rec: dict, appid: str) -> None:
+        """the public supported-games list on this game (Intel Arc column). Not supported there: not recommended,
+        and the reason says so; not in the list: set up the same way, marked as not on the list."""
+        oc = livedb.supported_list_says(livedb.supported_list(LISTS_DIR), appid)
+        rec["supported_list"] = oc
         if not oc["known"] or rec["route"] == "own_xess":
             return
         if oc["listed"] and oc["intel_ok"] is False:
             rec["recommended"] = False
-            rec["reasons"].insert(0, "OptiClick lists this game as not supported on Intel Arc: ClawDeck doesn't "
+            rec["reasons"].insert(0, "The public supported-games list marks this game as not working on Intel Arc: ClawDeck doesn't "
                                      "recommend OptiScaler here. You can still pick an upscaler by hand.")
         elif oc["listed"]:
-            rec["reasons"].append(f"On OptiClick's supported list for Intel Arc ({oc['name']})")
+            rec["reasons"].append(f"On the public supported-games list for Intel Arc ({oc['name']})")
         else:
-            rec["reasons"].append("Not on OptiClick's supported list yet: set up from what the game ships, not tested by OptiClick")
+            rec["reasons"].append("Not on the public supported-games list yet: set up from what the game ships")
 
     @staticmethod
     def _wiki_for(appid: str, fetch: bool = True) -> tuple[dict | None, dict | None]:
@@ -1012,7 +1012,7 @@ class Plugin:
         return row, page
 
     def _optiscaler_entry(self, rec: dict, appid: str) -> None:
-        """What OptiScaler's own Compatibility List says about this game (as OptiClick and Decky Framegen follow
+        """What OptiScaler's own Compatibility List says about this game (Decky Framegen follows
         it): not working means not recommended; "Requires REFramework" gives the Capcom setup even when the exe
         isn't in ClawDeck's RE Engine list yet; the entry's file names are where OptiScaler goes in; its known
         issues are shown before anything is installed."""
@@ -1030,7 +1030,7 @@ class Plugin:
             rec["launch"] = {"opti": "xess", "opti_fg": "dlssg", "opti_ini": ini, "reframework": True}
             rec.update(route="re_engine", re_engine=True, capcom=True, frame_gen="dlssg", fg_source="dlssg")
             rec["reasons"][0] = ("OptiScaler's compatibility list: this game needs REFramework. OptiScaler (XeSS on "
-                                 "the XMX cores) with REFramework, the way OptiClick sets up Capcom games.")
+                                 "the XMX cores) with REFramework.")
         if page and page["proxies"]:
             rec["proxies"] = page["proxies"]
             rec["reasons"].append(f"Loads as {' or '.join(page['proxies'])} (OptiScaler's entry for this game)")
@@ -1038,7 +1038,7 @@ class Plugin:
             rec["reasons"].append(f"Known: {issue}")
 
     def _prefer_fsr4(self, rec: dict, d: str | None, appid: str) -> None:
-        """The newest upscaler where it can run, as OptiClick does on Intel (it installs FSR 4 on XMX with
+        """The newest upscaler where it can run on Intel (it installs FSR 4 on XMX with
         OptiScaler): FSR 4.1.2 on the XMX cores when the game is DirectX 12, XMX is on and nitec's files are there.
         Not for Capcom RE Engine games (black picture in Onimusha, 2026-11-04) or games with their own XeSS."""
         launch = rec.get("launch") or {}
@@ -1081,7 +1081,7 @@ class Plugin:
         return tags
 
     def _with_support(self, games: list[dict]) -> list[dict]:
-        """Which installed games ClawDeck can set up (the Game list shows only those, as OptiClick does). Walking a
+        """Which installed games ClawDeck can set up (the Game list shows only those). Walking a
         game folder is slow on an SD card, so the answer is kept per game until its folder changes."""
         path = os.path.join(RUNTIME_DIR, "support-cache.json")
         try:
@@ -1125,7 +1125,7 @@ class Plugin:
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
 
     def _opti_entry(self, launch: dict) -> dict:
-        """The OptiScaler this game gets: OptiClick's Capcom setup (v10, subfolder layout) for a Capcom RE Engine
+        """The OptiScaler this game gets: the Capcom setup (v10, subfolder layout) for a Capcom RE Engine
         game, 0.9.4 for every other one."""
         v = self._versions()
         return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
@@ -1176,7 +1176,7 @@ class Plugin:
                 return {"ok": False, "owner": who["owner"], "error": (
                     "Decky Framegen has put OptiScaler in this game: remove it there (Decky Framegen → Unpatch), "
                     "then tap again" if who["owner"] == "decky-framegen" else
-                    "this game already has OptiScaler from somewhere else (OptiClick's files from Windows, or put "
+                    "this game already has OptiScaler from somewhere else (files from a Windows install, or put "
                     "there by hand): remove OptiScaler.ini and its DLL, then tap again")}
             r = await self._opti_into(appid, folder, launch)
             if not r.get("ok"):
@@ -1196,7 +1196,7 @@ class Plugin:
 
     async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False,
                           overlay: int | None = None) -> dict:
-        """Per-game's two choices, as plain as OptiClick's: the upscaler (the game's own, or XeSS / FSR 4.1.2 /
+        """Per-game's two choices, kept plain: the upscaler (the game's own, or XeSS / FSR 4.1.2 /
         FSR 4.1.2 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
         generation on XMX at 2x-4x, fed from the game's own frame generation when it has one). Everything they need
         (OptiScaler, REFramework for Capcom games, the game's fixes) is put in or taken out here."""
@@ -1226,7 +1226,7 @@ class Plugin:
         if who["owner"] in ("decky-framegen", "other"):
             return {"ok": False, "owner": who["owner"], "error": "this game has OptiScaler from " + (
                 "Decky Framegen: remove it there (Decky Framegen → Unpatch), then pick again" if who["owner"] == "decky-framegen"
-                else "somewhere else (OptiClick's files from Windows, or by hand): remove OptiScaler.ini and its DLL, then pick again")}
+                else "somewhere else (files from a Windows install, or by hand): remove OptiScaler.ini and its DLL, then pick again")}
         launch = {"opti": upscaler, "opti_fg": rec["fg_source"] if fg else "off", "opti_ini": rec["ini"] if rec["optiscaler"] else {},
                   "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None,
                   "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
@@ -1343,9 +1343,9 @@ class Plugin:
             decky.logger.warning("XeSS XMX install failed: %s", r.get("error"))
         return r
 
-    # ---- the VRR range fix (ClawLab's EDID, Fixes panel) -------------------------------------------------------------
+    # ---- the VRR range fix -------------------------------------------------------------
     async def set_wide_vrr(self, on: bool) -> dict:
-        """30-120 Hz VRR on the Claw's own screen (ClawLab's EDID fix). Rebuilds the initramfs: a minute or two."""
+        """30-120 Hz VRR on the Claw's own screen. Rebuilds the initramfs: a minute or two."""
         fn = edid.enable if on else edid.disable
         r = await self._bg(fn)
         decky.logger.info("wide VRR %s: %s", "install" if on else "remove", r)

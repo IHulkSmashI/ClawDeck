@@ -25,7 +25,7 @@ Framegen's fgmod reads from the environment, so a game Decky Framegen patched st
                                     Intel), or FSR 4.1.2 on XMX (nitec's build, regular or lite); takes effect when
                                     ClawDeck's OptiScaler is in the game (or, for compatibility, through fgmod)
   opti_xefg    bool                 OptiScaler's frame-generation output = XeSS-FG (on XMX through the shim)
-  reframework  bool                 a Capcom RE Engine game: REFramework (dinput8=n,b) and OptiClick's Capcom setup
+  reframework  bool                 a Capcom RE Engine game: REFramework (dinput8=n,b) and the Capcom setup
                                     (capcom(): OptiScaler v10 in the OptiScaler/ subfolder, CAPCOM_INI)
 
 FSR 4.1.2 (fsr4_xmx, fsr4_xmx_lite) is refused for a game with XMX switched off (xmx = false): nitec's build needs
@@ -85,10 +85,10 @@ INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "DLSSG", "NvngxFG", "O
                 "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
                 "fakenvapi", "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
                 "VSync", "Anisotropy", "Mipmap", "ProcessFilter", "Hotfix"}
-# Capcom RE Engine games, as OptiClick sets them up on Windows (its Onimusha install, read 2026-11-04) with OptiScaler
+# Capcom RE Engine games, set up as a tested Windows Onimusha install (read 2026-11-04) with OptiScaler
 # v10: the game's own DLSS frame generation (DLSS-G, which needs the Nvidia spoofing OptiScaler does by default on
 # Intel, so no Spoofing_Dxgi=false here although OptiScaler's wiki lists it for Onimusha) turned into XeSS-FG;
-# OptiScaler's libraries in OptiScaler/ (OptiDllPath); plugins (OptiPatcher) loaded. OptiClick's FramerateLimit was
+# OptiScaler's libraries in OptiScaler/ (OptiDllPath); plugins (OptiPatcher) loaded. The tested FramerateLimit was
 # the maintainer's own cap and isn't copied. The upscaler (Dx12Upscaler, FSR UpscalerIndex), the overlay and the
 # frame count come from the user's picks (opti_ini).
 CAPCOM_INI = {
@@ -99,25 +99,25 @@ CAPCOM_INI = {
     "Hotfix_RestoreComputeSignature": "true",           # OptiScaler's wiki: generally required in Onimusha
     # v10 has fakenvapi built in (the game's Reflex -> XeLL; may be what lets the game offer DLSS-G on Intel). It is
     # the default on AMD/Intel; set anyway, since this setup depends on it. The fakenvapi.dll + fakenvapi.ini in
-    # OptiScaler/ (optiscaler_v10 extras) match OptiClick's folder; v10 itself doesn't load that file.
+    # OptiScaler/ (optiscaler_v10 extras) match the tested folder; v10 itself doesn't load that file.
     "fakenvapi_UseFakenvapi": "true",
 }
 # not for the Capcom setup: the wiki's Dxgi=false (see above), 0.9.4-only FSR switches, XeFG's own count (DLSS-G's is used)
 CAPCOM_DROP = ("Spoofing_Dxgi", "FSR_Fsr4Update", "FSR_Fsr4ForceEnableInt8", "XeFG_InterpolationCount")
-# frames generated per rendered one when ClawDeck has no multiplier for the game: OptiClick's value (OptiScaler caps it
+# frames generated per rendered one when ClawDeck has no multiplier for the game: the tested value (OptiScaler caps it
 # at what the game's DLSS-G offers)
 CAPCOM_FG_COUNT = "2"
 
 
 def v10(launch: dict) -> bool:
-    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for OptiClick's Capcom setup, which was
+    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for the Capcom setup, which was
     tested with it. 3x / 4x in other games come from XESS_FG (xess-xmx-linux's ControlLib.dll answers XeSS frame
     generation's override query, as Intel Graphics Software does on Windows), with any OptiScaler."""
     return capcom(launch)
 
 
 def capcom(launch: dict) -> bool:
-    """OptiClick's Capcom setup for this game (OptiScaler v10, subfolder layout, CAPCOM_INI): every game that gets
+    """the Capcom setup for this game (OptiScaler v10, subfolder layout, CAPCOM_INI): every game that gets
     REFramework, i.e. Capcom's RE Engine games (gamedb.recommend)."""
     return bool(launch.get("reframework"))
 

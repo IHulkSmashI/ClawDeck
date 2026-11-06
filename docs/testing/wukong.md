@@ -21,9 +21,9 @@ After each run: `~/ClawDeck/tools/game-report.sh 3132990 > ~/wukong-R<n>.txt` an
 | Run | Launch options | In the benchmark | What it shows |
 |---|---|---|---|
 | R1 | `%command%` | XeSS Balanced, frame generation off | the game's own XeSS on XMX: the report's XMX section has no `fallback` |
-| R2 | `IGDEXT_XELL_LOG=1 Dx12Upscaler=xess FrameGen_FGOutput=xefg ~/fgmod/fgmod %command%` | DLSS Balanced, DLSS frame generation on | OptiClick's Intel setup on Linux: OptiScaler's XeSS + XeSS frame generation, both on XMX; low latency **on** |
+| R2 | `IGDEXT_XELL_LOG=1 Dx12Upscaler=xess FrameGen_FGOutput=xefg ~/fgmod/fgmod %command%` | DLSS Balanced, DLSS frame generation on | the reference Intel setup on Linux: OptiScaler's XeSS + XeSS frame generation, both on XMX; low latency **on** |
 | R3 | R2 with `IGDEXT_XELL_CAP=off` in front | same | the same with low latency **off**: compare the `xell latency` lines of R2 and R3 |
-| R4 | R2 with `XESS_FG=3` in front | same | 3x, as OptiClick sets on Arc |
+| R4 | R2 with `XESS_FG=3` in front | same | 3x on Arc |
 | R5 | FSR 4 on XMX (below) | DLSS Balanced, DLSS frame generation on | FSR 4 upscaling + XeSS frame generation + low latency, all on XMX |
 
 R5 setup (by hand for now; ClawDeck will do it per game once tested):
@@ -41,7 +41,7 @@ R5 setup (by hand for now; ClawDeck will do it per game once tested):
 
 ## Windows comparison (same day, same TDP and settings)
 
-Boot Windows, OptiClick on the benchmark (XeSS + XeFG 3x), same preset. Note the average fps; with Intel Graphics
+Boot Windows, run the benchmark (XeSS + XeFG 3x), same preset. Note the average fps; with Intel Graphics
 Software's overlay or PresentMon, note the latency it shows. (The Linux number is XeLL's own "simulation start ->
 present end"; a Windows tool that reads the same XeLL reports is planned so both sides use one counter.)
 

@@ -1,13 +1,13 @@
 """ClawDeck's own OptiScaler: download once, put into a game with its settings, take out again exactly.
 
-What OptiClick does on Windows, and Decky Framegen on SteamOS, done by ClawDeck so one tap covers everything the
+What Decky Framegen does on SteamOS, done by ClawDeck so one tap covers everything the
 recommended setup needs (FSR 4 on XMX, REFramework, the game's fixes from assets/games.json) and the OptiScaler
 version is ClawDeck's to choose:
 
   install()  OptiScaler's release .7z (pinned in assets/versions.json with its sha256) unpacked into
              ~/.local/share/clawdeck/optiscaler/<version>. Optional extras with their own sha256 (OptiPatcher).
   patch()    into the folder of the game's main exe: OptiScaler.dll under a proxy name (dxgi.dll, or the next free
-             one: winmm, version, dbghelp, winhttp; OptiClick's order), OptiScaler.ini with the game's settings, the
+             one: winmm, version, dbghelp, winhttp; the usual order), OptiScaler.ini with the game's settings, the
              libraries it ships, OptiPatcher in plugins/, and for "FSR 4 on XMX" nitec's files from ~/fsr4-xmx with
              ClawDeck's own cabinet.dll (tools/cabinet-lzms, in the plugin's bin/: no Windows file needed). Any
              file it replaces is moved to .clawdeck-optiscaler/backup first; everything is listed in
@@ -17,13 +17,13 @@ version is ClawDeck's to choose:
 
 Two package layouts (versions.json "layout"):
   flat       OptiScaler 0.9.4 (every game but Capcom's): its libraries, D3D12_Optiscaler/ and plugins/ next to the exe.
-  subfolder  OptiScaler v10 (Capcom RE Engine games, the way OptiClick installs them on Windows): only the proxy DLL
+  subfolder  OptiScaler v10 (Capcom RE Engine games): only the proxy DLL
              and OptiScaler.ini next to the exe; the libraries, D3D12_OptiScaler/ and plugins/ in OptiScaler/
              (OptiDllPath=.\\OptiScaler). nitec's FSR 4.1.2 files go into OptiScaler/ too; ClawDeck's cabinet.dll
              (LZMS) and Wine's as cabinet_wine.dll stay next to the exe, where Wine loads them. The folders ClawDeck creates are listed in
              the manifest ("dirs"), so unpatch() takes them away with what OptiScaler wrote into them.
 
-OptiScaler from another tool (Decky Framegen's fgmod, OptiClick's files from a Windows install, by hand) is never
+OptiScaler from another tool (Decky Framegen's fgmod, files from a Windows install, by hand) is never
 touched: owner() says whose it is and the panel shows a warning instead.
 """
 from __future__ import annotations
@@ -101,7 +101,7 @@ def _unpack(arc: str, dest: str) -> str | None:
     return "; ".join(tried) or "no unpacker for .7z on this system (7z or bsdtar)"
 
 
-# fakenvapi.ini with OptiClick's values (its Windows Onimusha install, OptiScaler\fakenvapi.ini, 2026-11-04): the
+# fakenvapi.ini with tested values (its Windows Onimusha install, OptiScaler\fakenvapi.ini, 2026-11-04): the
 # game's own Reflex setting decides (force_reflex=0), no LatencyFlex
 FAKENVAPI_INI = ("[fakenvapi]\nenable_logs=1\nenable_trace_logs=0\nforce_latencyflex=0\nforce_reflex=0\n")
 EXTRA_INIS = {"fakenvapi": FAKENVAPI_INI}
@@ -216,7 +216,7 @@ def _manifest(folder: str) -> dict | None:
 
 
 def owner(folder: str | None) -> dict:
-    """Whose OptiScaler is in this folder: "clawdeck", "decky-framegen", "other" (by hand, OptiClick's files from a
+    """Whose OptiScaler is in this folder: "clawdeck", "decky-framegen", "other" (by hand, files from a
     Windows install, another tool) or None."""
     if not folder or not os.path.isdir(folder):
         return {"owner": None}

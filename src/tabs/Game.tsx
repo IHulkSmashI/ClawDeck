@@ -21,7 +21,7 @@ export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
   useEffect(() => { if (games && !sel) { const first = games.find((g) => g.supported !== false); if (first && !running) setSel(first.appid); } }, [games]);
 
   const options = useMemo(() => {
-    // only games ClawDeck can set up, as OptiClick lists only supported games: DLSS, FSR or XeSS inside, or in the list
+    // only games ClawDeck can set up: DLSS, FSR or XeSS inside, or in the list
     return (games ?? []).filter((g) => g.supported !== false)
       .map((g) => ({ data: g.appid, label: <GameName appid={g.appid} name={g.appid === running?.appid ? `${g.name} (running)` : g.name} tags={g.tags} /> }));
   }, [games, running?.appid]);
