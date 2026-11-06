@@ -15,6 +15,12 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   (`intel_apu_database.toml`, max_boost 2.0); found in the 2026-11-05 audit of proven TDP tools.
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
   suspend/resume) and Decky patterns.
+- **[handheld-control](https://github.com/kupecjan1980-pixel/handheld-control)** (GPL-2.0-or-later) — the ONEXPLAYER 3's
+  facts: its oxpec fan (hwmon `oxp_ec`, pwm1_enable 1 manual / 2 automatic), its 3–40 W RAPL range, why Steam's
+  brightness slider does nothing (gamescope runs the OLED in HDR10) and the SDR-on-HDR brightness property ClawDeck
+  sets instead (`screen.py` adapts its gamescope code), and what not to touch on that panel (HDR/SDR switching, PSR).
+- **[SimpleDeckyTDP-OXP3_custom](https://github.com/raicoll/SimpleDeckyTDP-OXP3_custom)** — the ONEXPLAYER 3's DMI
+  name and its 40 W TDP ceiling.
 - **[decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template)** — plugin layout and build.
 - **[xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)** — XeSS super resolution and frame generation on
   XMX under Proton, with low latency; ClawDeck installs it, probes it, sets its per-game launch options and reads the

@@ -85,7 +85,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       </PanelSectionRow>
       {!quick && hw && (
         <PanelSectionRow>
-          <Status ok={hw.known} label={hw.model.name} detail={`${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel} · ${hw.stack.controller ?? "no controller service"}`} />
+          <Status ok={hw.known} label={hw.caps?.beta && hw.known ? `${hw.model.name} (beta: tell us how it runs)` : hw.model.name} detail={`${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel} · ${hw.stack.controller ?? "no controller service"}`} />
           <Note label="Free and open source (AGPLv3)">github.com/IHulkSmashI/ClawDeck. Built on many projects (CREDITS.md). Not affiliated with MSI, Valve or Intel. ko-fi.com/gamervault if it helps; never a nag.</Note>
         </PanelSectionRow>
       )}

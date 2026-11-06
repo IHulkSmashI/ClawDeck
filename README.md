@@ -41,8 +41,14 @@
   performance overlay, and a log flood that costs battery.
 
 **Tested on** the MSI Claw 8 EX AI+ (Panther Lake, Arc B390) on Bazzite, mainly with CONTROL Resonant and Onimusha:
-Way of the Sword. The Claw 8 AI+ and 7 AI+ should get everything too (tell us!); the older A1M and A8 get power and
-fixes.
+Way of the Sword. ClawDeck checks which handheld it's on first and only shows what that one can do:
+
+| Device | What you get |
+|---|---|
+| MSI Claw 8 EX AI+ | Everything (tested) |
+| MSI Claw 8 AI+, 7 AI+ | Everything; tell us how it runs |
+| MSI Claw A1M, A8 | Power, fans and fixes (no XMX cores: XeSS runs on the regular graphics cores) |
+| ONEXPLAYER 3 | **Beta:** XeSS, FSR 4.1.2 and frame gen on XMX, power, fan, charge limit, and a brightness control that works on its OLED |
 
 > **Beta.** Tried it? Tell us how your games run: [Feedback](#feedback).
 
