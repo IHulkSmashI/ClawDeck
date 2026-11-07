@@ -487,6 +487,39 @@ def conf_disable(b: dict, regen: bool = True) -> dict:
     return {"ok": True, "restart": True, "method": "boot"}
 
 
+def steamos_beta4_cleanup() -> dict | None:
+    """Beta 4 (out for a few hours on 2026-11-07) put the VRR fix into SteamOS's /etc/default/grub: a marker comment
+    line, then a GRUB_CMDLINE_LINUX_DEFAULT line with ClawDeck's EDID argument, regenerated with steamos-update-grub or
+    grub-mkconfig into SteamOS's grub.cfg. SteamOS is no longer edited, so that is taken out again the same way, once,
+    at start. None when there is nothing to undo."""
+    if distro.info()["kind"] != "steamos":
+        return None
+    conf = "/etc/default/grub"
+    lines = _conf_lines(conf)
+    if not any(MARK_BETA4 in ln for ln in lines):
+        return None
+    out, i = [], 0
+    while i < len(lines):
+        if MARK_BETA4 in lines[i] and i + 1 < len(lines) and OURS in lines[i + 1]:
+            i += 2
+            continue
+        out.append(lines[i])
+        i += 1
+    try:
+        _write_conf(conf, out)
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+    cfg = next((c for c in ("/efi/EFI/steamos/grub.cfg", "/boot/efi/EFI/steamos/grub.cfg", "/esp/efi/steamos/grub.cfg")
+                if os.path.isfile(c)), None)
+    cmd = ["steamos-update-grub"] if shutil.which("steamos-update-grub") else ["grub-mkconfig", "-o", cfg] if cfg else None
+    ok, msg = _regen(cmd) if cmd else (True, "no grub.cfg found")
+    remove_files_unless_booted()
+    return {"ok": ok, "error": None if ok else msg}
+
+
+MARK_BETA4 = "# ClawDeck: VRR range fix (Fixes -> Remove VRR fix takes this out)"
+
+
 def remove_files_unless_booted() -> None:
     """ClawDeck's EDID files, unless the running kernel still uses one (then they go at the next undo or uninstall)."""
     if "clawdeck-" in (_arg(_cmdline(), "drm.edid_firmware") or ""):

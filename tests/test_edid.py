@@ -288,3 +288,22 @@ def test_boot_backend_only_where_it_is_safe(monkeypatch, tmp_path):
     assert edid.boot_backend()["regen"] == [["mkinitcpio", "-P"], ["sdboot-manage", "gen"]]
     progs.add("rpm-ostree")
     assert edid.boot_backend() == {"kind": "rpm-ostree"}
+
+
+def test_beta4_steamos_grub_line_is_taken_out_once(panel, tmp_path, monkeypatch):
+    from clawdeck import distro
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    grub = tmp_path / "grub"
+    user = 'GRUB_TIMEOUT=0\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\n'
+    grub.write_text(user + edid.MARK_BETA4 + '\nGRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-CSW0801-30-120.bin"\n')
+    real_lines = edid._conf_lines
+    monkeypatch.setattr(edid, "_conf_lines", lambda p: real_lines(str(grub) if p == "/etc/default/grub" else p))
+    real_write = edid._write_conf
+    monkeypatch.setattr(edid, "_write_conf", lambda p, l: real_write(str(grub) if p == "/etc/default/grub" else p, l))
+    monkeypatch.setattr(edid.shutil, "which", lambda n: "/usr/bin/steamos-update-grub" if n == "steamos-update-grub" else None)
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "cachyos", "name": "CachyOS", "atomic": False, "like": "arch"})
+    assert edid.steamos_beta4_cleanup() is None and not ran                  # not SteamOS: nothing
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
+    r = edid.steamos_beta4_cleanup()
+    assert r["ok"] and grub.read_text() == user and ran == [["steamos-update-grub"]]
+    assert edid.steamos_beta4_cleanup() is None and len(ran) == 1             # once

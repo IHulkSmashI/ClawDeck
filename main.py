@@ -115,6 +115,8 @@ class Plugin:
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         # FSR 4.1.2 on XMX with nothing to set up: nitec's files fetched once in the background (versions.json)
         asyncio.get_event_loop().run_in_executor(None, self._fsr4_fetch)
+        # beta 4's SteamOS boot-config VRR fix comes out again (SteamOS isn't edited any more): once, in the background
+        asyncio.get_event_loop().run_in_executor(None, self._steamos_beta4_cleanup)
         # the VRR range fix applied live (edid.live_enable) lasts until a restart: on again at every start
         if self.settings.get("wide_vrr_live"):
             asyncio.get_event_loop().run_in_executor(None, self._vrr_live_again)
@@ -1407,6 +1409,11 @@ class Plugin:
         return r
 
     # ---- the VRR range fix -------------------------------------------------------------
+    def _steamos_beta4_cleanup(self) -> None:
+        r = edid.steamos_beta4_cleanup()
+        if r is not None:
+            decky.logger.info("SteamOS: beta 4's VRR boot line removed (Fixes turns the live fix on): %s", r)
+
     VRR_GUARD = "vrr-live-applying"
 
     def _vrr_live_again(self) -> None:
