@@ -53,7 +53,7 @@ sleep/wake several times fine.
 ## Needs the maintainer
 
 **Launch log + FSR 4.1.2 held back (2026-11-07, PR #126):** start CONTROL through ClawDeck, then
-`cat ~/homebrew/data/ClawDeck/launch/870780.log`: lines for the Proton, the exe, the settings, "XeSS XMX driver for
+`ls -t ~/homebrew/data/ClawDeck/launch/*.log | head -1 | xargs cat`: lines for the Proton, the exe, the settings, "XeSS XMX driver for
 this game" and "proton scope: XMX driver on". Setup → Export log: the report has a `games` section. A game whose
 last launch ran without XMX shows no FSR 4.1.2 in Per-game.
 
