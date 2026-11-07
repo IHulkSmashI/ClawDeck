@@ -1357,3 +1357,24 @@ def test_no_xmx_chip_gets_no_xmx_driver_and_no_fsr4(plugin):
     p.caps = {"device": "ONEXPLAYER 3", "xmx": True, "hdr_brightness": False}
     assert not p._no_xmx()
     assert p.run(p.get_brightness()) == {"supported": False}
+
+
+def test_fsr4_refused_after_a_launch_without_xmx(plugin, tmp_path, monkeypatch):
+    """FH5 on a Claw 8 AI+ (r/MSIClaw 2026-11-07): FSR 4.1.2 drew a black screen because that launch ran without the
+    XMX cores. While the game's last launch shows that, FSR 4.1.2 is refused (Per-game hides it too); XeSS 2 is not."""
+    import asyncio
+    from clawdeck import xess
+    p = plugin
+    p._install_lock = asyncio.Lock()
+    game = tmp_path / "steam" / "FH5"
+    _w(game / "ForzaHorizon5.exe", "x")
+    monkeypatch.setattr(xess, "steam_install_dir", lambda h, a: str(game))
+    monkeypatch.setattr(p, "_fsr4_xmx_files", lambda: {"dir": "x", "ready": True, "missing": []})
+    for state in ("stale", "failed"):
+        monkeypatch.setattr(xess, "xmx_proof", lambda *a, s=state: {"state": s})
+        r = p.run(p.game_choose("1551360", "fsr4_xmx_lite", 0))
+        assert not r["ok"] and "last launch ran without" in r["error"] and not (game / "OptiScaler.ini").exists()
+    seen = []
+    monkeypatch.setattr(xess, "xmx_proof", lambda *a: seen.append(1) or {"state": "ok"})
+    r = p.run(p.game_choose("1551360", "fsr4_xmx", 0))
+    assert seen and "last launch ran without" not in (r.get("error") or "")

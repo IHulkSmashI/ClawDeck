@@ -1667,3 +1667,64 @@ def test_fsr4_files_come_inside_the_plugin_and_are_checked(tmp_path):
 def test_the_build_packages_the_fsr4_files():
     wf = open(os.path.join(ROOT, ".github", "workflows", "build.yml")).read()
     assert "tools/fetch_fsr4.py out/ClawDeck/bin/fsr4-xmx" in wf
+
+
+def test_launch_wrapper_logs_why_a_game_got_or_missed_the_xmx_driver(tmp_path):
+    """Each launch writes <runtime>/launch/<appid>.log (Setup -> Export log reads it): the Proton, the exe, the saved
+    settings and the XMX decision with its reason. The game runs in every case, also without Steam's variables."""
+    import subprocess
+    (tmp_path / "launch").mkdir()
+    xenv = tmp_path / ".local/share/clawdeck/xmx.env"
+    run = lambda: subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "echo", "ran", "C:/g/game.exe"],
+                                 capture_output=True, text=True,
+                                 env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path),
+                                      "SteamAppId": "42", "CLAWDECK_NO_MANGOHUD": "1"})
+    log = lambda: (tmp_path / "launch" / "42.log").read_text()
+    out = run()
+    assert out.stdout.startswith("ran") and "xmx.env is missing" in log() and "settings: none" in log()
+    _w(xenv, "FOO=1\n")
+    (tmp_path / "launch" / "42.env").write_text("CLAWDECK_XMX=1\n")
+    assert run().stdout.startswith("ran") and "XeSS XMX driver for this game" in log() and "exe C:/g/game.exe" in log()
+    assert log().count("launch ") == 1                       # one launch per file
+    (tmp_path / "launch" / "42.env").write_text("CLAWDECK_XMX=0\n")
+    run()
+    assert "XMX is off for this game" in log()
+    (tmp_path / "launch" / "42.env").write_text("")
+    run()
+    assert "nothing in this game asks for it" in log()
+
+
+def test_proton_scope_adds_its_lines_to_the_launch_log(tmp_path, monkeypatch):
+    from clawdeck import xmxscope
+    src = xmxscope.SCOPE_PY % {"prev": xmxscope.PREV_PY, "xmx_env": xmxscope.XMX_ENV, "depth": xmxscope.DEPTH,
+                               "all_flag": xmxscope.ALL_FLAG}
+    pkg = tmp_path / "pkg"
+    _w(pkg / "igdext64.dll", "x")
+    _w(tmp_path / xmxscope.XMX_ENV, f"VK_DRIVER_FILES={pkg}/run/intel_icd.json\n")
+    (tmp_path / "cd/pfx/drive_c/windows/system32").mkdir(parents=True)
+    log = tmp_path / "42.log"
+    for k, v in {"HOME": str(tmp_path), "SteamAppId": "42", "CLAWDECK_XMX": "1", "CLAWDECK_LAUNCH_LOG": str(log),
+                 "STEAM_COMPAT_DATA_PATH": str(tmp_path / "cd")}.items():
+        monkeypatch.setenv(k, v)
+    f = tmp_path / "proton" / "user_settings.user.py"
+    _w(f, src)
+    g = {"__file__": str(f)}
+    exec(compile(src, str(f), "exec"), g)
+    assert g["user_settings"]["VK_DRIVER_FILES"].endswith("intel_icd.json")
+    text = log.read_text()
+    assert "proton scope: XMX driver on" in text and "XMX shim in this prefix: put there now" in text
+
+
+def test_report_has_each_games_last_launch(tmp_path):
+    from clawdeck import health, xess
+    rt = tmp_path / "rt"
+    _w(rt / "launch/1551360.env", "CLAWDECK_XMX=1\n")
+    _w(rt / "launch/1551360.log", "clawdeck: XMX driver not used: XMX is off for this game\n")
+    _w(rt / "launch/1551360.started", "")
+    _w(tmp_path / xess.COMPATDATA / "1551360/config_info", "GE-Proton10-3\n/path\nmore\n")
+    _w(tmp_path / xess.COMPATDATA / "1551360/pfx/drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1/igdext64.dll", "x")
+    g = health.game_reports(str(tmp_path), str(rt))
+    assert len(g) == 1 and g[0]["appid"] == "1551360" and g[0]["settings"] == ["CLAWDECK_XMX=1"]
+    assert "XMX is off" in g[0]["last_launch"][0] and g[0]["prefix_shim"] and g[0]["proton"] == ["GE-Proton10-3", "/path"]
+    assert g[0]["xmx_proof"]["state"] == "never"
+    assert health.game_reports(str(tmp_path), None) == [] and health.game_reports(str(tmp_path), str(tmp_path / "x")) == []
