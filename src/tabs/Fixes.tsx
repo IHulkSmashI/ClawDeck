@@ -22,7 +22,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const vrr = f?.vrr;
   const want = vrr?.pending ? vrr.pending === "on" : !!vrr?.wide;
-  const live = vrr?.method === "live" || (!vrr?.method && !vrr?.rpm_ostree && !!vrr?.live_possible);
+  const live = vrr?.method === "live" || (!vrr?.method && !vrr?.boot_backend && !!vrr?.live_possible);
   const runVrr = async (on: boolean) => {
     setBusy(true);
     try {

@@ -192,7 +192,10 @@ class Plugin:
             decky.logger.info("uninstall: an update (Setup -> Updates): everything stays for the new version")
             return
         self.power.revert_all()
-        if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
+        b = edid.boot_backend()
+        if b and b["kind"] != "rpm-ostree" and edid.conf_pending(b) == "on":   # SteamOS / CachyOS boot config
+            decky.logger.info("removing the wider VRR range: %s", edid.conf_disable(b))
+        elif glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
             decky.logger.info("removing the wider VRR range: %s", edid.disable())
         if edid.live_active():                             # the live one: undone now
             decky.logger.info("removing the live VRR range: %s", edid.live_disable())
@@ -1433,10 +1436,13 @@ class Plugin:
         every start); else at boot through rpm-ostree on Bazzite (rebuilds the initramfs, then a restart)."""
         st = await self._bg(edid.status)
         if on:
-            # Bazzite keeps the boot method, tested on the Claw 8 EX; live is for systems without rpm-ostree (SteamOS,
-            # CachyOS), which had no VRR fix at all
+            # each system's own way: rpm-ostree on Bazzite (tested on the Claw 8 EX), GRUB on SteamOS, Limine /
+            # systemd-boot / GRUB on CachyOS; the live EDID override only where none of those is found
+            b = await self._bg(edid.boot_backend)
             if st.get("rpm_ostree"):
                 r = await self._bg(edid.enable)
+            elif b:                                    # SteamOS / CachyOS: their own way to set kernel arguments
+                r = await self._bg(edid.conf_enable, b)
             elif st.get("live_possible"):
                 r = await self._bg(edid.live_enable)
             else:
@@ -1444,7 +1450,13 @@ class Plugin:
                      "for the boot method (Bazzite)"}
             self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
         else:
-            r = await self._bg(edid.disable if st.get("method") == "boot" or st.get("pending") == "on" else edid.live_disable)
+            b = await self._bg(edid.boot_backend)
+            if b and b["kind"] != "rpm-ostree" and (st.get("pending") == "on" or st.get("method") == "boot"):
+                r = await self._bg(edid.conf_disable, b)
+            elif st.get("method") == "boot" or st.get("pending") == "on":
+                r = await self._bg(edid.disable)
+            else:
+                r = await self._bg(edid.live_disable)
             self.settings["wide_vrr_live"] = False
         self._save_settings()
         decky.logger.info("wide VRR %s: %s", "install" if on else "remove", r)
