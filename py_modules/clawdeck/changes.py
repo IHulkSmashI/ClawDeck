@@ -13,7 +13,7 @@ import platform
 
 from . import hw, sysfs, xess
 
-LABELS = {"kernel": "Kernel", "mesa": "Mesa", "os": "Bazzite", "controller": "Controller service",
+LABELS = {"kernel": "Kernel", "mesa": "Mesa", "os": "System", "controller": "Controller service",
           "xess": "XeSS driver", "hhd": "Handheld Daemon", "decky": "Decky Loader"}
 
 

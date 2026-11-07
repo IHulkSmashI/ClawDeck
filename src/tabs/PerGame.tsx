@@ -279,7 +279,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           label={!gs ? "XeSS: …" : !installed ? "XeSS: driver not installed (Setup)"
             : xmxOn ? (xessOk ? `XeSS runs on XMX (${perGame ? (launch.xmx == null ? "automatic" : "switched on for this game") : "default"})`
               : gs.xess.status.state === "unknown" ? "XeSS on XMX from your next log-in (the session check hasn't run yet)" : "XeSS: patched driver not loading, DP4a fallback")
-            : perGame ? (launch.xmx === false ? "XeSS: Bazzite's driver for this game (switched off)" : "Bazzite's driver: this game ships no XeSS or OptiScaler")
+            : perGame ? (launch.xmx === false ? "XeSS: the system's driver for this game (switched off)" : "The system's driver: this game ships no XeSS or OptiScaler")
               : wrapped ? "XeSS: stock driver for this game (DP4a)" : "XMX off is saved, but ClawDeck isn't in this game's launch options yet, so the game still uses XMX"}
           detail={xmxOn && gs?.xess.status.state === "failed" ? gs.xess.status.line ?? undefined : undefined} />
       </PanelSectionRow>

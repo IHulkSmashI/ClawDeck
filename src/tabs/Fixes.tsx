@@ -93,7 +93,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
             detail={f.quiet_log.per_minute != null ? `${f.quiet_log.per_minute} split-lock lines in the last minute` : undefined} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.quiet_log!.installed ? "undo_quiet_split_lock_log" : "quiet_split_lock_log")}
             description={explain(f.quiet_log.installed ? "Lets steamos-manager log split-lock hits again (removes ClawDeck's one-line setting)."
-              : "steamos-manager writes every split-lock hit from Steam into the system log, thousands a minute, for a crash reporter Bazzite doesn't have. It costs CPU and battery, and the log then erases earlier boots within minutes, so a crash or a failed wake leaves no trace. This silences only that part. ClawDeck does this by itself on Bazzite; once you undo it, it stays undone.",
+              : "steamos-manager writes every split-lock hit from Steam into the system log, thousands a minute, for a crash reporter this system doesn't have. It costs CPU and battery, and the log then erases earlier boots within minutes, so a crash or a failed wake leaves no trace. This silences only that part. ClawDeck does this by itself on Bazzite; once you undo it, it stays undone.",
               undefined, "steamos-manager restarts once (a second; Steam reconnects by itself).")}>
             {f.quiet_log.installed ? "Log split-lock hits again" : "Silence the split-lock flood"}
           </ButtonItem>
