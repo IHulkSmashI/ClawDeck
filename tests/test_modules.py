@@ -1771,15 +1771,19 @@ def test_launch_wrapper_gives_the_games_proton_the_shim(tmp_path):
     bundled.write_text("newer stock")                         # a Proton update: the new original is kept
     run()
     assert bundled.read_text().strip() == "shim IGDEXT_TRACE" and (bundled.parent / "igdext64.dll.stock").read_text().strip() == "newer stock"
+    # a Proton only root can write (a distribution package): not writable, and chmod refuses (a stand-in chmod here,
+    # since the test's user owns the file and could chmod it)
     bundled.write_text("stock again")
     bundled.chmod(stat.S_IRUSR)
-    bundled.parent.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    fake = tmp_path / "fakebin"
+    _w(fake / "chmod", "#!/bin/sh\nexit 1\n")
+    (fake / "chmod").chmod(0o755)
+    env["PATH"] = f"{fake}:/usr/bin:/bin"
     try:
         if os.geteuid() != 0:                                 # root can write anyway
             run()
             assert "can't be changed" in log() and bundled.read_text().strip() == "stock again"
     finally:
-        bundled.parent.chmod(0o755)
         bundled.chmod(0o644)
 
 
