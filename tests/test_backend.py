@@ -1378,3 +1378,28 @@ def test_fsr4_refused_after_a_launch_without_xmx(plugin, tmp_path, monkeypatch):
     monkeypatch.setattr(xess, "xmx_proof", lambda *a: seen.append(1) or {"state": "ok"})
     r = p.run(p.game_choose("1551360", "fsr4_xmx", 0))
     assert seen and "last launch ran without" not in (r.get("error") or "")
+
+
+def test_an_update_through_decky_keeps_everything(tmp_path, monkeypatch):
+    """Decky's installer uninstalls the old ClawDeck before it unpacks the new one. After Setup -> Update's marker that
+    uninstall reverts nothing (XMX driver, game setups, wrapper stay); without it, or once it is old, it reverts."""
+    import asyncio
+    m = _load_main(tmp_path, monkeypatch)
+    p = m.Plugin.__new__(m.Plugin)
+    reverted = []
+    p.power = type("P", (), {"revert_all": lambda self: reverted.append(1) or 0})()
+    p.settings = {}
+    monkeypatch.setattr(m.edid, "EDID_DIR", str(tmp_path / "noedid"))
+    monkeypatch.setattr(m.userexec, "chown_tree", lambda p, h: None)
+    for mod, fn in ((m.xmxscope, "remove_scope"), (m.xess, "remove_for_uninstall"), (m.quietlog, "remove"), (m.telemetry, "apply")):
+        monkeypatch.setattr(mod, fn, lambda *a: {"ok": True})
+    assert asyncio.run(p.update_prepare())["ok"]
+    asyncio.run(p._uninstall())
+    assert not reverted and not m.selfupdate.update_pending(m.RUNTIME_DIR)     # used once
+    asyncio.run(p._uninstall())
+    assert reverted == [1]
+    m.selfupdate.mark_update(m.RUNTIME_DIR)
+    old = os.path.join(m.RUNTIME_DIR, m.selfupdate.MARKER)
+    os.utime(old, (1, 1))                                                       # cancelled long ago
+    asyncio.run(p._uninstall())
+    assert reverted == [1, 1]

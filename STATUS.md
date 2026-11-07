@@ -52,6 +52,14 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**XMX on any Proton + Update button (2026-11-07):**
+- Set a game with XeSS (CONTROL) to GE-Proton or Proton Experimental, start it through ClawDeck: the launch log says
+  "XMX shim put into this Proton's own igdext64.dll", and Per-game shows the XMX cores used. Then FSR 4.1.2 there.
+- A prefix without the shim (new game) on Proton 11.0: the log shows the `Z:` path and the XMX check is green. If it is
+  not, the Z: path doesn't work and must come out.
+- Setup -> Updates on a build with build.json: Update hands the zip to Decky, Decky asks, ClawDeck reloads, and the XMX
+  driver, OptiScaler in games and settings are all still there.
+
 **Launch log + FSR 4.1.2 held back (2026-11-07, PR #126):** start CONTROL through ClawDeck, then
 `ls -t ~/homebrew/data/ClawDeck/launch/*.log | head -1 | xargs cat`: lines for the Proton, the exe, the settings, "XeSS XMX driver for
 this game" and "proton scope: XMX driver on". Setup → Export log: the report has a `games` section. A game whose

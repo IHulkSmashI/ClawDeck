@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, osupdate, battery, screen, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, osupdate, battery, screen, selfupdate, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -76,6 +76,7 @@ class Plugin:
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
     async def _main(self):
         self.settings = self._load_settings()
+        selfupdate.update_pending(RUNTIME_DIR, clear=True)   # an update's marker never outlives the update
         if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
             self._save_settings()
         self.hw = hw.detect()
@@ -182,7 +183,11 @@ class Plugin:
 
     async def _uninstall(self):
         """Leave nothing behind that changes how the Claw or a game behaves (the face-button fix stays on purpose:
-        without it the buttons are dead)."""
+        without it the buttons are dead). Not when Decky is only updating ClawDeck: its installer uninstalls the old
+        version first, and that took the XMX driver and every game's OptiScaler out on each update."""
+        if selfupdate.update_pending(RUNTIME_DIR, clear=True):
+            decky.logger.info("uninstall: an update (Setup -> Updates): everything stays for the new version")
+            return
         self.power.revert_all()
         if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
             decky.logger.info("removing the wider VRR range: %s", edid.disable())
@@ -287,6 +292,15 @@ class Plugin:
         result = await self._bg(health.checks, self.hw, HOME)
         self._health = (now, result)
         return result
+
+    async def update_prepare(self) -> dict:
+        """Right before Setup -> Updates hands the new zip to Decky: marks the next uninstall as an update."""
+        return await self._bg(selfupdate.mark_update, RUNTIME_DIR)
+
+    async def update_check(self) -> dict:
+        """Setup -> Updates: the installed build and the newest ClawDeck release. The frontend installs it through
+        Decky's own plugin installer (it asks, checks the sha256, reloads); only asked when Setup opens or on Check."""
+        return await self._bg(selfupdate.check, PLUGIN_DIR)
 
     async def collect_logs(self) -> str:
         dest = os.path.join(DESKTOP, f"clawdeck-report-{time.strftime('%Y%m%d-%H%M%S')}.json")

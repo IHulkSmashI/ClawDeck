@@ -104,6 +104,49 @@ if [ -f "$xmxenv" ] && [ "${CLAWDECK_XMX:-}" != 0 ]; then
       export "$k=$v"
     done < "$xmxenv"
     say "XeSS XMX driver for this game (set before the container)"
+    # The shim straight from ClawDeck's package, through Wine's Z: drive (the real Linux folder), for every Proton.
+    # XeSS, XeSS-FG and FSR 4.1.2 look in INTC_ALT_DRIVER_EXTENSIONS_PATH first; the session file points it at the
+    # prefix's driver store, and that copy depends on the Proton: Protons that bundle Intel's igdext64.dll (Proton
+    # Experimental, GE-Proton, proton-cachyos) copy theirs over it at each launch, Proton 11.0 has no driver store at
+    # all, and a new prefix has nothing yet. Then the game ran on the stock path: no XMX, a black screen with FSR 4.1.2
+    # (FH5 on a Claw 8 AI+, 2026-11-07). A folder outside the prefix is the same for every Proton and every prefix.
+    shimdir=$(ls -d "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/ 2>/dev/null | tail -1)
+    if [ -n "$shimdir" ] && [ -f "$shimdir/igdext64.dll" ]; then
+      # the prefix's copy when it is the shim (the path proven on Proton 11.0), else the package folder
+      pcopy=$(ls "${STEAM_COMPAT_DATA_PATH:-/nonexistent}"/pfx/drive_c/windows/system32/[dD]river[sS]tore/[fF]ile[rR]epository/igd_faux.inf_1/igdext64.dll 2>/dev/null | head -1)
+      if [ -n "$pcopy" ] && cmp -s "$pcopy" "$shimdir/igdext64.dll"; then
+        say "XMX shim: this prefix has it"
+      else
+        real=$(cd "$shimdir" && pwd -P)
+        export INTC_ALT_DRIVER_EXTENSIONS_PATH="Z:${real//\//\\}"
+        say "XMX shim for any Proton: $INTC_ALT_DRIVER_EXTENSIONS_PATH (no shim in this prefix's driver store)"
+      fi
+      # GE-Proton overrides that path (C:\Windows\System32) and, like Proton Experimental and proton-cachyos, copies
+      # its own bundled igdext64.dll into the prefix at every launch. So the Proton this game runs on gets the shim as
+      # its bundled copy, the way xess-xmx-linux's install.sh does it for every Proton it finds (original kept as
+      # .stock, its uninstall.sh puts it back; stamped like install.sh's copies, so its watcher leaves it alone).
+      # Here at launch it also covers a Proton added since then. A Proton only root can write (a distribution
+      # package) can't be changed: said in the launch log, and the Per-game XMX check shows the result.
+      tp="${STEAM_COMPAT_TOOL_PATHS:-}"; tp="${tp%%:*}"
+      bundled="$tp/files/lib/wine/igdext/x86_64-windows/igdext64.dll"
+      if [ -n "$tp" ] && [ -f "$bundled" ] && ! cmp -s "$bundled" "$shimdir/igdext64.dll"; then
+        if [ -w "$bundled" ] || chmod u+w "$bundled" 2>/dev/null; then
+          if ! grep -aq 'IGDEXT_' "$bundled" && { [ ! -f "$bundled.stock" ] || ! cmp -s "$bundled" "$bundled.stock"; }; then
+            chmod u+w "$bundled.stock" 2>/dev/null; cp -p "$bundled" "$bundled.stock"
+          fi
+          if cp -f "$shimdir/igdext64.dll" "$bundled"; then
+            [ -f "$shimdir/run/shim-stamp" ] && touch -r "$shimdir/run/shim-stamp" "$bundled" 2>/dev/null
+            say "XMX shim put into this Proton's own igdext64.dll ($tp; original kept as .stock)"
+          fi
+        else
+          say "this Proton can't be changed ($bundled is read-only): it puts Intel's stock igdext64.dll into the game, so no XMX there. Pick another Proton for this game"
+        fi
+      elif [ -f "$bundled" ]; then
+        say "this Proton's own igdext64.dll is already the XMX shim"
+      fi
+    else
+      say "XMX shim: no igdext64.dll in ClawDeck's XeSS XMX package; the prefix's copy is used"
+    fi
   else
     say "XMX driver not used: nothing in this game asks for it (no CLAWDECK_XMX=1, no XeSS or OptiScaler found)"
   fi

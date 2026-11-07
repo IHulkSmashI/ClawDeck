@@ -37,6 +37,13 @@ export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any
 export const getHardware = callable<[], Hardware>("get_hardware");
 export const getHealth = callable<[force?: boolean], Health[]>("get_health");
 export const collectLogs = callable<[], string>("collect_logs");
+export interface UpdateState {
+  ok: boolean; error?: string; update?: boolean;
+  installed: { tag: string; commit: string; built: string };
+  latest?: { tag: string; name: string; url: string; sha256: string; notes: string; prerelease: boolean } | null;
+}
+export const updateCheck = callable<[], UpdateState>("update_check");
+export const updatePrepare = callable<[], { ok: boolean; error?: string }>("update_prepare");
 export const getSetting = callable<[key: string], any>("get_setting");
 export const setSetting = callable<[key: string, value: any], boolean>("set_setting");
 export type Fix = { ok: boolean; error?: string; log?: string; path?: string; next?: string; note?: string | null; removed?: string[] };
