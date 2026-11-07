@@ -307,3 +307,13 @@ def test_beta4_steamos_grub_line_is_taken_out_once(panel, tmp_path, monkeypatch)
     r = edid.steamos_beta4_cleanup()
     assert r["ok"] and grub.read_text() == user and ran == [["steamos-update-grub"]]
     assert edid.steamos_beta4_cleanup() is None and len(ran) == 1             # once
+
+
+def test_beta4_cachyos_line_is_recognised_and_removed(panel, tmp_path, monkeypatch):
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    conf = tmp_path / "conf"
+    user = 'KERNEL_CMDLINE[default]+="quiet"\n'
+    conf.write_text(user + edid.MARK_BETA4 + '\nKERNEL_CMDLINE[default]+=" firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-x.bin"\n')
+    b = {"kind": "limine", "conf": str(conf), "line": LINES["limine"], "regen": [["limine-update"]], "initramfs": False}
+    assert edid.conf_pending(b) == "on"
+    assert edid.conf_disable(b)["ok"] and conf.read_text() == user and edid.conf_pending(b) == "off"

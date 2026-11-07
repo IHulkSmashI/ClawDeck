@@ -354,7 +354,7 @@ def conf_pending(b: dict | None) -> str | None:
     """"on" when ClawDeck's line is in the boot config, "off" when not; None without such a backend."""
     if not b or b["kind"] == "rpm-ostree":
         return None
-    return "on" if any(MARK in ln for ln in _conf_lines(b["conf"])) else "off"
+    return "on" if any(MARK in ln or MARK_BETA4 in ln for ln in _conf_lines(b["conf"])) else "off"
 
 
 def _write_conf(path: str, lines: list[str]) -> None:
@@ -385,7 +385,7 @@ def _strip_ours(lines: list[str]) -> list[str]:
     out, i = [], 0
     while i < len(lines):
         ln = lines[i]
-        if MARK in ln and ln.lstrip().startswith("#") and i + 1 < len(lines) and OURS in lines[i + 1]:
+        if (MARK in ln or MARK_BETA4 in ln) and ln.lstrip().startswith("#") and i + 1 < len(lines) and OURS in lines[i + 1]:
             i += 2
             continue
         if MARK in ln:
@@ -472,7 +472,7 @@ def conf_enable(b: dict) -> dict:
 def conf_disable(b: dict, regen: bool = True) -> dict:
     try:
         lines = _conf_lines(b["conf"])
-        if any(MARK in ln for ln in lines):
+        if any(MARK in ln or MARK_BETA4 in ln for ln in lines):
             _write_conf(b["conf"], _strip_ours(lines))
         if os.path.exists(MKINIT_DROPIN):
             os.remove(MKINIT_DROPIN)
