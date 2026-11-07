@@ -1403,3 +1403,37 @@ def test_an_update_through_decky_keeps_everything(tmp_path, monkeypatch):
     os.utime(old, (1, 1))                                                       # cancelled long ago
     asyncio.run(p._uninstall())
     assert reverted == [1, 1]
+
+
+def test_wide_vrr_live_first_then_boot_and_again_at_start(plugin, monkeypatch):
+    """The VRR range fix: live on any distribution (SteamOS, CachyOS), remembered so ClawDeck applies it again after
+    a restart; the rpm-ostree boot method only where live isn't possible."""
+    from clawdeck import edid
+    p = plugin
+    calls = []
+    st = {"method": None, "live_possible": True, "rpm_ostree": False, "pending": None}
+    monkeypatch.setattr(edid, "status", lambda: dict(st))
+    monkeypatch.setattr(edid, "live_enable", lambda: calls.append("live") or {"ok": True, "restart": False, "method": "live"})
+    monkeypatch.setattr(edid, "live_disable", lambda: calls.append("live-off") or {"ok": True})
+    monkeypatch.setattr(edid, "enable", lambda: calls.append("boot") or {"ok": True, "restart": True, "method": "boot"})
+    monkeypatch.setattr(edid, "disable", lambda: calls.append("boot-off") or {"ok": True, "restart": True})
+    r = p.run(p.set_wide_vrr(True))
+    assert r["ok"] and calls == ["live"] and p.settings["wide_vrr_live"]
+    p._vrr_live_again()                                       # what _main runs at start
+    assert calls == ["live", "live"]
+    st["method"] = "live"
+    p.run(p.set_wide_vrr(False))
+    assert calls[-1] == "live-off" and not p.settings["wide_vrr_live"]
+    # live refused (lockdown) on Bazzite: the boot method
+    monkeypatch.setattr(edid, "live_enable", lambda: calls.append("live") or {"ok": False, "error": "lockdown?"})
+    st.update(method=None, rpm_ostree=True)
+    r = p.run(p.set_wide_vrr(True))
+    assert r["ok"] and r["restart"] and calls[-2:] == ["live", "boot"] and r["live_error"] == "lockdown?"
+    assert not p.settings["wide_vrr_live"]
+    st.update(method="boot")
+    p.run(p.set_wide_vrr(False))
+    assert calls[-1] == "boot-off"
+    # neither: a plain reason
+    st.update(method=None, rpm_ostree=False, live_possible=False)
+    r = p.run(p.set_wide_vrr(True))
+    assert not r["ok"] and "rpm-ostree" in r["error"]

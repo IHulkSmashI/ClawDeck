@@ -121,7 +121,8 @@ export const framegenState = callable<[], FramegenState>("framegen_state");
 
 // ---- fixes -----------------------------------------------------------------------------------------------------------
 export type WideVrr = { panel: string | null; panel_name: string | null; range: number[] | null; wide: boolean; supported: boolean;
-  reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean; idle_hold?: boolean };
+  reason: string | null; pending: "on" | "off" | null; rpm_ostree: boolean; idle_hold?: boolean;
+  method?: "live" | "boot" | null; live_possible?: boolean };
 export type ButtonsState = { applies: boolean; ok: boolean; installed: boolean; stock_map: string | null; upstream_fixed?: boolean; legacy_hwdb: string[] };
 export type OverlayPower = { available: boolean; on: boolean; files: { path: string; mode: string; readable: boolean }[]; battery_w: number | null };
 export type QuietLog = { applies: boolean; installed: boolean; per_minute: number | null };
@@ -129,7 +130,7 @@ export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean
 export const getFixes = callable<[], Fixes>("get_fixes");
 export const uiLog = callable<[msg: string], void>("ui_log");
 export const displayExternal = callable<[], { connected: boolean; connectors: string[] }>("display_external");
-export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean }>("set_wide_vrr");
+export const setWideVrr = callable<[on: boolean], { ok: boolean; error?: string; restart?: boolean; method?: string }>("set_wide_vrr");
 export type Changes = { first_run: boolean; changed: { what: string; key: string; from: string | null; to: string | null }[]; failing?: { title: string; detail: string }[] };
 export const getChanges = callable<[], Changes>("get_changes");
 
