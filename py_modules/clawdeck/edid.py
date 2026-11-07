@@ -12,7 +12,8 @@ What changes, and nothing else:
   - the checksums: each 128-byte block's last byte, plus the DisplayID section checksum, which Linux validates
     (an invalid DisplayID section is dropped whole, and with it the 120 Hz timing; Windows does not check it).
 
-How Linux uses it, the way Bazzite already overrides the AOKZOE A1's EDID (usr/libexec/bazzite-hardware-setup):
+Two ways to apply it. Live (below, preferred): the kernel's DRM debugfs override, any distribution, no restart.
+At boot, the way Bazzite already overrides the AOKZOE A1's EDID (usr/libexec/bazzite-hardware-setup):
   /etc/firmware/edid/<file>.bin        the patched EDID
   rpm-ostree initramfs-etc --track     so the GPU driver finds it at its first probe, inside the initramfs
   rpm-ostree kargs                     firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/<file>.bin
@@ -199,10 +200,12 @@ def status() -> dict:
             reason = str(e)
     if booted and not ours:
         supported, reason = False, f"another EDID override is active ({booted}); ClawDeck leaves it alone"
+    live = not ours and live_active()
     return {"panel": key or None, "panel_name": p["panel"] if p else None, "range": list(rng) if rng else None,
-            "wide": ours, "supported": supported, "reason": reason,
+            "wide": ours or live, "supported": supported or live, "reason": None if live else reason,
             "pending": None if not pending_args else ("on" if "clawdeck-" in pending else "off"),
-            "rpm_ostree": shutil.which("rpm-ostree") is not None}
+            "rpm_ostree": shutil.which("rpm-ostree") is not None,
+            "method": "boot" if ours else "live" if live else None, "live_possible": live_dir() is not None}
 
 
 def _run(cmd: list[str]) -> tuple[bool, str]:
@@ -251,7 +254,7 @@ def enable() -> dict:
     if not ok:
         _run(["rpm-ostree", "initramfs-etc", f"--untrack={dest}"])
         return {"ok": False, "error": f"kernel arguments: {out}"}
-    return {"ok": True, "restart": True, "file": dest, "sha256": sha256(data)}
+    return {"ok": True, "restart": True, "method": "boot", "file": dest, "sha256": sha256(data)}
 
 
 def disable() -> dict:
@@ -276,6 +279,92 @@ def disable() -> dict:
         except OSError:
             pass
     return {"ok": True, "restart": True}
+
+
+# ---- live: any distribution, no restart -----------------------------------------------------------------------------
+# The kernel's DRM debugfs takes an EDID override per connector (edid_override), and writing "detect" to the
+# connector's sysfs status probes it again: the driver then reads the patched EDID and its VRR range at once. This
+# needs no bootloader, initramfs or rpm-ostree, so it works on SteamOS, CachyOS and Bazzite alike; nothing is written
+# to disk, a restart drops it (ClawDeck applies it again when it starts), and undo is "reset" + detect. Kernel lockdown
+# (Secure Boot on some kernels) blocks debugfs writes: then Bazzite still has the boot method above.
+DEBUGFS = "/sys/kernel/debug/dri"
+
+
+def _status_path() -> str | None:
+    p = panel_edid_path()
+    return os.path.join(os.path.dirname(p), "status") if p else None
+
+
+def live_dir() -> str | None:
+    """The panel's DRM debugfs folder (dri/<minor>/eDP-1), when it offers edid_override."""
+    p = panel_edid_path()
+    m = re.search(r"card(\d+)-", p or "")
+    cands = ([f"{DEBUGFS}/{m.group(1)}/{CONNECTOR}"] if m else []) + sorted(glob.glob(f"{DEBUGFS}/*/{CONNECTOR}"))
+    for d in cands:
+        if os.path.isfile(os.path.join(d, "edid_override")):
+            return d
+    return None
+
+
+def live_active() -> bool:
+    """The driver runs the patched EDID right now: the panel's EDID in sysfs has the wide range and valid checksums,
+    and it isn't the factory EDID (a panel that announced 30 Hz itself needs nothing)."""
+    raw = _read_bytes(panel_edid_path())
+    p = PANELS.get(panel_id(raw))
+    if not raw or not p or vrr_range(raw) != WIDE or not checksums_ok(raw):
+        return False
+    return sha256(canonical(raw, p["length"]) or raw) != p["physical_sha256"]
+
+
+def _probe() -> bool:
+    st = _status_path()
+    if not st:
+        return False
+    try:
+        with open(st, "w") as f:
+            f.write("detect")
+        return True
+    except OSError as e:
+        log.warning("re-probing %s: %s", st, e)
+        return False
+
+
+def live_enable() -> dict:
+    raw = _read_bytes(panel_edid_path())
+    key = panel_id(raw)
+    d = live_dir()
+    if live_active():
+        return {"ok": True, "restart": False, "method": "live", "already": True}
+    if not d:
+        return {"ok": False, "error": "this kernel offers no EDID override in debugfs"}
+    if _arg(_cmdline(), "drm.edid_firmware"):
+        return {"ok": False, "error": "a boot-time EDID override is active; ClawDeck leaves it alone"}
+    try:
+        data = patch(raw, key)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    try:
+        with open(os.path.join(d, "edid_override"), "wb") as f:
+            f.write(data)
+    except OSError as e:
+        return {"ok": False, "error": f"debugfs refused the EDID ({e.strerror or e}); kernel lockdown?"}
+    if not _probe() or not live_active():
+        live_disable()                                       # never leave a half-applied override behind
+        return {"ok": False, "error": "the driver didn't take the corrected range; put back as it was"}
+    return {"ok": True, "restart": False, "method": "live"}
+
+
+def live_disable() -> dict:
+    d = live_dir()
+    if not d:
+        return {"ok": True, "restart": False}
+    try:
+        with open(os.path.join(d, "edid_override"), "w") as f:
+            f.write("reset")
+    except OSError as e:
+        return {"ok": False, "error": f"debugfs: {e.strerror or e}"}
+    _probe()
+    return {"ok": True, "restart": False, "method": "live"}
 
 
 _idle_hold: bool | None = None

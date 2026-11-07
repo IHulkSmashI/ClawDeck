@@ -115,6 +115,9 @@ class Plugin:
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         # FSR 4.1.2 on XMX with nothing to set up: nitec's files fetched once in the background (versions.json)
         asyncio.get_event_loop().run_in_executor(None, self._fsr4_fetch)
+        # the VRR range fix applied live (edid.live_enable) lasts until a restart: on again at every start
+        if self.settings.get("wide_vrr_live"):
+            asyncio.get_event_loop().run_in_executor(None, self._vrr_live_again)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
@@ -191,6 +194,8 @@ class Plugin:
         self.power.revert_all()
         if glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
             decky.logger.info("removing the wider VRR range: %s", edid.disable())
+        if edid.live_active():                             # the live one: undone now
+            decky.logger.info("removing the live VRR range: %s", edid.live_disable())
         try:
             _write_user_file(WRAPPER, PASSTHROUGH)
             os.chmod(WRAPPER, 0o755)
@@ -1397,9 +1402,30 @@ class Plugin:
         return r
 
     # ---- the VRR range fix -------------------------------------------------------------
+    def _vrr_live_again(self) -> None:
+        r = edid.live_enable()
+        decky.logger.info("wide VRR live at start: %s", r)
+
     async def set_wide_vrr(self, on: bool) -> dict:
-        """30-120 Hz VRR on the Claw's own screen. Rebuilds the initramfs: a minute or two."""
-        fn = edid.enable if on else edid.disable
-        r = await self._bg(fn)
+        """30-120 Hz VRR on the Claw's own screen. Live where the kernel allows it (any distribution, at once, again at
+        every start); else at boot through rpm-ostree on Bazzite (rebuilds the initramfs, then a restart)."""
+        st = await self._bg(edid.status)
+        if on:
+            r = {"ok": False, "error": "no way to apply it on this system"}
+            if st.get("method") != "boot" and st.get("live_possible"):
+                r = await self._bg(edid.live_enable)
+            if not r.get("ok") and st.get("rpm_ostree"):
+                live_err = r.get("error")
+                r = await self._bg(edid.enable)
+                if live_err:
+                    r["live_error"] = live_err
+            elif not r.get("ok") and not st.get("live_possible"):
+                r = {"ok": False, "error": "this kernel offers no live EDID override, and this system has no rpm-ostree "
+                     "for the boot method (Bazzite)"}
+            self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
+        else:
+            r = await self._bg(edid.disable if st.get("method") == "boot" or st.get("pending") == "on" else edid.live_disable)
+            self.settings["wide_vrr_live"] = False
+        self._save_settings()
         decky.logger.info("wide VRR %s: %s", "install" if on else "remove", r)
         return r

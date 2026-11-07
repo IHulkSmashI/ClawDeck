@@ -106,3 +106,68 @@ def test_someone_elses_override_is_left_alone(panel, tmp_path, monkeypatch):
     assert not edid.disable()["ok"]
     st = edid.status()
     assert st["supported"] is False and "another EDID override" in st["reason"]
+
+
+def _fake_kernel(tmp_path, monkeypatch, raw, writable=True):
+    """sysfs card0-eDP-1/{edid,status} and debugfs dri/0/eDP-1/edid_override; writing "detect" to status makes the
+    driver read the override (or the factory EDID after "reset"), like drm's probe."""
+    sysd = tmp_path / "sys/class/drm/card0-eDP-1"
+    sysd.mkdir(parents=True)
+    (sysd / "edid").write_bytes(raw)
+    (sysd / "status").write_text("connected")
+    dbg = tmp_path / "debug/dri/0/eDP-1"
+    dbg.mkdir(parents=True)
+    (dbg / "edid_override").write_bytes(b"")
+    if not writable:
+        (dbg / "edid_override").chmod(0o444)
+    monkeypatch.setattr(edid, "panel_edid_path", lambda: str(sysd / "edid"))
+    monkeypatch.setattr(edid, "DEBUGFS", str(tmp_path / "debug/dri"))
+    monkeypatch.setattr(edid, "_cmdline", lambda: "quiet")
+    real_probe = edid._probe
+
+    def probe():
+        ok = real_probe()
+        ov = (dbg / "edid_override").read_bytes()
+        (sysd / "edid").write_bytes(raw if ov in (b"", b"reset") else ov)
+        return ok
+    monkeypatch.setattr(edid, "_probe", probe)
+    return sysd, dbg
+
+
+def test_live_vrr_range_without_restart(panel, tmp_path, monkeypatch):
+    """Any distribution: the patched EDID goes into DRM's debugfs override and the panel is probed again, so the
+    driver runs 30-120 Hz at once; undo puts the factory EDID back the same way. Nothing on disk, no rpm-ostree."""
+    raw = synthetic_edid()
+    sysd, dbg = _fake_kernel(tmp_path, monkeypatch, raw)
+    monkeypatch.setattr(edid.shutil, "which", lambda n: None)          # SteamOS / CachyOS: no rpm-ostree
+    st = edid.status()
+    assert st["live_possible"] and st["supported"] and not st["wide"] and st["method"] is None
+    r = edid.live_enable()
+    assert r["ok"] and not r["restart"] and edid.vrr_range((sysd / "edid").read_bytes()) == (30, 120)
+    assert (sysd / "status").read_text() == "detect"
+    st = edid.status()
+    assert st["wide"] and st["method"] == "live" and st["range"] == [30, 120]
+    assert edid.live_enable().get("already")                          # at the next start: nothing to redo
+    assert edid.live_disable()["ok"] and (sysd / "edid").read_bytes() == raw and not edid.live_active()
+
+
+def test_live_vrr_refused_by_the_kernel_changes_nothing(panel, tmp_path, monkeypatch):
+    raw = synthetic_edid()
+    sysd, dbg = _fake_kernel(tmp_path, monkeypatch, raw)
+    real_open = open
+
+    def guarded(path, *a, **k):                                        # lockdown: debugfs writes fail
+        if str(path).endswith("edid_override") and a and "w" in a[0]:
+            raise PermissionError(1, "Operation not permitted")
+        return real_open(path, *a, **k)
+    monkeypatch.setattr("builtins.open", guarded)
+    r = edid.live_enable()
+    assert not r["ok"] and "lockdown" in r["error"] and (sysd / "edid").read_bytes() == raw
+
+
+def test_live_vrr_not_taken_is_put_back(panel, tmp_path, monkeypatch):
+    raw = synthetic_edid()
+    sysd, dbg = _fake_kernel(tmp_path, monkeypatch, raw)
+    monkeypatch.setattr(edid, "_probe", lambda: True)                  # the driver ignores the override
+    r = edid.live_enable()
+    assert not r["ok"] and "put back" in r["error"] and (dbg / "edid_override").read_text() == "reset"

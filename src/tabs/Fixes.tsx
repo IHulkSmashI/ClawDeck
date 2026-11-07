@@ -22,11 +22,12 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const vrr = f?.vrr;
   const want = vrr?.pending ? vrr.pending === "on" : !!vrr?.wide;
+  const live = vrr?.method === "live" || (!vrr?.method && !!vrr?.live_possible);
   const runVrr = async (on: boolean) => {
     setBusy(true);
     try {
       const r = await setWideVrr(on);
-      toast(r.ok ? `${on ? "VRR fix installed: 30–120 Hz" : "VRR fix removed: factory range"} after the next restart` : `VRR fix: not changed (${r.error})`);
+      toast(r.ok ? `${on ? "VRR fix on: 30–120 Hz" : "VRR fix off: factory range"}${r.restart ? " after the next restart" : ""}` : `VRR fix: not changed (${r.error})`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(); }
   };
@@ -50,9 +51,11 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           detail={vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, validated` : undefined)} />
         {vrr && (vrr.supported || vrr.wide) && (
           <ButtonItem layout="below" disabled={busy}
-            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known.", undefined, "a restart; the previous boot entry always starts without it.")}
+            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known.", undefined,
+              live ? "turn it off; a restart also drops it until ClawDeck starts again. Nothing on disk changes." : "a restart; the previous boot entry always starts without it.")}
             onClick={() => confirmRestart(want ? "Remove the VRR fix?" : "Install the VRR fix 30–120 Hz?",
-              want ? "ClawDeck removes its corrected screen description. Takes a minute or two, then restart."
+              want ? (vrr.method === "boot" ? "ClawDeck removes its corrected screen description. Takes a minute or two, then restart." : "The factory range comes back at once; the screen may blink once.")
+                : live ? "ClawDeck gives the GPU driver a corrected description of this screen, so VRR works from 30 Hz instead of 48. It applies at once (the screen may blink once) and again each time ClawDeck starts; nothing on disk changes."
                 : "ClawDeck gives the GPU driver a corrected description of this screen, so VRR works from 30 Hz instead of 48. Takes a minute or two, then restart.",
               want ? "Remove" : "Install", () => runVrr(!want))}>
             {want ? "Remove VRR fix" : "Install VRR fix 30–120 Hz"}
