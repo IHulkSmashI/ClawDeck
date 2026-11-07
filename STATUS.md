@@ -52,10 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
-**VRR fix live on SteamOS / CachyOS (beta 4, 2026-11-07):** not run on hardware yet; SteamOS testers asked. Bazzite
-keeps the boot method (unchanged). On SteamOS: Fixes → Install VRR fix: the screen may blink once, Fixes shows
-"VRR range: 30–120 Hz" at once, and again after a restart (ClawDeck applies it at start). If the system restarts
-within a minute of applying it, the next start leaves it off. Ask a SteamOS tester for their Export log.
+**VRR fix on SteamOS / CachyOS (beta 4, 2026-11-07):** not run on hardware yet; SteamOS testers asked. Bazzite
+unchanged (rpm-ostree). SteamOS: one marked line in /etc/default/grub, then steamos-update-grub (or grub-mkconfig into
+SteamOS's grub.cfg). CachyOS: Limine (/etc/default/limine + limine-mkinitcpio), systemd-boot (/etc/sdboot-manage.conf +
+mkinitcpio -P + sdboot-manage gen) or GRUB, with the EDID in the initramfs through /etc/mkinitcpio.conf.d. Check
+after the restart: Fixes shows "VRR range: 30–120 Hz" and /proc/cmdline has drm.edid_firmware. Other systems: the
+live debugfs override (guarded against boot loops). Ask a SteamOS tester for their Export log.
 
 **XMX on any Proton + Update button (2026-11-07):**
 - ~~GE-Proton with stock copies~~ **tested 2026-11-07 on the Claw 8 EX**: CONTROL Resonant (FSR 4.1.2 + XeFG 2x) on

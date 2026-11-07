@@ -30,7 +30,7 @@ import re
 import shutil
 import subprocess
 
-from . import sysfs
+from . import distro, sysfs
 
 log = logging.getLogger("clawdeck.edid")
 
@@ -184,6 +184,8 @@ def status() -> dict:
     ours = "clawdeck-" in booted
     pending_args = _kargs_pending()
     pending = _arg(pending_args, "drm.edid_firmware") or ""
+    b = boot_backend()
+    cp = conf_pending(b)
     supported = False
     reason = None
     if not raw:
@@ -203,9 +205,10 @@ def status() -> dict:
     live = not ours and live_active()
     return {"panel": key or None, "panel_name": p["panel"] if p else None, "range": list(rng) if rng else None,
             "wide": ours or live, "supported": supported or live, "reason": None if live else reason,
-            "pending": None if not pending_args else ("on" if "clawdeck-" in pending else "off"),
+            "pending": cp if cp else None if not pending_args else ("on" if "clawdeck-" in pending else "off"),
             "rpm_ostree": shutil.which("rpm-ostree") is not None,
-            "method": "boot" if ours else "live" if live else None, "live_possible": live_dir() is not None}
+            "boot_backend": b["kind"] if b else None,
+            "method": "boot" if ours or cp == "on" else "live" if live else None, "live_possible": live_dir() is not None}
 
 
 def _run(cmd: list[str]) -> tuple[bool, str]:
@@ -279,6 +282,153 @@ def disable() -> dict:
         except OSError:
             pass
     return {"ok": True, "restart": True}
+
+
+# ---- at boot on SteamOS and CachyOS: their own documented ways to set kernel arguments ---------------------------
+# SteamOS: /etc/default/grub (GRUB_CMDLINE_LINUX_DEFAULT), then SteamOS's grub.cfg regenerated (steamos-update-grub, or
+#   grub-mkconfig into the grub.cfg SteamOS boots). /etc survives SteamOS updates. Its /boot is read-only, so the EDID
+#   isn't put into an initramfs: firmware_class.path=/etc/firmware lets the driver find it on the root filesystem.
+# CachyOS / Arch (wiki.cachyos.org "Boot Manager Configuration", Arch wiki "Kernel mode setting: EDID"): Limine
+#   /etc/default/limine (KERNEL_CMDLINE[default]) + limine-mkinitcpio; systemd-boot /etc/sdboot-manage.conf
+#   (LINUX_OPTIONS) + sdboot-manage gen; GRUB /etc/default/grub + grub-mkconfig. The EDID goes into the initramfs
+#   through a mkinitcpio drop-in (FILES+=), so the driver has it at its first probe.
+# Every file is a shell file its tool sources, so ClawDeck appends one marked line that adds its two arguments to the
+# variable, and undo deletes exactly the marked lines: nothing else in the file is touched.
+MARK = "# ClawDeck: VRR range fix (Fixes -> Remove VRR fix takes this out)"
+MKINIT_DROPIN = "/etc/mkinitcpio.conf.d/clawdeck-edid.conf"
+
+
+def _grub_cfg() -> str | None:
+    for c in ("/efi/EFI/steamos/grub.cfg", "/boot/efi/EFI/steamos/grub.cfg", "/esp/efi/steamos/grub.cfg", "/boot/grub/grub.cfg"):
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def boot_backend() -> dict | None:
+    """How this system takes kernel arguments: {"kind", "conf", "line" (format with {args}), "regen": [commands],
+    "initramfs": bool}, or None (then the live method)."""
+    d = distro.info()
+    if shutil.which("rpm-ostree"):
+        return {"kind": "rpm-ostree"}
+    w = shutil.which
+    grub_line = 'GRUB_CMDLINE_LINUX_DEFAULT="${{GRUB_CMDLINE_LINUX_DEFAULT}} {args}"'
+    if d["kind"] == "steamos" and os.path.isfile("/etc/default/grub"):
+        cfg = _grub_cfg()
+        regen = [["steamos-update-grub"]] if w("steamos-update-grub") else [["grub-mkconfig", "-o", cfg]] if cfg and w("grub-mkconfig") else None
+        if regen:
+            return {"kind": "steamos-grub", "conf": "/etc/default/grub", "line": grub_line, "regen": regen, "initramfs": False}
+        return None
+    mkinit = w("mkinitcpio") is not None
+    if os.path.isfile("/etc/default/limine") and w("limine-mkinitcpio"):
+        return {"kind": "limine", "conf": "/etc/default/limine", "line": 'KERNEL_CMDLINE[default]+=" {args}"',
+                "regen": [["limine-mkinitcpio"]], "initramfs": mkinit}
+    if os.path.isfile("/etc/sdboot-manage.conf") and w("sdboot-manage"):
+        regen = ([["mkinitcpio", "-P"]] if mkinit else []) + [["sdboot-manage", "gen"]]
+        return {"kind": "systemd-boot", "conf": "/etc/sdboot-manage.conf", "line": 'LINUX_OPTIONS="${{LINUX_OPTIONS}} {args}"',
+                "regen": regen, "initramfs": mkinit}
+    if os.path.isfile("/etc/default/grub") and w("grub-mkconfig") and os.path.isfile("/boot/grub/grub.cfg"):
+        regen = ([["mkinitcpio", "-P"]] if mkinit else []) + [["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]]
+        return {"kind": "grub", "conf": "/etc/default/grub", "line": grub_line, "regen": regen, "initramfs": mkinit}
+    return None
+
+
+def _conf_lines(path: str) -> list[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().splitlines()
+    except OSError:
+        return []
+
+
+def conf_pending(b: dict | None) -> str | None:
+    """"on" when ClawDeck's line is in the boot config, "off" when not; None without such a backend."""
+    if not b or b["kind"] == "rpm-ostree":
+        return None
+    return "on" if any(MARK in ln for ln in _conf_lines(b["conf"])) else "off"
+
+
+def _write_conf(path: str, lines: list[str]) -> None:
+    tmp = path + ".clawdeck-tmp"
+    st = os.stat(path) if os.path.exists(path) else None
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines).rstrip("\n") + "\n")
+    if st:
+        os.chmod(tmp, st.st_mode & 0o7777)
+    os.replace(tmp, path)
+
+
+def _strip_ours(lines: list[str]) -> list[str]:
+    out, skip = [], False
+    for ln in lines:
+        if MARK in ln:
+            skip = True                      # the marker line, and the one line after it
+            continue
+        if skip:
+            skip = False
+            continue
+        out.append(ln)
+    return out
+
+
+def conf_enable(b: dict) -> dict:
+    raw = _read_bytes(panel_edid_path())
+    key = panel_id(raw)
+    if _arg(_cmdline(), "drm.edid_firmware") and "clawdeck-" not in (_arg(_cmdline(), "drm.edid_firmware") or ""):
+        return {"ok": False, "error": "another EDID override is active; ClawDeck leaves it alone"}
+    if conf_pending(b) == "on":
+        return {"ok": True, "restart": True, "method": "boot", "already": True}
+    name = file_name(key)
+    dest = f"{EDID_DIR}/{name}"
+    if live_active() or "clawdeck-" in (_arg(_cmdline(), "drm.edid_firmware") or ""):
+        data = _read_bytes(dest)
+        if not data or vrr_range(data) != WIDE or not checksums_ok(data):
+            return {"ok": False, "error": "restart once first, then turn it on again"}
+    else:
+        try:
+            data = patch(raw, key)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+    os.makedirs(EDID_DIR, exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(data)
+    args = f"firmware_class.path={FW_DIR} drm.edid_firmware={CONNECTOR}:edid/{name}"
+    lines = _strip_ours(_conf_lines(b["conf"]))
+    _write_conf(b["conf"], lines + [MARK, b["line"].format(args=args)])
+    if b.get("initramfs"):
+        os.makedirs(os.path.dirname(MKINIT_DROPIN), exist_ok=True)
+        _write_conf(MKINIT_DROPIN, [MARK, f'FILES+=({dest})'])
+    for cmd in b["regen"]:
+        ok, out = _run(cmd)
+        if not ok:
+            conf_disable(b, regen=False)                  # back to how it was, then regenerate once more
+            for c in b["regen"]:
+                _run(c)
+            return {"ok": False, "error": f"{cmd[0]}: {out}"}
+    return {"ok": True, "restart": True, "method": "boot", "file": dest, "backend": b["kind"]}
+
+
+def conf_disable(b: dict, regen: bool = True) -> dict:
+    lines = _conf_lines(b["conf"])
+    if any(MARK in ln for ln in lines):
+        _write_conf(b["conf"], _strip_ours(lines))
+    if os.path.exists(MKINIT_DROPIN):
+        try:
+            os.remove(MKINIT_DROPIN)
+        except OSError:
+            pass
+    if regen:
+        for cmd in b["regen"]:
+            ok, out = _run(cmd)
+            if not ok:
+                return {"ok": False, "error": f"{cmd[0]}: {out}"}
+    if "clawdeck-" not in (_arg(_cmdline(), "drm.edid_firmware") or ""):
+        for f in sorted(glob.glob(f"{EDID_DIR}/clawdeck-*.bin")):   # still in use until the restart otherwise
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    return {"ok": True, "restart": True, "method": "boot"}
 
 
 # ---- live: any distribution, no restart -----------------------------------------------------------------------------
