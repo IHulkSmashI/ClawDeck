@@ -9,6 +9,10 @@
 # Chains with other wrappers: "clawdeck-launch.sh ~/fgmod/fgmod %command%" exports first, then runs fgmod.
 # Env: CLAWDECK_NO_MANGOHUD=1 skips the overlay/log; CLAWDECK_RUNTIME overrides the runtime folder.
 set -u
+# say: a "clawdeck:" line to Steam's console and to this launch's log (<runtime>/launch/<appid>.log, one launch per
+# file, read by Setup -> Export log). Before this, a bug report could not show why a game started on the stock driver
+# (FH5 on a Claw 8 AI+, r/MSIClaw 2026-11-07). Only this script's own lines go there, never the game's output.
+say() { echo "clawdeck: $*" >&2; [ -n "${CLAWDECK_LAUNCH_LOG:-}" ] && echo "clawdeck: $*" >> "$CLAWDECK_LAUNCH_LOG" 2>/dev/null; return 0; }
 # ---- second stage: Decky Framegen's fgmod has copied OptiScaler and its FSR 4 into the game, then started us -----
 # FSR 4.1.2 on XMX (Per-game: OptiScaler upscaler "FSR 4 XMX"): nitec's files from ~/fsr4-xmx go over fgmod's FSR 4,
 # with ClawDeck's own LZMS cabinet.dll (tools/cabinet-lzms; the plugin keeps a copy next to this wrapper) and Wine's
@@ -26,7 +30,7 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
     if [ -f "$list" ] && [ -z "${CLAWDECK_FSR4_XMX:-}" ]; then
       while read -r f; do [ -n "$f" ] && rm -f "$dir/$f"; done < "$list"
       rm -f "$list"
-      echo "clawdeck: FSR 4 XMX files removed from $dir" >&2
+      say "FSR 4 XMX files removed from $dir"
     fi
     src="${CLAWDECK_FSR4_XMX_DIR:-$HOME/fsr4-xmx}"
     cab="${CLAWDECK_CABINET:-$HOME/.local/share/clawdeck/cabinet.dll}"
@@ -38,7 +42,8 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
         cp -f "$cab" "$dir/cabinet.dll" && echo cabinet.dll >> "$list"
         wcab="$src/cabinet_wine.dll"
         if [ ! -f "$wcab" ]; then                                 # Wine's own cabinet, from the Proton running this game
-          for p in ${STEAM_COMPAT_TOOL_PATHS//:/ }; do
+          tp="${STEAM_COMPAT_TOOL_PATHS:-}"
+          for p in ${tp//:/ }; do
             [ -f "$p/files/lib/wine/x86_64-windows/cabinet.dll" ] && { wcab="$p/files/lib/wine/x86_64-windows/cabinet.dll"; break; }
           done
         fi
@@ -46,9 +51,9 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
         ig=$(ls -d "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/igdext64.dll 2>/dev/null | tail -1)
         [ -f "$src/igdext64.dll" ] && ig="$src/igdext64.dll"
         if [ -n "$ig" ] && [ ! -f "$dir/igdext64.dll" ]; then cp -f "$ig" "$dir/" && echo igdext64.dll >> "$list"; fi
-        echo "clawdeck: FSR 4 XMX ($CLAWDECK_FSR4_XMX) into $dir" >&2
+        say "FSR 4 XMX ($CLAWDECK_FSR4_XMX) into $dir"
       else
-        echo "clawdeck: FSR 4 XMX: needs amd_fidelityfx_upscaler_dx12.dll and fsr-original.dll in $src, and ClawDeck's $cab; fgmod's FSR 4 stays" >&2
+        say "FSR 4 XMX: needs amd_fidelityfx_upscaler_dx12.dll and fsr-original.dll in $src, and ClawDeck's $cab; fgmod's FSR 4 stays"
       fi
     fi
   fi
@@ -60,6 +65,15 @@ mkdir -p "$LOGDIR" 2>/dev/null
 appid="${SteamAppId:-${SteamGameId:-0}}"
 # per-game settings saved by the plugin (plain file: <runtime>/launch/<appid>.env, KEY=VALUE lines)
 envfile="$RUNTIME/launch/$appid.env"
+export CLAWDECK_LAUNCH_LOG="$RUNTIME/launch/$appid.log"
+if mkdir -p "$RUNTIME/launch" 2>/dev/null && : > "$CLAWDECK_LAUNCH_LOG" 2>/dev/null; then
+  say "launch $(date '+%F %T'), appid $appid"
+  p="${STEAM_COMPAT_TOOL_PATHS:-}"; say "proton ${p%%:*}"
+  for a in "$@"; do case "$a" in *.exe|*.EXE) say "exe $a"; break;; esac; done
+  say "per-game settings: $([ -f "$envfile" ] && tr '\n' ' ' < "$envfile" || echo none)"
+else
+  CLAWDECK_LAUNCH_LOG=""
+fi
 # when this game last started: Per-game compares the XMX driver's self-test with it ("XMX cores used in the last launch")
 mkdir -p "$RUNTIME/launch" 2>/dev/null && : > "$RUNTIME/launch/$appid.started" 2>/dev/null
 if [ -f "$envfile" ]; then
@@ -89,8 +103,14 @@ if [ -f "$xmxenv" ] && [ "${CLAWDECK_XMX:-}" != 0 ]; then
       [ -n "$k" ] && [ "${k#\#}" = "$k" ] || continue
       export "$k=$v"
     done < "$xmxenv"
-    echo "clawdeck: XeSS XMX driver for this game (set before the container)" >&2
+    say "XeSS XMX driver for this game (set before the container)"
+  else
+    say "XMX driver not used: nothing in this game asks for it (no CLAWDECK_XMX=1, no XeSS or OptiScaler found)"
   fi
+elif [ ! -f "$xmxenv" ]; then
+  say "XMX driver not used: $xmxenv is missing (Setup -> Install XeSS XMX)"
+else
+  say "XMX driver not used: XMX is off for this game"
 fi
 if [ -z "${IGDEXT_XELL_LOG:-}" ]; then export IGDEXT_XELL_LOG=1; fi
 # the shim appends to its logs in the prefix, so keep only this launch (the plugin reads them)
@@ -124,7 +144,7 @@ if [ "${CLAWDECK_CORES:-}" = e ] && command -v taskset >/dev/null 2>&1 && [ -r /
   done
   list=${list#,}; [ -z "$list" ] && list=${all#,}
   if [ -n "$list" ]; then
-    echo "clawdeck: E-cores only ($list)" >&2
+    say "E-cores only ($list)"
     pre=(taskset -c "$list")
   fi
 fi

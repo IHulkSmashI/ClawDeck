@@ -69,6 +69,16 @@ try:
                     _found = True
                     break
         _want = "1" if _found else "0"
+    def _say(_m):
+        # the launch wrapper's log for this launch (Setup -> Export log): shows this Proton ran ClawDeck's scope
+        _ll = _o.environ.get("CLAWDECK_LAUNCH_LOG", "")
+        if _ll:
+            try:
+                with open(_ll, "a") as _f:
+                    _f.write("clawdeck: proton scope: " + _m + "\\n")
+            except OSError:
+                pass
+    _say("XMX driver " + ("on" if _want == "1" else "off") + " (" + _here + ")")
     if _want == "1":
         _env = _o.path.join(_home, "%(xmx_env)s")
         for _l in open(_env):
@@ -100,6 +110,9 @@ try:
             if not _o.path.exists(_cl) and _o.path.isfile(_o.path.join(_pkg, "ControlLib.dll")):
                 _sh.copyfile(_o.path.join(_pkg, "ControlLib.dll"), _cl)
             user_settings.setdefault("INTC_ALT_DRIVER_EXTENSIONS_PATH", "C:\\\\windows\\\\system32\\\\driverstore\\\\filerepository\\\\igd_faux.inf_1")
+            _say("XMX shim in this prefix: " + ("already there" if _have else "put there now"))
+        else:
+            _say("XMX shim not placed: " + ("no package" if not _pkg else "no prefix system32 yet"))
 except Exception as _e:
     import sys as _s
     _s.stderr.write("clawdeck: xmx scope: %%s\\n" %% _e)

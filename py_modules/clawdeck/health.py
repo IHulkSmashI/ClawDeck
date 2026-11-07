@@ -155,7 +155,45 @@ def device_report(root: str = "/sys") -> dict:
     return out
 
 
-def collect_logs(hardware: hw.Hardware, home: str, dest: str) -> str:
+def _tail(path: str, lines: int) -> list[str] | None:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return [x.rstrip("\n") for x in f.read().rstrip("\n").split("\n")[-lines:]]
+    except OSError:
+        return None
+
+
+def game_reports(home: str, runtime_dir: str | None) -> list[dict]:
+    """Per game ClawDeck set up (a launch file in <runtime>/launch): its saved settings, what its last launch did (the
+    wrapper's and the Proton scope's lines), whether the XMX cores ran then, whether the game's prefix has the XMX shim,
+    and the Proton it last ran on. Without this a bug report could not say why a game started on the stock driver
+    (FH5 on a Claw 8 AI+, 2026-11-07). Read only; paths and game ids, nothing personal."""
+    d = os.path.join(runtime_dir, "launch") if runtime_dir else None
+    if not d or not os.path.isdir(d):
+        return []
+    ids = sorted({n.split(".", 1)[0] for n in os.listdir(d) if n.split(".", 1)[0].isdigit()})
+    out = []
+    for appid in ids:
+        pfx = os.path.join(home, xess.COMPATDATA, appid)
+        sys32 = os.path.join(pfx, "pfx", "drive_c", "windows", "system32")
+        shim = False
+        for r, _d, f in os.walk(os.path.join(sys32, "driverstore")) if os.path.isdir(sys32) else ():
+            if "igd_faux.inf_1" in r.lower() and "igdext64.dll" in [x.lower() for x in f]:
+                shim = True
+                break
+        out.append({
+            "appid": appid,
+            "settings": _tail(os.path.join(d, f"{appid}.env"), 40),
+            "last_launch": _tail(os.path.join(d, f"{appid}.log"), 40),
+            "xmx_proof": xess.xmx_proof(home, appid, runtime_dir),
+            "prefix_shim": shim,
+            "proton": (_tail(os.path.join(pfx, "config_info"), 1000) or [])[:2] or None,   # Steam writes its version first
+            "xell_log": _tail(os.path.join(xess.prefix_dir(home, appid), "igdext_xell.log"), 15),
+        })
+    return out
+
+
+def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str | None = None) -> str:
     """One-tap diagnostic bundle for a bug report: hardware, paths, health, versions. No personal data beyond the
     username in paths."""
     import json
@@ -168,6 +206,7 @@ def collect_logs(hardware: hw.Hardware, home: str, dest: str) -> str:
         "hhd_state": hhd.get_state() if hhd.available() else None,
         "sysfs_touched": sysfs.touched(),
         "device": device_report(),
+        "games": game_reports(home, runtime_dir),
     }
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "w", encoding="utf-8") as f:

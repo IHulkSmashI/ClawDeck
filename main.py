@@ -290,7 +290,7 @@ class Plugin:
 
     async def collect_logs(self) -> str:
         dest = os.path.join(DESKTOP, f"clawdeck-report-{time.strftime('%Y%m%d-%H%M%S')}.json")
-        path = await self._bg(health.collect_logs, self.hw, HOME, dest)
+        path = await self._bg(health.collect_logs, self.hw, HOME, dest, RUNTIME_DIR)
         userexec.chown_tree(path, HOME)
         return path
 
@@ -1242,6 +1242,11 @@ class Plugin:
             return {"ok": False, "error": "can't find this game's install folder or its exe"}
         if upscaler.startswith("fsr4_xmx") and self._xmx_off(appid):
             return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
+        if upscaler.startswith("fsr4_xmx"):
+            proof = await self._bg(xess.xmx_proof, HOME, appid, RUNTIME_DIR)
+            if proof["state"] in ("stale", "failed"):
+                return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and this game's last launch ran without them "
+                        "(a black screen with FSR 4.1.2): start it once with XeSS 2, then FSR 4.1.2 is offered again"}
         if upscaler.startswith("fsr4_xmx") and not self._fsr4_xmx_files()["ready"]:
             f = self._fsr4_xmx_files()
             return {"ok": False, "error": f"FSR 4.1.2 on XMX needs nitec's files in {f['dir']} (missing: {', '.join(f['missing'])})"}
