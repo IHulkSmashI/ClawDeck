@@ -1687,13 +1687,13 @@ def test_launch_wrapper_logs_why_a_game_got_or_missed_the_xmx_driver(tmp_path):
     assert run().stdout.startswith("ran") and "XeSS XMX driver for this game" in log() and "exe C:/g/game.exe" in log()
     assert log().count("launch ") == 1                       # one launch per file
     assert "no igdext64.dll in ClawDeck's XeSS XMX package" in log()
-    _w(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0/igdext64.dll", "shim")
+    _w(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0/xess-xmx-linux-1.0/igdext64.dll", "shim")   # real layout
     _w(xenv, "INTC_ALT_DRIVER_EXTENSIONS_PATH=C:\\windows\\system32\\driverstore\\filerepository\\igd_faux.inf_1\n")
     got = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "printenv", "INTC_ALT_DRIVER_EXTENSIONS_PATH"],
                          capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path),
                          "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "42", "CLAWDECK_NO_MANGOHUD": "1"}).stdout.strip()
     # every Proton: the shim from ClawDeck's package through Wine's Z: drive, not the prefix's driver store
-    real = os.path.realpath(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0")
+    real = os.path.realpath(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0/xess-xmx-linux-1.0")
     assert got == "Z:" + real.replace("/", "\\") and "XMX shim for any Proton" in log()
     store = tmp_path / "cd/pfx/drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1"
     _w(store / "igdext64.dll", "shim")                        # the prefix has the shim: its path stays (Proton 11.0)
@@ -1729,6 +1729,10 @@ def test_proton_scope_adds_its_lines_to_the_launch_log(tmp_path, monkeypatch):
     assert g["user_settings"]["VK_DRIVER_FILES"].endswith("intel_icd.json")
     text = log.read_text()
     assert "proton scope: XMX driver on" in text and "XMX shim in this prefix: put there now" in text
+    store = tmp_path / "cd/pfx/drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1/igdext64.dll"
+    store.write_text("stock intel")                          # a Proton copied its own over it
+    exec(compile(src, str(f), "exec"), {"__file__": str(f)})
+    assert store.read_text().strip() == "x" and "replaced 1 stock copy" in log.read_text()
 
 
 def test_report_has_each_games_last_launch(tmp_path):
@@ -1752,9 +1756,10 @@ def test_launch_wrapper_gives_the_games_proton_the_shim(tmp_path):
     (original kept as .stock, as xess-xmx-linux's install.sh does); a read-only Proton is named in the launch log."""
     import stat
     import subprocess
-    pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0"
+    # the real layout: ClawDeck unpacks the package one level down; xmx.env's ANV_CM_KERNEL_DIR points into it
+    pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-20261104/xess-xmx-linux-20261104"
     _w(pkg / "igdext64.dll", "shim IGDEXT_TRACE")
-    _w(tmp_path / ".local/share/clawdeck/xmx.env", "FOO=1\n")
+    _w(tmp_path / ".local/share/clawdeck/xmx.env", f"ANV_CM_KERNEL_DIR={pkg}/kernels\n")
     _w(tmp_path / "launch/42.env", "CLAWDECK_XMX=1\n")
     proton = tmp_path / "compatibilitytools.d/GE-Proton10-25"
     bundled = proton / "files/lib/wine/igdext/x86_64-windows/igdext64.dll"

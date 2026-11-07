@@ -101,6 +101,11 @@ try:
         if _pkg and _o.path.isfile(_o.path.join(_pkg, "igdext64.dll")) and _o.path.isdir(_sys32):
             import shutil as _sh
             _have = [_o.path.join(_r, "igdext64.dll") for _r, _d, _f in _o.walk(_sys32) if "igd_faux.inf_1" in _r.lower() and "igdext64.dll" in [x.lower() for x in _f]]
+            _shim = open(_o.path.join(_pkg, "igdext64.dll"), "rb").read()
+            # a copy that isn't the shim (a Proton's own, stock Intel) is replaced: "there" is not enough
+            _stale = [_p for _p in _have if open(_p, "rb").read() != _shim]
+            for _p in _stale:
+                _sh.copyfile(_o.path.join(_pkg, "igdext64.dll"), _p)
             if not _have:
                 _dst = _o.path.join(_sys32, "driverstore", "filerepository", "igd_faux.inf_1")
                 _o.makedirs(_dst, exist_ok=True)
@@ -110,7 +115,7 @@ try:
             if not _o.path.exists(_cl) and _o.path.isfile(_o.path.join(_pkg, "ControlLib.dll")):
                 _sh.copyfile(_o.path.join(_pkg, "ControlLib.dll"), _cl)
             user_settings.setdefault("INTC_ALT_DRIVER_EXTENSIONS_PATH", "C:\\\\windows\\\\system32\\\\driverstore\\\\filerepository\\\\igd_faux.inf_1")
-            _say("XMX shim in this prefix: " + ("already there" if _have else "put there now"))
+            _say("XMX shim in this prefix: " + ("replaced %%d stock copy(ies)" %% len(_stale) if _stale else "already there" if _have else "put there now"))
         else:
             _say("XMX shim not placed: " + ("no package" if not _pkg else "no prefix system32 yet"))
 except Exception as _e:
