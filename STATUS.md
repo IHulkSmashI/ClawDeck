@@ -53,8 +53,10 @@ sleep/wake several times fine.
 ## Needs the maintainer
 
 **XMX on any Proton + Update button (2026-11-07):**
-- Set a game with XeSS (CONTROL) to GE-Proton or Proton Experimental, start it through ClawDeck: the launch log says
-  "XMX shim put into this Proton's own igdext64.dll", and Per-game shows the XMX cores used. Then FSR 4.1.2 there.
+- ~~GE-Proton with stock copies~~ **tested 2026-11-07 on the Claw 8 EX**: CONTROL Resonant (FSR 4.1.2 + XeFG 2x) on
+  GE-Proton11-12 with Intel's stock igdext64.dll in the Proton and the prefix, watcher stopped: black screen before the
+  fix; with it the launch log says "XMX shim put into this Proton's own igdext64.dll", XMX cores used 4 s after start,
+  picture right.
 - A prefix without the shim (new game) on Proton 11.0: the log shows the `Z:` path and the XMX check is green. If it is
   not, the Z: path doesn't work and must come out.
 - Setup -> Updates on a build with build.json: Update hands the zip to Decky, Decky asks, ClawDeck reloads, and the XMX
