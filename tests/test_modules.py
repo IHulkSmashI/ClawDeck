@@ -1686,6 +1686,22 @@ def test_launch_wrapper_logs_why_a_game_got_or_missed_the_xmx_driver(tmp_path):
     (tmp_path / "launch" / "42.env").write_text("CLAWDECK_XMX=1\n")
     assert run().stdout.startswith("ran") and "XeSS XMX driver for this game" in log() and "exe C:/g/game.exe" in log()
     assert log().count("launch ") == 1                       # one launch per file
+    assert "no igdext64.dll in ClawDeck's XeSS XMX package" in log()
+    _w(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0/igdext64.dll", "shim")
+    _w(xenv, "INTC_ALT_DRIVER_EXTENSIONS_PATH=C:\\windows\\system32\\driverstore\\filerepository\\igd_faux.inf_1\n")
+    got = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "printenv", "INTC_ALT_DRIVER_EXTENSIONS_PATH"],
+                         capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path),
+                         "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "42", "CLAWDECK_NO_MANGOHUD": "1"}).stdout.strip()
+    # every Proton: the shim from ClawDeck's package through Wine's Z: drive, not the prefix's driver store
+    real = os.path.realpath(tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0")
+    assert got == "Z:" + real.replace("/", "\\") and "XMX shim for any Proton" in log()
+    store = tmp_path / "cd/pfx/drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1"
+    _w(store / "igdext64.dll", "shim")                        # the prefix has the shim: its path stays (Proton 11.0)
+    got = subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "printenv", "INTC_ALT_DRIVER_EXTENSIONS_PATH"],
+                         capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path),
+                         "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "42", "CLAWDECK_NO_MANGOHUD": "1",
+                         "STEAM_COMPAT_DATA_PATH": str(tmp_path / "cd")}).stdout.strip()
+    assert got.startswith("C:") and "this prefix has it" in log()
     (tmp_path / "launch" / "42.env").write_text("CLAWDECK_XMX=0\n")
     run()
     assert "XMX is off for this game" in log()
@@ -1728,3 +1744,59 @@ def test_report_has_each_games_last_launch(tmp_path):
     assert "XMX is off" in g[0]["last_launch"][0] and g[0]["prefix_shim"] and g[0]["proton"] == ["GE-Proton10-3", "/path"]
     assert g[0]["xmx_proof"]["state"] == "never"
     assert health.game_reports(str(tmp_path), None) == [] and health.game_reports(str(tmp_path), str(tmp_path / "x")) == []
+
+
+def test_launch_wrapper_gives_the_games_proton_the_shim(tmp_path):
+    """GE-Proton points XeSS at C:\\Windows\\System32 and, like Proton Experimental, copies its bundled igdext64.dll
+    into the prefix at every launch: the wrapper makes the shim that bundled copy for the Proton the game runs on
+    (original kept as .stock, as xess-xmx-linux's install.sh does); a read-only Proton is named in the launch log."""
+    import stat
+    import subprocess
+    pkg = tmp_path / ".local/share/clawdeck/xess-xmx-linux-1.0"
+    _w(pkg / "igdext64.dll", "shim IGDEXT_TRACE")
+    _w(tmp_path / ".local/share/clawdeck/xmx.env", "FOO=1\n")
+    _w(tmp_path / "launch/42.env", "CLAWDECK_XMX=1\n")
+    proton = tmp_path / "compatibilitytools.d/GE-Proton10-25"
+    bundled = proton / "files/lib/wine/igdext/x86_64-windows/igdext64.dll"
+    _w(bundled, "stock intel")
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "42",
+           "CLAWDECK_NO_MANGOHUD": "1", "STEAM_COMPAT_TOOL_PATHS": f"{proton}:/runtime/sniper"}
+    run = lambda: subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "true"], env=env, check=True)
+    log = lambda: (tmp_path / "launch/42.log").read_text()
+    run()
+    assert bundled.read_text().strip() == "shim IGDEXT_TRACE" and (proton / "files/lib/wine/igdext/x86_64-windows/igdext64.dll.stock").read_text().strip() == "stock intel"
+    assert "put into this Proton's own igdext64.dll" in log()
+    run()
+    assert "already the XMX shim" in log() and (bundled.parent / "igdext64.dll.stock").read_text().strip() == "stock intel"
+    bundled.write_text("newer stock")                         # a Proton update: the new original is kept
+    run()
+    assert bundled.read_text().strip() == "shim IGDEXT_TRACE" and (bundled.parent / "igdext64.dll.stock").read_text().strip() == "newer stock"
+    bundled.write_text("stock again")
+    bundled.chmod(stat.S_IRUSR)
+    bundled.parent.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.geteuid() != 0:                                 # root can write anyway
+            run()
+            assert "can't be changed" in log() and bundled.read_text().strip() == "stock again"
+    finally:
+        bundled.parent.chmod(0o755)
+        bundled.chmod(0o644)
+
+
+def test_selfupdate_offers_the_newest_release_with_its_zip(tmp_path):
+    from clawdeck import selfupdate
+    zip_ = lambda tag: {"name": "ClawDeck.zip", "browser_download_url": f"https://x/{tag}/ClawDeck.zip",
+                        "digest": "sha256:" + "a" * 64}
+    rels = [{"tag_name": "v0.2.0-beta.1", "assets": [zip_("b1")], "prerelease": True},
+            {"tag_name": "v0.2.0-beta.10", "assets": [zip_("b10")], "prerelease": True},
+            {"tag_name": "v0.2.0-beta.2", "assets": [zip_("b2")], "prerelease": True},
+            {"tag_name": "v0.3.0-beta.1", "assets": [zip_("draft")], "draft": True},
+            {"tag_name": "fsr4-xmx-4.1.2", "assets": [{"name": "fsr.dll"}]}]
+    r = selfupdate.check(str(tmp_path), rels)                 # no build.json: a build from before it
+    assert r["update"] and r["latest"]["tag"] == "v0.2.0-beta.10" and r["latest"]["sha256"] == "a" * 64
+    _w(tmp_path / "build.json", '{"tag": "v0.2.0-beta.10", "commit": "abc", "built": "x"}')
+    assert not selfupdate.check(str(tmp_path), rels)["update"]
+    rels.append({"tag_name": "v0.2.0", "assets": [zip_("final")]})          # the final release beats its betas
+    r = selfupdate.check(str(tmp_path), rels)
+    assert r["update"] and r["latest"]["tag"] == "v0.2.0"
+    assert selfupdate.check(str(tmp_path), [])["latest"] is None

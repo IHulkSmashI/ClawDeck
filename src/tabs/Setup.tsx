@@ -5,6 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { collectLogs, getHardware, optiscalerState, selfTest, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
+import { Updates } from "../components/Updates";
 
 const toast = (body: string) => notify(body);
 
@@ -83,6 +84,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={quick ? undefined : explain("One file on the Desktop with your hardware, the checks and what ClawDeck changed. Attach it to a GitHub issue.")}>Export log to Desktop</ButtonItem>
         <Problem error={err} what="Setup" />
       </PanelSectionRow>
+      <Updates quick={quick} />
       {!quick && hw && (
         <PanelSectionRow>
           <Status ok={hw.known} label={hw.caps?.beta && hw.known ? `${hw.model.name} (beta: tell us how it runs)` : hw.model.name} detail={`${hw.known ? "" : "Not in ClawDeck's list yet · "}${hw.model.soc} · ${hw.model.gpu} · kernel ${hw.kernel} · ${hw.stack.controller ?? "no controller service"}`} />

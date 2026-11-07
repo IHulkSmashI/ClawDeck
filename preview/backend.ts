@@ -115,6 +115,10 @@ export const backend = {
   }),
   get_health: () => health(),
   collect_logs: () => "/home/bazzite/Desktop/clawdeck-report-20261021-181502.json",
+  update_check: () => ({ ok: true, update: true, installed: { tag: "v0.2.0-beta.2", commit: "d2eb120", built: "" },
+    latest: { tag: "v0.2.0-beta.3", name: "ClawDeck 0.2.0 beta 3", url: "https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.3/ClawDeck.zip",
+      sha256: "", notes: "https://github.com/IHulkSmashI/ClawDeck/releases/tag/v0.2.0-beta.3", prerelease: true } }),
+  update_prepare: () => ({ ok: true }),
   run_fix: (fix: string, allow: boolean) => {
     if (fix === "install_xess" && !allow) return { ok: false, error: "xess-xmx-linux has no tested version pinned yet; allow 'latest (untested)' to continue" };
     if (fix === "install_xess") { state.xessInstalled = true; return ok({ next: "log out of Game Mode and back in (or reboot) so the session picks up the driver" }); }
