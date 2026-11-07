@@ -1418,12 +1418,25 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
     monkeypatch.setattr(edid, "live_disable", lambda: calls.append("live-off") or {"ok": True})
     monkeypatch.setattr(edid, "enable", lambda: calls.append("boot") or {"ok": True, "restart": True, "method": "boot"})
     monkeypatch.setattr(edid, "disable", lambda: calls.append("boot-off") or {"ok": True, "restart": True})
+    # the boot method comes from the test, never from the machine running it (CI's Ubuntu has GRUB)
+    backend = {"b": {"kind": "rpm-ostree"}}
+    monkeypatch.setattr(edid, "boot_backend", lambda: backend["b"])
+    monkeypatch.setattr(edid, "conf_enable", lambda b: calls.append("conf") or {"ok": True, "restart": True, "method": "boot"})
+    monkeypatch.setattr(edid, "conf_disable", lambda b: calls.append("conf-off") or {"ok": True, "restart": True})
     r = p.run(p.set_wide_vrr(True))
     assert r["restart"] and calls == ["boot"] and not p.settings["wide_vrr_live"]          # Bazzite: unchanged
     st.update(method="boot")
     p.run(p.set_wide_vrr(False))
     assert calls[-1] == "boot-off"
-    st.update(method=None, rpm_ostree=False)                                               # SteamOS
+    st.update(method=None, rpm_ostree=False)                                               # SteamOS: its GRUB
+    backend["b"] = {"kind": "steamos-grub"}
+    r = p.run(p.set_wide_vrr(True))
+    assert r["restart"] and calls[-1] == "conf"
+    st.update(method="boot", pending="on")
+    p.run(p.set_wide_vrr(False))
+    assert calls[-1] == "conf-off"
+    st.update(method=None, pending=None)                                                   # no known bootloader
+    backend["b"] = None
     r = p.run(p.set_wide_vrr(True))
     assert r["ok"] and not r["restart"] and calls[-1] == "live" and p.settings["wide_vrr_live"]
     sleeps = []
