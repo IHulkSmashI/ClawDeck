@@ -1809,3 +1809,13 @@ def test_selfupdate_offers_the_newest_release_with_its_zip(tmp_path):
     r = selfupdate.check(str(tmp_path), rels)
     assert r["update"] and r["latest"]["tag"] == "v0.2.0"
     assert selfupdate.check(str(tmp_path), [])["latest"] is None
+
+
+def test_new_intel_handhelds_are_known_with_only_what_they_have():
+    from clawdeck import hw
+    key, m = hw.match_model("Predator PA08-I51", "Predator PA08-I51")
+    assert key == "Predator PA08-I51" and m["xmx"] and m["beta"] and m["vendor"] == "acer"
+    key, m = hw.match_model("ONEXPLAYER X1Air", "ONEXPLAYER X1 Air")
+    assert m["name"] == "OneXPlayer X1 Air" and m["xmx"] and not m.get("oled_hdr")
+    _, oxp3 = hw.match_model("ONEXPLAYER 3", "ONEXPLAYER 3")
+    assert oxp3["oled_hdr"]

@@ -29,7 +29,8 @@ MODELS: dict[str, dict] = {
                 "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "sppt_max": 37}, "panel_hz": [60, 120]},
     "MS-1T52": {"name": "MSI Claw 8 AI+", "soc": "Lunar Lake", "gpu": "Arc 140V (Xe2)", "xmx": True,
                 "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "sppt_max": 37}, "panel_hz": [60, 120]},
-    "MS-1T91": {"name": "MSI Claw 8 EX AI+", "soc": "Panther Lake", "gpu": "Arc B390 (Xe3)", "xmx": True,
+    # the Arc G3 version (Arc B370, 10 Xe3 cores; Oct 2026) is believed to share the board id: not confirmed yet
+    "MS-1T91": {"name": "MSI Claw 8 EX AI+", "soc": "Panther Lake", "gpu": "Arc B390 / B370 (Xe3)", "xmx": True,
                 "tdp": {"min": 8, "battery_max": 35, "plugged_max": 35, "sppt_max": 45}, "panel_hz": [60, 120],
                 "vrr": [30, 120]},
     "MS-1T8K": {"name": "MSI Claw A8", "soc": "AMD Ryzen Z2 Extreme", "gpu": "Radeon 890M", "xmx": False,
@@ -39,7 +40,18 @@ MODELS: dict[str, dict] = {
     # plugins, 2026-10/11); the xess-xmx-linux driver was developed on one. Not tested by us: beta.
     "ONEXPLAYER 3": {"name": "ONEXPLAYER 3", "vendor": "oxp", "beta": True, "soc": "Panther Lake", "gpu": "Arc B390 (Xe3)",
                      "xmx": True, "tdp": {"min": 5, "battery_max": 35, "plugged_max": 40, "sppt_max": 42},
-                     "panel_hz": [60, 144], "oled": True},
+                     "panel_hz": [60, 144], "oled": True, "oled_hdr": True},
+    # OneXPlayer X1 Air (Lunar Lake, 10.95" 120 Hz LCD): DMI board "ONEXPLAYER X1Air" (Handheld Daemon's list). The
+    # kernel's oxpec driver gives fan and charge limit (oxp_x1). Not tested by us: beta.
+    "ONEXPLAYER X1Air": {"name": "OneXPlayer X1 Air", "vendor": "oxp", "beta": True, "soc": "Lunar Lake",
+                         "gpu": "Arc 140V / 130V (Xe2)", "xmx": True,
+                         "tdp": {"min": 8, "battery_max": 30, "plugged_max": 30, "sppt_max": 37}, "panel_hz": [60, 120]},
+    # Acer Predator Atlas 8 (PA08-I51; Arc G3 or G3 Extreme, 8" 1920x1200 48-120 Hz; US Nov 2026): DMI sys_vendor
+    # "Acer", product "Predator PA08-I51" (Bazzite #6052). Linux has no fan or charge-limit driver for it yet, so ClawDeck
+    # gives it TDP (RAPL; Acer documents 8-40 W sustained), the XMX driver and the games. Not tested by us: beta.
+    "Predator PA08-I51": {"name": "Acer Predator Atlas 8", "vendor": "acer", "beta": True, "soc": "Panther Lake",
+                          "gpu": "Arc B390 / B370 (Xe3)", "xmx": True,
+                          "tdp": {"min": 8, "battery_max": 30, "plugged_max": 40, "sppt_max": 40}, "panel_hz": [60, 120]},
 }
 for _row in MODELS.values():
     _row.setdefault("vendor", "msi")
@@ -289,7 +301,7 @@ def capabilities(h: "Hardware", fan_kind: str | None = None) -> dict:
         "face_buttons": h.model_id == "MS-1T91",
         # gamescope runs the OXP3's OLED in HDR10, where the panel ignores its backlight: brightness is gamescope's
         # SDR-on-HDR level instead (screen.py)
-        "hdr_brightness": vendor == "oxp",
+        "hdr_brightness": bool(m.get("oled_hdr")) and h.known,
     }
 
 

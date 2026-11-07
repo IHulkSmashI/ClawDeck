@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import distro, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -57,7 +57,7 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     if st["conflict"]:
         out.append({"id": "controller", "title": "Controller service", "ok": False,
                     "detail": "Handheld Daemon and InputPlumber are both running and will fight over the controller: "
-                              "keep one (Bazzite's default is InputPlumber)", "fix": None})
+                              "keep one (" + distro.name() + " uses InputPlumber by default)", "fix": None})
     elif hhd_ok:
         hv = hhd_version()
         out.append({"id": "controller", "title": "Controller service: Handheld Daemon", "ok": True,
@@ -67,7 +67,7 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                     "detail": "accepted" if ready else "open the Handheld Daemon overlay once and enable TDP controls",
                     "fix": None})
     elif st["inputplumber"]:
-        out.append({"id": "controller", "title": "Controller service: InputPlumber (Bazzite default)", "ok": True,
+        out.append({"id": "controller", "title": "Controller service: InputPlumber", "ok": True,
                     "detail": "MSI buttons and gyro come from InputPlumber; set them in Steam's controller settings. "
                               "ClawDeck's Controller tab shows InputPlumber's status; fan presets need Handheld Daemon", "fix": None})
     else:
@@ -90,8 +90,8 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                     "detail": detail, "fix": None if bs["ok"] else "fix_face_buttons"})
     if not hhd_ok:
         out.append({"id": "tdp_owner", "title": "Power limit control", "ok": p.msi_pl1 is not None or p.rapl_pl1 is not None,
-                    "detail": ("RAPL package limits (what the SoC enforces; the MSI firmware attributes are ignored on the "
-                               "Claw 8 EX). Steam's own TDP slider may do nothing on this chip"
+                    "detail": ("RAPL package limits (what the chip enforces; the MSI firmware attributes are ignored on "
+                               "Intel Claws). Steam's own TDP slider may do nothing on this chip"
                                if p.rapl_pl1 else "MSI firmware attributes only (no RAPL package domain); Steam's slider may do nothing" if p.msi_pl1 else "no way to set TDP on this system")
                               + ("; PowerStation running" if st["powerstation"] else "")
                               + ("; thermald runs and rewrites RAPL PL1 every few seconds: ClawDeck pauses it while it holds a "
@@ -113,11 +113,11 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
         out.append({"id": "quiet_log", "title": "System log kept (no split-lock flood)", "ok": ql["installed"],
                     "detail": "steamos-manager's split-lock forwarding is silenced" if ql["installed"] else
                               "steamos-manager logs every split-lock hit from Steam (thousands a minute) for a crash reporter "
-                              "Bazzite doesn't have; the 50 MB journal then erases earlier boots within minutes",
+                              "this system doesn't have; the 50 MB journal then erases earlier boots within minutes",
                     "fix": None if ql["installed"] else "quiet_split_lock_log"})
     ou = osupdate.status()
     if ou.get("applies"):
-        out.append({"id": "os_update", "title": "Bazzite up to date (kernel, Intel graphics driver, Mesa, gamescope)",
+        out.append({"id": "os_update", "title": distro.name() + " up to date (kernel, Intel graphics driver, Mesa, gamescope)",
                     "ok": not ou["waiting"], "optional": True, "detail": ou["line"], "fix": None})
     others = stack.other_plugins(home)
     if others["power"]:

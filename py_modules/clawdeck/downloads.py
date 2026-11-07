@@ -117,7 +117,8 @@ def extract(archive: str, dest: str) -> str:
         elif bsdtar:      # libarchive reads 7z too
             paths = subprocess.run([bsdtar, "-tf", archive], capture_output=True, text=True, check=True).stdout.splitlines()
         else:
-            raise FileNotFoundError("7z or bsdtar is needed to unpack OptiScaler (sudo rpm-ostree install p7zip)")
+            from . import distro
+            raise FileNotFoundError(f"7z or bsdtar is needed to unpack OptiScaler ({distro.package_hint('p7zip')})")
         for pth in paths:
             if not _safe(pth):
                 raise ValueError(f"unsafe path in archive: {pth}")

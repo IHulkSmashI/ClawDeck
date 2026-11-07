@@ -37,11 +37,14 @@
   Uninstall puts every original file back.
 - 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX), Autotune
   for the lowest wattage that keeps your frame rate, fan curves and a battery charge limit.
-- 🛠️ **The fixes Bazzite doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
+- 🛠️ **The fixes Linux doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
   performance overlay, and a log flood that costs battery.
 
 **Tested on** the MSI Claw 8 EX AI+ (Panther Lake, Arc B390) on Bazzite, mainly with CONTROL Resonant and Onimusha:
-Way of the Sword. ClawDeck checks which handheld it's on first and only shows what that one can do:
+Way of the Sword, and by users on SteamOS. **Works on Bazzite, SteamOS and CachyOS:** ClawDeck only needs Decky
+Loader, Steam's Game Mode and Proton, and XeSS on XMX works on Proton 11, Proton Experimental and GE-Proton (a Proton
+installed as a system package, like CachyOS's proton-cachyos from pacman, can't be given the XMX file: pick one of
+those three for XeSS and FSR 4.1.2 games). ClawDeck checks which handheld it's on first and only shows what that one can do:
 
 | Device | What you get |
 |---|---|
@@ -49,6 +52,9 @@ Way of the Sword. ClawDeck checks which handheld it's on first and only shows wh
 | MSI Claw 8 AI+, 7 AI+ | Everything; tell us how it runs |
 | MSI Claw A1M, A8 | Power, fans and fixes (no XMX cores: XeSS runs on the regular graphics cores) |
 | ONEXPLAYER 3 | **Beta:** XeSS, FSR 4.1.2 and frame gen on XMX, power, fan, charge limit, and a brightness control that works on its OLED |
+| OneXPlayer X1 Air | **Beta:** XeSS, FSR 4.1.2 and frame gen on XMX, power, fan, charge limit |
+| Acer Predator Atlas 8 | **Beta:** XeSS, FSR 4.1.2 and frame gen on XMX, power (Linux has no fan or charge-limit driver for it yet) |
+| Other Intel Arc handhelds | XeSS on XMX and power where the chip allows it; ClawDeck shows only what it finds |
 
 > **Beta.** Tried it? Tell us how your games run: [Feedback](#feedback).
 
@@ -70,10 +76,13 @@ Way of the Sword. ClawDeck checks which handheld it's on first and only shows wh
 
 ## Install
 
-You need an MSI Claw on [Bazzite](https://bazzite.gg) or SteamOS. New to Linux? Our
-[step-by-step guide](docs/INSTALL-BAZZITE.md) goes from Windows to Bazzite, with Windows staying on your Claw.
+You need an Intel handheld (see the table above) on [Bazzite](https://bazzite.gg), SteamOS or
+[CachyOS](https://cachyos.org) handheld edition. New to Linux? Our [step-by-step guide](docs/INSTALL-BAZZITE.md) goes
+from Windows to Bazzite, with Windows staying on your Claw.
 
-**1. Decky Loader.** On Bazzite: open the **Bazzite Portal** and tick **Decky Loader**.
+**1. Decky Loader.** On Bazzite: open the **Bazzite Portal** and tick **Decky Loader**. On SteamOS and CachyOS: the
+installer from [decky.xyz](https://decky.xyz) (Desktop Mode). On SteamOS, set a password for the Konsole line below
+once with `passwd`.
 
 **2. ClawDeck.** Either way works:
 

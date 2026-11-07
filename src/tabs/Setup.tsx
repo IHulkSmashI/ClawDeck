@@ -61,7 +61,7 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {x?.installed && x.scope?.per_game && !noXmx && (
         <PanelSectionRow>
           <Status ok={true} label="XMX driver: in every game that can use the XMX cores"
-            detail={explain("Automatic, as on Windows: every game with XeSS, XeSS frame generation, XeLL or ClawDeck's OptiScaler starts on the XeSS XMX driver, so that work runs on the XMX cores. A game with none of them can't use the XMX cores at all and keeps Bazzite's newer driver. DLSS and FSR games get there through OptiScaler (Per-game).",
+            detail={explain("Automatic, as on Windows: every game with XeSS, XeSS frame generation, XeLL or ClawDeck's OptiScaler starts on the XeSS XMX driver, so that work runs on the XMX cores. A game with none of them can't use the XMX cores at all and keeps the system's newer driver. DLSS and FSR games get there through OptiScaler (Per-game).",
               undefined, "each game's first launch on it compiles for a minute or two, once.")} />
         </PanelSectionRow>
       )}
