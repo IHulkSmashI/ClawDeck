@@ -173,84 +173,118 @@ def test_live_vrr_not_taken_is_put_back(panel, tmp_path, monkeypatch):
     assert not r["ok"] and "put back" in r["error"] and (dbg / "edid_override").read_text() == "reset"
 
 
-@pytest.mark.parametrize("kind,line_has", [
-    ("steamos-grub", 'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/'),
-    ("limine", 'KERNEL_CMDLINE[default]+=" firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/'),
-    ("systemd-boot", 'LINUX_OPTIONS="${LINUX_OPTIONS} firmware_class.path=/etc/firmware'),
-])
-def test_boot_config_on_steamos_and_cachyos_adds_one_marked_line_and_undo_takes_only_it(panel, tmp_path, monkeypatch, kind, line_has):
-    """SteamOS (GRUB) and CachyOS (Limine, systemd-boot, GRUB): one marked line that adds ClawDeck's two arguments to the
-    bootloader's variable, the EDID into the initramfs through a mkinitcpio drop-in where there is one, then the
-    system's own regenerate command. Undo deletes exactly those lines and regenerates."""
-    raw = synthetic_edid()
-    sysd = tmp_path / "sys"
-    sysd.mkdir()
-    (sysd / "edid").write_bytes(raw)
-    monkeypatch.setattr(edid, "panel_edid_path", lambda: str(sysd / "edid"))
-    monkeypatch.setattr(edid, "_cmdline", lambda: "quiet splash")
-    monkeypatch.setattr(edid, "EDID_DIR", str(tmp_path / "etc/firmware/edid"))
-    monkeypatch.setattr(edid, "MKINIT_DROPIN", str(tmp_path / "etc/mkinitcpio.conf.d/clawdeck-edid.conf"))
-    conf = tmp_path / "conf"
-    original = "# user's config\nGRUB_TIMEOUT=0\nLINUX_OPTIONS=\"quiet\"\nKERNEL_CMDLINE[default]=\"quiet\"\n"
-    conf.write_text(original)
-    ran = []
-    monkeypatch.setattr(edid, "_run", lambda cmd: ran.append(cmd) or (True, ""))
-    lines = {"steamos-grub": 'GRUB_CMDLINE_LINUX_DEFAULT="${{GRUB_CMDLINE_LINUX_DEFAULT}} {args}"',
-             "limine": 'KERNEL_CMDLINE[default]+=" {args}"', "systemd-boot": 'LINUX_OPTIONS="${{LINUX_OPTIONS}} {args}"'}
-    b = {"kind": kind, "conf": str(conf), "line": lines[kind], "regen": [["regen-" + kind]], "initramfs": kind != "steamos-grub"}
-    r = edid.conf_enable(b)
-    text = conf.read_text()
-    assert r["ok"] and r["restart"] and text.startswith(original) and line_has in text and edid.MARK in text
-    assert ran == [["regen-" + kind]] and edid.conf_pending(b) == "on"
-    written = list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
-    assert len(written) == 1 and edid.vrr_range(written[0].read_bytes()) == (30, 120)
-    dropin = tmp_path / "etc/mkinitcpio.conf.d/clawdeck-edid.conf"
-    assert dropin.exists() == (kind != "steamos-grub")
-    if dropin.exists():
-        assert f"FILES+=({written[0]})" in dropin.read_text()
-    assert edid.conf_enable(b).get("already") and conf.read_text().count(edid.MARK) == 1     # twice: one line
-    r = edid.conf_disable(b)
-    assert r["ok"] and conf.read_text() == original and not dropin.exists() and ran[-1] == ["regen-" + kind]
-    assert not list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin")) and edid.conf_pending(b) == "off"
-
-
-def test_boot_config_failure_puts_the_config_back(panel, tmp_path, monkeypatch):
+def _boot_env(tmp_path, monkeypatch, cmdline="quiet splash"):
     raw = synthetic_edid()
     (tmp_path / "edid").write_bytes(raw)
     monkeypatch.setattr(edid, "panel_edid_path", lambda: str(tmp_path / "edid"))
-    monkeypatch.setattr(edid, "_cmdline", lambda: "quiet")
-    monkeypatch.setattr(edid, "EDID_DIR", str(tmp_path / "fw"))
-    conf = tmp_path / "grub"
-    conf.write_text('GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n')
-    monkeypatch.setattr(edid, "_run", lambda cmd: (False, "grub-mkconfig: error") if cmd == ["grub-mkconfig"] else (True, ""))
-    b = {"kind": "steamos-grub", "conf": str(conf), "line": 'GRUB_CMDLINE_LINUX_DEFAULT="${{GRUB_CMDLINE_LINUX_DEFAULT}} {args}"',
-         "regen": [["grub-mkconfig"]], "initramfs": False}
+    monkeypatch.setattr(edid, "_cmdline", lambda: cmdline)
+    monkeypatch.setattr(edid, "EDID_DIR", str(tmp_path / "etc/firmware/edid"))
+    monkeypatch.setattr(edid, "MKINIT_DROPIN", str(tmp_path / "etc/mkinitcpio.conf.d/clawdeck-edid.conf"))
+    ran = []
+    monkeypatch.setattr(edid, "_regen", lambda cmd: ran.append(cmd) or (True, ""))
+    return raw, ran
+
+
+LINES = {"limine": 'KERNEL_CMDLINE[default]+=" {args}"', "systemd-boot": 'LINUX_OPTIONS="${{LINUX_OPTIONS}} {args}"',
+         "grub": 'GRUB_CMDLINE_LINUX_DEFAULT="${{GRUB_CMDLINE_LINUX_DEFAULT}} {args}"'}
+
+
+@pytest.mark.parametrize("kind", ["limine", "systemd-boot", "grub"])
+def test_cachyos_boot_config_one_marked_line_undo_restores_the_file_exactly(panel, tmp_path, monkeypatch, kind):
+    """CachyOS: ClawDeck's two arguments on ONE line carrying its marker, the EDID into the initramfs (mkinitcpio
+    drop-in), the system's regenerate command. Undo leaves the file byte for byte as it was."""
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    conf = tmp_path / "conf"
+    original = '# user config\nKERNEL_CMDLINE[default]="root=UUID=x rw quiet"\nOVERWRITE_EXISTING="yes"\nGRUB_TIMEOUT=0\n'
+    conf.write_text(original)
+    conf.chmod(0o640)
+    b = {"kind": kind, "conf": str(conf), "line": LINES[kind], "regen": [["regen"]], "initramfs": True}
     r = edid.conf_enable(b)
-    assert not r["ok"] and "grub-mkconfig" in r["error"] and conf.read_text() == 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n'
+    text = conf.read_text()
+    added = text[len(original):].strip()
+    assert r["ok"] and r["restart"] and text.startswith(original) and "\n" not in added
+    assert added.endswith(edid.MARK) and "firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-" in added
+    assert ran == [["regen"]] and edid.conf_pending(b) == "on" and oct(conf.stat().st_mode & 0o777) == "0o640"
+    bins = list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
+    assert len(bins) == 1 and edid.vrr_range(bins[0].read_bytes()) == (30, 120)
+    dropin = tmp_path / "etc/mkinitcpio.conf.d/clawdeck-edid.conf"
+    assert f"FILES+=({bins[0]})" in dropin.read_text()
+    assert edid.conf_enable(b).get("already") and conf.read_text().count(edid.MARK) == 1
+    r = edid.conf_disable(b)
+    assert r["ok"] and conf.read_text() == original and not dropin.exists() and edid.conf_pending(b) == "off"
+    assert not list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
 
 
-def test_boot_backend_is_chosen_by_system(monkeypatch):
-    files = set()
-    progs = set()
-    monkeypatch.setattr(edid.os.path, "isfile", lambda p: p in files)
-    monkeypatch.setattr(edid.shutil, "which", lambda n: f"/usr/bin/{n}" if n in progs else None)
+def test_undo_never_takes_a_user_line_after_a_stray_marker(panel, tmp_path, monkeypatch):
+    lines = ["GRUB_TIMEOUT=0", "# ClawDeck VRR range fix", "GRUB_CMDLINE_LINUX_DEFAULT=\"mine\"", "X=1"]
+    assert edid._strip_ours(lines) == ["GRUB_TIMEOUT=0", "GRUB_CMDLINE_LINUX_DEFAULT=\"mine\"", "X=1"]
+    old_form = ["A=1", "# ClawDeck VRR range fix", 'G="${G} firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-x.bin"']
+    assert edid._strip_ours(old_form) == ["A=1"]
+
+
+def test_boot_config_refuses_someone_elses_firmware_path_and_survives_failures(panel, tmp_path, monkeypatch):
+    raw, ran = _boot_env(tmp_path, monkeypatch, cmdline="quiet firmware_class.path=/opt/fw")
+    conf = tmp_path / "conf"
+    conf.write_text('GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n')
+    b = {"kind": "grub", "conf": str(conf), "line": LINES["grub"], "regen": [["grub-mkconfig"]], "initramfs": False}
+    r = edid.conf_enable(b)
+    assert not r["ok"] and "/opt/fw" in r["error"] and not ran
+    monkeypatch.setattr(edid, "_cmdline", lambda: "quiet")
+    monkeypatch.setattr(edid, "_regen", lambda cmd: (False, "error"))          # regenerate fails: config put back
+    r = edid.conf_enable(b)
+    assert not r["ok"] and conf.read_text() == 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n'
+    monkeypatch.setattr(edid, "_regen", lambda cmd: (True, ""))
+    monkeypatch.setattr(edid, "_write_conf", lambda p, l: (_ for _ in ()).throw(PermissionError(13, "Read-only file system")))
+    r = edid.conf_enable(b)
+    assert not r["ok"] and "Read-only" in r["error"]
+
+
+def test_switching_from_live_to_boot_takes_the_live_one_off_first(panel, tmp_path, monkeypatch):
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    state = {"live": True}
+    monkeypatch.setattr(edid, "live_active", lambda: state["live"])
+    monkeypatch.setattr(edid, "live_disable", lambda: state.update(live=False) or {"ok": True})
+    conf = tmp_path / "conf"
+    conf.write_text('LINUX_OPTIONS="quiet"\n')
+    b = {"kind": "systemd-boot", "conf": str(conf), "line": LINES["systemd-boot"], "regen": [["g"]], "initramfs": False}
+    assert edid.conf_enable(b)["ok"] and not state["live"]
+
+
+def test_boot_backend_only_where_it_is_safe(monkeypatch, tmp_path):
+    """SteamOS: never edited (live instead). CachyOS Limine only when the file sets KERNEL_CMDLINE[default] itself
+    (else limine-entry-tool would write entries without root=); systemd-boot only with OVERWRITE_EXISTING=yes; GRUB
+    without grub.d drop-ins. Bazzite: rpm-ostree."""
     from clawdeck import distro
-    monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False})
-    files |= {"/etc/default/grub", "/efi/EFI/steamos/grub.cfg"}
-    progs |= {"grub-mkconfig"}
-    b = edid.boot_backend()
-    assert b["kind"] == "steamos-grub" and b["regen"] == [["grub-mkconfig", "-o", "/efi/EFI/steamos/grub.cfg"]] and not b["initramfs"]
-    progs.add("steamos-update-grub")
-    assert edid.boot_backend()["regen"] == [["steamos-update-grub"]]
-    monkeypatch.setattr(distro, "info", lambda: {"kind": "cachyos", "name": "CachyOS", "atomic": False})
-    files, progs = {"/etc/default/limine"}, {"limine-mkinitcpio", "mkinitcpio"}
+    files, progs, texts, globs = set(), set(), {}, {}
     monkeypatch.setattr(edid.os.path, "isfile", lambda p: p in files)
     monkeypatch.setattr(edid.shutil, "which", lambda n: f"/usr/bin/{n}" if n in progs else None)
+    monkeypatch.setattr(edid, "_conf_lines", lambda p: texts.get(p, "").splitlines())
+    monkeypatch.setattr(edid.glob, "glob", lambda pat: globs.get(pat, []))
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
+    files |= {"/etc/default/grub", "/boot/grub/grub.cfg"}
+    progs |= {"grub-mkconfig"}
+    assert edid.boot_backend() is None                                         # SteamOS: live
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "cachyos", "name": "CachyOS", "atomic": False, "like": "arch"})
+    assert edid.boot_backend()["kind"] == "grub"
+    globs["/etc/default/grub.d/*"] = ["/etc/default/grub.d/x.cfg"]
+    assert edid.boot_backend() is None
+    files, progs = {"/etc/default/limine"}, {"limine-update", "limine-mkinitcpio", "mkinitcpio"}
+    monkeypatch.setattr(edid.os.path, "isfile", lambda p: p in files)
+    monkeypatch.setattr(edid.shutil, "which", lambda n: f"/usr/bin/{n}" if n in progs else None)
+    texts["/etc/default/limine"] = 'TARGET_OS_NAME="CachyOS"\n#KERNEL_CMDLINE[default]="quiet"\n'
+    assert edid.boot_backend() is None                                         # no KERNEL_CMDLINE of its own
+    texts["/etc/default/limine"] += 'KERNEL_CMDLINE[default]+="quiet nowatchdog"\n'
     b = edid.boot_backend()
-    assert b["kind"] == "limine" and b["regen"] == [["limine-mkinitcpio"]] and b["initramfs"]
-    files.clear(); files.add("/etc/sdboot-manage.conf"); progs.clear(); progs |= {"sdboot-manage", "mkinitcpio"}
+    assert b["kind"] == "limine" and b["regen"] == [["limine-update"]] and b["initramfs"]
+    globs["/etc/limine-entry-tool.d/*.conf"] = ["/etc/limine-entry-tool.d/a.conf"]
+    texts["/etc/limine-entry-tool.d/a.conf"] = 'KERNEL_CMDLINE[default]="root=x"\n'
+    assert edid.boot_backend() is None                                         # a drop-in would win
+    files, progs = {"/etc/sdboot-manage.conf"}, {"sdboot-manage", "mkinitcpio"}
+    monkeypatch.setattr(edid.os.path, "isfile", lambda p: p in files)
+    monkeypatch.setattr(edid.shutil, "which", lambda n: f"/usr/bin/{n}" if n in progs else None)
+    texts["/etc/sdboot-manage.conf"] = 'LINUX_OPTIONS="quiet"\n#OVERWRITE_EXISTING="yes"\n'
+    assert edid.boot_backend() is None                                         # gen would leave entries alone
+    texts["/etc/sdboot-manage.conf"] += 'OVERWRITE_EXISTING="yes"\n'
     assert edid.boot_backend()["regen"] == [["mkinitcpio", "-P"], ["sdboot-manage", "gen"]]
-    files.clear(); progs.clear()
-    assert edid.boot_backend() is None                        # nothing known: the live method
     progs.add("rpm-ostree")
     assert edid.boot_backend() == {"kind": "rpm-ostree"}

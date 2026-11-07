@@ -1443,7 +1443,13 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
     monkeypatch.setattr(_t, "sleep", lambda s: sleeps.append(s))
     p._vrr_live_again()                                                                    # a good start
     assert calls[-1] == "live" and sleeps == [60] and not os.path.exists(os.path.join(m_runtime(p), p.VRR_GUARD))
-    open(os.path.join(m_runtime(p), p.VRR_GUARD), "w").close()                             # a start that died
+    with open(os.path.join(m_runtime(p), p.VRR_GUARD), "w") as f:                          # a plugin reload in the
+        f.write(open("/proc/sys/kernel/random/boot_id").read().strip())                    # same boot: no harm
+    n = len(calls)
+    p._vrr_live_again()
+    assert len(calls) == n + 1 and p.settings["wide_vrr_live"]
+    with open(os.path.join(m_runtime(p), p.VRR_GUARD), "w") as f:                          # an earlier boot that died
+        f.write("another-boot")
     n = len(calls)
     p._vrr_live_again()
     assert len(calls) == n and not p.settings["wide_vrr_live"]                             # skipped, turned off

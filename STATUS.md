@@ -52,12 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
-**VRR fix on SteamOS / CachyOS (beta 4, 2026-11-07):** not run on hardware yet; SteamOS testers asked. Bazzite
-unchanged (rpm-ostree). SteamOS: one marked line in /etc/default/grub, then steamos-update-grub (or grub-mkconfig into
-SteamOS's grub.cfg). CachyOS: Limine (/etc/default/limine + limine-mkinitcpio), systemd-boot (/etc/sdboot-manage.conf +
-mkinitcpio -P + sdboot-manage gen) or GRUB, with the EDID in the initramfs through /etc/mkinitcpio.conf.d. Check
-after the restart: Fixes shows "VRR range: 30–120 Hz" and /proc/cmdline has drm.edid_firmware. Other systems: the
-live debugfs override (guarded against boot loops). Ask a SteamOS tester for their Export log.
+**VRR fix on SteamOS / CachyOS (beta 5, 2026-11-07):** not run on hardware yet. After an independent review of
+beta 4: SteamOS is never edited (live debugfs EDID override, applied at every start; boot-loop guard counts real
+reboots by boot id). CachyOS: Limine only when /etc/default/limine sets KERNEL_CMDLINE[default] itself (and no
+limine-entry-tool.d override), systemd-boot only with OVERWRITE_EXISTING=yes, GRUB only without grub.d; regenerate
+via systemd-run with no time limit; undo removes only marker lines. Check on SteamOS: Fixes → Install VRR fix, the
+range shows 30–120 Hz at once and again after a restart. Ask SteamOS/CachyOS testers for their Export log.
 
 **XMX on any Proton + Update button (2026-11-07):**
 - ~~GE-Proton with stock copies~~ **tested 2026-11-07 on the Claw 8 EX**: CONTROL Resonant (FSR 4.1.2 + XeFG 2x) on

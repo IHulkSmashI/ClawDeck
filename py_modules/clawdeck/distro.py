@@ -19,7 +19,8 @@ def info() -> dict:
             "cachyos" if "cachyos" in ids else
             "other")
     name = vals.get("NAME") or {"bazzite": "Bazzite", "steamos": "SteamOS", "cachyos": "CachyOS"}.get(kind, "Linux")
-    return {"kind": kind, "name": name, "atomic": shutil.which("rpm-ostree") is not None}
+    return {"kind": kind, "name": name, "atomic": shutil.which("rpm-ostree") is not None,
+            "like": vals.get("ID_LIKE", "").lower()}
 
 
 def name() -> str:

@@ -193,10 +193,12 @@ class Plugin:
             return
         self.power.revert_all()
         b = edid.boot_backend()
-        if b and b["kind"] != "rpm-ostree" and edid.conf_pending(b) == "on":   # SteamOS / CachyOS boot config
+        if b and b["kind"] != "rpm-ostree" and edid.conf_pending(b) == "on":   # CachyOS boot config
             decky.logger.info("removing the wider VRR range: %s", edid.conf_disable(b))
-        elif glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):   # the wider VRR range: undone at the next restart
-            decky.logger.info("removing the wider VRR range: %s", edid.disable())
+        elif b and b["kind"] == "rpm-ostree" and glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):
+            decky.logger.info("removing the wider VRR range: %s", edid.disable())   # undone at the next restart
+        else:
+            edid.remove_files_unless_booted()
         if edid.live_active():                             # the live one: undone now
             decky.logger.info("removing the live VRR range: %s", edid.live_disable())
         try:
@@ -1412,15 +1414,24 @@ class Plugin:
         minute of applying it, the next start finds the guard, skips the fix and turns it off, so a screen that went
         wrong with it can't come back at every boot."""
         guard = os.path.join(RUNTIME_DIR, self.VRR_GUARD)
-        if os.path.exists(guard):
+        boot = (sysfs.read("/proc/sys/kernel/random/boot_id") or "").strip()
+        try:
+            with open(guard) as f:
+                left = f.read().strip()
+        except OSError:
+            left = None
+        if left is not None and left != boot:
+            # written in an earlier boot and never cleared: that boot ended within a minute of applying it. A plugin
+            # reload in the same boot (Decky update, Steam restart) leaves the same boot id, so it doesn't count.
             os.remove(guard)
             self.settings["wide_vrr_live"] = False
             self._save_settings()
-            decky.logger.warning("wide VRR live: the last start didn't get past it, so it stays off (Fixes turns it on)")
+            decky.logger.warning("wide VRR live: the last boot didn't get past it, so it stays off (Fixes turns it on)")
             return
         try:
             os.makedirs(RUNTIME_DIR, exist_ok=True)
-            open(guard, "w").close()
+            with open(guard, "w") as f:
+                f.write(boot)
         except OSError:
             pass
         r = edid.live_enable()
@@ -1436,8 +1447,8 @@ class Plugin:
         every start); else at boot through rpm-ostree on Bazzite (rebuilds the initramfs, then a restart)."""
         st = await self._bg(edid.status)
         if on:
-            # each system's own way: rpm-ostree on Bazzite (tested on the Claw 8 EX), GRUB on SteamOS, Limine /
-            # systemd-boot / GRUB on CachyOS; the live EDID override only where none of those is found
+            # each system's own safe way: rpm-ostree on Bazzite (tested on the Claw 8 EX); Limine / systemd-boot /
+            # GRUB on CachyOS where safe (edid.boot_backend); the live EDID override on SteamOS and elsewhere
             b = await self._bg(edid.boot_backend)
             if st.get("rpm_ostree"):
                 r = await self._bg(edid.enable)
