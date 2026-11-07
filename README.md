@@ -80,7 +80,7 @@ You need an MSI Claw on [Bazzite](https://bazzite.gg) or SteamOS. New to Linux? 
 - **From Game Mode, no terminal:** Quick Access → Decky → gear → **Developer mode** on → **Developer** → **Install
   plugin from URL**, and enter:
   ```
-  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.2/ClawDeck.zip
+  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.3/ClawDeck.zip
   ```
 - **From Desktop Mode:** open **Konsole** and paste (asks for your password once; run it again to update):
   ```
@@ -194,6 +194,8 @@ self-test, and **Export log to Desktop** for bug reports.
 
 ## Updates and safety
 
+- **Updating ClawDeck:** Setup → **Update to …** when a new version is out. Decky installs it, and your settings,
+  the XMX driver and your game setups stay.
 - **Pinned and checked.** Every download (OptiScaler, REFramework, FSR 4.1.2) is a tested version with
   its sha256 in [`assets/versions.json`](assets/versions.json). Nothing updates until we've tested it on a Claw; then
   your games show **Update OptiScaler to X**.
