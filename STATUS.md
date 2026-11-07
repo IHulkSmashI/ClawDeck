@@ -52,6 +52,11 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Launch log + FSR 4.1.2 held back (2026-11-07, PR #126):** start CONTROL through ClawDeck, then
+`ls -t ~/homebrew/data/ClawDeck/launch/*.log | head -1 | xargs cat`: lines for the Proton, the exe, the settings, "XeSS XMX driver for
+this game" and "proton scope: XMX driver on". Setup → Export log: the report has a `games` section. A game whose
+last launch ran without XMX shows no FSR 4.1.2 in Per-game.
+
 **v0.2.0-beta.2 released (2026-11-06):** tested on the Claw 8 EX before release: FSR 4.1.2 files filled
 `~/fsr4-xmx` from the plugin (no download, sha256 identical), device line and capabilities right. The old
 `fsr4-xmx-4.1.2` release and tag are deleted, so beta 1 can no longer download the FSR files: beta 1 users update to

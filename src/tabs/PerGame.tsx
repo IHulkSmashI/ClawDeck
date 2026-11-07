@@ -107,7 +107,11 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   const setPickOv = (v: number | null) => { picks.set(app.appid, { ...(picks.get(app.appid) ?? {}), ov: v ?? undefined }); setPickOvS(v); };
   const nowOv = launch.opti_overlay ?? -1;
   const [busy, setBusy] = useState(false);
-  const wantUp = pickUp ?? nowUp, wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
+  // and not while this game's last launch ran without the XMX cores: FSR 4.1.2 drew a black screen then (FH5 on a
+  // Claw 8 AI+, r/MSIClaw 2026-11-07). One launch with XeSS 2 on XMX brings it back. The backend refuses it too.
+  const xmxMissed = gs?.xmx_proof?.state === "stale" || gs?.xmx_proof?.state === "failed";
+  // a game on FSR 4.1.2 when that happened: the pick moves to XeSS 2, so Apply switches it
+  const wantUp = pickUp ?? (xmxMissed && nowUp.startsWith("fsr4") ? "xess" : nowUp), wantFg = pickFg ?? (ours ? nowFg : rec?.frame_gen && rec.frame_gen !== "off" ? 2 : nowFg);
   const wantOv = pickOv ?? nowOv;
   const changed = !ours || wantUp !== nowUp || wantFg !== nowFg || wantOv !== nowOv;
   // FSR 4.1.2 only where it can run: only what the game and the hardware support
@@ -116,9 +120,10 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   // (nothing in the game uses XeSS yet), and picking an OptiScaler upscaler is what switches it on (launchenv: opti
   // implies CLAWDECK_XMX=1). CONTROL showed no FSR 4.1.2 for that reason, 2026-11-05.
   const fsr4Xmx = launch.xmx !== false && rec?.fsr4?.xmx !== false;
-  const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files && fsr4Xmx);
+  const fsr4Ok = !!(rec?.fsr4?.dx12 && rec.fsr4.files && fsr4Xmx && !xmxMissed);
   const fsr4Why = !rec ? "" : !rec.fsr4 ? "FSR 4.1.2 isn't offered: ClawDeck couldn't check this game (see its log)." : !rec.fsr4.dx12 ? "FSR 4.1.2 isn't offered: this game isn't DirectX 12."
     : !fsr4Xmx ? "FSR 4.1.2 isn't offered: XMX is off for this game, and FSR 4.1.2 needs the XMX cores (a black screen without them)."
+    : xmxMissed ? "FSR 4.1.2 isn't offered right now: this game's last launch ran without the XMX cores, and FSR 4.1.2 needs them (a black screen without them). Start it once with XeSS 2; when \"In this game now\" shows the XMX cores were used, FSR 4.1.2 is back."
     : !rec.fsr4.files ? `FSR 4.1.2's files aren't in place yet: reinstall ClawDeck, or put nitec's two files (or their zip) in Downloads.` : "";
   const upscalers = UPSCALERS.filter((u) => u.data === "xess" || (fsr4Ok && u.data.startsWith("fsr4")));
   const optiVer = gs?.opti_version ?? null;
