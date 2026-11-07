@@ -1402,24 +1402,44 @@ class Plugin:
         return r
 
     # ---- the VRR range fix -------------------------------------------------------------
+    VRR_GUARD = "vrr-live-applying"
+
     def _vrr_live_again(self) -> None:
+        """At start. A guard file stands while the fix is fresh: if the system restarted (or ClawDeck died) within a
+        minute of applying it, the next start finds the guard, skips the fix and turns it off, so a screen that went
+        wrong with it can't come back at every boot."""
+        guard = os.path.join(RUNTIME_DIR, self.VRR_GUARD)
+        if os.path.exists(guard):
+            os.remove(guard)
+            self.settings["wide_vrr_live"] = False
+            self._save_settings()
+            decky.logger.warning("wide VRR live: the last start didn't get past it, so it stays off (Fixes turns it on)")
+            return
+        try:
+            os.makedirs(RUNTIME_DIR, exist_ok=True)
+            open(guard, "w").close()
+        except OSError:
+            pass
         r = edid.live_enable()
         decky.logger.info("wide VRR live at start: %s", r)
+        time.sleep(60)
+        try:
+            os.remove(guard)
+        except OSError:
+            pass
 
     async def set_wide_vrr(self, on: bool) -> dict:
         """30-120 Hz VRR on the Claw's own screen. Live where the kernel allows it (any distribution, at once, again at
         every start); else at boot through rpm-ostree on Bazzite (rebuilds the initramfs, then a restart)."""
         st = await self._bg(edid.status)
         if on:
-            r = {"ok": False, "error": "no way to apply it on this system"}
-            if st.get("method") != "boot" and st.get("live_possible"):
-                r = await self._bg(edid.live_enable)
-            if not r.get("ok") and st.get("rpm_ostree"):
-                live_err = r.get("error")
+            # Bazzite keeps the boot method, tested on the Claw 8 EX; live is for systems without rpm-ostree (SteamOS,
+            # CachyOS), which had no VRR fix at all
+            if st.get("rpm_ostree"):
                 r = await self._bg(edid.enable)
-                if live_err:
-                    r["live_error"] = live_err
-            elif not r.get("ok") and not st.get("live_possible"):
+            elif st.get("live_possible"):
+                r = await self._bg(edid.live_enable)
+            else:
                 r = {"ok": False, "error": "this kernel offers no live EDID override, and this system has no rpm-ostree "
                      "for the boot method (Bazzite)"}
             self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
