@@ -12,6 +12,16 @@ set -u
 # say: a "clawdeck:" line to Steam's console and to this launch's log (<runtime>/launch/<appid>.log, one launch per
 # file, read by Setup -> Export log). Before this, a bug report could not show why a game started on the stock driver
 # (FH5 on a Claw 8 AI+, r/MSIClaw 2026-11-07). Only this script's own lines go there, never the game's output.
+# xmx_pkg: the folder of xess-xmx-linux's package (igdext64.dll, run/shim-stamp). ANV_CM_KERNEL_DIR from xmx.env
+# points at <package>/kernels; ClawDeck unpacks it one level down (xess-xmx-linux-<date>/xess-xmx-linux-<date>/), so
+# a glob of one level found nothing and the shim steps never ran (CONTROL on GE-Proton, 2026-11-07)
+xmx_pkg() {
+  local d="${ANV_CM_KERNEL_DIR:-}"; d="${d%/kernels}"
+  [ -n "$d" ] && [ -f "$d/igdext64.dll" ] && { echo "$d"; return; }
+  for d in "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/xess-xmx-linux-* "$HOME"/.local/share/clawdeck/xess-xmx-linux-*; do
+    [ -f "$d/igdext64.dll" ] && { echo "$d"; return; }
+  done
+}
 say() { echo "clawdeck: $*" >&2; [ -n "${CLAWDECK_LAUNCH_LOG:-}" ] && echo "clawdeck: $*" >> "$CLAWDECK_LAUNCH_LOG" 2>/dev/null; return 0; }
 # ---- second stage: Decky Framegen's fgmod has copied OptiScaler and its FSR 4 into the game, then started us -----
 # FSR 4.1.2 on XMX (Per-game: OptiScaler upscaler "FSR 4 XMX"): nitec's files from ~/fsr4-xmx go over fgmod's FSR 4,
@@ -48,7 +58,7 @@ if [ "${CLAWDECK_STAGE:-}" = post ]; then
           done
         fi
         [ -f "$wcab" ] && cp -f "$wcab" "$dir/cabinet_wine.dll" && echo cabinet_wine.dll >> "$list"
-        ig=$(ls -d "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/igdext64.dll 2>/dev/null | tail -1)
+        ig=$(xmx_pkg); [ -n "$ig" ] && ig="$ig/igdext64.dll"
         [ -f "$src/igdext64.dll" ] && ig="$src/igdext64.dll"
         if [ -n "$ig" ] && [ ! -f "$dir/igdext64.dll" ]; then cp -f "$ig" "$dir/" && echo igdext64.dll >> "$list"; fi
         say "FSR 4 XMX ($CLAWDECK_FSR4_XMX) into $dir"
@@ -110,8 +120,8 @@ if [ -f "$xmxenv" ] && [ "${CLAWDECK_XMX:-}" != 0 ]; then
     # Experimental, GE-Proton, proton-cachyos) copy theirs over it at each launch, Proton 11.0 has no driver store at
     # all, and a new prefix has nothing yet. Then the game ran on the stock path: no XMX, a black screen with FSR 4.1.2
     # (FH5 on a Claw 8 AI+, 2026-11-07). A folder outside the prefix is the same for every Proton and every prefix.
-    shimdir=$(ls -d "$HOME"/.local/share/clawdeck/xess-xmx-linux-*/ 2>/dev/null | tail -1)
-    if [ -n "$shimdir" ] && [ -f "$shimdir/igdext64.dll" ]; then
+    shimdir=$(xmx_pkg)
+    if [ -n "$shimdir" ]; then
       # the prefix's copy when it is the shim (the path proven on Proton 11.0), else the package folder
       pcopy=$(ls "${STEAM_COMPAT_DATA_PATH:-/nonexistent}"/pfx/drive_c/windows/system32/[dD]river[sS]tore/[fF]ile[rR]epository/igd_faux.inf_1/igdext64.dll 2>/dev/null | head -1)
       if [ -n "$pcopy" ] && cmp -s "$pcopy" "$shimdir/igdext64.dll"; then
