@@ -317,3 +317,26 @@ def test_beta4_cachyos_line_is_recognised_and_removed(panel, tmp_path, monkeypat
     b = {"kind": "limine", "conf": str(conf), "line": LINES["limine"], "regen": [["limine-update"]], "initramfs": False}
     assert edid.conf_pending(b) == "on"
     assert edid.conf_disable(b)["ok"] and conf.read_text() == user and edid.conf_pending(b) == "off"
+
+
+def test_live_method_not_offered_on_intels_built_in_screen(panel, tmp_path, monkeypatch):
+    """i915 / xe keep the eDP EDID they read at start, so the live override never reaches the panel (SteamOS 3.9.5 on a
+    Claw 8 EX: 'the driver didn't take the corrected range'). Not offered there."""
+    raw = synthetic_edid()
+    sysd, dbg = _fake_kernel(tmp_path, monkeypatch, raw)
+    card = tmp_path / "sys/class/drm/card0"
+    (card / "device").mkdir(parents=True)
+    drv = tmp_path / "drivers/xe"
+    drv.mkdir(parents=True)
+    (card / "device" / "driver").symlink_to(drv)
+    assert edid._gpu_driver() == "xe" and edid.live_dir() is None and not edid.status()["live_possible"]
+
+
+def test_no_way_to_apply_says_why_instead_of_offering_the_button(panel, tmp_path, monkeypatch):
+    raw = synthetic_edid()
+    _fake_kernel(tmp_path, monkeypatch, raw)
+    monkeypatch.setattr(edid, "live_dir", lambda: None)
+    monkeypatch.setattr(edid, "boot_backend", lambda: None)
+    monkeypatch.setattr(edid.shutil, "which", lambda n: None)
+    st = edid.status()
+    assert not st["supported"] and "SteamOS support" in st["reason"]

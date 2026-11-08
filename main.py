@@ -1466,8 +1466,8 @@ class Plugin:
             elif st.get("live_possible"):
                 r = await self._bg(edid.live_enable)
             else:
-                r = {"ok": False, "error": "this kernel offers no live EDID override, and this system has no rpm-ostree "
-                     "for the boot method (Bazzite)"}
+                r = {"ok": False, "error": "on this system the fix needs a boot setting ClawDeck can't make yet "
+                     "(SteamOS support is in the works); Bazzite and CachyOS have it"}
             self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
         else:
             b = await self._bg(edid.boot_backend)

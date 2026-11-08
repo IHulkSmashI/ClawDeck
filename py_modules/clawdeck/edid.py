@@ -203,6 +203,10 @@ def status() -> dict:
     if booted and not ours:
         supported, reason = False, f"another EDID override is active ({booted}); ClawDeck leaves it alone"
     live = not ours and live_active()
+    can = shutil.which("rpm-ostree") is not None or b is not None or live_dir() is not None
+    if supported and not ours and not live and not can:
+        supported, reason = False, ("the fix needs a boot setting ClawDeck can't make on this system yet "
+                                    "(SteamOS support is in the works); Bazzite and CachyOS have it")
     return {"panel": key or None, "panel_name": p["panel"] if p else None, "range": list(rng) if rng else None,
             "wide": ours or live, "supported": supported or live, "reason": None if live else reason,
             "pending": cp if cp else None if not pending_args else ("on" if "clawdeck-" in pending else "off"),
@@ -545,8 +549,24 @@ def _status_path() -> str | None:
     return os.path.join(os.path.dirname(p), "status") if p else None
 
 
+def _gpu_driver() -> str:
+    p = panel_edid_path()
+    if not p:
+        return ""
+    try:
+        return os.path.basename(os.path.realpath(os.path.join(os.path.dirname(os.path.dirname(p)),
+                                                               os.path.basename(os.path.dirname(p)).split("-")[0], "device", "driver")))
+    except OSError:
+        return ""
+
+
 def live_dir() -> str | None:
-    """The panel's DRM debugfs folder (dri/<minor>/eDP-1), when it offers edid_override."""
+    """The panel's DRM debugfs folder (dri/<minor>/eDP-1), when it offers edid_override and the driver uses it.
+    Intel's drivers (i915, xe) read the internal panel's EDID once when they start and keep that copy, so a live
+    override never reaches the built-in screen there: on SteamOS 3.9.5 (Claw 8 EX, r/MSIClaw 2026-11-07) the probe
+    kept the factory range and ClawDeck put everything back. Not offered on them."""
+    if _gpu_driver() in ("i915", "xe"):
+        return None
     p = panel_edid_path()
     m = re.search(r"card(\d+)-", p or "")
     cands = ([f"{DEBUGFS}/{m.group(1)}/{CONNECTOR}"] if m else []) + sorted(glob.glob(f"{DEBUGFS}/*/{CONNECTOR}"))
