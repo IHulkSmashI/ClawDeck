@@ -89,7 +89,7 @@ once with `passwd`.
 - **From Game Mode, no terminal:** Quick Access → Decky → gear → **Developer mode** on → **Developer** → **Install
   plugin from URL**, and enter:
   ```
-  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.6/ClawDeck.zip
+  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.7/ClawDeck.zip
   ```
 - **From Desktop Mode:** open **Konsole** and paste (asks for your password once; run it again to update):
   ```
