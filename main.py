@@ -197,9 +197,9 @@ class Plugin:
             decky.logger.info("uninstall: an update (Setup -> Updates): everything stays for the new version")
             return
         self.power.revert_all()
-        b = edid.boot_backend()
-        if b and b["kind"] != "rpm-ostree" and edid.conf_pending(b) == "on":   # CachyOS boot config
-            decky.logger.info("removing the wider VRR range: %s", edid.conf_disable(b))
+        b = edid.boot_backend(for_enable=False)           # also where it couldn't be turned on any more
+        if b and b["kind"] != "rpm-ostree" and (edid.conf_pending(b) == "on" or os.path.exists(b.get("keep") or "")):
+            decky.logger.info("removing the wider VRR range: %s", edid.conf_disable(b))   # SteamOS / CachyOS config
         elif b and b["kind"] == "rpm-ostree" and glob.glob(f"{edid.EDID_DIR}/clawdeck-*.bin"):
             decky.logger.info("removing the wider VRR range: %s", edid.disable())   # undone at the next restart
         else:
@@ -1474,10 +1474,11 @@ class Plugin:
                      "can't make; Bazzite, SteamOS and CachyOS have it"}
             self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
         else:
-            b = await self._bg(edid.boot_backend)
-            if b and b["kind"] != "rpm-ostree" and (st.get("pending") == "on" or st.get("method") == "boot"):
+            b = await self._bg(edid.boot_backend, False)    # Remove works also where Install no longer would
+            if b and b["kind"] != "rpm-ostree" and (st.get("pending") == "on" or st.get("method") == "boot"
+                                                    or os.path.exists(b.get("keep") or "")):
                 r = await self._bg(edid.conf_disable, b)
-            elif st.get("method") == "boot" or st.get("pending") == "on":
+            elif st.get("rpm_ostree") and (st.get("method") == "boot" or st.get("pending") == "on"):
                 r = await self._bg(edid.disable)
             else:
                 r = await self._bg(edid.live_disable)

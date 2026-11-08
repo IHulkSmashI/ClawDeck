@@ -29,6 +29,9 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import itertools
+import functools
 
 from . import distro, sysfs
 
@@ -184,8 +187,8 @@ def status() -> dict:
     ours = "clawdeck-" in booted
     pending_args = _kargs_pending()
     pending = _arg(pending_args, "drm.edid_firmware") or ""
-    b = boot_backend()
-    cp = conf_pending(b)
+    b = boot_backend()                                 # can it be turned on here
+    cp = conf_pending(boot_backend(for_enable=False))  # is ClawDeck's line in the config (also where it can't be added now)
     supported = False
     reason = None
     if not raw:
@@ -203,18 +206,25 @@ def status() -> dict:
     if booted and not ours:
         supported, reason = False, f"another EDID override is active ({booted}); ClawDeck leaves it alone"
     live = not ours and live_active()
+    taken = ours and rng == WIDE                       # booted with ours AND the driver reports the wide range
     can = shutil.which("rpm-ostree") is not None or b is not None or live_dir() is not None
     if supported and not ours and not live and not can:
-        if distro.info()["kind"] == "steamos" and _driver_in_initramfs():
+        if distro.info()["kind"] == "steamos":
             why = ("on this SteamOS the graphics driver starts from the initramfs, before /etc is there, so a boot "
-                   "setting can't hand it the corrected range")
+                   "setting can't hand it the corrected range" if _driver_in_initramfs() else
+                   "this SteamOS lacks /etc/default/grub, update-grub or its keep-list folder, which the fix needs")
         else:
             why = "the fix needs a boot setting ClawDeck can't make on this system; Bazzite, SteamOS and CachyOS have it"
         supported, reason = False, why
+    if ours and not taken:
+        reason = (f"started with the fix, but the driver still reports {rng[0]}-{rng[1]} Hz: it didn't take the "
+                  "corrected range at boot" if rng else "started with the fix, but the screen's range can't be read")
+    if _after_update_error and not ours and cp != "on":
+        reason = f"couldn't put the fix back after the SteamOS update: {_after_update_error}"
     return {"panel": key or None, "panel_name": p["panel"] if p else None, "range": list(rng) if rng else None,
-            "wide": ours or live, "supported": supported or live, "reason": None if live else reason,
+            "wide": taken or live, "supported": supported or live, "reason": None if live else reason,
             "pending": cp if cp else None if not pending_args else ("on" if "clawdeck-" in pending else "off"),
-            "rpm_ostree": shutil.which("rpm-ostree") is not None,
+            "rpm_ostree": shutil.which("rpm-ostree") is not None, "not_taken": bool(ours and not taken),
             "boot_backend": b["kind"] if b else None,
             "method": "boot" if ours or cp == "on" else "live" if live else None, "live_possible": live_dir() is not None}
 
@@ -342,8 +352,16 @@ def _driver_in_initramfs() -> bool | None:
     """Is the screen's driver (xe / i915) inside the running kernel's initramfs? Then it probes before the real /etc is
     there and can't read an EDID from it. None when that can't be told (no lsinitcpio, image not found)."""
     drv = _gpu_driver()
+    if drv not in ("xe", "i915"):
+        return None
+    try:                                              # built into the kernel: it probes before any /etc either
+        with open(f"/usr/lib/modules/{os.uname().release}/modules.builtin", encoding="utf-8") as f:
+            if any(re.search(rf"/{drv}\.ko$", ln.strip()) for ln in f):
+                return True
+    except OSError:
+        pass
     m = re.search(r"BOOT_IMAGE=\S*?vmlinuz-(\S+)", _cmdline())
-    if drv not in ("xe", "i915") or not m or not shutil.which("lsinitcpio"):
+    if not m or not shutil.which("lsinitcpio"):
         return None
     img = f"/boot/initramfs-{m.group(1)}.img"
     try:
@@ -364,17 +382,18 @@ def _driver_in_initramfs() -> bool | None:
     return _initramfs_cache[key]
 
 
-def boot_backend() -> dict | None:
+def boot_backend(for_enable: bool = True) -> dict | None:
     """How this system takes kernel arguments safely: {"kind", "conf", "line" (format with {args}), "regen":
-    [commands], "initramfs": bool}, or None (then the live method)."""
+    [commands], "initramfs": bool}, or None (then the live method). for_enable=False: the backend to take ClawDeck's
+    line OUT again (Remove, uninstall), also where it couldn't be added any more."""
     if shutil.which("rpm-ostree"):
         return {"kind": "rpm-ostree"}
     d = distro.info()
     w = shutil.which
     if d["kind"] == "steamos":                        # (it calls itself Arch-like in os-release: checked first)
-        if not (os.path.isfile("/etc/default/grub") and w("update-grub") and os.path.isdir(os.path.dirname(KEEP_CONF))):
+        if not (os.path.isfile("/etc/default/grub") and w("update-grub")):
             return None
-        if _driver_in_initramfs():
+        if for_enable and (not os.path.isdir(os.path.dirname(KEEP_CONF)) or _driver_in_initramfs()):
             return None
         return {"kind": "steamos-grub", "conf": "/etc/default/grub", "line": GRUB_LINE, "regen": [["update-grub"]],
                 "initramfs": False, "keep": KEEP_CONF}
@@ -448,11 +467,23 @@ def _strip_ours(lines: list[str]) -> list[str]:
     return out
 
 
+_lock = threading.RLock()        # one boot-config change at a time: the start-up re-add never races a tap in Fixes
+_unit_no = itertools.count(1)
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def run(*a, **k):
+        with _lock:
+            return fn(*a, **k)
+    return run
+
+
 def _regen(cmd: list[str]) -> tuple[bool, str]:
     """Bootloader / initramfs tools as their own systemd unit, waited for with no time limit: killing mkinitcpio
     halfway (a timeout, a Steam or plugin restart) could leave a cut-off initramfs."""
     if shutil.which("systemd-run"):
-        cmd = ["systemd-run", "--wait", "--collect", "--pipe", "--quiet", "--unit", f"clawdeck-regen-{os.getpid()}", *cmd]
+        cmd = ["systemd-run", "--wait", "--collect", "--pipe", "--quiet", "--unit", f"clawdeck-regen-{os.getpid()}-{next(_unit_no)}", *cmd]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, check=False, env=sysfs.clean_env())
     except (OSError, subprocess.SubprocessError) as e:
@@ -475,7 +506,21 @@ def _other_fw_path(b: dict) -> str | None:
     return None
 
 
-def conf_enable(b: dict) -> dict:
+STEAMOS_GRUB_CFG = "/efi/EFI/SteamOS/grub.cfg"
+
+
+def _undo_line(b: dict) -> None:
+    """Only ClawDeck's line out of the config again and regenerate: the EDID and the keep-list entry stay."""
+    try:
+        _write_conf(b["conf"], _strip_ours(_conf_lines(b["conf"])))
+    except OSError:
+        return
+    for c in b["regen"]:
+        _regen(c)
+
+
+@_locked
+def conf_enable(b: dict, after_update: bool = False) -> dict:
     booted = _arg(_cmdline(), "drm.edid_firmware") or ""
     if booted and "clawdeck-" not in booted:
         return {"ok": False, "error": "another EDID override is active; ClawDeck leaves it alone"}
@@ -518,22 +563,34 @@ def conf_enable(b: dict) -> dict:
     for cmd in b["regen"]:
         ok, out = _regen(cmd)
         if not ok:
-            conf_disable(b, regen=False)                  # back to how it was, then regenerate once more
-            for c in b["regen"]:
-                _regen(c)
+            if after_update:                              # keep the EDID and the keep-list entry: try again next start
+                _undo_line(b)
+            else:
+                conf_disable(b, regen=False)              # back to how it was, then regenerate once more
+                for c in b["regen"]:
+                    _regen(c)
             return {"ok": False, "error": f"{cmd[0]}: {out}"}
+    if b["kind"] == "steamos-grub" and os.path.isfile(STEAMOS_GRUB_CFG):
+        cfg = "\n".join(_conf_lines(STEAMOS_GRUB_CFG))
+        if OURS not in cfg:                               # update-grub ran, but the kernel line didn't get ours
+            if after_update:
+                _undo_line(b)
+            else:
+                conf_disable(b)
+            return {"ok": False, "error": "SteamOS's boot menu didn't take the setting (update-grub left it out)"}
     return {"ok": True, "restart": True, "method": "boot", "file": dest, "backend": b["kind"]}
 
 
+@_locked
 def conf_disable(b: dict, regen: bool = True) -> dict:
     try:
+        if b.get("keep") and os.path.exists(b["keep"]):   # first: an interrupted Remove never comes back at start
+            os.remove(b["keep"])
         lines = _conf_lines(b["conf"])
         if any(MARK in ln or MARK_BETA4 in ln for ln in lines):
             _write_conf(b["conf"], _strip_ours(lines))
         if os.path.exists(MKINIT_DROPIN):
             os.remove(MKINIT_DROPIN)
-        if b.get("keep") and os.path.exists(b["keep"]):
-            os.remove(b["keep"])
     except OSError as e:
         return {"ok": False, "error": f"couldn't write the boot config: {e.strerror or e}"}
     if regen:
@@ -545,6 +602,7 @@ def conf_disable(b: dict, regen: bool = True) -> dict:
     return {"ok": True, "restart": True, "method": "boot"}
 
 
+@_locked
 def steamos_beta4_cleanup() -> dict | None:
     """Beta 4 (out for a few hours on 2026-11-07) put the VRR fix into SteamOS's /etc/default/grub: a marker comment
     line, then a GRUB_CMDLINE_LINUX_DEFAULT line with ClawDeck's EDID argument, regenerated with steamos-update-grub or
@@ -560,6 +618,9 @@ def steamos_beta4_cleanup() -> dict | None:
     while i < len(lines):
         if MARK_BETA4 in lines[i] and i + 1 < len(lines) and OURS in lines[i + 1]:
             i += 2
+            continue
+        if MARK_BETA4 in lines[i]:                       # a lone marker comment: out too, or this runs every start
+            i += 1
             continue
         out.append(lines[i])
         i += 1
@@ -579,20 +640,36 @@ def steamos_beta4_cleanup() -> dict | None:
 MARK_BETA4 = "# ClawDeck: VRR range fix (Fixes -> Remove VRR fix takes this out)"
 
 
+_after_update_error: str | None = None
+
+
+@_locked
 def steamos_after_update() -> dict | None:
     """After a SteamOS update /etc/default/grub is Valve's new one, without ClawDeck's line; the keep-list drop-in and
     the EDID file it kept say the fix was on. ClawDeck puts its one line back on top of the new file and regenerates:
     the next restart has the wide range again. None when there is nothing to do."""
-    b = boot_backend()
-    if not b or b["kind"] != "steamos-grub" or not os.path.isfile(KEEP_CONF) or conf_pending(b) == "on":
+    global _after_update_error
+    if distro.info()["kind"] != "steamos" or not os.path.isfile(KEEP_CONF):
         return None
-    if not glob.glob(f"{EDID_DIR}/clawdeck-*.bin"):   # the drop-in alone: nothing to restore, take it out
+    undo = boot_backend(for_enable=False)
+    if undo and conf_pending(undo) == "on":
+        return None
+    b = boot_backend()
+    if not b or not glob.glob(f"{EDID_DIR}/clawdeck-*.bin"):
+        # the update made the fix impossible here (driver now in the initramfs, ...) or only the drop-in is left:
+        # take ClawDeck's files out instead of keeping them forever
+        log.info("SteamOS: the VRR fix can't come back after this update; removing its files")
+        if undo:
+            return conf_disable(undo)
         try:
             os.remove(KEEP_CONF)
         except OSError:
             pass
-        return None
-    return conf_enable(b)
+        remove_files_unless_booted()
+        return {"ok": False, "error": "removed: the fix can't be applied on this SteamOS any more"}
+    r = conf_enable(b, after_update=True)
+    _after_update_error = None if r.get("ok") else r.get("error")
+    return r
 
 
 def remove_files_unless_booted() -> None:

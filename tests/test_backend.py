@@ -1420,7 +1420,7 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
     monkeypatch.setattr(edid, "disable", lambda: calls.append("boot-off") or {"ok": True, "restart": True})
     # the boot method comes from the test, never from the machine running it (CI's Ubuntu has GRUB)
     backend = {"b": {"kind": "rpm-ostree"}}
-    monkeypatch.setattr(edid, "boot_backend", lambda: backend["b"])
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: backend["b"])
     monkeypatch.setattr(edid, "conf_enable", lambda b: calls.append("conf") or {"ok": True, "restart": True, "method": "boot"})
     monkeypatch.setattr(edid, "conf_disable", lambda b: calls.append("conf-off") or {"ok": True, "restart": True})
     r = p.run(p.set_wide_vrr(True))
@@ -1435,6 +1435,11 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
     st.update(method="boot", pending="on")
     p.run(p.set_wide_vrr(False))
     assert calls[-1] == "conf-off"
+    st.update(method="boot", pending="on")                                                 # Install no longer
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: None if for_enable else {"kind": "steamos-grub"})
+    p.run(p.set_wide_vrr(False))                                                           # possible: Remove still
+    assert calls[-1] == "conf-off" and "boot-off" not in calls[2:]                         # never rpm-ostree here
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: backend["b"])
     st.update(method=None, pending=None)                                                   # no known bootloader
     backend["b"] = None
     r = p.run(p.set_wide_vrr(True))
