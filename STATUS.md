@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**MSI BIOS check (2026-11-07):** Setup's checks show "MSI BIOS up to date" or "MSI has BIOS E1T91IMS.10E
+(2026-10-30); this Claw runs E1T91IMS.10D …" with MSI's support link. The sandbox can't reach msi.com, so check the
+request on the Claw once: `python3 -c "import sys;sys.path.insert(0,'$HOME/homebrew/plugins/ClawDeck/py_modules');
+from clawdeck import msibios;print(msibios.refresh('MS-1T91'))"` shows latest E1T91IMS.10E (or newer). If MSI
+refuses a non-browser client, it says so in `error`.
+
 **VRR fix on SteamOS / CachyOS (beta 5, 2026-11-07):** not run on hardware yet. After an independent review of
 beta 4: SteamOS is never edited (live debugfs EDID override, applied at every start; boot-loop guard counts real
 reboots by boot id). CachyOS: Limine only when /etc/default/limine sets KERNEL_CMDLINE[default] itself (and no
