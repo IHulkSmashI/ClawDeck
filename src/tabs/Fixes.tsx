@@ -48,11 +48,11 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Group title="Screen (VRR)" first />
         <Status ok={vrr ? (vrr.wide ? true : vrr.supported ? false : null) : null}
           label={vrr?.range ? `VRR range: ${vrr.range[0]}–${vrr.range[1]} Hz` : "VRR range unknown"}
-          detail={vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, validated` : undefined)} />
+          detail={vrr?.not_taken ? vrr.reason ?? undefined : vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, validated` : undefined)} />
         {vrr && (vrr.supported || vrr.wide) && (
           <ButtonItem layout="below" disabled={busy}
             description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known.", undefined,
-              live ? "turn it off; a restart also drops it until ClawDeck starts again. Nothing on disk changes." : "a restart; the previous boot entry always starts without it.")}
+              live ? "turn it off; a restart also drops it until ClawDeck starts again. Nothing on disk changes." : vrr?.boot_backend === "steamos-grub" ? "a restart; if the screen misbehaves, pick the other SteamOS version in the boot menu (after an update it may have the fix too) and Remove it here." : "a restart; the previous boot entry always starts without it.")}
             onClick={() => confirmRestart(want ? "Remove the VRR fix?" : "Install the VRR fix 30–120 Hz?",
               want ? (vrr.method === "boot" ? "ClawDeck removes its corrected screen description. Takes a minute or two, then restart." : "The factory range comes back at once; the screen may blink once.")
                 : live ? "ClawDeck gives the GPU driver a corrected description of this screen, so VRR works from 30 Hz instead of 48. It applies at once (the screen may blink once) and again each time ClawDeck starts; nothing on disk changes."

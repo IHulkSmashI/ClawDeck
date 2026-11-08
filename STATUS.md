@@ -65,7 +65,9 @@ list) and the tester's output (/etc/default/grub present, /usr/bin/update-grub, 
 line in /etc/default/grub + update-grub, and a keep-list drop-in /etc/atomic-update.conf.d/clawdeck-vrr.conf naming only
 /etc/firmware/edid/clawdeck-*.bin (never /etc/default/grub, so Valve's changes to it are never shadowed). After a SteamOS
 update ClawDeck adds its line again at start; one restart. Not offered when xe/i915 is inside the running initramfs
-(lsinitcpio), since the driver would start before /etc. Check on SteamOS: Fixes → Install VRR fix → restart → 30–120 Hz;
+(lsinitcpio), since the driver would start before /etc. A rollback to the other SteamOS slot after an update can carry
+the fix too (both slots' grub.cfg get it); Remove there takes it out. If grub.cfg comes out without the argument, Install
+fails with an error; started with the argument but the driver still at 48 Hz shows "didn't take". Check on SteamOS: Fixes → Install VRR fix → restart → 30–120 Hz;
 after the next SteamOS update, start ClawDeck, restart once, 30–120 Hz again. CachyOS: Limine only when
 /etc/default/limine sets KERNEL_CMDLINE[default] itself (and no limine-entry-tool.d override), systemd-boot only with
 OVERWRITE_EXISTING=yes, GRUB only without grub.d; regenerate via systemd-run with no time limit; undo removes only marker

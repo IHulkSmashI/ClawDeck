@@ -345,7 +345,7 @@ def test_no_way_to_apply_says_why_instead_of_offering_the_button(panel, tmp_path
     raw = synthetic_edid()
     _fake_kernel(tmp_path, monkeypatch, raw)
     monkeypatch.setattr(edid, "live_dir", lambda: None)
-    monkeypatch.setattr(edid, "boot_backend", lambda: None)
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: None)
     monkeypatch.setattr(edid.shutil, "which", lambda n: None)
     st = edid.status()
     assert not st["supported"] and "boot setting" in st["reason"]
@@ -364,7 +364,7 @@ def _steamos_env(tmp_path, monkeypatch):
     monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
     b = {"kind": "steamos-grub", "conf": str(grub), "line": edid.GRUB_LINE, "regen": [["update-grub"]],
          "initramfs": False, "keep": str(keep)}
-    monkeypatch.setattr(edid, "boot_backend", lambda: b)
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: b)
     return b, grub, keep, valve, ran
 
 
@@ -398,7 +398,77 @@ def test_steamos_update_brings_back_valves_grub_file_and_clawdeck_adds_its_line_
     grub.write_text(new_valve)
     for f in (tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"):
         f.unlink()                                                          # drop-in alone: nothing to restore
-    assert edid.steamos_after_update() is None and not keep.exists() and grub.read_text() == new_valve
+    r = edid.steamos_after_update()                                         # drop-in alone: cleaned up, not kept forever
+    assert not keep.exists() and grub.read_text() == new_valve
+
+
+def test_steamos_failed_re_add_after_update_keeps_the_fix_for_next_time(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    assert edid.conf_enable(b)["ok"]
+    grub.write_text(valve)                                                  # the update
+    monkeypatch.setattr(edid, "_regen", lambda cmd: (False, "grub-probe: error"))
+    r = edid.steamos_after_update()
+    assert not r["ok"] and grub.read_text() == valve and keep.exists()
+    assert list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))       # EDID kept: next start tries again
+    assert "after the SteamOS update" in edid.status()["reason"]
+    monkeypatch.setattr(edid, "_regen", lambda cmd: ran.append(cmd) or (True, ""))
+    assert edid.steamos_after_update()["ok"] and edid.status()["reason"] is None
+
+
+def test_steamos_update_that_makes_the_fix_impossible_takes_its_files_out(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    assert edid.conf_enable(b)["ok"]
+    grub.write_text(valve)
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: None if for_enable else b)   # driver in initramfs now
+    edid.steamos_after_update()
+    assert not keep.exists() and grub.read_text() == valve
+    assert not list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
+
+
+def test_steamos_boot_menu_without_our_argument_is_an_error_not_a_silent_no(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    cfg = tmp_path / "grub.cfg"
+    cfg.write_text("linux /boot/vmlinuz-linux-neptune-72 quiet\n")              # update-grub left our line out
+    monkeypatch.setattr(edid, "STEAMOS_GRUB_CFG", str(cfg))
+    r = edid.conf_enable(b)
+    assert not r["ok"] and "boot menu" in r["error"] and grub.read_text() == valve and not keep.exists()
+    monkeypatch.setattr(edid, "_regen", lambda cmd: (cfg.write_text(
+        f"linux /boot/vmlinuz quiet firmware_class.path=/etc/firmware {edid.OURS}CSW0801-30-120.bin\n"), (True, ""))[1])
+    assert edid.conf_enable(b)["ok"]
+
+
+def test_started_with_the_fix_but_the_driver_kept_48_says_so(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    assert edid.conf_enable(b)["ok"]
+    monkeypatch.setattr(edid, "_cmdline", lambda: "quiet firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-CSW0801-30-120.bin")
+    st = edid.status()                                                      # sysfs EDID still the factory 48-120
+    assert not st["wide"] and st["not_taken"] and "48-120" in st["reason"] and st["pending"] == "on"
+
+
+def test_interrupted_remove_never_brings_the_fix_back(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    assert edid.conf_enable(b)["ok"]
+    real = edid._write_conf
+    monkeypatch.setattr(edid, "_write_conf", lambda p, l: (_ for _ in ()).throw(OSError(5, "I/O error")))
+    assert not edid.conf_disable(b)["ok"]
+    assert not keep.exists()                                                # keep-list entry went first
+    monkeypatch.setattr(edid, "_write_conf", real)
+    assert edid.steamos_after_update() is None                              # no drop-in: nothing re-added
+
+
+def test_beta4_lone_marker_line_goes_too(panel, tmp_path, monkeypatch):
+    from clawdeck import distro
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    grub = tmp_path / "grub"
+    user = 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n'
+    grub.write_text(user + edid.MARK_BETA4 + "\n")
+    real_lines, real_write = edid._conf_lines, edid._write_conf
+    monkeypatch.setattr(edid, "_conf_lines", lambda p: real_lines(str(grub) if p == "/etc/default/grub" else p))
+    monkeypatch.setattr(edid, "_write_conf", lambda p, l: real_write(str(grub) if p == "/etc/default/grub" else p, l))
+    monkeypatch.setattr(edid.shutil, "which", lambda n: "/usr/bin/update-grub" if n == "update-grub" else None)
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
+    assert edid.steamos_beta4_cleanup()["ok"] and grub.read_text() == user and ran == [["update-grub"]]
+    assert edid.steamos_beta4_cleanup() is None
 
 
 def test_driver_in_the_initramfs_is_read_from_the_running_image(tmp_path, monkeypatch):
