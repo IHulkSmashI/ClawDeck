@@ -1458,7 +1458,7 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
     assert calls[-1] == "live-off"
     st.update(method=None, live_possible=False)
     r = p.run(p.set_wide_vrr(True))
-    assert not r["ok"] and "SteamOS support" in r["error"]
+    assert not r["ok"] and "boot setting" in r["error"]
 
 
 def m_runtime(p):

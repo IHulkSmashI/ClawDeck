@@ -117,8 +117,9 @@ class Plugin:
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)
         # FSR 4.1.2 on XMX with nothing to set up: nitec's files fetched once in the background (versions.json)
         asyncio.get_event_loop().run_in_executor(None, self._fsr4_fetch)
-        # beta 4's SteamOS boot-config VRR fix comes out again (SteamOS isn't edited any more): once, in the background
-        asyncio.get_event_loop().run_in_executor(None, self._steamos_beta4_cleanup)
+        # SteamOS VRR fix: beta 4's two-line form comes out once; after a SteamOS update (Valve's /etc/default/grub back)
+        # ClawDeck's one line goes back on top of the new file, in the background
+        asyncio.get_event_loop().run_in_executor(None, self._steamos_vrr_at_start)
         # the VRR range fix applied live (edid.live_enable) lasts until a restart: on again at every start
         if self.settings.get("wide_vrr_live"):
             asyncio.get_event_loop().run_in_executor(None, self._vrr_live_again)
@@ -1411,10 +1412,13 @@ class Plugin:
         return r
 
     # ---- the VRR range fix -------------------------------------------------------------
-    def _steamos_beta4_cleanup(self) -> None:
+    def _steamos_vrr_at_start(self) -> None:
         r = edid.steamos_beta4_cleanup()
         if r is not None:
-            decky.logger.info("SteamOS: beta 4's VRR boot line removed (Fixes turns the live fix on): %s", r)
+            decky.logger.info("SteamOS: beta 4's VRR boot line removed (Fixes turns the fix on again): %s", r)
+        r = edid.steamos_after_update()
+        if r is not None:
+            decky.logger.info("SteamOS updated: VRR range fix line put back, the next restart applies it: %s", r)
 
     VRR_GUARD = "vrr-live-applying"
 
@@ -1466,8 +1470,8 @@ class Plugin:
             elif st.get("live_possible"):
                 r = await self._bg(edid.live_enable)
             else:
-                r = {"ok": False, "error": "on this system the fix needs a boot setting ClawDeck can't make yet "
-                     "(SteamOS support is in the works); Bazzite and CachyOS have it"}
+                r = {"ok": False, "error": st.get("reason") or "on this system the fix needs a boot setting ClawDeck "
+                     "can't make; Bazzite, SteamOS and CachyOS have it"}
             self.settings["wide_vrr_live"] = bool(r.get("ok") and r.get("method") == "live")
         else:
             b = await self._bg(edid.boot_backend)
