@@ -251,7 +251,7 @@ def test_switching_from_live_to_boot_takes_the_live_one_off_first(panel, tmp_pat
 
 
 def test_boot_backend_only_where_it_is_safe(monkeypatch, tmp_path):
-    """SteamOS: never edited (live instead). CachyOS Limine only when the file sets KERNEL_CMDLINE[default] itself
+    """SteamOS: /etc/default/grub + Holo's update-grub, only when the GPU driver isn't in the initramfs. CachyOS Limine only when the file sets KERNEL_CMDLINE[default] itself
     (else limine-entry-tool would write entries without root=); systemd-boot only with OVERWRITE_EXISTING=yes; GRUB
     without grub.d drop-ins. Bazzite: rpm-ostree."""
     from clawdeck import distro
@@ -263,7 +263,16 @@ def test_boot_backend_only_where_it_is_safe(monkeypatch, tmp_path):
     monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
     files |= {"/etc/default/grub", "/boot/grub/grub.cfg"}
     progs |= {"grub-mkconfig"}
-    assert edid.boot_backend() is None                                         # SteamOS: live
+    monkeypatch.setattr(edid.os.path, "isdir", lambda p: p == "/etc/atomic-update.conf.d")
+    monkeypatch.setattr(edid, "_driver_in_initramfs", lambda: None)
+    assert edid.boot_backend() is None                                         # SteamOS without Holo's update-grub
+    progs.add("update-grub")
+    b = edid.boot_backend()
+    assert b["kind"] == "steamos-grub" and b["regen"] == [["update-grub"]] and not b["initramfs"]
+    assert b["keep"] == "/etc/atomic-update.conf.d/clawdeck-vrr.conf"
+    monkeypatch.setattr(edid, "_driver_in_initramfs", lambda: True)
+    assert edid.boot_backend() is None                                         # driver starts before /etc: no
+    progs.discard("update-grub")
     monkeypatch.setattr(distro, "info", lambda: {"kind": "cachyos", "name": "CachyOS", "atomic": False, "like": "arch"})
     assert edid.boot_backend()["kind"] == "grub"
     globs["/etc/default/grub.d/*"] = ["/etc/default/grub.d/x.cfg"]
@@ -339,4 +348,79 @@ def test_no_way_to_apply_says_why_instead_of_offering_the_button(panel, tmp_path
     monkeypatch.setattr(edid, "boot_backend", lambda: None)
     monkeypatch.setattr(edid.shutil, "which", lambda n: None)
     st = edid.status()
-    assert not st["supported"] and "SteamOS support" in st["reason"]
+    assert not st["supported"] and "boot setting" in st["reason"]
+
+
+def _steamos_env(tmp_path, monkeypatch):
+    from clawdeck import distro
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    grub = tmp_path / "etc/default/grub"
+    grub.parent.mkdir(parents=True)
+    valve = 'GRUB_DEFAULT=saved\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 splash quiet"\n'
+    grub.write_text(valve)
+    keep = tmp_path / "etc/atomic-update.conf.d/clawdeck-vrr.conf"
+    keep.parent.mkdir(parents=True)
+    monkeypatch.setattr(edid, "KEEP_CONF", str(keep))
+    monkeypatch.setattr(distro, "info", lambda: {"kind": "steamos", "name": "SteamOS", "atomic": False, "like": "arch"})
+    b = {"kind": "steamos-grub", "conf": str(grub), "line": edid.GRUB_LINE, "regen": [["update-grub"]],
+         "initramfs": False, "keep": str(keep)}
+    monkeypatch.setattr(edid, "boot_backend", lambda: b)
+    return b, grub, keep, valve, ran
+
+
+def test_steamos_boot_line_keep_list_and_exact_undo(panel, tmp_path, monkeypatch):
+    """SteamOS: one marked line in /etc/default/grub, Holo's update-grub, and a keep-list drop-in naming ONLY
+    ClawDeck's EDID file (never /etc/default/grub, which would shadow Valve's changes). No initramfs rebuild. Undo
+    leaves Valve's file byte for byte and removes the drop-in."""
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    r = edid.conf_enable(b)
+    assert r["ok"] and r["restart"] and ran == [["update-grub"]]
+    text = grub.read_text()
+    assert text.startswith(valve) and text.rstrip().endswith(edid.MARK) and "drm.edid_firmware=eDP-1:edid/clawdeck-" in text
+    entries = [ln for ln in keep.read_text().splitlines() if ln and not ln.startswith("#")]
+    assert entries == [f"{edid.EDID_DIR}/clawdeck-*.bin"]
+    assert not (tmp_path / "etc/mkinitcpio.conf.d/clawdeck-edid.conf").exists()
+    assert edid.conf_disable(b)["ok"] and grub.read_text() == valve and not keep.exists()
+    assert not list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
+
+
+def test_steamos_update_brings_back_valves_grub_file_and_clawdeck_adds_its_line_again(panel, tmp_path, monkeypatch):
+    b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
+    assert edid.steamos_after_update() is None and not ran                   # fix never turned on: nothing
+    assert edid.conf_enable(b)["ok"]
+    assert edid.steamos_after_update() is None and len(ran) == 1             # line still there: nothing
+    new_valve = 'GRUB_DEFAULT=saved\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 splash quiet newparam=1"\n'
+    grub.write_text(new_valve)                                              # the update: Valve's new file, EDID kept
+    r = edid.steamos_after_update()
+    assert r["ok"] and len(ran) == 2
+    text = grub.read_text()
+    assert text.startswith(new_valve) and "newparam=1" in text and text.rstrip().endswith(edid.MARK)
+    grub.write_text(new_valve)
+    for f in (tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"):
+        f.unlink()                                                          # drop-in alone: nothing to restore
+    assert edid.steamos_after_update() is None and not keep.exists() and grub.read_text() == new_valve
+
+
+def test_driver_in_the_initramfs_is_read_from_the_running_image(tmp_path, monkeypatch):
+    img = tmp_path / "initramfs-linux-neptune-72.img"
+    img.write_bytes(b"x")
+    monkeypatch.setattr(edid, "_gpu_driver", lambda: "xe")
+    monkeypatch.setattr(edid, "_cmdline", lambda: "BOOT_IMAGE=/boot/vmlinuz-linux-neptune-72 quiet")
+    monkeypatch.setattr(edid.shutil, "which", lambda n: "/usr/bin/lsinitcpio" if n == "lsinitcpio" else None)
+    real_stat = edid.os.stat
+    monkeypatch.setattr(edid.os, "stat", lambda p, *a, **k: real_stat(str(img) if p == "/boot/initramfs-linux-neptune-72.img" else p))
+    listing = {"out": "usr/lib/modules/7.2/kernel/drivers/nvme/host/nvme.ko.zst\n"}
+
+    class R:
+        returncode = 0
+        @property
+        def stdout(self):
+            return listing["out"]
+    monkeypatch.setattr(edid.subprocess, "run", lambda *a, **k: R())
+    edid._initramfs_cache.clear()
+    assert edid._driver_in_initramfs() is False                              # Valve's hooks: no GPU driver
+    edid._initramfs_cache.clear()
+    listing["out"] += "usr/lib/modules/7.2/kernel/drivers/gpu/drm/xe/xe.ko.zst\n"
+    assert edid._driver_in_initramfs() is True
+    monkeypatch.setattr(edid, "_gpu_driver", lambda: "amdgpu")
+    assert edid._driver_in_initramfs() is None                               # not Intel: not this check's business

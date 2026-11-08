@@ -45,7 +45,8 @@ py_modules/clawdeck/
    framegen.py  Decky Framegen compatibility: is it installed, fgmod state (read-only; ClawDeck doesn't install it)
    launchenv.py per-game <runtime>/launch/<appid>.env: XMX off, XESS_FG, IGDEXT_XELL_CAP=off, XESS=latest, FSR routes,
                 OptiScaler presets (read by the wrapper)
-   edid.py      the panel list's VRR range fix for Linux (validated panels only; drm.edid_firmware + initramfs-etc)
+   edid.py      the panel list's VRR range fix for Linux (validated panels only; drm.edid_firmware: rpm-ostree + initramfs-etc on Bazzite,
+                the bootloader config on CachyOS, /etc/default/grub + update-grub + a keep-list entry on SteamOS)
    buttons.py   Claw 8 EX face buttons: InputPlumber override (claw8ex map) for MS-1T91
    health.py    checks + one-line summary + the bug report
    changes.py   what changed since the last start (kernel, Mesa, OS, controller service, XeSS, Decky)
