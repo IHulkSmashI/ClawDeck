@@ -179,3 +179,14 @@ def test_accelerometer_is_off_by_default_and_toggles_as_a_second_imu_source(tmp_
     assert buttons.accel_in_override() and f"capability_map_id: {buttons.MAP_ID}" in open(buttons.DEVICE_OVERRIDE).read()
     assert gyro.set_accel(False)["ok"] and not buttons.accel_in_override() and buttons.imu_in_override()
     assert gyro.disable()["ok"] and not buttons.imu_in_override()
+
+
+def test_a_hand_installed_copy_of_the_helpers_is_turned_off_not_doubled(tmp_path, monkeypatch):
+    ran, kargs = _env(tmp_path, monkeypatch)
+    os.makedirs(gyro.UNIT_DIR, exist_ok=True)
+    for u in gyro.MANUAL_UNITS:
+        open(os.path.join(gyro.UNIT_DIR, u), "w").write("[Service]\n")
+    r = gyro.enable(fetch=lambda url: _kit())
+    assert r["ok"] and r["manual_off"] == list(gyro.MANUAL_UNITS)
+    assert ["systemctl", "disable", "--now", *gyro.MANUAL_UNITS] in ran
+    assert all(os.path.exists(os.path.join(gyro.UNIT_DIR, u)) for u in gyro.MANUAL_UNITS)   # their files stay

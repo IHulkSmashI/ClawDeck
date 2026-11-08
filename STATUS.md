@@ -52,10 +52,9 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
-**Claw 8 EX gyro (2026-11-08, branch claw8ex-gyro, not merged):** Kisenir's tested method packaged (gyro.py); he OK'd it. Waiting
-on a run on the maintainer's Claw: Fixes -> Install gyro ->
-cold boot -> `dmesg | grep -i ish` shows "firmware loaded", `ls /sys/bus/iio/devices/*/name` has gyro_3d, Steam's
-controller settings show gyro; then Remove -> restart -> back to stock. Bazzite only for now.
+**Claw 8 EX gyro (beta 9, 2026-11-08):** Kisenir ran ClawDeck's one-button install on his EX: Install works at once,
+Remove takes it out (no cold boot needed for him, but he already had MSI's firmware loaded). Still worth a run on the
+maintainer's EX from stock (firmware never loaded before): Install -> cold boot -> gyro in Steam -> Remove.
 
 **Autotune target fps + faster recovery (2026-11-08):** not run on the Claw yet. Target mode (Power → Autotune target,
 Auto FPS) follows DeckyTDPTuner's governor; most-frames mode now raises at once when a heavy scene drops clearly under

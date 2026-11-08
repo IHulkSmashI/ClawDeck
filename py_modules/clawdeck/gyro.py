@@ -83,6 +83,9 @@ WantedBy=multi-user.target
 """,
 }
 UNIT_DIR = "/etc/systemd/system"
+# the same two helpers set up by hand from Kisenir's bundle (its README's unit names): two keepalives and two bias
+# correctors on one sensor fight each other, so ClawDeck's install turns those off (their files stay)
+MANUAL_UNITS = ("ish-imu-keepalive.service", "ish-gyro-bias.service")
 
 
 def _run(cmd: list[str], timeout: float = 120) -> tuple[bool, str]:
@@ -251,6 +254,10 @@ def enable(fetch=None) -> dict:
         _undo_files(done)
         return {"ok": False, "error": f"gyro install: {e}"}
     _run(["systemctl", "daemon-reload"], 60)
+    manual = [u for u in MANUAL_UNITS if os.path.exists(os.path.join(UNIT_DIR, u))]
+    if manual:
+        _run(["systemctl", "disable", "--now", *manual], 60)
+        log.info("gyro: turned off the hand-installed %s (ClawDeck's own run instead)", ", ".join(manual))
     ok, out = _run(["systemctl", "enable", "--now", *UNITS], 60)
     if not ok:
         _undo_files(done)
@@ -265,7 +272,7 @@ def enable(fetch=None) -> dict:
             disable()
             return {"ok": False, "error": f"kernel argument: {out}"}
     log.info("gyro installed (firmware, HID-BPF, services, InputPlumber imu source)")
-    return {"ok": True, "restart": True,
+    return {"ok": True, "restart": True, "manual_off": manual,
             "next": "shut the Claw down fully and turn it on again (a cold boot clears the sensor hub), then "
                     "recalibrate gyro once in Steam (Settings -> Controller -> Gyro)"}
 
