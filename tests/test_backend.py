@@ -1491,7 +1491,7 @@ def test_target_fps_fewest_watts_that_hold_it_and_fast_back_up_in_a_heavy_scene(
     at, s, run = _target_tuner(fake_hw, monkeypatch, 60)
     scene = {"fps_per_w": 4.0}
     _Game(at, lambda tdp, *_: min(90.0, scene["fps_per_w"] * tdp))
-    assert s.learned.tdp == 25
+    assert s.learned.tdp == 17                                   # mid-range start (8..25)
     run(300)
     assert s.learned.tdp == 15 and s.phase == "target"          # 15 W gives 60; 14 W (56) would be under 97 %
     st = at.status()
@@ -1570,3 +1570,28 @@ def test_autotune_target_setting_is_saved_clamped_and_reaches_the_running_sessio
     p.settings.update(autotune=True, autotune_target=45, autotune_auto_fps=False, autotune_plugged=True)
     p._start_game_power("123", True)
     assert started["target"] == 45 and started["auto_fps"] is False and started["fg"] == 0
+
+
+def test_target_fps_gets_the_tdp_moving_and_locked_fast(fake_hw, monkeypatch):
+    """From the start to the settled watts in about a minute, then no more changes while the game holds."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    _Game(at, lambda tdp, *_: min(100.0, 5.0 * tdp))            # 12 W gives 60
+    assert s.learned.tdp == 19                                   # mid-range start (8..30)
+    t = 0
+    while s.learned.tdp != 12 and t < 200:
+        run(1)
+        t += 1
+    assert s.learned.tdp == 12 and t <= 60, t
+    run(30)                                                      # one probe of 11 W, straight back: the floor
+    changes = s.last_change_at
+    run(240)
+    assert s.learned.tdp == 12 and s.last_change_at == changes and s.g_floor == 12   # locked
+    at.session = None
+
+
+def test_target_fps_a_too_low_start_climbs_in_seconds(fake_hw, monkeypatch):
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    _Game(at, lambda tdp, *_: min(100.0, 2.4 * tdp))            # needs 25 W for 60
+    run(12)
+    assert s.learned.tdp >= 25                                   # 19 W -> 25 W within ~12 s
+    at.session = None
