@@ -17,7 +17,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   HID sensors, which MSI ISH firmware file loads it (MSI's ISH kit 5.8.1.7782, FWImage/0004), wrote the HID-BPF program
   that relabels them as a standard accelerometer and gyrometer with bias correction (`tools/gyro/MSI__Claw-ISH-IMU.bpf.c`,
   GPL-2.0-only), the keepalive and bias helpers (`py_modules/clawdeck/gyro_files/`) and the InputPlumber imu source.
-  ClawDeck installs his method with one button; the BPF program is built from his source.
+  ClawDeck installs his method with one button; the BPF program is built from his source. Used with his permission
+  (2026-11-08); his helpers are GPL-2.0-or-later. He also exposed the gyro ClawTweaks uses on Windows.
 - **[udev-hid-bpf](https://gitlab.freedesktop.org/libevdev/udev-hid-bpf)** (libevdev) — loads HID-BPF programs from
   `/etc/udev-hid-bpf/`; its headers build the gyro program.
 - **[DeckyTDPTuner](https://github.com/sidharthify/DeckyTDPTuner)** by sidharthify (GPL-3.0) — Autotune's target fps

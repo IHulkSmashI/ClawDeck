@@ -163,7 +163,8 @@ def status(board: str | None) -> dict:
     if not on:
         state, line = "off", "Gyro is off: the Claw 8 EX's gyro needs MSI's sensor-hub firmware, which ClawDeck can install"
     elif not arg_now or not hub or not gyro:
-        state, line = "restart", "Gyro installed: restart the Claw once, then recalibrate gyro in Steam (Controller settings)"
+        state, line = "restart", ("Gyro installed: shut the Claw down fully and turn it on again (a cold boot, not a "
+                                  "restart), then recalibrate gyro in Steam (Controller settings)")
     elif not ip or any(v != "active" for v in services.values()):
         state, line = "partial", "Gyro: the sensor works, but InputPlumber or ClawDeck's gyro services aren't running"
     else:
@@ -265,7 +266,8 @@ def enable(fetch=None) -> dict:
             return {"ok": False, "error": f"kernel argument: {out}"}
     log.info("gyro installed (firmware, HID-BPF, services, InputPlumber imu source)")
     return {"ok": True, "restart": True,
-            "next": "restart the Claw, then recalibrate gyro once in Steam (Settings -> Controller -> Gyro)"}
+            "next": "shut the Claw down fully and turn it on again (a cold boot clears the sensor hub), then "
+                    "recalibrate gyro once in Steam (Settings -> Controller -> Gyro)"}
 
 
 def _undo_files(done: list[str]) -> None:
