@@ -37,8 +37,11 @@ fps you picked, judged every second on rendered (base) frames. The rules are Dec
 backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in mind:
   - a miss is the last G_WIN seconds AND the last second under G_MISS of the target: +G_RAISE W at once (+G_RAISE_BIG
     far under), at most every G_RAISE_GAP s, then judged on fresh frames only;
-  - -1 W (-2 W far above) only after G_LOWER_AFTER s with no change and no miss, at G_LOWER_OK of the target or more,
-    with GPU headroom;
+  - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), at G_LOWER_OK of
+    the target or more, with GPU headroom: 1 W near the target, far above it half the way to where the watts would
+    just hold it (frames roughly follow watts; Handheld Companion's assumption), at most G_STEP_MAX W;
+  - it starts mid-range (Winhanced), or at the watts that held the same target in this game last time; raises are
+    proportional too (at least +2 W, +4 W far under, at most G_STEP_MAX);
   - a miss within G_BLAME s of lowering makes the watts before it the floor (a calm scene can't talk it below what the
     heavy ones need: the RE4 report, 2026-11-08); the floor comes down 1 W per G_FLOOR_DECAY s without a miss;
   - at the full TDP and still under for AUTO_FPS_S: Auto FPS (Winhanced's idea) holds the closest fps it can reach
@@ -95,7 +98,10 @@ G_WIN = 3               # seconds of history a miss is judged on (theirs: 4 tick
 G_MISS = 0.93           # under this share of the target is a miss
 G_RAISE, G_RAISE_BIG = 2, 4
 G_RAISE_GAP = 2         # s between raises: the last one has to kick in
-G_LOWER_AFTER = 15      # s with no change and no miss before -1 W
+G_LOWER_AFTER = 12      # s with no change and no miss before lowering near the target
+G_LOWER_FAST = 5        # ... and while clearly above it (G_FAR): the PL1 window is 8 s, so a step shows within that
+G_FAR = 1.15            # this far above the target: proportional steps down, G_LOWER_FAST apart
+G_STEP_MAX = 6          # the most one step moves (up or down)
 G_LOWER_OK = 0.97       # ... and at least this share of the target (hysteresis: lower above, raise under 0.93)
 G_BLAME = 20            # s: a miss this soon after lowering blames the lowering (theirs 5 s; Intel's PL1 window here)
 G_FLOOR_DECAY = 300     # s without a miss: the learned floor comes down 1 W (theirs 120 s: one dip every 2 min
@@ -422,8 +428,8 @@ class Autotune:
             l.tdp = max(s.floor_tdp, min(int(known["tdp"]), s.ceiling_tdp))
             if auto_fps and known.get("target_eff"):
                 s.target = float(min(target, known["target_eff"]))
-        else:
-            l.tdp = s.ceiling_tdp
+        else:                                             # mid-range (Winhanced): misses climb back in seconds
+            l.tdp = max(s.floor_tdp, min(s.ceiling_tdp, -(-(s.floor_tdp + s.ceiling_tdp) // 2)))
         l.target, l.target_eff = target, s.target
         now = time.monotonic()
         s.g_hist, s.g_last_change, s.g_last_miss, s.g_last_drop = [], now, now, None
@@ -440,7 +446,7 @@ class Autotune:
             return
         if target:
             self._start_target(s, {}, int(target), auto_fps)
-            self._tdp(s.learned, self._top(s))
+            self._tdp(s.learned, min(s.learned.tdp, self._top(s)))
             self._tau(s, True)
             s.paused = False
         elif s.phase == "target":
@@ -681,7 +687,10 @@ class Autotune:
                 return
             if now - s.g_last_change < G_RAISE_GAP:
                 return
-            w, was = min(top, l.tdp + (G_RAISE_BIG if win < T * 0.75 else G_RAISE)), l.tdp
+            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_MAX
+            need = -(-int(l.tdp * (T / max(win, 1.0) - 1) * 10) // 10)
+            step = max(G_RAISE_BIG if win < T * 0.75 else G_RAISE, min(G_STEP_MAX, need))
+            w, was = min(top, l.tdp + step), l.tdp
             if blamed:
                 w, s.g_last_drop = min(top, max(s.g_drop_from, l.tdp + 1)), None   # exactly back to what held
             if self._tdp(l, w):
@@ -719,15 +728,24 @@ class Autotune:
                 return
         else:
             s.g_up_since = None
-        if s.g_floor > s.floor_tdp and now - s.g_last_miss > G_FLOOR_DECAY and now - s.g_floor_at > G_FLOOR_DECAY:
+        # the floor comes down only when the game got lighter (well above the target, or the GPU clearly idle under a
+        # frame limit): a game that stays as heavy keeps its watts locked instead of a probe dip every few minutes
+        lighter = win >= T * G_FAR or (smp.gpu_busy is not None and smp.gpu_busy < 60)
+        if (lighter and s.g_floor > s.floor_tdp and now - s.g_last_miss > G_FLOOR_DECAY
+                and now - s.g_floor_at > G_FLOOR_DECAY):
             s.g_floor, s.g_floor_at = s.g_floor - 1, now
         if now - s.g_last_change >= 60 and now - s.g_last_miss >= 60:
             s.settled = True                              # a minute steady: worth saving for the game
         headroom = smp.gpu_busy is None or smp.gpu_busy < G_BUSY
         low = max(s.floor_tdp, s.g_floor)
+        far = win >= T * G_FAR
+        wait = G_LOWER_FAST if far else G_LOWER_AFTER
         if (headroom and l.tdp > low and len(s.g_hist) >= G_WIN and win >= T * G_LOWER_OK
-                and now - s.g_last_change >= G_LOWER_AFTER and now - s.g_last_miss >= G_LOWER_AFTER):
-            w, was = max(low, l.tdp - (2 if win >= T * 1.15 else 1)), l.tdp
+                and now - s.g_last_change >= wait and now - s.g_last_miss >= wait):
+            # far above: half the way to where the watts would just hold the target (frames roughly follow watts),
+            # at most G_STEP_MAX; near it: 1 W
+            step = max(1, min(G_STEP_MAX, int((l.tdp - l.tdp * T / win) / 2))) if far else 1
+            w, was = max(low, l.tdp - step), l.tdp
             if self._tdp(l, w):
                 s.g_drop_from, s.g_last_drop, s.g_last_change, s.g_hist = was, now, now, []
                 self._did(s, f"{win:.0f} fps holds the {T:.0f} target: lowered TDP to {w} W", f"−{was - w} W")
