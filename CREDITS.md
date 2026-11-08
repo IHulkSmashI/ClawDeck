@@ -13,6 +13,10 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
 - **PL2 = PL1 + 2 W** follows Handheld Daemon (`adjustor/core/rapl.py`), PowerControl (`cpu.py`) and PowerStation
   (`intel_apu_database.toml`, max_boost 2.0); found in the 2026-11-05 audit of proven TDP tools.
+- **[DeckyTDPTuner](https://github.com/sidharthify/DeckyTDPTuner)** by sidharthify (GPL-3.0) — Autotune's target fps
+  mode follows its governor (`backend/internal/tdp/governor.go`): a miss over a short window and the last tick, +2 W at
+  once (+4 W far under), -1 W only after 15 s steady with GPU headroom, a miss right after lowering makes the watts
+  before it the floor, and the floor decays. Re-implemented in Python with Intel's PL1 window in mind; not copied.
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** — Steam client listeners (battery state,
   suspend/resume) and Decky patterns.
 - **[handheld-control](https://github.com/kupecjan1980-pixel/handheld-control)** (GPL-2.0-or-later) — the ONEXPLAYER 3's

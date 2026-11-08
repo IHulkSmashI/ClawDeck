@@ -32,6 +32,8 @@ const state = {
   floor: null as null | number,
   customTdp: null as null | number,
   keep: 5,
+  target: 0 as number,
+  autoFps: true,
   launch: { xmx: true, opti: "fsr4_xmx", fg: 2, opti_fg: "dlssg", opti_overlay: 2 } as any,
   framegen: true,
   xessInstalled: !(typeof location !== "undefined" && location.hash.includes("firstrun")),
@@ -156,7 +158,7 @@ export const backend = {
     hhd: hhd(), msi_firmware: true, tdp_backend: hhd() ? "hhd" : "rapl", tdp_w: scenario.game && state.autotune ? atW() : state.tdp,
     firmware_tdp: { pl1_w: 0, pl2_w: 0 },
     limits: { min: 8, battery_max: 35, plugged_max: 35, sppt_max: 45 }, range: { min: 8, max: 35 },
-    custom_tdp: state.customTdp, autotune_floor: state.floor, autotune_keep: state.keep, thermal: thermal(),
+    custom_tdp: state.customTdp, autotune_floor: state.floor, autotune_keep: state.keep, autotune_target: state.target ?? 0, autotune_auto_fps: state.autoFps ?? true, thermal: thermal(),
   }),
   apply_profile: (name: string) => {
     const p = PROFILE_TABLE[name];
@@ -176,6 +178,7 @@ export const backend = {
   set_gpu_power_profile: (v: boolean) => { state.gpuSaving = v; const p = v ? "power_saving" : "base"; return done("GPU efficiency mode", p, p); },
   set_autotune_floor: (w: number | null) => { state.floor = w; return { ok: true, floor_w: w ?? 8, summary: `Autotune floor ${w ?? 8} W`, error: null }; },
   list_profiles: () => Object.fromEntries(Object.entries(PROFILE_TABLE).map(([k, v]) => [k, { tdp: v[0], cpu_max_pct: v[1] }])),
+  set_autotune_target: (t: number, a: boolean) => { state.target = t; state.autoFps = a; return { ok: true, target: t, auto_fps: a, summary: t ? `Autotune holds ${t} fps with the fewest watts` : "Autotune: nearly the most frames for the watts", error: null }; },
   set_autotune_keep: (v: number) => { state.keep = v; return { ok: true, keep_pct: v, summary: `Autotune keeps within ${v} % of the most the TDP gives`, error: null }; },
   get_autotune: () => (scenario.game && state.autotune
     ? { running: true, enabled: true, appid: "2054970", paused: false, phase: "hold", tdp: atW(), ceiling_tdp: state.tdp, floor_tdp: state.floor ?? 8,

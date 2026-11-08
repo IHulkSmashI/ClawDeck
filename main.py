@@ -457,6 +457,8 @@ class Plugin:
         st["autotune_w"] = s.learned.tdp if s is not None and not s.paused else None
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
+        st["autotune_target"] = int(self.settings.get("autotune_target") or 0)
+        st["autotune_auto_fps"] = self.settings.get("autotune_auto_fps", True) is not False
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -693,7 +695,10 @@ class Plugin:
             floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
             self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
                                 keep_pct=self.settings.get("autotune_keep"),
-                                xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"))
+                                xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"),
+                                target=int(self.settings.get("autotune_target") or 0) or None,
+                                auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
+                                fg=self._game_fg(appid))
             result["autotune"] = "started"
             quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
@@ -902,12 +907,30 @@ class Plugin:
             self.running_plugged = plugged
             return {"reapplied": True, **self._restart_game_power(self.running_appid, plugged)}
 
+    def _game_fg(self, appid: str | None) -> int:
+        """ClawDeck's frame generation multiplier for the game (0: off): Autotune divides presented frames by it when
+        XeLL's rendered-frame figure isn't there."""
+        launch = self.profiles.get_launch(appid) if appid else {}
+        fg = launch.get("fg") or 0
+        return int(fg) if fg >= 2 and launch.get("opti_fg") != "off" else 0
+
+    async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
+        """Autotune target: 0 / None = nearly the most frames for the watts (as before); a number = the fewest watts
+        that hold that many rendered fps. Auto FPS: an out-of-reach target becomes the closest fps it can hold.
+        Applies to the running game at once (from the full TDP), and to every game from its start."""
+        t = int(fps or 0)
+        t = 0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240))
+        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, bool(auto_fps)
+        self._save_settings()
+        self.autotune.set_target(t or None, bool(auto_fps))
+        words = (f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
+                 if t else "Autotune: nearly the most frames for the watts")
+        return {"ok": True, "target": t, "auto_fps": bool(auto_fps), "summary": words, "error": None}
+
     async def get_autotune(self) -> dict:
         st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid}
         # the running game's frame generation (ClawDeck's pick): the Power panel says what that does to Autotune
-        launch = self.profiles.get_launch(self.running_appid) if self.running_appid else {}
-        fg = launch.get("fg") or 0
-        st["game_fg"] = fg if fg >= 2 and launch.get("opti_fg") != "off" else 0
+        st["game_fg"] = self._game_fg(self.running_appid)
         if not st.get("running"):
             st["why"] = self._autotune_why()
         return st
