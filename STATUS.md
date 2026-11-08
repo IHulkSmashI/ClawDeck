@@ -58,12 +58,12 @@ request on the Claw once: `python3 -c "import sys;sys.path.insert(0,'$HOME/homeb
 from clawdeck import msibios;print(msibios.refresh('MS-1T91'))"` shows latest E1T91IMS.10E (or newer). If MSI
 refuses a non-browser client, it says so in `error`.
 
-**VRR fix on SteamOS / CachyOS (beta 5, 2026-11-07):** not run on hardware yet. After an independent review of
-beta 4: SteamOS is never edited (live debugfs EDID override, applied at every start; boot-loop guard counts real
-reboots by boot id). CachyOS: Limine only when /etc/default/limine sets KERNEL_CMDLINE[default] itself (and no
+**VRR fix on SteamOS / CachyOS (beta 5, 2026-11-07; beta 6):** a tester on SteamOS 3.9.5 showed the live debugfs
+EDID override does nothing on Intel eDP (i915/xe cache the panel EDID), so beta 6 no longer offers it there and
+Fixes says why. SteamOS needs a boot method that survives its updates (asked the tester for /etc/default/grub, the
+regen tool and the atomic-update keep list). SteamOS is never edited. CachyOS: Limine only when /etc/default/limine sets KERNEL_CMDLINE[default] itself (and no
 limine-entry-tool.d override), systemd-boot only with OVERWRITE_EXISTING=yes, GRUB only without grub.d; regenerate
-via systemd-run with no time limit; undo removes only marker lines. Check on SteamOS: Fixes → Install VRR fix, the
-range shows 30–120 Hz at once and again after a restart. Ask SteamOS/CachyOS testers for their Export log.
+via systemd-run with no time limit; undo removes only marker lines. Check on CachyOS: the range shows 30–120 Hz after a restart. Ask SteamOS/CachyOS testers for their Export log.
 
 **XMX on any Proton + Update button (2026-11-07):**
 - ~~GE-Proton with stock copies~~ **tested 2026-11-07 on the Claw 8 EX**: CONTROL Resonant (FSR 4.1.2 + XeFG 2x) on
