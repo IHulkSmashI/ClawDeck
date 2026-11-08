@@ -74,6 +74,24 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         </PanelSectionRow>
       )}
+      {f?.gyro?.applies && (
+        <PanelSectionRow>
+          <Group title="Gyro (beta)" />
+          <Status ok={f.gyro.state === "on" ? true : f.gyro.state === "off" ? null : false} label={f.gyro.line ?? "Gyro"}
+            detail={f.gyro.installed ? `firmware ${f.gyro.firmware_ok ? "MSI's" : "missing"} · sensor ${f.gyro.gyro_iio ? "found" : "not yet"} · InputPlumber ${f.gyro.inputplumber_imu ? "reads it" : "doesn't read it"}` : undefined} />
+          {(f.gyro.installed || f.gyro.supported) && (
+            <ButtonItem layout="below" disabled={busy}
+              description={explain(f.gyro.installed ? "Takes out the sensor-hub firmware, the gyro program, its two services and the gyro line in InputPlumber's config. Restart to finish."
+                : "The Claw 8 EX's gyro sits behind Intel's sensor hub, which needs MSI's firmware. ClawDeck downloads MSI's sensor-hub kit, checks the exact firmware file, installs it with a small program that lets Linux read the gyro, and tells InputPlumber to pass it to Steam as a Steam Deck gyro. Then restart once and recalibrate gyro in Steam's controller settings. Method found by Kisenir on r/MSIClaw.",
+                undefined, f.gyro.installed ? "none; the gyro is gone after the restart." : "a restart; Remove puts everything back. A firmware file other than MSI's tested one is never installed.")}
+              onClick={() => confirmRestart(f.gyro!.installed ? "Remove the gyro?" : "Install the gyro (beta)?",
+                f.gyro!.installed ? "ClawDeck removes its gyro files and the kernel setting. Restart afterwards." : "ClawDeck downloads MSI's sensor-hub firmware (about 1 minute), installs it and the gyro program, then asks for a restart.",
+                f.gyro!.installed ? "Remove" : "Install", () => fix(f.gyro!.installed ? "gyro_off" : "gyro_on"))}>
+              {f.gyro.installed ? "Remove gyro" : "Install gyro (beta)"}
+            </ButtonItem>
+          )}
+        </PanelSectionRow>
+      )}
       {f?.overlay_power?.available && (
         <PanelSectionRow>
           <Group title="Performance overlay" />

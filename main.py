@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -204,6 +204,8 @@ class Plugin:
             decky.logger.info("removing the wider VRR range: %s", edid.disable())   # undone at the next restart
         else:
             edid.remove_files_unless_booted()
+        if gyro.installed():                               # the Claw 8 EX gyro: ClawDeck's files out (restart finishes it)
+            decky.logger.info("removing the gyro: %s", gyro.disable())
         if edid.live_active():                             # the live one: undone now
             decky.logger.info("removing the live VRR range: %s", edid.live_disable())
         try:
@@ -347,6 +349,10 @@ class Plugin:
                 self.settings.setdefault("auto_fixes", {})[key] = "removed" if undo else "applied"
                 self._save_settings()
             return r
+        if fix in ("gyro_on", "gyro_off"):
+            if not gyro.status(self.hw.model_id).get("applies"):
+                return {"ok": False, "error": "the gyro install is for the MSI Claw 8 EX AI+ only"}
+            return await self._bg(gyro.enable if fix == "gyro_on" else gyro.disable)
         if fix in ("overlay_power_on", "overlay_power_off"):
             on = fix.endswith("_on")
             r = await self._bg(lambda: telemetry.apply(on))
@@ -367,6 +373,7 @@ class Plugin:
         vrr, checks = await asyncio.gather(self._bg(edid.status), self.get_health())
         vrr = {**vrr, "idle_hold": await self._bg(edid.gamescope_idle_hold)}
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
+                "gyro": await self._bg(gyro.status, self.hw.model_id),
                 "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()},
                 "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)}}
 
