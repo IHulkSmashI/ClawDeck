@@ -31,6 +31,19 @@ STOCK_DEVICE = "/usr/share/inputplumber/devices/50-msi_claw8_ex_ai_cg3em.yaml"
 DEVICE_OVERRIDE = "/etc/inputplumber/devices.d/50-msi_claw8_ex_ai_cg3em.yaml"
 MAP_OVERRIDE = "/etc/inputplumber/capability_maps.d/msiclaw_claw8ex.yaml"
 MAP_ID = "claw8ex"
+GYRO_BPF = "/etc/udev-hid-bpf/MSI__Claw-ISH-IMU.bpf.o"     # gyro.py installed: the override carries the imu source
+IMU_TEXT = """  # IMU: gyro_3d from the sensor hub (ClawDeck Gyro: HID-BPF relabel + MSI's ISH firmware, see gyro.py)
+  - group: imu
+    iio:
+      name: gyro_3d
+    config:
+      imu:
+        mount_matrix:
+          x: [1, 0, 0]
+          y: [0, 1, 0]
+          z: [0, 0, 1]
+
+"""
 LEGACY_HWDB = ("/etc/udev/hwdb.d/61-clawdeck-msi-claw-8-ex.hwdb", "/etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb")
 MAP_TEXT = f"""# ClawDeck: MSI Claw 8 EX AI+ (MS-1T91). Its firmware sends Win+G for the left face button and F15 alone for
 # the right one; the stock map (claw2) waits for the chord F15+G and for F16, so both buttons are dropped.
@@ -89,13 +102,60 @@ def stock_map_id(stock: str | None = None) -> str | None:
     return m.group(1) if m else None
 
 
-def device_override_text(stock: str | None = None) -> str | None:
-    """The stock device config with its map swapped for ours; None if the stock file is missing or has no map id."""
+def device_override_text(stock: str | None = None, imu: bool | None = None, swap_map: bool = True) -> str | None:
+    """The stock device config with its map swapped for ours (the face buttons) and, with the gyro installed, an imu
+    source added; None if the stock file is missing or has no map id."""
     s = _read(stock or STOCK_DEVICE)
     if s is None or not re.search(r"^capability_map_id:\s*\S+", s, re.M):
         return None
-    s = re.sub(r"^capability_map_id:\s*\S+", f"capability_map_id: {MAP_ID}", s, count=1, flags=re.M)
-    return "# ClawDeck override of the stock file (only capability_map_id differs); delete to restore it\n" + s
+    if imu is None:
+        imu = os.path.exists(GYRO_BPF)
+    what = []
+    if swap_map:
+        s = re.sub(r"^capability_map_id:\s*\S+", f"capability_map_id: {MAP_ID}", s, count=1, flags=re.M)
+        what.append("capability_map_id")
+    if imu and "name: gyro_3d" not in s:
+        m = re.search(r"^(# Optional configuration[^\n]*\n)?options:", s, re.M)
+        if not m:
+            return None
+        s = s[:m.start()] + IMU_TEXT + s[m.start():]
+        what.append("an imu source")
+    return f"# ClawDeck override of the stock file ({' and '.join(what) or 'nothing'} differs); delete to restore it\n" + s
+
+
+def imu_in_override() -> bool:
+    return "name: gyro_3d" in (_read(DEVICE_OVERRIDE) or "")
+
+
+def _restart_inputplumber() -> dict:
+    try:
+        r = _run(["systemctl", "restart", "inputplumber"], timeout=60)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": f"systemctl restart inputplumber: {e}"}
+    if r.returncode != 0:
+        return {"ok": False, "error": f"inputplumber did not restart ({r.returncode})", "log": (r.stdout + r.stderr)[-2000:]}
+    return {"ok": True}
+
+
+def write_override(imu: bool) -> dict:
+    """The gyro's half of the override: add or take out the imu source, keeping the face-button map as it is.
+    Neither left: the override goes, the stock config is back."""
+    cur = _read(DEVICE_OVERRIDE) or ""
+    swap = f"capability_map_id: {MAP_ID}" in cur
+    try:
+        if not swap and not imu:
+            if os.path.exists(DEVICE_OVERRIDE):
+                os.remove(DEVICE_OVERRIDE)
+        else:
+            text = device_override_text(imu=imu, swap_map=swap)
+            if text is None:
+                return {"ok": False, "error": f"{STOCK_DEVICE} not found: this InputPlumber has no config for the Claw 8 EX"}
+            os.makedirs(os.path.dirname(DEVICE_OVERRIDE), exist_ok=True)
+            with open(DEVICE_OVERRIDE, "w", encoding="utf-8") as f:
+                f.write(text)
+    except OSError as e:
+        return {"ok": False, "error": f"cannot write InputPlumber override: {e}"}
+    return _restart_inputplumber()
 
 
 def status(board: str | None) -> dict:
@@ -136,12 +196,19 @@ def apply() -> dict:
 
 def remove() -> dict:
     """Undo apply(): delete the override (and any hwdb file an earlier ClawDeck wrote) and restart InputPlumber."""
-    targets = [p for p in (DEVICE_OVERRIDE, MAP_OVERRIDE, *LEGACY_HWDB) if os.path.exists(p)]
+    keep_imu = os.path.exists(GYRO_BPF)              # the gyro stays: its imu source stays in the override
+    targets = [p for p in (DEVICE_OVERRIDE, MAP_OVERRIDE, *LEGACY_HWDB) if os.path.exists(p)
+               and not (keep_imu and p == DEVICE_OVERRIDE)]
     if not targets:
         return {"ok": True, "removed": []}
     try:
         for p in targets:
             os.remove(p)
+        if keep_imu:
+            text = device_override_text(imu=True, swap_map=False)
+            if text:
+                with open(DEVICE_OVERRIDE, "w", encoding="utf-8") as f:
+                    f.write(text)
         if any(p.endswith(".hwdb") for p in targets):
             _run(["systemd-hwdb", "update"], timeout=60)
         _run(["systemctl", "restart", "inputplumber"], timeout=60)

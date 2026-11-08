@@ -52,6 +52,11 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Claw 8 EX gyro (2026-11-08, branch claw8ex-gyro, not merged):** Kisenir's tested method packaged (gyro.py). Waiting
+on his OK for including his helpers (no license line) and a run on the maintainer's Claw: Fixes -> Install gyro ->
+restart -> `dmesg | grep -i ish` shows "firmware loaded", `ls /sys/bus/iio/devices/*/name` has gyro_3d, Steam's
+controller settings show gyro; then Remove -> restart -> back to stock. Bazzite only for now.
+
 **Autotune target fps + faster recovery (2026-11-08):** not run on the Claw yet. Target mode (Power → Autotune target,
 Auto FPS) follows DeckyTDPTuner's governor; most-frames mode now raises at once when a heavy scene drops clearly under
 its line (RE4 report: Autotune lowered the TDP in a calm scene, then took minutes to come back). Check: RE4 or CONTROL,

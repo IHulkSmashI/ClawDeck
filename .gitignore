@@ -7,3 +7,4 @@ __pycache__/
 ref/
 preview/dist/
 /bin/
+py_modules/clawdeck/gyro_files/*.bpf.o

@@ -128,7 +128,9 @@ export type WideVrr = { panel: string | null; panel_name: string | null; range: 
 export type ButtonsState = { applies: boolean; ok: boolean; installed: boolean; stock_map: string | null; upstream_fixed?: boolean; legacy_hwdb: string[] };
 export type OverlayPower = { available: boolean; on: boolean; files: { path: string; mode: string; readable: boolean }[]; battery_w: number | null };
 export type QuietLog = { applies: boolean; installed: boolean; per_minute: number | null };
-export type Fixes = { vrr: WideVrr; buttons: ButtonsState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower; quiet_log?: QuietLog };
+export type GyroState = { applies: boolean; state?: "off" | "restart" | "partial" | "on"; line?: string; installed?: boolean; supported?: boolean;
+  firmware_ok?: boolean; kernel_arg?: boolean; hub?: boolean; gyro_iio?: boolean; inputplumber_imu?: boolean; services?: Record<string, string> };
+export type Fixes = { vrr: WideVrr; buttons: ButtonsState; gyro?: GyroState; health: { ok: boolean; total: number; problems: number; line: string }; overlay_power: OverlayPower; quiet_log?: QuietLog };
 export const getFixes = callable<[], Fixes>("get_fixes");
 export const uiLog = callable<[msg: string], void>("ui_log");
 export const displayExternal = callable<[], { connected: boolean; connectors: string[] }>("display_external");

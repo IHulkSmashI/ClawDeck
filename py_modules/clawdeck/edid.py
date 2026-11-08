@@ -39,6 +39,7 @@ log = logging.getLogger("clawdeck.edid")
 
 FW_DIR = "/etc/firmware"
 EDID_DIR = f"{FW_DIR}/edid"
+GYRO_FW = f"{FW_DIR}/intel/ish/ish_ptl.bin"     # gyro.py's MSI ISH firmware: firmware_class.path stays while it's there
 CONNECTOR = "eDP-1"
 
 # From the validated panel catalog. Physical = the factory EDID, as the kernel reads it.
@@ -287,7 +288,7 @@ def disable() -> dict:
     args = []
     if cur:
         args.append(f"--delete-if-present=drm.edid_firmware={cur}")
-    if _arg(pending, "firmware_class.path") == FW_DIR:
+    if _arg(pending, "firmware_class.path") == FW_DIR and not os.path.exists(GYRO_FW):   # the gyro needs it too
         args.append(f"--delete-if-present=firmware_class.path={FW_DIR}")
     if args:
         ok, out = _run(["rpm-ostree", "kargs", *args])

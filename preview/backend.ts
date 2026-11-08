@@ -130,6 +130,7 @@ export const backend = {
     return ok();
   },
   get_fixes: () => ({
+    gyro: { applies: true, state: "off", line: "Gyro is off: the Claw 8 EX's gyro needs MSI's sensor-hub firmware, which ClawDeck can install", installed: false, supported: true },
     vrr: { panel: "CSW0801", panel_name: "PN8007QB1-2", range: state.wideVrr ? [30, 120] : [48, 120], wide: state.wideVrr, supported: true, reason: null, pending: null, rpm_ostree: true },
     buttons: { applies: true, ok: state.buttonsFixed, installed: state.buttonsFixed, stock_map: "claw2", upstream_fixed: false, legacy_hwdb: [] },
     health: healthSummary(),

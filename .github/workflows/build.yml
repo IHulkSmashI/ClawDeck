@@ -47,6 +47,9 @@ jobs:
       - run: pnpm exec tsc --noEmit
       - run: pnpm test:ts
       - run: pnpm build
+      # the Claw 8 EX gyro's HID-BPF program, built here from its source (tools/gyro) with udev-hid-bpf's headers
+      - run: sudo apt-get install -y -qq clang llvm libbpf-dev
+      - run: tools/gyro/build-bpf.sh py_modules/clawdeck/gyro_files/MSI__Claw-ISH-IMU.bpf.o
       - name: package (Decky zip layout)
         env:
           TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
@@ -58,6 +61,9 @@ jobs:
           # ClawDeck's cabinet.dll (built and tested above) with its LGPL source, as the LGPL asks of a binary
           test -s bin/cabinet.dll && cp -r bin out/ClawDeck/
           cp -r tools/cabinet-lzms out/ClawDeck/tools/ && rm -rf out/ClawDeck/tools/cabinet-lzms/out
+          # the gyro program's GPL-2.0 source next to its binary
+          mkdir -p out/ClawDeck/tools/gyro && cp tools/gyro/MSI__Claw-ISH-IMU.bpf.c tools/gyro/build-bpf.sh out/ClawDeck/tools/gyro/
+          test -s out/ClawDeck/py_modules/clawdeck/gyro_files/MSI__Claw-ISH-IMU.bpf.o
           cp assets/versions.json assets/games.json out/ClawDeck/assets/
           # nitec's FSR 4.1.2 XMX files inside the zip (pinned in versions.json, sha256 checked): one install, nothing
           # to download afterwards

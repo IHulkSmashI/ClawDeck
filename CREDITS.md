@@ -13,6 +13,13 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
 - **PL2 = PL1 + 2 W** follows Handheld Daemon (`adjustor/core/rapl.py`), PowerControl (`cpu.py`) and PowerStation
   (`intel_apu_database.toml`, max_boost 2.0); found in the 2026-11-05 audit of proven TDP tools.
+- **Kisenir** (r/MSIClaw) — the Claw 8 EX gyro: found that the IMU hides behind the Intel sensor hub as two "custom"
+  HID sensors, which MSI ISH firmware file loads it (MSI's ISH kit 5.8.1.7782, FWImage/0004), wrote the HID-BPF program
+  that relabels them as a standard accelerometer and gyrometer with bias correction (`tools/gyro/MSI__Claw-ISH-IMU.bpf.c`,
+  GPL-2.0-only), the keepalive and bias helpers (`py_modules/clawdeck/gyro_files/`) and the InputPlumber imu source.
+  ClawDeck installs his method with one button; the BPF program is built from his source.
+- **[udev-hid-bpf](https://gitlab.freedesktop.org/libevdev/udev-hid-bpf)** (libevdev) — loads HID-BPF programs from
+  `/etc/udev-hid-bpf/`; its headers build the gyro program.
 - **[DeckyTDPTuner](https://github.com/sidharthify/DeckyTDPTuner)** by sidharthify (GPL-3.0) — Autotune's target fps
   mode follows its governor (`backend/internal/tdp/governor.go`): a miss over a short window and the last tick, +2 W at
   once (+4 W far under), -1 W only after 15 s steady with GPU headroom, a miss right after lowering makes the watts
