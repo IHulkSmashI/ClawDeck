@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, osupdate, battery, screen, selfupdate, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -110,6 +110,8 @@ class Plugin:
         self._health: tuple[float, list] | None = None
         # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
         asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
+        # a newer MSI BIOS for this Claw? MSI's support page list, once per start (read-only, msibios.py)
+        asyncio.get_event_loop().run_in_executor(None, msibios.refresh, self.hw.model_id)
         # the per-game lists, kept current (read at every start): ClawDeck's, the public
         # supported list, OptiScaler's Compatibility List; offline: the copies from last time, else the plugin's
         asyncio.get_event_loop().run_in_executor(None, livedb.refresh, LISTS_DIR, GAMES)

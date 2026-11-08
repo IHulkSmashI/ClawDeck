@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import distro, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import distro, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -119,6 +119,10 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
     if ou.get("applies"):
         out.append({"id": "os_update", "title": distro.name() + " up to date (kernel, Intel graphics driver, Mesa, gamescope)",
                     "ok": not ou["waiting"], "optional": True, "detail": ou["line"], "fix": None})
+    mb = msibios.status(hardware.model_id)
+    if mb.get("applies"):
+        out.append({"id": "msi_bios", "title": "MSI BIOS up to date", "ok": not mb["newer"], "optional": True,
+                    "detail": mb["line"] + (f" ({mb['url']})" if mb["newer"] else ""), "fix": None})
     others = stack.other_plugins(home)
     if others["power"]:
         out.append({"id": "power_plugins", "title": "Only one power plugin", "ok": False,

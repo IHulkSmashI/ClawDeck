@@ -1819,3 +1819,25 @@ def test_new_intel_handhelds_are_known_with_only_what_they_have():
     assert m["name"] == "OneXPlayer X1 Air" and m["xmx"] and not m.get("oled_hdr")
     _, oxp3 = hw.match_model("ONEXPLAYER 3", "ONEXPLAYER 3")
     assert oxp3["oled_hdr"]
+
+
+def test_msi_bios_check_compares_with_msis_list_for_this_board(monkeypatch):
+    """MSI's support page list (download_version / download_release), the running BIOS from DMI: newer only for the
+    same board, revisions counted in hex (10D < 10E < 114); ME firmware entries and other boards don't count."""
+    from clawdeck import msibios
+    msibios._cache.update(at=0.0, latest=None, date=None, error=None, page=None)
+    monkeypatch.setattr(msibios, "running", lambda: "E1T91IMS.10D")
+    listing = [{"download_version": "ME20011.1815(LNL)", "download_release": "2026-08-07"},
+               {"download_version": "E1T91IMS.10E", "download_release": "2026-10-30"},
+               {"download_version": "E1T91IMS.109", "download_release": "2026-07-01"},
+               {"download_version": "E1T52IMS.114", "download_release": "2026-09-17"}]
+    msibios.refresh("MS-1T91", fetch=lambda page: listing)
+    st = msibios.status("MS-1T91")
+    assert st["newer"] and st["latest"] == "E1T91IMS.10E" and "2026-10-30" in st["line"] and st["url"].endswith("#bios")
+    monkeypatch.setattr(msibios, "running", lambda: "E1T91IMS.10E")
+    assert not msibios.status("MS-1T91")["newer"]
+    assert msibios._rev("114") > msibios._rev("10E")
+    msibios._cache.update(at=0.0)
+    msibios.refresh("MS-1T91", fetch=lambda page: (_ for _ in ()).throw(OSError("offline")))
+    assert msibios.status("MS-1T91")["error"]                                     # offline: still a line, no crash
+    assert msibios.status("ONEXPLAYER 3") == {"applies": False}                   # not an MSI Claw
