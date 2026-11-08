@@ -164,3 +164,18 @@ def test_status_only_on_the_claw_8_ex_with_a_panther_lake_sensor_hub(monkeypatch
     assert gyro.status("MS-1T52") == {"applies": False}
     monkeypatch.setattr(gyro, "_has_ish", lambda: False)
     assert gyro.status("MS-1T91") == {"applies": False}
+
+
+def test_accelerometer_is_off_by_default_and_toggles_as_a_second_imu_source(tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    assert not gyro.set_accel(True)["ok"]                                       # gyro first
+    assert gyro.enable(fetch=lambda url: _kit())["ok"]
+    ov = open(buttons.DEVICE_OVERRIDE).read()
+    assert "name: gyro_3d" in ov and "name: accel_3d" not in ov
+    assert gyro.set_accel(True)["ok"]
+    ov = open(buttons.DEVICE_OVERRIDE).read()
+    assert "name: gyro_3d" in ov and "name: accel_3d" in ov and ov.index("accel_3d") < ov.index("options:")
+    assert buttons.apply()["ok"]                                                # face fix keeps the accelerometer
+    assert buttons.accel_in_override() and f"capability_map_id: {buttons.MAP_ID}" in open(buttons.DEVICE_OVERRIDE).read()
+    assert gyro.set_accel(False)["ok"] and not buttons.accel_in_override() and buttons.imu_in_override()
+    assert gyro.disable()["ok"] and not buttons.imu_in_override()

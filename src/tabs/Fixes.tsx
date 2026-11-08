@@ -1,4 +1,4 @@
-import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
+import { ButtonItem, ToggleField, PanelSection, PanelSectionRow } from "@decky/ui";
 import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
@@ -89,6 +89,11 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
                 f.gyro!.installed ? "Remove" : "Install", () => fix(f.gyro!.installed ? "gyro_off" : "gyro_on"))}>
               {f.gyro.installed ? "Remove gyro" : "Install gyro (beta)"}
             </ButtonItem>
+          )}
+          {f.gyro.installed && (
+            <ToggleField label="Accelerometer too" checked={!!f.gyro.accel} disabled={busy}
+              onChange={(v) => fix(v ? "gyro_accel_on" : "gyro_accel_off")}
+              description={explain("Also passes the accelerometer to Steam. Leave it off for gyro aiming: Steam mixes the two and aim gets worse. Turn it on for games that use tilt.", undefined, "none; it switches at once (InputPlumber restarts).")} />
           )}
         </PanelSectionRow>
       )}

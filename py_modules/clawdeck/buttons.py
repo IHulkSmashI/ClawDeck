@@ -44,6 +44,18 @@ IMU_TEXT = """  # IMU: gyro_3d from the sensor hub (ClawDeck Gyro: HID-BPF relab
           z: [0, 0, 1]
 
 """
+ACCEL_TEXT = """  # Accelerometer (ClawDeck Gyro -> Accelerometer on): Steam fuses it with the gyro; gyro aim is better without it
+  - group: imu
+    iio:
+      name: accel_3d
+    config:
+      imu:
+        mount_matrix:
+          x: [1, 0, 0]
+          y: [0, 1, 0]
+          z: [0, 0, 1]
+
+"""
 LEGACY_HWDB = ("/etc/udev/hwdb.d/61-clawdeck-msi-claw-8-ex.hwdb", "/etc/udev/hwdb.d/61-msi-claw-8-ex.hwdb")
 MAP_TEXT = f"""# ClawDeck: MSI Claw 8 EX AI+ (MS-1T91). Its firmware sends Win+G for the left face button and F15 alone for
 # the right one; the stock map (claw2) waits for the chord F15+G and for F16, so both buttons are dropped.
@@ -102,7 +114,8 @@ def stock_map_id(stock: str | None = None) -> str | None:
     return m.group(1) if m else None
 
 
-def device_override_text(stock: str | None = None, imu: bool | None = None, swap_map: bool = True) -> str | None:
+def device_override_text(stock: str | None = None, imu: bool | None = None, swap_map: bool = True,
+                         accel: bool | None = None) -> str | None:
     """The stock device config with its map swapped for ours (the face buttons) and, with the gyro installed, an imu
     source added; None if the stock file is missing or has no map id."""
     s = _read(stock or STOCK_DEVICE)
@@ -110,6 +123,8 @@ def device_override_text(stock: str | None = None, imu: bool | None = None, swap
         return None
     if imu is None:
         imu = os.path.exists(GYRO_BPF)
+    if accel is None:
+        accel = accel_in_override()
     what = []
     if swap_map:
         s = re.sub(r"^capability_map_id:\s*\S+", f"capability_map_id: {MAP_ID}", s, count=1, flags=re.M)
@@ -118,13 +133,17 @@ def device_override_text(stock: str | None = None, imu: bool | None = None, swap
         m = re.search(r"^(# Optional configuration[^\n]*\n)?options:", s, re.M)
         if not m:
             return None
-        s = s[:m.start()] + IMU_TEXT + s[m.start():]
+        s = s[:m.start()] + IMU_TEXT + (ACCEL_TEXT if accel else "") + s[m.start():]
         what.append("an imu source")
     return f"# ClawDeck override of the stock file ({' and '.join(what) or 'nothing'} differs); delete to restore it\n" + s
 
 
 def imu_in_override() -> bool:
     return "name: gyro_3d" in (_read(DEVICE_OVERRIDE) or "")
+
+
+def accel_in_override() -> bool:
+    return "name: accel_3d" in (_read(DEVICE_OVERRIDE) or "")
 
 
 def _restart_inputplumber() -> dict:
@@ -137,7 +156,7 @@ def _restart_inputplumber() -> dict:
     return {"ok": True}
 
 
-def write_override(imu: bool) -> dict:
+def write_override(imu: bool, accel: bool | None = None) -> dict:
     """The gyro's half of the override: add or take out the imu source, keeping the face-button map as it is.
     Neither left: the override goes, the stock config is back."""
     cur = _read(DEVICE_OVERRIDE) or ""
@@ -147,7 +166,7 @@ def write_override(imu: bool) -> dict:
             if os.path.exists(DEVICE_OVERRIDE):
                 os.remove(DEVICE_OVERRIDE)
         else:
-            text = device_override_text(imu=imu, swap_map=swap)
+            text = device_override_text(imu=imu, swap_map=swap, accel=bool(imu and (accel_in_override() if accel is None else accel)))
             if text is None:
                 return {"ok": False, "error": f"{STOCK_DEVICE} not found: this InputPlumber has no config for the Claw 8 EX"}
             os.makedirs(os.path.dirname(DEVICE_OVERRIDE), exist_ok=True)
