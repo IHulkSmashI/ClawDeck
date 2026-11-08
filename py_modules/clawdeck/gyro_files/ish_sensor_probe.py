@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 Kisenir (r/MSIClaw). Part of ClawDeck's Claw 8 EX gyro, used with permission (2026-11-08).
 """
 Read the raw IMU of the MSI Claw 8 EX AI+ from the Intel ISH sensor hub on Linux.
 

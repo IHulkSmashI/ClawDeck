@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Kisenir (r/MSIClaw). Used in ClawDeck with permission (2026-11-08).
 /*
  * MSI Claw 8 EX AI+ (Intel Panther Lake ISH sensor hub, 8087:0AC2):
  * the IMU is declared as two *custom* HID sensors (usage 0x2000e1), which no

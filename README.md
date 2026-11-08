@@ -167,6 +167,7 @@ start, and applies each game's fixes from OptiScaler's compatibility list.
 |---|---|
 | **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. |
 | **Face buttons** (Claw 8 EX) | Maps the two MSI buttons: left = Steam menu, right = Quick Access. |
+| **Gyro (beta)** (Claw 8 EX) | Turns on the EX's gyro for Steam Input: downloads MSI's sensor-hub firmware (checked before it's installed), lets Linux read the gyro, and passes it to Steam as a Steam Deck gyro. One restart; Remove undoes it. Bazzite for now. Method by Kisenir. |
 | **Performance overlay** | Real watts in Steam's performance overlay. |
 | **System log** | Stops a split-lock log flood that costs battery. |
 | **Health check** | One line: all good, or what needs a look. |
@@ -218,7 +219,7 @@ self-test, and **Export log to Desktop** for bug reports.
 ## Uninstall
 
 1. For each game you set up: ClawDeck → the game → **Uninstall OptiScaler from this game**.
-2. **Fixes:** remove the VRR fix and the face-button fix if you want them gone.
+2. **Fixes:** remove the VRR fix, the face-button fix and the gyro if you want them gone.
 3. Decky → gear → ClawDeck → **Uninstall**. Power goes back to the firmware's own and the XMX driver comes out.
 4. Optional: delete `~/.local/share/clawdeck` and `~/fsr4-xmx` (ClawDeck's downloads, about 1 GB).
 
@@ -241,6 +242,9 @@ ClawDeck is free. If you'd like to chip in: [ko-fi.com/gamervault](https://ko-fi
 
 A big thank you to [HHHHanasak1](https://github.com/HHHHanasak1), whose
 [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) puts XeSS on the XMX cores under Linux.
+
+Thanks to Kisenir (r/MSIClaw), who found how to get the Claw 8 EX's gyro working on Linux and let ClawDeck use his
+method and code.
 
 Thanks also to [ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaks) and
 [OptiClick](https://github.com/onehoon/OptiClick) for the inspiration.
