@@ -176,7 +176,7 @@ def status(board: str | None) -> dict:
         why = "this system has no udev-hid-bpf, which loads the gyro program"
     return {"applies": True, "state": state, "line": why or line, "installed": on, "supported": why is None,
             "firmware_ok": fw == FW_SHA256, "kernel_arg": arg_now, "hub": hub, "gyro_iio": bool(gyro),
-            "inputplumber_imu": ip, "services": services}
+            "inputplumber_imu": ip, "services": services, "accel": buttons.accel_in_override()}
 
 
 def _fetch_firmware(fetch=None) -> bytes:
@@ -268,6 +268,17 @@ def enable(fetch=None) -> dict:
     return {"ok": True, "restart": True,
             "next": "shut the Claw down fully and turn it on again (a cold boot clears the sensor hub), then "
                     "recalibrate gyro once in Steam (Settings -> Controller -> Gyro)"}
+
+
+def set_accel(on: bool) -> dict:
+    """The accelerometer as a second imu source. Off by default: with it, Steam fuses it with the gyro and gyro
+    aiming gets worse (Kisenir's tests); some games' tilt controls want it."""
+    if not installed():
+        return {"ok": False, "error": "install the gyro first"}
+    r = buttons.write_override(imu=True, accel=bool(on))
+    if r.get("ok"):
+        r["next"] = "accelerometer on (recalibrate gyro in Steam)" if on else "accelerometer off: gyro only"
+    return r
 
 
 def _undo_files(done: list[str]) -> None:

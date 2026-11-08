@@ -349,6 +349,8 @@ class Plugin:
                 self.settings.setdefault("auto_fixes", {})[key] = "removed" if undo else "applied"
                 self._save_settings()
             return r
+        if fix in ("gyro_accel_on", "gyro_accel_off"):
+            return await self._bg(gyro.set_accel, fix.endswith("_on"))
         if fix in ("gyro_on", "gyro_off"):
             if not gyro.status(self.hw.model_id).get("applies"):
                 return {"ok": False, "error": "the gyro install is for the MSI Claw 8 EX AI+ only"}
