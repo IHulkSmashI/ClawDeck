@@ -3,7 +3,7 @@ import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setPl2, setAutotuneFloor, setAutotuneKeep, setCpuMaxPct, setCpuTurbo,
+  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setPl2, setAutotuneFloor, setAutotuneKeep, setAutotuneTarget, setCpuMaxPct, setCpuTurbo,
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -23,6 +23,8 @@ const PROFILES: { id: string; short: string; does: string; cost: string }[] = [
   { id: "plugged", short: "Plugged", does: "heavy games on the charger", cost: "warm; fans audible" },
   { id: "max", short: "Max", does: "the firmware's ceiling, docked", cost: "hot and loud; few extra frames per watt" },
 ];
+const TARGETS = [{ data: 0, label: "None: nearly the most frames" },
+  ...[30, 40, 45, 50, 60, 72, 90, 120].map((f) => ({ data: f, label: `${f} fps` }))];
 const EPP: { data: string; label: string }[] = [
   { data: "power", label: "Most battery" }, { data: "balance_power", label: "Balanced, battery first" },
   { data: "balance_performance", label: "Balanced, speed first" }, { data: "performance", label: "Fastest" },
@@ -167,11 +169,13 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const running = !!at?.running && !at.paused;
   const thermalLine = at?.thermal?.line ?? null;     // "thermal: stepped to 15 W" once the temperature guard acted
-  const phase = { measure: "measuring the most", balance: "balancing CPU/GPU", lower: "lowering", hold: "holding" }[at?.phase ?? "measure"];
+  const phase = { measure: "measuring the most", balance: "balancing CPU/GPU", lower: "lowering", hold: "holding",
+    target: at?.target ? `holding ${at.target} fps` : "target" }[at?.phase ?? "measure"];
   // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
   const fpsText = at?.avg_fps != null
-    ? `${Math.round(at.avg_fps)} fps${at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : ""}` +
-      (at.source === "rendered" && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
+    ? `${Math.round(at.avg_fps)} fps` + (at.phase === "target" && at.target ? ` (target ${at.target}${at.unreachable && at.user_target && at.target < at.user_target ? `, Auto FPS: ${at.user_target} out of reach` : at.unreachable ? ", out of reach" : ""})`
+        : at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : "") +
+      ((at.source === "rendered" || at.source === "frame-gen pick") && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (!appid ? "Autotune on: starts with the next game"
       : at?.why && at.why !== "not started" ? `Autotune: ${at.why}` : "Autotune on: starting…")
@@ -232,6 +236,19 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <ToggleField label="Autotune (beta, every game)" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
           description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP (3 W steps on a plateau, then 1 W) while the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60 (${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
+        {autotune && (
+          <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
+            selectedOption={st?.autotune_target ?? 0}
+            onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
+            description={explain("A frame rate to hold with the fewest watts: watts come back within seconds when a heavy scene drops below it, and go down slowly while it holds. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+              quick ? undefined : "No target: nearly the most frames the TDP above gives, for less power.", undefined)} />
+        )}
+        {autotune && !!st?.autotune_target && (
+          <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
+            onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
+            description={explain(`If the TDP above can't reach ${st?.autotune_target} fps for a minute, Autotune holds the closest frame rate it can (95 % of what the full TDP gives) instead of running flat out, and goes back toward ${st?.autotune_target} when the game gets lighter.`,
+              undefined, "off: an out-of-reach target keeps the full TDP and says so.")} />
+        )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
         {autotune && !!at?.game_fg && (
           <Note label={`Frame generation is on (${at.game_fg}x)`}>

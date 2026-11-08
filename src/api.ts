@@ -13,7 +13,7 @@ export type PowerStatus = {
   limit_w?: number | null; autotune_w?: number | null;   // in a game with Autotune: your limit, and what it uses now
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
-  custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number; thermal?: Thermal;
+  custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number; autotune_target?: number; autotune_auto_fps?: boolean; thermal?: Thermal;
 };
 /** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
 export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; line: string | null; stepped_s: number | null };
@@ -23,9 +23,10 @@ export type Caps = { device: string; known: boolean; vendor: string | null; beta
   fan: "msi" | "oxp" | null; charge_limit: boolean; face_buttons: boolean; hdr_brightness: boolean };
 export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; caps?: Caps; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
 export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; learned?: any; paused?: boolean; no_frames?: boolean; game_fg?: number; last?: any;
-  phase?: "measure" | "balance" | "lower" | "hold"; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number; keep_fps?: number; saves_w?: number | null;
+  phase?: "measure" | "balance" | "lower" | "hold" | "target"; target?: number | null; user_target?: number | null; auto_fps?: boolean;
+  unreachable?: boolean; best_fps?: number | null; floor_learned?: number | null; fg?: number; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number; keep_fps?: number; saves_w?: number | null;
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
-  source?: "rendered" | "presented"; multiplier?: number | null; window_s?: number;
+  source?: "rendered" | "presented" | "frame-gen pick"; multiplier?: number | null; window_s?: number;
   last_action?: string | null; last_delta?: string | null; last_change_s?: number | null; bound?: "gpu" | "cpu" | "balanced";
   thermal_cap?: number | null; thermal?: Thermal; learning?: boolean; pl1_window_s?: number | null; plugged?: boolean | null;
   game?: string | null; why?: string };
@@ -65,6 +66,7 @@ export const setGpuWindow = callable<[min: number | null, max: number | null], W
 export const setEpp = callable<[value: string], WriteResult>("set_epp");
 export const setGpuPowerProfile = callable<[saving: boolean], WriteResult>("set_gpu_power_profile");
 export const setAutotuneFloor = callable<[watts: number | null], WriteResult & { floor_w: number }>("set_autotune_floor");
+export const setAutotuneTarget = callable<[fps: number, autoFps: boolean], { ok: boolean; target: number; auto_fps: boolean; summary: string; error: string | null }>("set_autotune_target");
 export const setAutotuneKeep = callable<[pct: number], WriteResult & { keep_pct: number }>("set_autotune_keep");
 export const listProfiles = callable<[], Record<string, { tdp?: number; cpu_max_pct?: number; note?: string }>>("list_profiles");
 export const gameStarted = callable<[appid: string], any>("game_started");

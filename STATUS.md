@@ -52,6 +52,13 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune target fps + faster recovery (2026-11-08):** not run on the Claw yet. Target mode (Power → Autotune target,
+Auto FPS) follows DeckyTDPTuner's governor; most-frames mode now raises at once when a heavy scene drops clearly under
+its line (RE4 report: Autotune lowered the TDP in a calm scene, then took minutes to come back). Check: RE4 or CONTROL,
+target 40 and 60 with Steam's frame limit at the same number: watts settle within a few minutes, a heavy fight gets
+watts back within ~5 s, no saw-tooth; with frame generation (2x) the target counts rendered frames. An out-of-reach
+target (60 at 12 W) drops to the closest after a minute with Auto FPS on; off, it stays at the full TDP.
+
 **MSI BIOS check (2026-11-07):** Setup's checks show "MSI BIOS up to date" or "MSI has BIOS E1T91IMS.10E
 (2026-10-30); this Claw runs E1T91IMS.10D …" with MSI's support link. The sandbox can't reach msi.com, so check the
 request on the Claw once: `python3 -c "import sys;sys.path.insert(0,'$HOME/homebrew/plugins/ClawDeck/py_modules');

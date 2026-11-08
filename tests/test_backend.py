@@ -414,9 +414,12 @@ def test_autotune_a_new_scene_or_the_clock_measures_again(fake_hw, monkeypatch):
     for _ in range(14):
         at._step()
     assert s.phase == "hold" and s.learned.tdp == 19
-    fps["v"] = 40.0                                             # a much heavier area
+    fps["v"] = 40.0                                             # a much heavier area: watts back at once
     at._step(); at._step()
-    assert s.phase == "measure" and s.learned.tdp == 20
+    assert s.learned.tdp == 20 and "at once" in s.last_action
+    for _ in range(4):
+        at._step()
+    assert s.learned.max_fps == 40.0 and s.learned.tdp == 20    # ... and the new area is measured
     at.session.phase, at.session.measured_at = "hold", time.monotonic() - autotune.RESCAN_S - 1
     s.learned.fps = 40.0
     at._step()
@@ -1468,3 +1471,102 @@ def test_wide_vrr_live_where_no_rpm_ostree_boot_on_bazzite_and_a_boot_loop_guard
 
 def m_runtime(p):
     return p._vrr_live_again.__func__.__globals__["RUNTIME_DIR"]
+
+
+def _target_tuner(fake_hw, monkeypatch, target, auto_fps=True, ceiling=25):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=ceiling)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+    at._start_target(s, {}, target, auto_fps)
+
+    def run(n):
+        for _ in range(n):
+            clock["t"] += 1
+            at._step()
+    return at, s, run
+
+
+def test_target_fps_fewest_watts_that_hold_it_and_fast_back_up_in_a_heavy_scene(fake_hw, monkeypatch):
+    """DeckyTDPTuner's rules: down 1-2 W after 15 s steady at the target, +2 W at once when it misses."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60)
+    scene = {"fps_per_w": 4.0}
+    _Game(at, lambda tdp, *_: min(90.0, scene["fps_per_w"] * tdp))
+    assert s.learned.tdp == 25
+    run(300)
+    assert s.learned.tdp == 15 and s.phase == "target"          # 15 W gives 60; 14 W (56) would be under 97 %
+    st = at.status()
+    assert st["target"] == 60 and st["saves_w"] == 10
+    scene["fps_per_w"] = 2.95                                    # a heavy scene: 44 fps at 15 W
+    run(12)
+    assert s.learned.tdp >= 19 and "under the 60 target" in s.last_action   # seconds, not minutes
+    run(60)
+    assert s.learned.tdp == 20                                   # 59 fps: back in the band
+    at.session = None
+
+
+def test_target_fps_a_miss_right_after_lowering_makes_that_the_floor(fake_hw, monkeypatch):
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=20)
+    _Game(at, lambda tdp, *_: 62.0 if tdp >= 18 else 50.0)      # calm at 18 W, misses under it
+    run(200)
+    assert s.g_floor == 18 and s.learned.tdp == 18              # tried 17 once, missed, straight back to 18
+    tried = len([1 for _ in range(100) if (run(1), s.learned.tdp)[1] == 17])
+    assert tried == 0 and s.learned.tdp == 18                    # not again within the floor's 5 minutes
+    at.session = None
+
+
+def test_auto_fps_holds_the_closest_fps_it_can_reach_and_goes_back_up(fake_hw, monkeypatch):
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60)
+    cap = {"most": 2.0}
+    _Game(at, lambda tdp, *_: cap["most"] * tdp)                 # 25 W gives 50 fps
+    run(70)
+    assert s.target == 47 and s.unreachable and "out of reach" in s.last_action
+    run(200)
+    assert s.learned.tdp == 23                                   # 46 fps holds 47 (97 %) with the fewest watts
+    cap["most"] = 3.0                                            # a lighter area: 72 fps at 24 W
+    run(40)
+    assert s.target > 47 and "room again" in s.last_action
+    at.session = None
+
+
+def test_without_auto_fps_an_out_of_reach_target_stays_at_the_full_tdp(fake_hw, monkeypatch):
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, auto_fps=False)
+    _Game(at, lambda tdp, *_: 2.0 * tdp)
+    run(120)
+    assert s.target == 60 and s.learned.tdp == 25 and s.unreachable and at.status()["best_fps"] == 50
+    at.session = None
+
+
+def test_target_counts_rendered_frames_with_frame_generation(fake_hw, monkeypatch):
+    """No XeLL figure, ClawDeck's 2x frame generation on: 120 presented is 60 rendered."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60)
+    s.fg = 2
+    _Game(at, lambda tdp, *_: min(180.0, 8.0 * tdp), source="presented")
+    run(300)
+    assert s.learned.tdp == 15 and s.multiplier == 2.0          # 120 presented = 60 rendered at 15 W
+    at.session = None
+
+
+def test_most_frames_mode_measures_rendered_frames_with_frame_generation(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch)
+    s.fg = 2
+    _Game(at, lambda tdp, *_: min(120.0, 6.0 * tdp), source="presented")
+    for _ in range(3):
+        at._step()
+    assert s.learned.max_fps == 60                               # 120 presented / 2
+    at.session = None
+
+
+def test_autotune_target_setting_is_saved_clamped_and_reaches_the_running_session(plugin, monkeypatch):
+    p = plugin
+    got = []
+    monkeypatch.setattr(p.autotune, "set_target", lambda t, a=True: got.append((t, a)))
+    r = p.run(p.set_autotune_target(60, True))
+    assert r["ok"] and r["target"] == 60 and p.settings["autotune_target"] == 60 and got[-1] == (60, True)
+    assert p.run(p.set_autotune_target(5, False))["target"] == 20 and got[-1] == (20, False)   # 20 fps minimum
+    r = p.run(p.set_autotune_target(0, True))
+    assert r["target"] == 0 and got[-1] == (None, True) and "most frames" in r["summary"]
+    started = {}
+    monkeypatch.setattr(p.autotune, "start", lambda *a, **k: started.update(k))
+    p.settings.update(autotune=True, autotune_target=45, autotune_auto_fps=False, autotune_plugged=True)
+    p._start_game_power("123", True)
+    assert started["target"] == 45 and started["auto_fps"] is False and started["fg"] == 0
