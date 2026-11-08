@@ -187,15 +187,20 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
     best, size = None, -1
     want = {e.lower() for e in known_exes or []}
     base = game_dir.rstrip(os.sep).count(os.sep)
+    named: list[str] = []
     for r, d, f in os.walk(game_dir):
+        d.sort()                                         # the same folder every time, whatever the file system's order
         if r.count(os.sep) - base >= 5:
             d[:] = []
-        for x in f:
+        for x in sorted(f):
             lo = x.lower()
             if not lo.endswith(".exe"):
                 continue
-            if lo.endswith(("-win64-shipping.exe", "-wingdk-shipping.exe")) or lo in want:
+            if lo.endswith(("-win64-shipping.exe", "-wingdk-shipping.exe")):
                 return r
+            if lo in want:
+                named.append(r)
+                continue
             if MAIN_EXE_SKIP.search(lo):
                 continue
             try:
@@ -204,6 +209,11 @@ def main_exe_dir(game_dir: str, known_exes: list[str] | None = None) -> str | No
                 continue
             if s > size:
                 best, size = r, s
+    if named:
+        # the same exe name in a DirectX 11 and a DirectX 12 folder (The Witcher 3: bin/x64 and bin/x64_dx12, issue
+        # #141): DLSS, FSR and XeSS live in the DX12 one, so OptiScaler goes there
+        dx12 = [r for r in named if re.search(r"dx12|d3d12", os.path.basename(r), re.I)]
+        return (dx12 or named)[0]
     return best
 
 

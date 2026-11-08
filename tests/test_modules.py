@@ -851,6 +851,17 @@ def test_main_exe_dir_finds_the_real_exe(tmp_path):
     assert optiscaler.main_exe_dir(str(t2)).endswith("bin")
 
 
+def test_the_witcher_3_gets_optiscaler_in_its_dx12_folder(tmp_path):
+    """bin/x64 (DirectX 11) and bin/x64_dx12 both have witcher3.exe; DLSS, FSR and XeSS only exist in DX12 (#141)."""
+    from clawdeck import optiscaler
+    _w(tmp_path / "bin" / "x64" / "witcher3.exe", "x" * 900)
+    _w(tmp_path / "bin" / "x64_dx12" / "witcher3.exe", "x" * 800)
+    assert optiscaler.main_exe_dir(str(tmp_path), ["witcher3.exe"]).endswith("x64_dx12")
+    one = tmp_path / "one"
+    _w(one / "bin" / "game.exe", "x")
+    assert optiscaler.main_exe_dir(str(one), ["game.exe"]).endswith("bin")
+
+
 def test_installed_games_from_steam_manifests(tmp_path):
     lib2 = tmp_path / "sd" / "SteamLibrary"
     _w(tmp_path / ".local/share/Steam/steamapps/libraryfolders.vdf", f'"libraryfolders"\n{{\n "1" {{ "path" "{lib2}" }}\n}}\n')
