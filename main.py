@@ -1245,6 +1245,12 @@ class Plugin:
         opti = "fsr4_xmx" if opti == "fsr4" else opti
         if opti in launchenv.FSR4_XMX and launch.get("xmx") is False:
             return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
+        old = (self.settings.get("opti_games") or {}).get(str(appid))
+        if old and old != folder and optiscaler.owner(old).get("owner") == "clawdeck":
+            # an earlier ClawDeck put it in another folder of the same game (The Witcher 3's DX11 folder before
+            # #141): out of there first, so no copy is left behind
+            u = await self._bg(optiscaler.unpatch, old)
+            decky.logger.info("OptiScaler moved from %s to %s: %s", old, folder, u)
         _, page = await self._bg(self._wiki_for, appid)
         r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
                            opti, opti in launchenv.FSR4_XMX, entry.get("layout") or "flat", (page or {}).get("proxies"))
