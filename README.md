@@ -35,8 +35,11 @@
 - 🎮 **One tap per game.** Pick the game, the upscaler and frame generation, tap Install. ClawDeck installs a pinned,
   tested OptiScaler with the per-game fixes OptiScaler's developers publish, and adds REFramework to Capcom games.
   Uninstall puts every original file back.
-- 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX), Autotune
-  for the lowest wattage that keeps your frame rate, fan curves and a battery charge limit.
+- 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX),
+  **Autotune** with a **target frame rate**: pick 30, 40, 60 fps and it holds it with the fewest watts, settles in about
+  a minute, gives the watts back within seconds in a heavy scene, and **Auto FPS** holds the closest it can when your
+  target is out of reach. Plus fan curves and a battery charge limit.
+- 🎯 **Gyro on the Claw 8 EX (beta):** one button turns on the EX's gyro for Steam Input (Kisenir's method).
 - 🛠️ **The fixes Linux doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
   performance overlay, and a log flood that costs battery.
 
@@ -167,7 +170,7 @@ start, and applies each game's fixes from OptiScaler's compatibility list.
 |---|---|
 | **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. |
 | **Face buttons** (Claw 8 EX) | Maps the two MSI buttons: left = Steam menu, right = Quick Access. |
-| **Gyro (beta)** (Claw 8 EX) | Turns on the EX's gyro for Steam Input: downloads MSI's sensor-hub firmware (checked before it's installed), lets Linux read the gyro, and passes it to Steam as a Steam Deck gyro. One restart; Remove undoes it. Bazzite for now. Method by Kisenir. |
+| **Gyro (beta)** (Claw 8 EX) | Turns on the EX's gyro for Steam Input: downloads MSI's sensor-hub firmware (checked before it's installed), lets Linux read the gyro, and passes it to Steam as a Steam Deck gyro. Then a cold boot (shut down, power on) and recalibrate gyro in Steam. **Accelerometer too** is a separate toggle, off by default (it makes gyro aim worse). Remove undoes it. Bazzite for now. Method by Kisenir. |
 | **Performance overlay** | Real watts in Steam's performance overlay. |
 | **System log** | Stops a split-lock log flood that costs battery. |
 | **Health check** | One line: all good, or what needs a look. |
@@ -186,7 +189,8 @@ self-test, and **Export log to Desktop** for bug reports.
 | **Black picture** (the HUD still shows) | Check **XMX cores used in the last launch**. Red: restart the game. FSR 4.1.2 needs the XMX cores; XeSS 2 still works without them. |
 | **Locked at 30 fps, or 60 with frame generation** | … → Performance → turn **Enable VRR** off and on, and check **Fixes → VRR fix** is installed. |
 | **3x/4x greyed out in the game's menu** | Normal: pick the multiplier in ClawDeck. OptiScaler's own menu offers up to what you picked. |
-| **Autotune with frame generation measures low** | Frame generation caps the rendered frames at the screen's refresh ÷ the multiplier. Let Autotune measure once with frame generation off, then turn it back on. |
+| **Autotune with frame generation measures low** | Autotune counts rendered frames, and frame generation caps them at the screen's refresh ÷ the multiplier. Pick an **Autotune target** in rendered fps (60 with 2x shows about 120), or let Autotune measure once with frame generation off. |
+| **Gyro doesn't show after installing it** | Shut the Claw down fully and turn it on again (a restart isn't always enough for the sensor hub), then recalibrate gyro in Steam's controller settings. Still nothing: Fixes shows which part is missing; Export log and tell us. |
 | **Crash when changing the upscaler or frame generation in the game** | Some games crash when these change mid-game. Quit, change it in ClawDeck, start again. |
 | **"Put there by another tool"** under In this game now | ClawDeck never touches an OptiScaler it didn't install (Decky Framegen's, say). Remove that one first, then pick again. |
 | **Anything else** | Setup → **Export log to Desktop**, then [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) with the file. |
@@ -196,7 +200,8 @@ self-test, and **Export log to Desktop** for bug reports.
 - **Flicker in Capcom RE Engine games** (Onimusha, Resident Evil): a bug in Intel's Linux graphics driver (Mesa) that
   Intel is working on. The launch option `/WineDetectionEnabled:False` (after `%command%`) fixed it in some RE Engine
   games; if a game won't start with it, take it out.
-- **No gyro** on the 7/8 AI+ and 8 EX: the sensor hub needs MSI firmware Linux doesn't have.
+- **Gyro:** the 8 EX has it as a beta (Fixes → Gyro, Bazzite only for now). The 7/8 AI+ need a tester with MSI's
+  sensor-hub firmware for their model; no gyro there yet.
 - **Four back buttons in Steam:** InputPlumber presents the Claw as a Steam Deck controller. The Claw's two land on
   two of them; Steam's controller test shows which.
 
