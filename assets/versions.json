@@ -14,11 +14,12 @@
  },
  "reframework": {
   "repo": "onehoon/REFramework",
-  "tag": "fork-release-15-854e42d58b97be792c8ce441e4bdc691684e5866",
+  "tag": "fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0",
   "asset_glob": "REFramework.zip",
-  "sha256": "538666f011a9ca54d38e87815a6227066daa32bb0349c392c98543268aaa9a64",
-  "dll_sha256": "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98",
-  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Releases 16 and 17 exist; not tested yet."
+  "sha256": "86a43b883f2e7a708918594ca46eaced9468d302c8f3c053e3eefe92e04dbcb4",
+  "dll_sha256": "58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b",
+  "previous_dll_sha256": ["ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98"],
+  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Release 18 (2026-11-05) since 2026-11-09: three upstream syncs over release 15 (Lua JSON and LooseFileLoader fixes, HookManager error paths and thread safety, ARM64EC hooks skipped), dinput8.dll 23262720 bytes; release 15's dll stays recognised (previous_dll_sha256) so Remove still takes it out."
  },
  "optiscaler": {
   "version": "0.9.4",
