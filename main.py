@@ -93,6 +93,11 @@ class Plugin:
             # cores itself, as Thread Director does on Windows (maintainer: "should just be automatic")
             if self.profiles.get_launch(appid).get("cores") is not None:
                 self.profiles.set_launch(appid, {"cores": None})
+            # each game's launch file follows this version's rules (#150: XeSS through OptiScaler now shows the Intel
+            # GPU to XeSS); before, a file kept an older version's variables until that game's settings changed
+            r = self._write_launch(appid)
+            if r.get("error"):
+                decky.logger.warning("game %s: launch file not rewritten: %s", appid, r["error"])
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)

@@ -64,7 +64,8 @@ def test_launch_env_compose_and_write(tmp_path):
     assert launchenv.compose({"fsr": "fg"}) == {"CLAWDECK_XMX": "1", "FSR_FG": "xess"}
     assert launchenv.compose({"fsr": "inject"}) == {"CLAWDECK_XMX": "1", "FSR": "xess", "FSR_FG": "inject"}
     # Decky Framegen's fgmod writes these into the game's OptiScaler.ini
-    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"CLAWDECK_XMX": "1", "Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg"}
+    assert launchenv.compose({"opti": "xess", "opti_xefg": True}) == {"CLAWDECK_XMX": "1", "Dx12Upscaler": "xess", "FrameGen_Enabled": "true", "FrameGen_FGOutput": "xefg",
+                                                                     "DXVK_CONFIG": "dxgi.customVendorId = 8086"}
     assert launchenv.compose({"opti": "fsr4"}) == launchenv.compose({"opti": "fsr4_xmx"})   # INT8 retired: on XMX
     for bad in ({"fg": 1}, {"fg": 9}, {"fg": True}, {"fg": "4"}, {"fsr": "amd"}, {"opti": "dlss"}):
         with pytest.raises(ValueError):
@@ -1505,10 +1506,18 @@ def test_3x_4x_through_optiscaler_show_the_intel_gpu_to_xess_fg():
     show = "dxgi.customVendorId = 8086"
     assert launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3})["DXVK_CONFIG"] == show
     assert launchenv.compose({"opti": "xess", "opti_xefg": True, "fg": 4})["DXVK_CONFIG"] == show
-    # 2x needs no override; a game's own XeSS (no OptiScaler) keeps DXVK's hiding (its older XeSS-FG crashes)
-    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "dlssg", "fg": 2})
+    # a game's own XeSS (no OptiScaler) keeps DXVK's hiding (its older XeSS-FG crashes); FSR 4.1.2 at 2x needs none
     assert "DXVK_CONFIG" not in launchenv.compose({"fg": 4, "xess_latest": True})
-    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "xess", "opti_fg": "off", "fg": 3})
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 2})
+    assert "DXVK_CONFIG" not in launchenv.compose({"opti": "fsr4_xmx", "opti_fg": "off"})
+
+
+def test_xess_through_optiscaler_always_shows_the_intel_gpu():
+    """#150: OptiScaler loads its XeSS 2.0.2.68 before the game's DXGI factory, so Proton 11.0's DXVK hid the Intel
+    GPU and XeSS ran its built-in DP4a context, with or without frame generation."""
+    from clawdeck import launchenv
+    for launch in ({"opti": "xess"}, {"opti": "xess", "opti_fg": "off", "fg": 3}, {"opti": "xess", "opti_fg": "dlssg", "fg": 2}):
+        assert launchenv.compose(launch)["DXVK_CONFIG"] == "dxgi.customVendorId = 8086"
 
 
 
