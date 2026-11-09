@@ -135,6 +135,11 @@ INI_VAL_RE = re.compile(r"^(true|false|auto|-?[0-9]+(\.[0-9]+)?)$")
 # Resonant on the Claw 8 EX, 2026-11-05: 2x before, 3x with this). OptiScaler games only: they run OptiScaler's own
 # XeSS 2.0.2.68 set, which DXVK's upstream lists as safe to show the Intel GPU to; a game's own older XeSS-FG (1.1)
 # crashes with it (xess-xmx-linux docs/games.md, Cyberpunk 2077).
+# XeSS 2 through OptiScaler needs it too, at any multiplier and without frame generation: OptiScaler (the dxgi.dll
+# proxy) loads its libxess.dll at start, before the game makes its DXGI factory, so Proton 11.0's DXVK (v2.7.1-498,
+# which hides the Intel GPU from every XeSS, not only from builds before 2.0.2.68 as DXVK's upstream does now) reports
+# vendor 0x1002 and XeSS takes its built-in DP4a context: no XMX at all (Tainted Grail on a Claw 8 AI+ with SteamOS,
+# #150: "Detected XeSS usage, hiding Intel GPU Vendor", then "[XeSS] No context found. Creating built-in context").
 SHOW_INTEL = "dxgi.customVendorId = 8086"
 
 
@@ -159,8 +164,9 @@ def compose(launch: dict, per_game: bool = True) -> dict[str, str]:
         raise ValueError(f"frame generation multiplier must be 2 to 8 (or 0 for the game's own), not {fg!r}")
     if fg:
         env["XESS_FG"] = str(fg)
-    if fg >= 3 and launch.get("opti") not in (None, "off") and (launch.get("opti_fg") not in (None, "off")
-                                                               or launch.get("opti_xefg")):
+    if (launch.get("opti") == "xess"
+            or fg >= 3 and launch.get("opti") not in (None, "off") and (launch.get("opti_fg") not in (None, "off")
+                                                                       or launch.get("opti_xefg"))):
         env["DXVK_CONFIG"] = SHOW_INTEL
     route = launch.get("fsr") or "off"
     if route not in FSR_ROUTES:

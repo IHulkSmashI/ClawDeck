@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**XeSS 2 through OptiScaler shows the Intel GPU (2026-11-09, #150):** Proton 11.0's DXVK hid the Intel GPU from
+every OptiScaler XeSS game (OptiScaler loads libxess.dll before the game's DXGI factory), so XeSS ran DP4a; now every
+`opti: xess` game gets `DXVK_CONFIG=dxgi.customVendorId = 8086`, and every launch file is rewritten at start. Check on
+the EX: a DLSS game with XeSS 2 (no frame generation) shows "XMX cores used in the last launch", the game still offers
+DLSS (OptiScaler's Nvidia spoof is above DXVK), and one game from the `Spoofing_Dxgi=false` list still starts.
+
 **Debug logs for the next launch (2026-11-09, #150):** Per-game button arms one launch: the wrapper turns on
 PROTON_LOG (into the runtime folder), XESS_LOG/IGDEXT_TRACE, ANV_CM_DEBUG and ClawDeck's OptiScaler's log
 (LogToFile/LogLevel in the game's OptiScaler.ini, put back at the next start); the bug report carries the filtered
