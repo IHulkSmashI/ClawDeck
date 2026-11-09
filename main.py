@@ -1244,7 +1244,8 @@ class Plugin:
 
     def _ref_shas(self) -> tuple[str, ...]:
         e = self._versions().get("reframework") or {}
-        return tuple(x for x in (e.get("dll_sha256"),) if x)
+        # the pinned build and the ones pinned before it (a game set up with an older ClawDeck still has that dll)
+        return tuple(x for x in (e.get("dll_sha256"), *(e.get("previous_dll_sha256") or [])) if x)
 
     def _xmx_off(self, appid: str) -> bool:
         """XMX switched off for this game (Per-game): FSR 4.1.2 isn't offered then (a black screen without XMX)."""
