@@ -54,11 +54,11 @@ sleep/wake several times fine.
 
 **XeSS XMX package 20261107 (2026-11-09, #51):** the pin moved from 20261104 (driver, shim and hook hardening,
 background compile of missing kernels, Mesa 26.3 patch 0006, session check from ~/.config/xess-xmx). The parts
-ClawDeck reads (50-xess-xmx.conf, the hook mark, the shim path) are unchanged. Check on the EX: Setup → Update XeSS
+ClawDeck reads (50-xess-xmx.conf, the hook mark, the shim path) are unchanged. Released in beta 13 without waiting (maintainer, 2026-11-09). Check on the EX: Setup → Update XeSS
 XMX, then CONTROL (OptiScaler XeSS 2) and one game with its own XeSS show "XMX cores used in the last launch".
 
 **REFramework fork release 18 (2026-11-09, #51):** the pin moved from release 15 (three small upstream syncs: Lua
-JSON / LooseFileLoader fixes, HookManager thread safety, ARM64EC). Check on the EX before the next beta: Onimusha →
+JSON / LooseFileLoader fixes, HookManager thread safety, ARM64EC). Released in beta 13 without waiting. Check on the EX: Onimusha →
 Game page → Install again (puts release 18 in), start it, REFramework's menu opens with Delete, play a minute.
 
 **XeSS 2 through OptiScaler shows the Intel GPU (2026-11-09, #150):** Proton 11.0's DXVK hid the Intel GPU from
