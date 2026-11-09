@@ -197,6 +197,9 @@ self-test, and **Export log to Desktop** for bug reports.
 
 ## Known limits
 
+- **No DLSS in The Witcher 3 (5.0 and newer)**: the game switches DLSS off when it sees Proton, before OptiScaler
+  gets a say. Pick XeSS in its menu (OptiScaler takes XeSS too), or run it with GE-Proton 11-9 or newer, which hides
+  Proton from the game.
 - **Flicker in Capcom RE Engine games** (Onimusha, Resident Evil): a bug in Intel's Linux graphics driver (Mesa) that
   Intel is working on. The launch option `/WineDetectionEnabled:False` (after `%command%`) fixed it in some RE Engine
   games; if a game won't start with it, take it out.

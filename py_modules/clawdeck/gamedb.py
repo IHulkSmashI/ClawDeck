@@ -95,6 +95,16 @@ def capcom_tested(doc: dict, exes: list[str]) -> str | None:
     return next((tested[e] for e in exes if e in tested), None)
 
 
+# Games that switch features off when they see Proton (ntdll's wine_get_version), whatever OptiScaler does. The Witcher
+# 3 5.0 (2026-09-29) skips its Streamline setup there, so DLSS never shows in its menu (#141; root cause found by
+# gabrielmaialva33, proton-salkim issue #71). GE-Proton 11-9 and newer hide Proton from it (umu-protonfixes, 292030).
+WINE_CHECK = {
+    "witcher3.exe": ("The Witcher 3 (5.0 and newer) turns DLSS off when it sees Proton, so DLSS stays greyed out in "
+                     "its menu with any Proton but GE-Proton 11-9 or newer. Pick XeSS in the game's menu instead "
+                     "(OptiScaler takes XeSS too), or switch the game to GE-Proton 11-9+ for DLSS."),
+}
+
+
 def recommend(doc: dict, game_dir: str | None) -> dict:
     """What 'Use the recommended setup' sets for this game on a Claw, and why (shown before anything is written).
 
@@ -151,6 +161,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         reasons.append(f"Not yet possible with the OptiScaler ClawDeck pins ({doc.get('ini_version') or '?'}): {', '.join(later)}")
     if (g or {}).get("quirks") and opti and not re_engine:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
+    reasons += [WINE_CHECK[e] for e in exes if e in WINE_CHECK]
     tested = capcom_tested(doc, exes) if re_engine else None
     if re_engine:
         reasons.append(f"The Capcom setup, tested on a Claw: {tested}" if tested else
