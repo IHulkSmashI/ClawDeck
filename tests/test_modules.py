@@ -629,7 +629,7 @@ def test_ships_xess_matches_the_scope_script_depth(tmp_path):
     _w(g / "a" / "b" / "c" / "libxess.dll", "x")
     assert xmxscope.ships_xess(str(g))
     deep = tmp_path / "deep"
-    _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "libxess.dll", "x")   # deeper than the launch-time check looks
+    _w(deep / "1" / "2" / "3" / "4" / "5" / "6" / "7" / "8" / "9" / "10" / "libxess.dll", "x")   # deeper than the launch-time check looks
     assert not xmxscope.ships_xess(str(deep))
     assert not xmxscope.ships_xess(None)
 
@@ -881,6 +881,18 @@ def test_opti_ini_follows_the_frame_generation_multiplier():
     ini = launchenv.opti_ini({"opti": "xess", "opti_fg": "dlssg", "fg": 2})
     assert ini["XeFG_InterpolationCount"] == "1" and ini["FrameGen_FGInput"] == "dlssg" and ini["Upscalers_Dx12Upscaler"] == "xess"
     assert "XeFG_InterpolationCount" not in launchenv.opti_ini({"opti": "xess", "opti_fg": "off", "fg": 3})
+
+
+def test_an_unreal_game_with_dlss_deep_in_its_plugins_counts_as_supported(tmp_path):
+    """Engine/Plugins/Marketplace/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll is 7 levels down (r/MSIClaw report:
+    Mortal Shell 2 and The Blood of Dawnwalker missing from the Game list)."""
+    from clawdeck import gamedb, xmxscope
+    _w(tmp_path / "MortalShell2" / "Binaries" / "Win64" / "MortalShell2-Win64-Shipping.exe", "x")
+    _w(tmp_path / "Engine" / "Plugins" / "Marketplace" / "DLSS" / "Binaries" / "ThirdParty" / "Win64" / "nvngx_dlss.dll", "x")
+    _w(tmp_path / "Engine" / "Plugins" / "Runtime" / "Intel" / "XeSS" / "Binaries" / "ThirdParty" / "Win64" / "libxess.dll", "x")
+    r = gamedb.support({"games": []}, str(tmp_path))
+    assert r["ok"] and "DLSS" in r["via"] and "XeSS" in r["via"]
+    assert xmxscope.ships_xess(str(tmp_path))
 
 
 def test_support_needs_an_upscaler_or_a_list_entry(tmp_path):
