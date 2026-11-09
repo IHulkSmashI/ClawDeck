@@ -168,7 +168,7 @@ start, and applies each game's fixes from OptiScaler's compatibility list.
 
 | Fix | What it does |
 |---|---|
-| **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. |
+| **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. 30 Hz is below MSI's official floor and some panels flicker there: if yours does, remove the fix. |
 | **Face buttons** (Claw 8 EX) | Maps the two MSI buttons: left = Steam menu, right = Quick Access. |
 | **Gyro (beta)** (Claw 8 EX) | Turns on the EX's gyro for Steam Input: downloads MSI's sensor-hub firmware (checked before it's installed), lets Linux read the gyro, and passes it to Steam as a Steam Deck gyro. Then a cold boot (shut down, power on) and recalibrate gyro in Steam. **Accelerometer too** is a separate toggle, off by default (it makes gyro aim worse). Remove undoes it. Bazzite for now. Method by Kisenir. |
 | **Performance overlay** | Real watts in Steam's performance overlay. |
@@ -194,6 +194,7 @@ self-test, and **Export log to Desktop** for bug reports.
 | **Crash when changing the upscaler or frame generation in the game** | Some games crash when these change mid-game. Quit, change it in ClawDeck, start again. |
 | **"Put there by another tool"** under In this game now | ClawDeck never touches an OptiScaler it didn't install (Decky Framegen's, say). Remove that one first, then pick again. |
 | **XeSS doesn't reach the XMX cores** ("XMX cores not used yet" after playing) | Per-game → **Debug logs for the next launch**, play a minute, quit, then Setup → **Export log to Desktop** and attach it to [an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose). The report then shows where XeSS stopped. |
+| **Flicker or stutter with VRR on, gone with VRR off** | Your panel doesn't like 30 Hz (it's below MSI's official 48 Hz floor). Fixes → **Remove VRR fix**, restart, and keep VRR on: it still works from 48 Hz. |
 | **Anything else** | Setup → **Export log to Desktop**, then [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) with the file. |
 
 ## Known limits
