@@ -1873,3 +1873,53 @@ def test_msi_bios_check_compares_with_msis_list_for_this_board(monkeypatch):
     msibios.refresh("MS-1T91", fetch=lambda page: (_ for _ in ()).throw(OSError("offline")))
     assert msibios.status("MS-1T91")["error"]                                     # offline: still a line, no crash
     assert msibios.status("ONEXPLAYER 3") == {"applies": False}                   # not an MSI Claw
+
+
+def test_debug_launch_is_one_launch_and_puts_optiscalers_log_back(tmp_path):
+    """Per-game -> Debug logs for the next launch: the wrapper turns the logs on once, then the next start is
+    normal and OptiScaler.ini's log lines are what they were (#150)."""
+    import subprocess
+    from clawdeck import debuglaunch
+    opti = tmp_path / "game"
+    _w(opti / "OptiScaler.ini", "[Log]\nLogToFile=auto\nLogLevel=auto\n")
+    st = debuglaunch.arm(str(tmp_path), "5", True, str(opti))
+    assert st == {"armed": True, "captured_at": None}
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path), "SteamAppId": "5",
+           "STEAM_COMPAT_DATA_PATH": str(tmp_path / "compat"), "CLAWDECK_NO_MANGOHUD": "1"}
+    run = lambda: subprocess.run(["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "env"], env=env,
+                                 capture_output=True, text=True, check=True).stdout
+    out = run()
+    d = tmp_path / "launch" / "debug-5"
+    for k in ("PROTON_LOG=1", f"PROTON_LOG_DIR={d}", "XESS_LOG=1", "IGDEXT_TRACE=1", "ANV_CM_DEBUG=1"):
+        assert k in out
+    assert "LogToFile=true" in (opti / "OptiScaler.ini").read_text() and "LogLevel=1" in (opti / "OptiScaler.ini").read_text()
+    st = debuglaunch.state(str(tmp_path), "5")
+    assert not st["armed"] and st["captured_at"]
+    out = run()                                   # the next launch: normal again
+    assert "PROTON_LOG=1" not in out and "IGDEXT_TRACE=1" not in out
+    assert (opti / "OptiScaler.ini").read_text().strip() == "[Log]\nLogToFile=auto\nLogLevel=auto"
+    debuglaunch.arm(str(tmp_path), "5", True)
+    assert debuglaunch.arm(str(tmp_path), "5", False)["armed"] is False
+
+
+def test_debug_launch_report_keeps_the_lines_that_matter(tmp_path):
+    from clawdeck import debuglaunch
+    home, rt = tmp_path / "home", tmp_path / "rt"
+    d = rt / "launch" / "debug-7"
+    _w(d / "started", "1")
+    noise = "".join(f"0a4:trace:seh:something {i}\n" for i in range(5000))
+    _w(d / "steam-7.log", "Proton: 11.0-100\nOptions: {}\n" + "x\n" * 40 + noise
+       + "0b0:trace:loaddll:load_dll Loaded L\"C:\\\\windows\\\\system32\\\\kernel32.dll\"\n"
+       + "0b0:trace:loaddll:load_dll Loaded L\"Z:\\\\game\\\\libxess.dll\" : native\n"
+       + "".join("0c0:err:vulkan:wine_vk_init cannot open shared object file\n" for _ in range(50)))
+    r = debuglaunch.collect(str(rt), str(home), "7")
+    lines = r["proton_log"]["lines"]
+    assert lines[0] == "Proton: 11.0-100" and any("libxess.dll" in x for x in lines)
+    assert not any("kernel32" in x for x in lines) and not any("something 4999" in x for x in lines)
+    assert sum("cannot open shared object" in x for x in lines) == 1 and any("same line 49 more times" in x for x in lines)
+    assert r["igdext_trace_missing"] is True and r["optiscaler_log"] is None
+    _w(home / xess.COMPATDATA / "7" / "pfx/drive_c/igdext_trace.log", "igdext: GPU 0x64a0 Xe2-LPG\n")
+    os.utime(home / xess.COMPATDATA / "7" / "pfx/drive_c/igdext_trace.log", (100, 100))
+    r = debuglaunch.collect(str(rt), str(home), "7")
+    assert r["igdext_trace"]["lines"] == ["igdext: GPU 0x64a0 Xe2-LPG"] and not r["igdext_trace_missing"]
+    assert debuglaunch.collect(str(rt), str(home), "8") is None

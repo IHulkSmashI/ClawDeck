@@ -89,12 +89,14 @@ export type FramegenState = { installed: boolean; dir: string | null; version: s
 export type OptiScalerIn = { present: boolean; dir: string | null; version?: string | null; xess_fg?: boolean };
 export type XmxScope = { session_wide: boolean; per_game: boolean; every_game?: boolean; auto: boolean; protons: string[]; scoped: string[]; unscoped: string[] };
 export type XmxProof = { state: "ok" | "stale" | "never" | "failed"; at: number | null; last_launch: number | null; kernels: number; failed: boolean };
-export type GameStatus = { xmx_proof?: XmxProof; launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
+export type DebugLaunch = { armed: boolean; captured_at: number | null };
+export type GameStatus = { xmx_proof?: XmxProof; debug?: DebugLaunch; launch: Launch; xess: XessState; latency: LatencyState; optiscaler: OptiScalerIn; framegen: FramegenState; wrapper: string; xmx_scope?: XmxScope;
   drive?: { device: string; mount: string; fstype: string; slow: boolean; kind: string; sd: boolean } | null;
   fsr4_xmx?: { dir: string; ready: boolean; missing: string[] }; opti_owner?: "clawdeck" | "decky-framegen" | "other" | null;
   opti_version?: string | null;
   files?: { owner: string | null; version?: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
+export const setDebugLaunch = callable<[appid: string, on: boolean], { ok: boolean; error?: string; debug?: DebugLaunch }>("set_debug_launch");
 export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[];
   tags?: { text: string; kind: "fsr" | "xess" | "fg" }[] };
 export const gamesList = callable<[], GameEntry[]>("games_list");

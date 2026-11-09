@@ -1595,3 +1595,21 @@ def test_target_fps_a_too_low_start_climbs_in_seconds(fake_hw, monkeypatch):
     run(12)
     assert s.learned.tdp >= 25                                   # 19 W -> 25 W within ~12 s
     at.session = None
+
+
+def test_debug_launch_arms_one_launch_and_never_touches_another_tools_optiscaler(plugin, tmp_path, monkeypatch):
+    p = plugin
+    rt = p.set_debug_launch.__func__.__globals__["RUNTIME_DIR"]
+    game = tmp_path / "dbg-game"
+    _w(game / "OptiScaler.ini", "[Log]\nLogToFile=auto\n")
+    p.settings = {**(p.settings or {}), "opti_games": {"42": str(game)}}
+    owner = {"owner": "other"}
+    monkeypatch.setattr(p.set_debug_launch.__func__.__globals__["optiscaler"], "owner", lambda f: owner)
+    r = p.run(p.set_debug_launch("42", True))
+    assert r["ok"] and r["debug"]["armed"]
+    assert open(os.path.join(rt, "launch", "42.debug")).read() == ""          # another tool's ini: left alone
+    owner["owner"] = "clawdeck"
+    p.run(p.set_debug_launch("42", True))
+    assert open(os.path.join(rt, "launch", "42.debug")).read() == f"opti={game}\n"
+    assert not p.run(p.set_debug_launch("42", False))["debug"]["armed"]
+    assert not p.run(p.set_debug_launch("../x", True))["ok"]
