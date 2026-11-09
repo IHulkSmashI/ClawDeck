@@ -193,6 +193,7 @@ self-test, and **Export log to Desktop** for bug reports.
 | **Gyro doesn't show after installing it** | Shut the Claw down fully and turn it on again (a restart isn't always enough for the sensor hub), then recalibrate gyro in Steam's controller settings. Still nothing: Fixes shows which part is missing; Export log and tell us. |
 | **Crash when changing the upscaler or frame generation in the game** | Some games crash when these change mid-game. Quit, change it in ClawDeck, start again. |
 | **"Put there by another tool"** under In this game now | ClawDeck never touches an OptiScaler it didn't install (Decky Framegen's, say). Remove that one first, then pick again. |
+| **XeSS doesn't reach the XMX cores** ("XMX cores not used yet" after playing) | Per-game → **Debug logs for the next launch**, play a minute, quit, then Setup → **Export log to Desktop** and attach it to [an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose). The report then shows where XeSS stopped. |
 | **Anything else** | Setup → **Export log to Desktop**, then [open an issue](https://github.com/IHulkSmashI/ClawDeck/issues/new/choose) with the file. |
 
 ## Known limits

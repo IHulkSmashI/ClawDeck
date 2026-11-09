@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import distro, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import debuglaunch, distro, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -193,6 +193,9 @@ def game_reports(home: str, runtime_dir: str | None) -> list[dict]:
             "prefix_shim": shim,
             "proton": (_tail(os.path.join(pfx, "config_info"), 1000) or [])[:2] or None,   # Steam writes its version first
             "xell_log": _tail(os.path.join(xess.prefix_dir(home, appid), "igdext_xell.log"), 15),
+            # Per-game -> Debug logs for the next launch: what that launch's Proton log, shim trace and OptiScaler
+            # log show (debuglaunch.py)
+            "debug": debuglaunch.collect(runtime_dir, home, appid),
         })
     return out
 

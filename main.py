@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, debuglaunch, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -1022,7 +1022,21 @@ class Plugin:
                 "xmx_scope": {**scope, "auto": auto}, "drive": storage.game_drive(d), "fsr4_xmx": self._fsr4_xmx_files(),
                 "opti_owner": (files := await self._bg(self._game_files, appid, xess.steam_install_dir(HOME, appid)))["owner"],
                 "files": files, "opti_version": self._opti_entry(launch)["version"],
-                "xmx_proof": await self._bg(xess.xmx_proof, HOME, appid, RUNTIME_DIR)}
+                "xmx_proof": await self._bg(xess.xmx_proof, HOME, appid, RUNTIME_DIR),
+                "debug": await self._bg(debuglaunch.state, RUNTIME_DIR, appid)}
+
+    async def set_debug_launch(self, appid: str, on: bool) -> dict:
+        """Debug logs for this game's next launch only (Proton log, the XeSS XMX shim's trace, the driver's messages,
+        OptiScaler's log): Setup -> Save a bug report then carries what they show (debuglaunch.py)."""
+        folder = (self.settings.get("opti_games") or {}).get(str(appid))
+        if folder and optiscaler.owner(folder)["owner"] != "clawdeck":
+            folder = None                 # OptiScaler from another tool: its ini is never touched
+        try:
+            st = await self._bg(debuglaunch.arm, RUNTIME_DIR, str(appid), bool(on), folder)
+        except (ValueError, OSError) as e:
+            return {"ok": False, "error": str(e)}
+        decky.logger.info("game %s: debug logs for the next launch %s", appid, "on" if on else "off")
+        return {"ok": True, "debug": st}
 
     def _opti_owner(self, appid: str, d: str | None) -> str | None:
         return self._game_files(appid, d)["owner"]

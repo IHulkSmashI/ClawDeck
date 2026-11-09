@@ -86,6 +86,41 @@ else
 fi
 # when this game last started: Per-game compares the XMX driver's self-test with it ("XMX cores used in the last launch")
 mkdir -p "$RUNTIME/launch" 2>/dev/null && : > "$RUNTIME/launch/$appid.started" 2>/dev/null
+# Debug logs for this one launch (Per-game -> "Debug logs for the next launch", py_modules/clawdeck/debuglaunch.py):
+# the marker is removed here, so the next start is normal again. OptiScaler's log lines from the debug launch before
+# go back first.
+dbg="$RUNTIME/launch/$appid.debug"
+restore="$RUNTIME/launch/$appid.debug-restore"
+opti_ini_set() {   # opti_ini_set <ini> <key> <value>: one [Log] key of OptiScaler.ini, changed in place
+  sed -i "s|^$2=.*|$2=$3|" "$1" 2>/dev/null
+}
+if [ -f "$restore" ]; then
+  while IFS='=' read -r k v; do
+    case "$k" in ini) rini="$v";; LogToFile|LogLevel) [ -n "${rini:-}" ] && [ -f "$rini" ] && opti_ini_set "$rini" "$k" "$v";; esac
+  done < "$restore"
+  rm -f "$restore"
+  say "debug launch before: OptiScaler's log settings put back"
+fi
+if [ -f "$dbg" ]; then
+  ofolder=$(sed -n 's/^opti=//p' "$dbg" | head -1)
+  rm -f "$dbg"
+  ddir="$RUNTIME/launch/debug-$appid"
+  rm -rf "$ddir"; mkdir -p "$ddir"
+  date +%s > "$ddir/started"
+  export PROTON_LOG=1 PROTON_LOG_DIR="$ddir" XESS_LOG=1 IGDEXT_TRACE=1 IGDEXT_XEFG_LOG=1 ANV_CM_DEBUG=1
+  oini="$ofolder/OptiScaler.ini"
+  if [ -n "$ofolder" ] && [ -f "$oini" ]; then
+    { echo "ini=$oini"
+      echo "LogToFile=$(sed -n 's/^LogToFile=//p' "$oini" | head -1)"
+      echo "LogLevel=$(sed -n 's/^LogLevel=//p' "$oini" | head -1)"; } > "$restore"
+    opti_ini_set "$oini" LogToFile true
+    opti_ini_set "$oini" LogLevel 1
+    echo "$ofolder" > "$ddir/opti_folder"
+  fi
+  what="Proton log, XeSS shim trace, driver messages"
+  [ -f "$ddir/opti_folder" ] && what="$what, OptiScaler log"
+  say "debug launch: $what for this launch only ($ddir)"
+fi
 if [ -f "$envfile" ]; then
   while IFS='=' read -r k v; do
     [ -n "$k" ] && [ "${k#\#}" = "$k" ] || continue

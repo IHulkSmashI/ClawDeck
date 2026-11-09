@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Debug logs for the next launch (2026-11-09, #150):** Per-game button arms one launch: the wrapper turns on
+PROTON_LOG (into the runtime folder), XESS_LOG/IGDEXT_TRACE, ANV_CM_DEBUG and ClawDeck's OptiScaler's log
+(LogToFile/LogLevel in the game's OptiScaler.ini, put back at the next start); the bug report carries the filtered
+lines. Run once on the EX: arm, play CONTROL a minute, quit, Export log: `games[].debug` has the Proton log lines,
+the shim trace and OptiScaler's lines; start again and check OptiScaler.ini is back to `LogToFile=auto`.
+
 **Claw 8 EX gyro (beta 9, 2026-11-08):** Kisenir ran ClawDeck's one-button install on his EX: Install works at once,
 Remove takes it out (no cold boot needed for him, but he already had MSI's firmware loaded). Still worth a run on the
 maintainer's EX from stock (firmware never loaded before): Install -> cold boot -> gyro in Steam -> Remove.

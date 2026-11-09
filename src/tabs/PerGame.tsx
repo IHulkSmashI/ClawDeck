@@ -2,7 +2,7 @@ import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } 
 import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
-import { gameChoose, gameRecommend, gameStatus, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
+import { gameChoose, gameRecommend, gameStatus, setDebugLaunch, setLaunch, FsrRoute, GameStatus, Launch, Recommendation } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { Advanced } from "../components/Advanced";
 import { LaunchWrapper } from "../components/LaunchWrapper";
@@ -303,6 +303,24 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
             description={explain(newPkg ? "For a game with FSR 3.1+ and no XeSS: its FSR runs on XeSS on the XMX cores, with multi-frame generation. Pick FSR in the game's menu as usual."
               : "Needs XeSS XMX 20261104 or newer: Setup → Update XeSS XMX.",
               "a game that has XeSS should use its own XeSS: this route can flicker more.", "FSR 2 or FSR built into the game: nothing changes.")} />
+        </PanelSectionRow>
+      )}
+
+      {!quick && (
+        <PanelSectionRow>
+          <Group title="Something not working?" />
+          <ButtonItem layout="below" disabled={!wrapped || !gs} onClick={async () => {
+            const r = await setDebugLaunch(app.appid, !gs?.debug?.armed);
+            if (!r.ok) setErr(r.error ?? "couldn't change the debug logs"); else await load();
+          }}
+            description={explain(!wrapped ? "Needs ClawDeck in this game's launch options first (pick a setup above)."
+              : gs?.debug?.armed ? "On for the next launch: start the game, play a minute where the problem shows, quit, then Setup → Save a bug report."
+              : gs?.debug?.captured_at ? `Logs from the debug launch of ${new Date(gs.debug.captured_at * 1000).toLocaleString()} go into Setup → Save a bug report.`
+              : "Turns on Proton's log, the XeSS XMX driver's messages and OptiScaler's log for one launch of this game, so a bug report shows why the XMX cores were missed.",
+              "without them a report can only say that XeSS didn't reach the XMX cores, not where it stopped.",
+              "that one launch starts a little slower and writes a few log files; the next launch is normal again.")}>
+            {gs?.debug?.armed ? "Cancel debug logs for the next launch" : "Debug logs for the next launch"}
+          </ButtonItem>
         </PanelSectionRow>
       )}
 

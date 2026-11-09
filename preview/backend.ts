@@ -206,9 +206,10 @@ export const backend = {
     for (const [k, val] of Object.entries(v)) { if (val === null) delete state.launch[k]; else state.launch[k] = val; }
     return { ok: true, launch: state.launch, env: envOf(state.launch), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%" };
   },
+  set_debug_launch: (_appid: string, on: boolean) => ({ ok: true, debug: { armed: on, captured_at: null } }),
   game_status: () => ({
     launch: state.launch, xess: xessState(), wrapper: "/home/bazzite/.local/share/clawdeck/clawdeck-launch.sh %command%",
-    opti_owner: "clawdeck", opti_version: "0.9.4", xmx_proof: { state: "ok", at: 0, last_launch: 0, kernels: 14, failed: false }, files: { owner: "clawdeck", dll: "dxgi.dll", preset: "fsr4_xmx", folder: "/x", reframework: false, install_dir: "/x" }, fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
+    opti_owner: "clawdeck", opti_version: "0.9.4", xmx_proof: { state: "ok", at: 0, last_launch: 0, kernels: 14, failed: false }, debug: { armed: false, captured_at: null }, files: { owner: "clawdeck", dll: "dxgi.dll", preset: "fsr4_xmx", folder: "/x", reframework: false, install_dir: "/x" }, fsr4_xmx: { dir: "/home/bazzite/fsr4-xmx", ready: true, missing: [] },
     xmx_scope: { session_wide: false, per_game: true, auto: true, protons: ["Proton 11.0"], scoped: ["Proton 11.0"], unscoped: [] },
     optiscaler: scenario.which === "dd2"
       ? { present: true, dir: "/home/bazzite/.local/share/Steam/steamapps/common/Dragons Dogma 2", version: "v0.9.4-final", xess_fg: true }
