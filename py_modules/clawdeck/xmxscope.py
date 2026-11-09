@@ -124,7 +124,7 @@ except Exception as _e:
 '''
 
 
-DEPTH = 5
+DEPTH = 9                       # Unreal: Engine/Plugins/.../Binaries/ThirdParty/Win64/libxess.dll is 7-8 deep
 
 
 def prefix_shim(home: str, appid: str, pkg: str | None) -> dict:

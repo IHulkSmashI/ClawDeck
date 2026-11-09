@@ -1190,8 +1190,8 @@ class Plugin:
             except OSError:
                 stamp = 0
             c = cache.get(g["appid"])
-            if not c or c.get("stamp") != stamp:
-                c = {**gamedb.support(doc, g["dir"]), "stamp": stamp}
+            if not c or c.get("stamp") != stamp or c.get("depth") != gamedb.DEPTH:   # deeper search: look again
+                c = {**gamedb.support(doc, g["dir"]), "stamp": stamp, "depth": gamedb.DEPTH}
                 cache[g["appid"]] = c
                 changed = True
             g["supported"], g["via"] = c["ok"], c["via"]

@@ -15,7 +15,11 @@ from __future__ import annotations
 import json
 import os
 
-DEPTH = 6
+# folders below the install folder that are searched. Unreal keeps its plugins' DLLs 7-8 levels down
+# (Engine/Plugins/Marketplace/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll, .../Runtime/Nvidia/DLSS/...): at 6, an
+# Unreal game that isn't in the per-game list didn't show up in the Game list at all (r/MSIClaw, Mortal Shell 2 and
+# The Blood of Dawnwalker, 2026-11-08).
+DEPTH = 9
 KEY_RE = r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$"
 
 
