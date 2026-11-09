@@ -220,6 +220,9 @@ def status() -> dict:
     if ours and not taken:
         reason = (f"started with the fix, but the driver still reports {rng[0]}-{rng[1]} Hz: it didn't take the "
                   "corrected range at boot" if rng else "started with the fix, but the screen's range can't be read")
+        said = [ln for ln in kernel_edid_lines() if re.search(r"fail|error|err=|not found", ln, re.I)]
+        if said:                                       # the kernel's own reason (#155)
+            reason += f". The kernel says: {said[0]}"
     if _after_update_error and not ours and cp != "on":
         reason = f"couldn't put the fix back after the SteamOS update: {_after_update_error}"
     return {"panel": key or None, "panel_name": p["panel"] if p else None, "range": list(rng) if rng else None,
@@ -690,6 +693,73 @@ def remove_files_unless_booted() -> None:
 # needs no bootloader, initramfs or rpm-ostree, so it works on SteamOS, CachyOS and Bazzite alike; nothing is written
 # to disk, a restart drops it (ClawDeck applies it again when it starts), and undo is "reset" + detect. Kernel lockdown
 # (Secure Boot on some kernels) blocks debugfs writes: then Bazzite still has the boot method above.
+# ---- why a boot override didn't take ---------------------------------------------------------------------------------
+# "started with the fix, but the driver still reports 48-120" (CachyOS, #155): the kernel had ClawDeck's arguments but
+# the driver kept the factory EDID. The kernel says why in its log ("Requesting EDID firmware ... failed (err=-2)":
+# the file wasn't there when the driver started, usually because the initramfs that loaded the driver lacks it), so
+# the Fixes panel and the bug report carry those lines, and the report also says which initramfs images hold the file.
+EDID_LOG = re.compile(r"edid|firmware_class", re.I)
+
+
+def kernel_edid_lines(limit: int = 12) -> list[str]:
+    """This boot's kernel log lines about EDID firmware (journalctl -k, else dmesg)."""
+    for cmd in (["journalctl", "-k", "-b", "--no-pager", "-o", "cat"], ["dmesg"]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False, env=sysfs.clean_env())
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0 and r.stdout:
+            return [ln.strip()[:300] for ln in r.stdout.splitlines() if EDID_LOG.search(ln)][:limit]
+    return []
+
+
+INITRAMFS_GLOBS = ("/boot/initramfs-*.img", "/boot/*/*/initramfs*", "/boot/*/initramfs*", "/efi/*/*/initramfs*",
+                   "/boot/efi/*/*/initramfs*", "/boot/booster-*.img", "/boot/initrd*")
+
+
+def initramfs_has(name: str) -> dict:
+    """Which initramfs images hold ClawDeck's EDID file (lsinitcpio -l), for the bug report."""
+    out: dict[str, bool | None] = {}
+    lister = shutil.which("lsinitcpio")
+    for pat in INITRAMFS_GLOBS:
+        for img in sorted(glob.glob(pat)):
+            if img in out or "fallback" in img:
+                continue
+            if not lister:
+                out[img] = None
+                continue
+            try:
+                r = subprocess.run([lister, "-l", img], capture_output=True, text=True, timeout=60, check=False,
+                                   env=sysfs.clean_env())
+                out[img] = name in r.stdout if r.returncode == 0 else None
+            except (OSError, subprocess.SubprocessError):
+                out[img] = None
+    return out
+
+
+def boot_report() -> dict:
+    """The VRR fix's state for the bug report: status, kernel arguments, the boot backend and its line, the mkinitcpio
+    drop-in, which initramfs images hold the EDID, what the kernel said, and which initramfs tools exist."""
+    st = status()
+    raw = _read_bytes(panel_edid_path())
+    key = panel_id(raw)
+    name = file_name(key) if key in PANELS else None
+    b = boot_backend(for_enable=False)
+    return {
+        "status": st,
+        "cmdline_edid": _arg(_cmdline(), "drm.edid_firmware"),
+        "cmdline_fw_path": _arg(_cmdline(), "firmware_class.path"),
+        "backend": {k: v for k, v in (b or {}).items() if k != "line"},
+        "conf_line": [ln for ln in _conf_lines(b["conf"]) if MARK in ln] if b and b.get("conf") else [],
+        "mkinitcpio_dropin": _conf_lines(MKINIT_DROPIN),
+        "edid_file": bool(name and os.path.isfile(f"{EDID_DIR}/{name}")),
+        "initramfs_has_edid": initramfs_has(f"edid/{name}") if name else {},
+        "initramfs_tools": [t for t in ("mkinitcpio", "dracut", "booster", "limine-update", "limine-mkinitcpio",
+                                         "sdboot-manage", "grub-mkconfig", "update-grub") if shutil.which(t)],
+        "kernel_log": kernel_edid_lines(),
+    }
+
+
 DEBUGFS = "/sys/kernel/debug/dri"
 
 

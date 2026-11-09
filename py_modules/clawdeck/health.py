@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import debuglaunch, distro, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import debuglaunch, distro, edid, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -200,6 +200,14 @@ def game_reports(home: str, runtime_dir: str | None) -> list[dict]:
     return out
 
 
+def _safe(fn):
+    """A report section that can't break the report."""
+    try:
+        return fn()
+    except Exception as e:                        # noqa: BLE001 - the report must still be written
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
 def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str | None = None) -> str:
     """One-tap diagnostic bundle for a bug report: hardware, paths, health, versions. No personal data beyond the
     username in paths."""
@@ -214,6 +222,8 @@ def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str |
         "sysfs_touched": sysfs.touched(),
         "device": device_report(),
         "games": game_reports(home, runtime_dir),
+        # the VRR range fix: why a boot override didn't take, if it didn't (edid.boot_report, #155)
+        "vrr": _safe(edid.boot_report),
     }
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "w", encoding="utf-8") as f:
