@@ -51,7 +51,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           detail={vrr?.not_taken ? vrr.reason ?? undefined : vrr?.pending && (vrr.pending === "on") !== vrr.wide ? "restart to apply the change" : vrr?.reason ?? (vrr?.panel_name ? `${vrr.panel_name} panel, validated` : undefined)} />
         {vrr && (vrr.supported || vrr.wide) && (
           <ButtonItem layout="below" disabled={busy}
-            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known.", undefined,
+            description={explain(want ? "Puts the factory 48–120 Hz description back." : "The screen does VRR from 30 Hz but says 48, so games at 30–48 fps judder. Only for screens whose factory description is known. 30 Hz is below MSI's official 48 Hz floor and some panels flicker or stutter there: if yours does with VRR on, remove the fix (VRR still works from 48 Hz).", undefined,
               live ? "turn it off; a restart also drops it until ClawDeck starts again. Nothing on disk changes." : vrr?.boot_backend === "steamos-grub" ? "a restart; if the screen misbehaves, pick the other SteamOS version in the boot menu (after an update it may have the fix too) and Remove it here." : "a restart; the previous boot entry always starts without it.")}
             onClick={() => confirmRestart(want ? "Remove the VRR fix?" : "Install the VRR fix 30–120 Hz?",
               want ? (vrr.method === "boot" ? "ClawDeck removes its corrected screen description. Takes a minute or two, then restart." : "The factory range comes back at once; the screen may blink once.")
