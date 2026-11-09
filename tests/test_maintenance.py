@@ -120,3 +120,38 @@ def test_write_new_does_not_follow_a_planted_link(tmp_path):
     link.symlink_to(target)
     userexec.write_new(str(link), "#!/bin/bash\n", 0o755)
     assert target.read_text() == "keep" and not link.is_symlink() and link.read_text() == "#!/bin/bash\n"
+
+
+def test_upstream_watch_checks_the_pinned_nightly_and_closes_the_tracker_when_all_is_tested(monkeypatch):
+    """The v10 nightly repo has no "latest" release (a 404 every day) and a new build daily: the watch checks that the
+    pinned build still downloads. Once everything is tested the tracker closes itself instead of staying open."""
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location("uw", os.path.join(os.path.dirname(__file__), "..", "tools", "upstream_watch.py"))
+    uw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(uw)
+    assert uw.UPSTREAMS["OptiScaler nightly (v10)"][0] == "pinned:optiscaler_v10"
+
+    class R:
+        def close(self): pass
+        def read(self): return b"{}"
+    monkeypatch.setattr(uw.urllib.request, "urlopen", lambda req, timeout=30: R())
+    assert uw.version_of("pinned:optiscaler_v10", "x") == "nightly-20261030"
+
+    def gone(req, timeout=30):
+        raise OSError("404")
+    monkeypatch.setattr(uw.urllib.request, "urlopen", gone)
+    assert uw.version_of("pinned:optiscaler_v10", "x").startswith("error: the pinned download is gone")
+
+    sent = []
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    monkeypatch.setattr(uw, "_send", lambda url, method, payload: sent.append((url, method, payload)))
+    open_one = [{"title": uw.ISSUE_TITLE, "url": "https://api.github.com/repos/o/r/issues/51"}]
+    monkeypatch.setattr(uw, "_json", lambda url: open_one)
+    assert uw.issue("body", attention=False) == "closed"
+    assert sent[-1][2]["state"] == "closed" and sent[0][0].endswith("/issues/51/comments")
+    sent.clear()
+    assert uw.issue("body", attention=True) == "updated" and sent[0][1] == "PATCH"
+    monkeypatch.setattr(uw, "_json", lambda url: [])
+    assert uw.issue("body", attention=False) == "nothing to do"
+    assert uw.issue("body", attention=True) == "opened"
