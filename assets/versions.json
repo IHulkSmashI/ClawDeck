@@ -2,9 +2,9 @@
  "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and ClawDeck's own OptiScaler + OptiPatcher are installed only at a tested version (OptiScaler with its sha256); 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
-  "tag": "20261104",
+  "tag": "20261107",
   "asset_glob": "xess-xmx-linux-*.zip",
-  "note": "20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
+  "note": "20261107: hardening of the driver, shim and hook, the other missing kernels compiled in the background on a cache miss, Mesa 26.3 patch 0006 (a Cyberpunk 2077 crash), the session check run from ~/.config/xess-xmx (stock drivers when the package folder is gone), any case of the prefix driver store; the session file, hook mark and shim path ClawDeck reads are unchanged. Also an experimental Vulkan layer for the stock driver (xmx-stock.sh), not used by ClawDeck yet. 20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
  },
  "decky_framegen": {
   "repo": "xXJSONDeruloXx/Decky-Framegen",

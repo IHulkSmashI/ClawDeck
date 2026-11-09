@@ -35,7 +35,9 @@ UPSTREAMS = {
     "xess-xmx-linux": ("release", "HHHHanasak1/xess-xmx-linux", "XeSS on XMX driver (pinned: test, then bump)"),
     "Decky Framegen": ("release", "xXJSONDeruloXx/Decky-Framegen", "compatibility only: games it patched are detected and left alone (framegen.py)"),
     "OptiScaler": ("release", "optiscaler/OptiScaler", "ClawDeck's own OptiScaler per game (optiscaler.py; pinned with sha256)"),
-    "OptiScaler nightly (v10)": ("release", "optiscaler/OptiScaler-nightly", "Capcom RE Engine games: ClawDeck's OptiScaler v10 in the OptiScaler/ subfolder (optiscaler.py; pinned with sha256)"),
+    # a new nightly every day, and the repo has no "latest" release (the API's 404): what matters is that the pinned
+    # build can still be downloaded; when it is pruned, this turns into an error and the pin needs a newer tested one
+    "OptiScaler nightly (v10)": ("pinned:optiscaler_v10", "optiscaler/OptiScaler-nightly", "Capcom RE Engine games: ClawDeck's OptiScaler v10 in the OptiScaler/ subfolder (optiscaler.py; pinned with sha256)"),
     "fakenvapi": ("release", "FakeMichau/fakenvapi", "Capcom games: fakenvapi.dll in OptiScaler/ next to v10 (optiscaler.py; pinned with sha256)"),
     "OptiPatcher": ("release", "xXJSONDeruloXx/OptiScaler-Bleeding-Edge", "OptiPatcher.asi next to OptiScaler (pinned with sha256)"),
     # onehoon's forks: its Windows install of Onimusha (2026-11-04) runs this REFramework fork with
@@ -73,7 +75,23 @@ def _json(url: str):
     return json.loads(_get(url, "application/json" if "registry.npmjs.org" in url else "application/vnd.github+json"))
 
 
+def pinned_alive(key: str) -> str:
+    """The pinned build's version when its download (assets/versions.json) still answers, else an error."""
+    with open(os.path.join(ROOT, "assets", "versions.json"), encoding="utf-8") as f:
+        entry = json.load(f)[key]
+    req = urllib.request.Request(entry["url"], method="HEAD", headers={"User-Agent": "ClawDeck-upstream-watch"})
+    try:
+        urllib.request.urlopen(req, timeout=30).close()
+    except Exception as e:
+        return f"error: the pinned download is gone ({e})"
+    # the release tag from the URL (.../releases/download/<tag>/...), the name the lock uses
+    parts = entry["url"].split("/releases/download/", 1)
+    return parts[1].split("/", 1)[0] if len(parts) == 2 else entry.get("version", "?")
+
+
 def version_of(kind: str, src: str) -> str:
+    if kind.startswith("pinned:"):
+        return pinned_alive(kind.split(":", 1)[1])
     if kind == "release":
         return _json(f"https://api.github.com/repos/{src}/releases/latest")["tag_name"]
     if kind.startswith("release:"):
@@ -162,16 +180,31 @@ def report(lock: dict) -> tuple[str, dict, bool, bool]:
     return "\n".join(md), now, bool(failed) or changed, bool(failed)
 
 
-def issue(body: str) -> None:
-    repo = os.environ["GITHUB_REPOSITORY"]
-    found = _json(f"https://api.github.com/repos/{repo}/issues?state=open&per_page=50")
-    existing = next((i for i in found if i.get("title") == ISSUE_TITLE and "pull_request" not in i), None)
-    data = json.dumps({"title": ISSUE_TITLE, "body": body}).encode()
-    url = existing["url"] if existing else f"https://api.github.com/repos/{repo}/issues"
-    req = urllib.request.Request(url, data=data, method="PATCH" if existing else "POST",
+def _send(url: str, method: str, payload: dict) -> None:
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), method=method,
                                  headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
                                           "Accept": "application/vnd.github+json", "User-Agent": "ClawDeck-upstream-watch"})
     urllib.request.urlopen(req, timeout=30).read()
+
+
+def issue(body: str, attention: bool = True) -> str:
+    """Opens or updates the tracker while something needs testing; closes it once everything is tested and every
+    canary passes (it opens again the next time something is new). Returns what it did."""
+    repo = os.environ["GITHUB_REPOSITORY"]
+    found = _json(f"https://api.github.com/repos/{repo}/issues?state=open&per_page=50")
+    existing = next((i for i in found if i.get("title") == ISSUE_TITLE and "pull_request" not in i), None)
+    if not attention:
+        if not existing:
+            return "nothing to do"
+        _send(existing["url"] + "/comments", "POST", {"body": "Everything is tested and every canary passes: closing. "
+                                                               "This opens again when something new needs testing."})
+        _send(existing["url"], "PATCH", {"body": body, "state": "closed", "state_reason": "completed"})
+        return "closed"
+    if existing:
+        _send(existing["url"], "PATCH", {"title": ISSUE_TITLE, "body": body})
+        return "updated"
+    _send(f"https://api.github.com/repos/{repo}/issues", "POST", {"title": ISSUE_TITLE, "body": body})
+    return "opened"
 
 
 def main() -> int:
@@ -190,8 +223,8 @@ def main() -> int:
         with open(LOCK, "w", encoding="utf-8") as f:
             json.dump({k: v for k, v in now.items() if not v.startswith("error")}, f, indent=2, sort_keys=True)
             f.write("\n")
-    if a.issue and attention:
-        issue(md)
+    if a.issue:
+        print(f"\nissue: {issue(md, attention)}")
     return 1 if failed and not a.update_lock else 0   # a red run is the alarm: a parser needs fixing
 
 
