@@ -912,6 +912,15 @@ def test_is_dx12_from_libraries_or_the_exe(tmp_path):
     assert not gamedb.is_dx12(_game(tmp_path, "c", ["Old.exe", "d3d9.dll"]), ["old.exe"])
 
 
+def test_the_witcher_3_says_its_dlss_is_hidden_under_proton(tmp_path):
+    """The Witcher 3 5.0 skips Streamline when it finds wine_get_version: DLSS never shows (#141)."""
+    from clawdeck import gamedb
+    w = gamedb.recommend({"games": []}, _game(tmp_path, "w3", ["bin/x64_dx12/witcher3.exe", "bin/x64_dx12/libxess.dll"]))
+    assert any("GE-Proton 11-9" in r and "XeSS" in r for r in w["reasons"])
+    other = gamedb.recommend({"games": []}, _game(tmp_path, "o", ["game.exe"]))
+    assert not any("GE-Proton" in r for r in other["reasons"])
+
+
 def test_recommend_ignores_clawdeck_optiscaler_files(tmp_path):
     """OptiScaler's own libxess.dll must not turn a DLSS game into 'ships XeSS' once ClawDeck set it up."""
     import json as _j
