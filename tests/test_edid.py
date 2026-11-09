@@ -441,8 +441,23 @@ def test_started_with_the_fix_but_the_driver_kept_48_says_so(panel, tmp_path, mo
     b, grub, keep, valve, ran = _steamos_env(tmp_path, monkeypatch)
     assert edid.conf_enable(b)["ok"]
     monkeypatch.setattr(edid, "_cmdline", lambda: "quiet firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-CSW0801-30-120.bin")
+    monkeypatch.setattr(edid, "kernel_edid_lines", lambda limit=12: [])
     st = edid.status()                                                      # sysfs EDID still the factory 48-120
     assert not st["wide"] and st["not_taken"] and "48-120" in st["reason"] and st["pending"] == "on"
+    # the kernel's own reason, when its log has one (#155)
+    said = 'xe 0000:00:02.0: [drm] *ERROR* Requesting EDID firmware "edid/clawdeck-csw0801-30-120.bin" failed (err=-2)'
+    monkeypatch.setattr(edid, "kernel_edid_lines", lambda limit=12: ["Command line: quiet", said])
+    assert edid.status()["reason"].endswith(f"The kernel says: {said}")
+    r = edid.boot_report()
+    assert r["status"]["not_taken"] and r["cmdline_edid"].startswith("eDP-1:edid/clawdeck-") and r["kernel_log"][1] == said
+    assert r["backend"]["kind"] == "steamos-grub" and r["conf_line"] and isinstance(r["initramfs_has_edid"], dict)
+
+
+def test_kernel_edid_lines_reads_only_edid_lines(monkeypatch):
+    class R:
+        returncode, stdout = 0, "xe: probing\n[drm] Got external EDID base block and 1 extension from \"edid/x.bin\"\nusb 1-1: new\n"
+    monkeypatch.setattr(edid.subprocess, "run", lambda *a, **k: R())
+    assert edid.kernel_edid_lines() == ['[drm] Got external EDID base block and 1 extension from "edid/x.bin"']
 
 
 def test_interrupted_remove_never_brings_the_fix_back(panel, tmp_path, monkeypatch):
