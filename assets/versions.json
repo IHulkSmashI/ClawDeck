@@ -2,9 +2,9 @@
  "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and ClawDeck's own OptiScaler + OptiPatcher are installed only at a tested version (OptiScaler with its sha256); 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
-  "tag": "20261107",
+  "tag": "20261111",
   "asset_glob": "xess-xmx-linux-*.zip",
-  "note": "20261107: hardening of the driver, shim and hook, the other missing kernels compiled in the background on a cache miss, Mesa 26.3 patch 0006 (a Cyberpunk 2077 crash), the session check run from ~/.config/xess-xmx (stock drivers when the package folder is gone), any case of the prefix driver store; the session file, hook mark and shim path ClawDeck reads are unchanged. Also an experimental Vulkan layer for the stock driver (xmx-stock.sh), not used by ClawDeck yet. 20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
+  "note": "20261111: Mesa 26.3.0 final; on Xe3 (Claw 8 EX / Panther Lake) install.sh now defaults to stock mode: the package's unpatched Mesa 26.3 plus the Vulkan layer VK_LAYER_XESS_xmx (its session file adds MESA, VK_ADD_LAYER_PATH, VK_LOADER_LAYERS_ENABLE, XMX_LAYER_HELPER, XMX_IGC_DIR, which ClawDeck carries per game like the others and sets before the container, as upstream's xmx-stock.sh does; the layer writes the same anv_canary); Xe2 (Claw 8 AI+) and older stay on the patched driver. XESS=latest also serves D3D11 and Vulkan games. 20261107: hardening of the driver, shim and hook, the other missing kernels compiled in the background on a cache miss, Mesa 26.3 patch 0006 (a Cyberpunk 2077 crash), the session check run from ~/.config/xess-xmx (stock drivers when the package folder is gone), any case of the prefix driver store; the session file, hook mark and shim path ClawDeck reads are unchanged. Also an experimental Vulkan layer for the stock driver (xmx-stock.sh), not used by ClawDeck yet. 20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
  },
  "decky_framegen": {
   "repo": "xXJSONDeruloXx/Decky-Framegen",
