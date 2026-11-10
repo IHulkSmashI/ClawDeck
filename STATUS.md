@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
+New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
+with five more session variables that ClawDeck carries per game. Check on the EX: Setup → Update XeSS XMX, then CONTROL
+shows "XMX cores used in the last launch"; if not, the launch log's "XMX driver on" line and xmx.env should list
+MESA=stock-26.3.0 and VK_LOADER_LAYERS_ENABLE=VK_LAYER_XESS_xmx.
+
 **XeSS XMX package 20261107 (2026-11-09, #51):** the pin moved from 20261104 (driver, shim and hook hardening,
 background compile of missing kernels, Mesa 26.3 patch 0006, session check from ~/.config/xess-xmx). The parts
 ClawDeck reads (50-xess-xmx.conf, the hook mark, the shim path) are unchanged. Released in beta 13 without waiting (maintainer, 2026-11-09). Check on the EX: Setup → Update XeSS
