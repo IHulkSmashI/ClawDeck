@@ -198,12 +198,19 @@ def test_cachyos_boot_config_one_marked_line_undo_restores_the_file_exactly(pane
     original = '# user config\nKERNEL_CMDLINE[default]="root=UUID=x rw quiet"\nOVERWRITE_EXISTING="yes"\nGRUB_TIMEOUT=0\n'
     conf.write_text(original)
     conf.chmod(0o640)
-    b = {"kind": kind, "conf": str(conf), "line": LINES[kind], "regen": [["regen"]], "initramfs": True}
+    b = {"kind": kind, "conf": str(conf), "line": LINES[kind], "regen": [["regen"]], "initramfs": True,
+         "marker_above": kind == "limine"}
     r = edid.conf_enable(b)
     text = conf.read_text()
     added = text[len(original):].strip()
-    assert r["ok"] and r["restart"] and text.startswith(original) and "\n" not in added
-    assert added.endswith(edid.MARK) and "firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-" in added
+    assert r["ok"] and r["restart"] and text.startswith(original)
+    if kind == "limine":                       # limine-entry-tool reads lines, not shell: marker on its own line (#155)
+        mark, line = added.split("\n")
+        assert mark == edid.MARK and line == LINES[kind].format(args="firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/" + line.split("edid/")[1].rstrip('"'))
+        assert "#" not in line
+    else:
+        assert "\n" not in added and added.endswith(edid.MARK)
+    assert "firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-" in added
     assert ran == [["regen"]] and edid.conf_pending(b) == "on" and oct(conf.stat().st_mode & 0o777) == "0o640"
     bins = list((tmp_path / "etc/firmware/edid").glob("clawdeck-*.bin"))
     assert len(bins) == 1 and edid.vrr_range(bins[0].read_bytes()) == (30, 120)
@@ -284,7 +291,7 @@ def test_boot_backend_only_where_it_is_safe(monkeypatch, tmp_path):
     assert edid.boot_backend() is None                                         # no KERNEL_CMDLINE of its own
     texts["/etc/default/limine"] += 'KERNEL_CMDLINE[default]+="quiet nowatchdog"\n'
     b = edid.boot_backend()
-    assert b["kind"] == "limine" and b["regen"] == [["limine-update"]] and b["initramfs"]
+    assert b["kind"] == "limine" and b["regen"] == [["limine-update"]] and b["initramfs"] and b["marker_above"]
     globs["/etc/limine-entry-tool.d/*.conf"] = ["/etc/limine-entry-tool.d/a.conf"]
     texts["/etc/limine-entry-tool.d/a.conf"] = 'KERNEL_CMDLINE[default]="root=x"\n'
     assert edid.boot_backend() is None                                         # a drop-in would win
@@ -509,3 +516,22 @@ def test_driver_in_the_initramfs_is_read_from_the_running_image(tmp_path, monkey
     assert edid._driver_in_initramfs() is True
     monkeypatch.setattr(edid, "_gpu_driver", lambda: "amdgpu")
     assert edid._driver_in_initramfs() is None                               # not Intel: not this check's business
+
+
+def test_limine_line_from_beta14_is_repaired_once(panel, tmp_path, monkeypatch):
+    """#155: beta 14 and earlier wrote the marker after the Limine setting; limine-entry-tool put it on the kernel
+    command line. At start ClawDeck rewrites it with the marker above, regenerates once, and leaves good files alone."""
+    raw, ran = _boot_env(tmp_path, monkeypatch)
+    conf = tmp_path / "limine"
+    user = 'KERNEL_CMDLINE[default]="quiet splash rw"\n'
+    args = "firmware_class.path=/etc/firmware drm.edid_firmware=eDP-1:edid/clawdeck-csw0801-30-120.bin"
+    conf.write_text(user + f'KERNEL_CMDLINE[default]+=" {args}"  {edid.MARK}\n')
+    b = {"kind": "limine", "conf": str(conf), "line": LINES["limine"], "regen": [["limine-update"]], "initramfs": True,
+         "marker_above": True}
+    monkeypatch.setattr(edid, "boot_backend", lambda for_enable=True: b)
+    r = edid.limine_marker_repair()
+    assert r == {"ok": True, "restart": True} and ran == [["limine-update"]]
+    assert conf.read_text() == user + f'{edid.MARK}\nKERNEL_CMDLINE[default]+=" {args}"\n'
+    assert edid.limine_marker_repair() is None and len(ran) == 1          # repaired: nothing more
+    assert edid.conf_pending(b) == "on"
+    assert edid.conf_disable(b)["ok"] and conf.read_text() == user        # Remove takes both lines out

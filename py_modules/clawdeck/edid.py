@@ -409,8 +409,11 @@ def boot_backend(for_enable: bool = True) -> dict | None:
         extra = [ln for f in sorted(glob.glob("/etc/limine-entry-tool.d/*.conf")) for ln in _conf_lines(f)]
         if not _sets(lines, r"KERNEL_CMDLINE\[default\]\+?=") or _sets(extra, r"KERNEL_CMDLINE"):
             return None
+        # limine-entry-tool reads this file line by line, not as a shell script: a comment after the value lands on
+        # the kernel command line, quotes and all (#155, CachyOS + Limine), so ClawDeck's marker goes on its own line
         return {"kind": "limine", "conf": "/etc/default/limine", "line": 'KERNEL_CMDLINE[default]+=" {args}"',
-                "regen": [["limine-update"]] if w("limine-update") else [["limine-mkinitcpio"]], "initramfs": mkinit}
+                "regen": [["limine-update"]] if w("limine-update") else [["limine-mkinitcpio"]], "initramfs": mkinit,
+                "marker_above": True}
     if os.path.isfile("/etc/sdboot-manage.conf") and w("sdboot-manage"):
         if not _sets(_conf_lines("/etc/sdboot-manage.conf"), r"""OVERWRITE_EXISTING=["']?yes"""):
             return None
@@ -513,6 +516,39 @@ def _other_fw_path(b: dict) -> str | None:
 STEAMOS_GRUB_CFG = "/efi/EFI/SteamOS/grub.cfg"
 
 
+def _our_lines(b: dict, args: str) -> list[str]:
+    """ClawDeck's setting with its marker: on the same line where the file is a shell script (GRUB, sdboot-manage),
+    on the line above where the tool reads lines itself (Limine)."""
+    line = b["line"].format(args=args)
+    return [MARK, line] if b.get("marker_above") else [f"{line}  {MARK}"]
+
+
+@_locked
+def limine_marker_repair() -> dict | None:
+    """At start: a Limine config written by ClawDeck 0.2.0 beta 14 or earlier has the marker after the setting, which
+    limine-entry-tool passes to the kernel, so the fix never took (#155). Rewritten with the marker above and the
+    boot entries regenerated once; the next restart applies the fix. None when there is nothing to repair."""
+    b = boot_backend(for_enable=False)
+    if not b or b["kind"] != "limine":
+        return None
+    lines = _conf_lines(b["conf"])
+    bad = [ln for ln in lines if MARK in ln and OURS in ln]
+    if not bad:
+        return None
+    m = re.search(r'\+="\s*(.*?)"', bad[0])
+    if not m:
+        return None
+    try:
+        _write_conf(b["conf"], _strip_ours(lines) + _our_lines(b, m.group(1).strip()))
+    except OSError as e:
+        return {"ok": False, "error": f"couldn't write the boot config: {e.strerror or e}"}
+    for cmd in b["regen"]:
+        ok, out = _regen(cmd)
+        if not ok:
+            return {"ok": False, "error": f"{cmd[0]}: {out}"}
+    return {"ok": True, "restart": True}
+
+
 def _undo_line(b: dict) -> None:
     """Only ClawDeck's line out of the config again and regenerate: the EDID and the keep-list entry stay."""
     try:
@@ -553,7 +589,7 @@ def conf_enable(b: dict, after_update: bool = False) -> dict:
         os.makedirs(EDID_DIR, exist_ok=True)
         with open(dest, "wb") as f:
             f.write(data)
-        _write_conf(b["conf"], _strip_ours(_conf_lines(b["conf"])) + [f"{b['line'].format(args=args)}  {MARK}"])
+        _write_conf(b["conf"], _strip_ours(_conf_lines(b["conf"])) + _our_lines(b, args))
         if b.get("initramfs"):
             os.makedirs(os.path.dirname(MKINIT_DROPIN), exist_ok=True)
             _write_conf(MKINIT_DROPIN, [f"FILES+=({dest})  {MARK}"])
