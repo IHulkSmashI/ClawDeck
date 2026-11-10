@@ -97,7 +97,7 @@ export type GameStatus = { xmx_proof?: XmxProof; debug?: DebugLaunch; launch: La
   files?: { owner: string | null; version?: string | null; dll?: string | null; preset?: string | null; folder: string | null; reframework: boolean; install_dir: string | null } };
 export const gameStatus = callable<[appid: string], GameStatus>("game_status");
 export const setDebugLaunch = callable<[appid: string, on: boolean], { ok: boolean; error?: string; debug?: DebugLaunch }>("set_debug_launch");
-export type GameEntry = { appid: string; name: string; dir: string; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[];
+export type GameEntry = { appid: string; name: string; dir: string; shortcut?: boolean; icon_url?: string | null; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[];
   tags?: { text: string; kind: "fsr" | "xess" | "fg" }[] };
 export const gamesList = callable<[], GameEntry[]>("games_list");
 export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;

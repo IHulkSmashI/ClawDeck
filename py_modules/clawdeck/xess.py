@@ -28,7 +28,7 @@ import os
 import re
 import urllib.error
 
-from . import downloads, sysfs, userexec
+from . import downloads, shortcuts, sysfs, userexec
 
 log = logging.getLogger("clawdeck.xess")
 
@@ -256,7 +256,8 @@ def steam_install_dir(home: str, appid: str) -> str | None:
             d = os.path.join(lib, "steamapps", "common", m.group(1))
             if os.path.isdir(d):
                 return d
-    return None
+    sc = shortcuts.find(home, appid)                   # a non-Steam game (#161)
+    return sc["dir"] if sc and os.path.isdir(sc["dir"]) else None
 
 
 def steam_app_name(home: str, appid: str) -> str | None:
@@ -270,7 +271,8 @@ def steam_app_name(home: str, appid: str) -> str | None:
         m = re.search(r'"name"\s+"([^"]+)"', sysfs.read(os.path.join(lib, "steamapps", f"appmanifest_{appid}.acf")) or "")
         if m:
             return m.group(1)
-    return None
+    sc = shortcuts.find(home, appid)                   # a non-Steam game (#161)
+    return sc["name"] if sc else None
 
 
 TOOLS = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common Redistributables|SteamVR)", re.I)
@@ -293,6 +295,11 @@ def installed_games(home: str) -> list[dict]:
             if os.path.isdir(folder):
                 seen.add(a.group(1))
                 out.append({"appid": a.group(1), "name": n.group(1), "dir": folder})
+    # non-Steam games (Steam shortcuts to a Windows .exe, #161): the support check still decides which are shown
+    for sc in shortcuts.shortcuts(home):
+        if sc["appid"] not in seen and os.path.isdir(sc["dir"]):
+            seen.add(sc["appid"])
+            out.append({"appid": sc["appid"], "name": sc["name"], "dir": sc["dir"], "shortcut": True})
     return sorted(out, key=lambda g: g["name"].lower())
 
 
@@ -323,7 +330,14 @@ def stock_env() -> dict[str, str]:
 
 
 def prefix_dir(home: str, appid: str) -> str:
-    return os.path.join(home, COMPATDATA, str(appid), "pfx", "drive_c")
+    """The game's Wine drive C:. A non-Steam game can name its own prefix (STEAM_COMPAT_DATA_PATH in its launch
+    options, #161); a Steam game's is compatdata/<appid>."""
+    d = os.path.join(home, COMPATDATA, str(appid))
+    if not os.path.isdir(d):
+        sc = shortcuts.find(home, appid)
+        if sc:
+            d = sc["compat"]
+    return os.path.join(d, "pfx", "drive_c")
 
 
 def xmx_proof(home: str, appid: str, runtime_dir: str | None = None) -> dict:

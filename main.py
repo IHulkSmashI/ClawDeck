@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, debuglaunch, quiet, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, debuglaunch, quiet, shortcuts, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -1175,6 +1175,8 @@ class Plugin:
             launch = self.profiles.get_launch(g["appid"])
             g["setup"] = "optiscaler" if g["appid"] in ours else "launch" if launch else None
             g["tags"] = self._game_tags(launch) if g["appid"] in ours else []
+            if g.get("shortcut"):                  # a non-Steam game: Steam has no icon URL for it (#161)
+                g["icon_url"] = await self._bg(shortcuts.icon_url, HOME, g["appid"])
         return games
 
     # the upscaler ClawDeck put into a game, as the Game list's coloured tag shows it

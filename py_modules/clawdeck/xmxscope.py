@@ -130,7 +130,8 @@ DEPTH = 9                       # Unreal: Engine/Plugins/.../Binaries/ThirdParty
 def prefix_shim(home: str, appid: str, pkg: str | None) -> dict:
     """The same as the scope script does at launch, from the plugin (when a game is set up): the shim into the game's
     prefix driver store when the prefix has none (Valve's Proton 11.0), and ControlLib.dll into its system32."""
-    sys32 = os.path.join(home, ".local/share/Steam/steamapps/compatdata", str(appid), "pfx", "drive_c", "windows", "system32")
+    from . import xess                                 # (xess imports this module)
+    sys32 = os.path.join(xess.prefix_dir(home, appid), "windows", "system32")   # a non-Steam game's own prefix too
     if not pkg or not os.path.isfile(os.path.join(pkg, "igdext64.dll")) or not os.path.isdir(sys32):
         return {"ok": False, "placed": False, "why": "no prefix yet or no package"}
     import shutil

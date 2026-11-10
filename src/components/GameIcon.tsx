@@ -7,7 +7,9 @@ export const gameIconUrl = (appid: string): string | null => {
     const store = (window as any).appStore;
     const ov = store?.GetAppOverviewByAppID?.(Number(appid));
     const url = ov ? store?.GetIconURLForApp?.(ov) : null;
-    return typeof url === "string" && url ? url : null;
+    if (typeof url === "string" && url) return url;
+    // a non-Steam game has no icon URL; its overview carries the icon itself once Steam has loaded it (#161)
+    return ov?.icon_data ? `data:image/${ov.icon_data_format || "png"};base64,${ov.icon_data}` : null;
   } catch {
     return null;
   }
@@ -22,8 +24,9 @@ export const Tag: FC<{ text: string; kind: keyof typeof TAG }> = ({ text, kind }
     color: "#fff", background: TAG[kind] ?? TAG.fg, whiteSpace: "nowrap" }}>{text}</span>
 );
 
-export const GameName: FC<{ appid: string; name: string; size?: number; tags?: { text: string; kind: keyof typeof TAG }[] }> = ({ appid, name, size = 20, tags }) => {
-  const url = gameIconUrl(appid);
+export const GameName: FC<{ appid: string; name: string; size?: number; tags?: { text: string; kind: keyof typeof TAG }[];
+  iconUrl?: string | null }> = ({ appid, name, size = 20, tags, iconUrl }) => {
+  const url = gameIconUrl(appid) ?? iconUrl ?? null;   // iconUrl: a non-Steam game's own icon file, from the backend
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
       {url ? <img src={url} width={size} height={size} style={{ borderRadius: 4, flex: "none" }} alt="" />
