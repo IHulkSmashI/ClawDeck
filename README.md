@@ -151,7 +151,7 @@ and **Setup**. **Explain** at the top says what each control does, why you'd use
 
 ### Upscaling and frame generation
 
-The list shows only games ClawDeck can set up (DLSS, FSR or XeSS inside), with a tag for what each one runs.
+The list shows only games ClawDeck can set up (DLSS, FSR or XeSS inside), with a tag for what each one runs. Non-Steam games you added to Steam and run through Proton show up too, with their own prefix if the shortcut sets `STEAM_COMPAT_DATA_PATH`.
 
 <p align="center"><img src="docs/img/game-tags.png" alt="The game list with a tag for each game's upscaler and frame generation" width="40%"></p>
 

@@ -178,7 +178,7 @@ def game_reports(home: str, runtime_dir: str | None) -> list[dict]:
     ids = sorted({n.split(".", 1)[0] for n in os.listdir(d) if n.split(".", 1)[0].isdigit()})
     out = []
     for appid in ids:
-        pfx = os.path.join(home, xess.COMPATDATA, appid)
+        pfx = os.path.dirname(os.path.dirname(xess.prefix_dir(home, appid)))     # a non-Steam game's own prefix too
         sys32 = os.path.join(pfx, "pfx", "drive_c", "windows", "system32")
         shim = False
         for r, _d, f in os.walk(os.path.join(sys32, "driverstore")) if os.path.isdir(sys32) else ():
