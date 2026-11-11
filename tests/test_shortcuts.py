@@ -79,3 +79,22 @@ def test_unreal_launcher_stub_is_not_where_optiscaler_goes(tmp_path):
     _touch(str(tmp_path / "G1R-Win64-Shipping.exe"), b"x" * 300)
     _touch(str(tmp_path / "G1R/Binaries/Win64/G1R-Win64-Shipping.exe"), b"x" * 5000)
     assert optiscaler.main_exe_dir(str(tmp_path)) == str(tmp_path / "G1R/Binaries/Win64")
+
+
+def test_a_shortcut_s_own_prefix_wins_over_the_empty_compatdata_folder_steam_makes(tmp_path):
+    """#166: Steam creates an empty compatdata/<appid> at a shortcut's first launch even though its launch options
+    send Proton elsewhere (with ~ for the user's home); the real prefix must still win."""
+    home, games = _setup(tmp_path)
+    exe = _touch(str(games / "SB2/SB2.exe"))
+    vdf = {"0": {"appid": 2972123661 - (1 << 32), "AppName": "Stellar Blade", "Exe": f'"{exe}"',
+                 "LaunchOptions": "STEAM_COMPAT_DATA_PATH=~/Prefixes/stellar-blade %command%"},
+           "1": {"appid": 222, "AppName": "Other", "Exe": f'"{exe}"', "LaunchOptions": "STEAM_COMPAT_DATA_PATH=${HOME}/p/o %command%"},
+           "2": {"appid": 333, "AppName": "Plain", "Exe": f'"{exe}"', "LaunchOptions": "%command%"}}
+    _touch(str(home / shortcuts.USERDATA / "12345/config/shortcuts.vdf"), b"\x00shortcuts\x00" + _kv(vdf) + b"\x08")
+    os.makedirs(home / xess.COMPATDATA / "2972123661")                 # what Steam leaves: empty, no pfx/
+    os.makedirs(home / xess.COMPATDATA / "333" / "pfx")
+    assert xess.prefix_dir(str(home), "2972123661") == f"{home}/Prefixes/stellar-blade/pfx/drive_c"
+    assert xess.prefix_dir(str(home), "222") == f"{home}/p/o/pfx/drive_c"
+    assert xess.prefix_dir(str(home), "333") == str(home / xess.COMPATDATA / "333/pfx/drive_c")
+    assert shortcuts.compat_path("STEAM_COMPAT_DATA_PATH=$HOME/x %command%", "/home/u/") == "/home/u/x"
+    assert shortcuts.compat_path("STEAM_COMPAT_DATA_PATH=~user/x %command%", "/home/u") == "~user/x"
