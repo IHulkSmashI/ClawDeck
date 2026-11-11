@@ -33,12 +33,12 @@
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
     "@decky/ui": "^4.16.4",
-    "@rollup/rollup-linux-x64-musl": "^4.67.4",
+    "@rollup/rollup-linux-x64-musl": "^4.68.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/webpack": "^5.28.5",
     "esbuild": "0.28.2",
-    "rollup": "^4.67.4",
+    "rollup": "^4.68.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
