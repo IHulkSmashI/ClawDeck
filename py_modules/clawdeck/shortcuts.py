@@ -88,15 +88,21 @@ def top_folder(exe: str) -> str:
     return d
 
 
-def compat_path(launch_options: str) -> str | None:
-    """STEAM_COMPAT_DATA_PATH=<path> in a shortcut's launch options (quoted or not)."""
+def compat_path(launch_options: str, home: str | None = None) -> str | None:
+    """STEAM_COMPAT_DATA_PATH=<path> in a shortcut's launch options (quoted or not). With home, a leading ~ or $HOME
+    / ${HOME} is the user's home, as the shell running the launch options expands it (the plugin runs as root, so
+    os.path.expanduser would give /root): STEAM_COMPAT_DATA_PATH=~/Prefixes/stellar-blade (#166)."""
     m = re.search(r"""STEAM_COMPAT_DATA_PATH=(?:"([^"]+)"|'([^']+)'|(\S+))""", launch_options or "")
-    return next((g for g in m.groups() if g), None) if m else None
+    path = next((g for g in m.groups() if g), None) if m else None
+    if path and home:
+        path = re.sub(r"^(~|\$HOME|\$\{HOME\})(?=/|$)", lambda _: home.rstrip("/"), path)
+    return path
 
 
 def shortcuts(home: str) -> list[dict]:
     """Every non-Steam shortcut that starts a Windows .exe: appid, name, exe, dir (the game's top folder),
-    compat (its prefix folder, the one holding pfx/), icon (file path or None)."""
+    compat (its prefix folder, the one holding pfx/), compat_set (the launch options name it), icon (file path or
+    None)."""
     out, seen = [], set()
     for path in sorted(glob.glob(os.path.join(home, USERDATA, "*", "config", "shortcuts.vdf"))):
         try:
@@ -116,11 +122,12 @@ def shortcuts(home: str) -> list[dict]:
                     if not exe.lower().endswith(".exe") or not isinstance(appid, int) or not os.path.isfile(exe):
                         continue
                     aid = str(appid & 0xFFFFFFFF)
-                    compat = compat_path(str(_get(entry, "LaunchOptions") or ""))
+                    compat = compat_path(str(_get(entry, "LaunchOptions") or ""), home)
                     icon = str(_get(entry, "icon") or "").strip().strip('"') or None
                     items.append({"appid": aid, "name": str(_get(entry, "AppName") or os.path.basename(exe)),
                                   "exe": exe, "dir": top_folder(exe),
                                   "compat": compat or os.path.join(home, ".local/share/Steam/steamapps/compatdata", aid),
+                                  "compat_set": bool(compat),
                                   "icon": icon if icon and os.path.isfile(icon) else None, "shortcut": True})
                 _cache[path] = (mtime, items)
         except (OSError, ValueError, struct.error, IndexError):

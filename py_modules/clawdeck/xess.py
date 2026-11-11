@@ -331,12 +331,13 @@ def stock_env() -> dict[str, str]:
 
 def prefix_dir(home: str, appid: str) -> str:
     """The game's Wine drive C:. A non-Steam game can name its own prefix (STEAM_COMPAT_DATA_PATH in its launch
-    options, #161); a Steam game's is compatdata/<appid>."""
+    options, #161): Proton always uses that one, so it wins. Steam still creates an empty compatdata/<appid> for the
+    shortcut at its first launch, which made this point at a pfx/ that never exists (#166, maltyjava). A Steam game's
+    prefix, and a shortcut's without its own, is compatdata/<appid>."""
     d = os.path.join(home, COMPATDATA, str(appid))
-    if not os.path.isdir(d):
-        sc = shortcuts.find(home, appid)
-        if sc:
-            d = sc["compat"]
+    sc = shortcuts.find(home, appid)
+    if sc and (sc.get("compat_set") or not os.path.isdir(d)):
+        d = sc["compat"]
     return os.path.join(d, "pfx", "drive_c")
 
 
