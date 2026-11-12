@@ -32,15 +32,14 @@ the minimum TDP, which is why the rule is "within KEEP of the most", not "the be
 Cost, per second while a game runs: the new lines of two small logs, /proc/stat, two GPU clock files and the RAPL
 energy counter. The log directory listing and PowerStation's GPU load are cached (LOG_RESCAN_S, BUSY_EVERY_S).
 
-Target fps (optional, Power -> Autotune target): instead of "nearly the most frames", the fewest watts that hold the
-fps you picked, judged every second on rendered (base) frames. The rules are DeckyTDPTuner's governor (GPL-3,
+Target fps (optional, Power -> Autotune target): instead of "nearly the most frames", the fewest watts that keep
+every second at the fps you picked or over (a minimum, not an average), judged every second on rendered (base) frames. The rules are DeckyTDPTuner's governor (GPL-3,
 backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in mind:
-  - a miss is the last G_WIN seconds AND the last second under G_MISS of the target: +G_RAISE W at once (+G_RAISE_BIG
-    far under), at most every G_RAISE_GAP s, then judged on fresh frames only;
-  - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), and only while
-    the target is met with room to spare: a step is taken only if, with frames following
-    watts (Handheld Companion's assumption, which overstates the loss), the fps after it would still be G_SAFE of the
-    target. 1 W near the target, far above it half the way to where the watts would just hold it, at most G_STEP_MAX W.
+  - a miss is any second under G_AT of the target: +G_RAISE W at once (+G_RAISE_BIG far under, proportional up to
+    G_STEP_UP), at most every G_RAISE_GAP s, then judged on fresh frames only;
+  - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), judged on the
+    lowest second in that time: a step is taken only if, with frames following watts (Handheld Companion's
+    assumption, which overstates the loss), that lowest second would still be G_SAFE of the target. 1 W near the target, far above it half the way to where the watts would just hold it, at most G_STEP_MAX W.
     A frame limit at the target pins fps there: at G_AT with PowerStation's GPU busy under G_BUSY, 1 W at a time;
   - it starts at the set TDP (your pick for the game) and goes from there: up to the model's maximum for this power
     source while under the target, down only as above; raises are proportional (at least +2 W, +4 W far under, at
@@ -99,7 +98,6 @@ LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_
 SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
 # target fps (DeckyTDPTuner's governor, see above)
 G_WIN = 3               # seconds of history a miss is judged on (theirs: 4 ticks of 0.5 s)
-G_MISS = 0.93           # under this share of the target is a miss
 G_RAISE, G_RAISE_BIG = 2, 4
 G_STEP_UP = 12          # the most one raise moves: far under the target, 8 W -> 35 W in three raises (~6 s)
 G_SETTLE_S = 60         # readings in a row at one TDP, at the target and without a miss: that TDP holds it
@@ -110,8 +108,8 @@ G_FAR = 1.15            # this far above the target: proportional steps down, G_
 G_STEP_MAX = 6          # the most one step down moves (up: G_STEP_UP)
 G_SAFE = 1.03           # a step down only if the fps after it, with frames following watts, is still this share of
                         # the target (the target met with room to spare, never lowered into a miss)
-G_AT = 0.99             # at the target: within 1 % holds it (a frame limit reads 59.9 for 60). Under it (but over
-                        # G_MISS) +1 W after G_LOWER_AFTER s; at it, lowered 1 W only with GPU headroom (G_BUSY)
+G_AT = 0.99             # the minimum, within 1 % (a frame limit at 60 reads 59.9): any second under it is a miss;
+                        # at it, lowered 1 W only with GPU headroom (G_BUSY)
 G_BLAME = 20            # s: a miss this soon after lowering blames the lowering (theirs 5 s; Intel's PL1 window here)
 G_FLOOR_DECAY = 300     # s without a miss: the learned floor comes down 1 W (theirs 120 s: one dip every 2 min
                         # in a game that stays heavy; 5 min here)
@@ -382,7 +380,6 @@ class Session:
     g_floor_at: float = 0.0
     g_maxed: list[float] = field(default_factory=list)
     g_maxed_since: float | None = None
-    g_under_since: float | None = None  # just under the target band (0.93-0.95) since
     best_fps: float | None = None       # what the full TDP gave when the target was out of reach
     unreachable: bool = False
 
@@ -675,7 +672,8 @@ class Autotune:
         return True
 
     def _govern(self, s: Session, fps: float, smp: Sample) -> None:
-        """Target fps mode, every second (see the module docstring)."""
+        """Target fps mode, every second (see the module docstring). The target is a minimum: every second at it or
+        over, with the fewest watts that keep it there (maintainer, 2026-11-12: "60 fps target means 60 fps minimum")."""
         l, now, T = s.learned, time.monotonic(), s.target or 0
         if not T:
             return
@@ -683,84 +681,69 @@ class Autotune:
         # safe side; skipping fps under 35 % of the target as "a menu" kept a game at 8 W and 11-28 fps for 40 s
         # (Order of the Sinking Star, target 120, 2026-11-12)
         s.g_hist.append(fps)
-        del s.g_hist[:-G_WIN]
-        win = sum(s.g_hist) / len(s.g_hist)
-        s.avg_fps, s.low_fps = win, min(s.g_hist)
+        del s.g_hist[:-G_LOWER_AFTER]                     # since the last change, at most G_LOWER_AFTER s
+        recent = s.g_hist[-G_WIN:]
+        win = sum(recent) / len(recent)
+        s.avg_fps, s.low_fps = win, min(recent)
         if smp.pkg_w:
             s.fps_per_w = fps / smp.pkg_w
         top = self._top(s)
-        lim = T * G_MISS
-        if len(s.g_hist) >= 2 and win < lim and fps < lim:
+        if fps < T * G_AT:
+            # under the minimum this second: watts at once. It used to take a 3 s average under 93 % (56 fps for 60),
+            # and 56-59 fps got +1 W only after 12 s
             s.g_last_miss, s.g_steady = now, 0
             blamed = s.g_last_drop is not None and now - s.g_last_drop < G_BLAME and s.g_drop_from > l.tdp
             if blamed and s.g_drop_from > s.g_floor:
                 s.g_floor, s.g_floor_at = s.g_drop_from, now
             if l.tdp >= top:
-                self._out_of_reach(s, win, now)
+                self._out_of_reach(s, fps, now)
                 return
             if now - s.g_last_change < G_RAISE_GAP:
                 return
             # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_UP
-            need = -(-int(l.tdp * (T / max(win, 1.0) - 1) * 10) // 10)
-            step = max(G_RAISE_BIG if win < T * 0.75 else G_RAISE, min(G_STEP_UP, need))
+            need = -(-int(l.tdp * (T / max(fps, 1.0) - 1) * 10) // 10)
+            step = max(G_RAISE_BIG if fps < T * 0.75 else G_RAISE, min(G_STEP_UP, need))
             w, was = min(top, l.tdp + step), l.tdp
             if blamed:
                 w, s.g_last_drop = min(top, max(s.g_drop_from, l.tdp + 1)), None   # exactly back to what held
             if self._tdp(l, w):
                 s.g_last_change, s.g_hist = now, []
-                self._did(s, f"{win:.0f} fps, under the {T:.0f} target: raised TDP to {w} W", f"+{w - was} W")
+                self._did(s, f"{fps:.0f} fps, under the {T:.0f} fps minimum: raised TDP to {w} W", f"+{w - was} W")
             return
         s.g_maxed_since, s.unreachable = None, False
-        # the last step down lost the target without being a miss (59 fps for 60): undone, and that's the floor
-        if (s.g_last_drop is not None and now - s.g_last_drop < G_BLAME and len(s.g_hist) >= G_WIN
-                and win < T * G_AT and s.g_drop_from > l.tdp):
-            was = l.tdp
-            if self._tdp(l, min(top, s.g_drop_from)):
-                s.g_floor, s.g_floor_at = max(s.g_floor, l.tdp), now
-                s.g_last_drop, s.g_last_change, s.g_hist = None, now, []
-                self._did(s, f"{win:.0f} fps at {was} W is just under the {T:.0f} target: back to {l.tdp} W", f"+{l.tdp - was} W")
-            return
-        # just under the target (59 fps for 60) for G_LOWER_AFTER s: +1 W (a miss under G_MISS gets +2 W at once)
-        if win < T * G_AT and l.tdp < top:
-            s.g_under_since = s.g_under_since or now
-            if now - s.g_under_since >= G_LOWER_AFTER and now - s.g_last_change >= G_LOWER_AFTER:
-                was = l.tdp
-                if self._tdp(l, l.tdp + 1):
-                    s.g_under_since, s.g_last_change, s.g_hist = None, now, []
-                    self._did(s, f"{win:.0f} fps, just under the {T:.0f} target: TDP {l.tdp} W", "+1 W")
-                return
-        else:
-            s.g_under_since = None
         # the floor comes down only when the game got lighter (well above the target, or the GPU clearly idle under a
         # frame limit): a game that stays as heavy keeps its watts locked instead of a probe dip every few minutes
         lighter = win >= T * G_FAR or (smp.gpu_busy is not None and smp.gpu_busy < 60)
         if (lighter and s.g_floor > s.floor_tdp and now - s.g_last_miss > G_FLOOR_DECAY
                 and now - s.g_floor_at > G_FLOOR_DECAY):
             s.g_floor, s.g_floor_at = s.g_floor - 1, now
-        # a TDP holds the target once G_SETTLE_S readings in a row at it were at the target without a miss. It used to be
-        # a minute on the clock since the last change and miss, which counted skipped readings too: a session marked
+        # a TDP holds the target once G_SETTLE_S seconds in a row at it were all at the minimum or over. It used to be a
+        # minute on the clock since the last change and miss, which counted skipped readings too: a session marked
         # settled at 8 W and 15 fps saved the 23 W an exit menu at 400 fps had brought it to (OotSS, 2026-11-12)
-        s.g_steady = s.g_steady + 1 if s.g_steady_tdp == l.tdp and win >= T * G_AT else int(win >= T * G_AT)
+        s.g_steady = s.g_steady + 1 if s.g_steady_tdp == l.tdp else 1
         s.g_steady_tdp = l.tdp
         if s.g_steady >= G_SETTLE_S:
             s.settled, l.held = True, l.tdp
-        low = max(s.floor_tdp, s.g_floor)
-        far = win >= T * G_FAR
+        floor = max(s.floor_tdp, s.g_floor)
+        lowest = min(s.g_hist)
+        far = lowest >= T * G_FAR
         wait = G_LOWER_FAST if far else G_LOWER_AFTER
-        # the most a step may take: with frames following watts, the target is still met with G_SAFE after it. A frame
-        # limit at the target pins fps there, so it can never be exceeded: at the target with the GPU under G_BUSY, the
-        # limit holds it, not the power, and 1 W is safe (a miss right after it undoes the step and makes it the floor)
-        safe = int(l.tdp * (1 - T * G_SAFE / win))
-        if safe < 1 and win >= T * G_AT and smp.gpu_busy is not None and smp.gpu_busy < G_BUSY:
+        # judged on the lowest second since the last change (up to G_LOWER_AFTER s), not the average: the most a step
+        # may take keeps that lowest second G_SAFE over the minimum, with frames following watts. A frame limit at the
+        # target pins fps there, so it can never be exceeded: at the target with the GPU under G_BUSY, the limit holds
+        # it, not the power, and 1 W is safe (a miss right after it undoes the step and makes it the floor)
+        safe = int(l.tdp * (1 - T * G_SAFE / lowest))
+        if safe < 1 and lowest >= T * G_AT and smp.gpu_busy is not None and smp.gpu_busy < G_BUSY:
             safe = 1
-        if (l.tdp > low and len(s.g_hist) >= G_WIN and safe >= 1
+        if (l.tdp > floor and len(s.g_hist) >= wait and safe >= 1
                 and now - s.g_last_change >= wait and now - s.g_last_miss >= wait):
             # far above: half the way to where the watts would just hold the target, at most G_STEP_MAX; near it: 1 W
-            step = min(safe, max(1, min(G_STEP_MAX, int((l.tdp - l.tdp * T / win) / 2))) if far else 1)
-            w, was = max(low, l.tdp - step), l.tdp
+            step = min(safe, max(1, min(G_STEP_MAX, int((l.tdp - l.tdp * T / lowest) / 2))) if far else 1)
+            w, was = max(floor, l.tdp - step), l.tdp
             if self._tdp(l, w):
                 s.g_drop_from, s.g_last_drop, s.g_last_change, s.g_hist = was, now, now, []
-                self._did(s, f"{win:.0f} fps holds the {T:.0f} target: lowered TDP to {w} W", f"−{was - w} W")
+                self._did(s, f"{lowest:.0f} fps at the lowest holds the {T:.0f} fps minimum: lowered TDP to {w} W",
+                          f"−{was - w} W")
 
     def _out_of_reach(self, s: Session, win: float, now: float) -> None:
         """At the full TDP and still under the target: it stays there. After REACH_S it says the target is out of reach

@@ -144,7 +144,7 @@ and **Setup**. **Explain** at the top says what each control does, why you'd use
 |---|---|
 | **Profile** | Battery saver, Battery, Balanced, Performance, Plugged, Max: the most power the game may use. |
 | **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. |
-| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, from your TDP, up when the game needs it and down only with room to spare; the TDP it settles on is the game's next start; out of reach, it stays at the maximum. Counts rendered frames, so frame generation doesn't fool it. |
+| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): a minimum, every second at it or over, with the fewest watts, from your TDP, up when the game needs it and down only with room to spare; the TDP it settles on is the game's next start; out of reach, it stays at the maximum. Counts rendered frames, so frame generation doesn't fool it. |
 | **Fan** | Automatic (MSI), Quiet, Cooling, Full speed, or your own curve. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |
 | **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |

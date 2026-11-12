@@ -241,7 +241,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
             selectedOption={st?.autotune_target ?? 0}
             onChange={async (o) => { const r = await setAutotuneTarget(o.data); toast(r.summary); refresh(); }}
-            description={explain("A frame rate to hold with the fewest watts: starts at the TDP above, raises it (up to the most this Claw allows) while the game is under the target, lowers it only while the game stays above the target with room to spare, and the TDP it settles on becomes this game's TDP for its next start. Out of reach, it stays at the most this Claw allows. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+            description={explain("A minimum frame rate to keep with the fewest watts (every second at it or over): starts at the TDP above, raises it (up to the most this Claw allows) while the game is under the target, lowers it only while the game stays above the target with room to spare, and the TDP it settles on becomes this game's TDP for its next start. Out of reach, it stays at the most this Claw allows. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
               quick ? undefined : "No target: nearly the most frames the TDP above gives, for less power.", undefined)} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />

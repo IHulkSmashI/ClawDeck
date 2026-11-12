@@ -1515,7 +1515,7 @@ def test_target_starts_at_your_tdp_and_lowers_only_with_room_to_spare(fake_hw, m
     assert min(run.seen["fps"]) >= 60 and at.status()["saves_w"] == 9
     game.per_w = 2.95                                            # a heavy scene: 47 fps at 16 W
     run(12)
-    assert s.learned.tdp >= 19 and "under the 60 target" in s.last_action   # seconds, not minutes
+    assert s.learned.tdp >= 19 and "under the 60 fps minimum" in s.last_action   # seconds, not minutes
     run(60)
     assert s.learned.tdp == 21                                   # 62 fps: no room for another step
     at.session = None
@@ -1633,7 +1633,26 @@ def test_target_raises_at_once_however_low_the_fps(fake_hw, monkeypatch):
     _BusyGame(at, 2.0)                                           # 16 fps at 8 W, 70 at 35 W
     run(10)
     steps = [t for i, t in enumerate(run.seen["tdp"]) if i == 0 or t != run.seen["tdp"][i - 1]]
-    assert steps == [8, 20, 32, 35] and "120 target" in s.last_action  # +12 W raises, 35 W within 10 s
+    assert steps == [8, 20, 32, 35] and "120 fps minimum" in s.last_action  # +12 W raises, 35 W within 10 s
+    at.session = None
+
+
+def test_target_is_a_minimum_every_second_and_lowering_is_judged_on_the_lowest(fake_hw, monkeypatch):
+    """60 fps means 60 fps minimum (maintainer, 2026-11-12): one second under it raises at once, and a game that
+    averages 66 but dips to 62 every other second has no room for a step down (62 is under 60 + 3 % after one)."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=20)
+    s.max_tdp = 35
+    beat = {"n": 0, "dip": 0.0}
+
+    def fps(tdp, *_):
+        beat["n"] += 1
+        return (62.0 if beat["n"] % 2 else 70.0) - beat["dip"]
+    _Game(at, fps, gpu_busy=99)                                  # power-bound: no frame limit holds it
+    run(120)
+    assert s.learned.tdp == 20 and min(run.seen["fps"]) >= 60    # never lowered: the lowest second has no room
+    beat["dip"] = 4.0                                            # 58 fps every other second: under the minimum
+    run(2)
+    assert s.learned.tdp > 20 and "under the 60 fps minimum" in s.last_action   # within 2 s
     at.session = None
 
 

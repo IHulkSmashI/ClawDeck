@@ -55,7 +55,8 @@ sleep/wake several times fine.
 **Autotune target starts at your TDP and keeps your target (2026-11-12):** target mode started mid-range (22 W of a
 35 W pick), never went above the pick, lowered at 97 % of the target (and not at all in a power-bound game: the GPU
 is busy there), and Auto FPS replaced an out-of-reach target with what the full TDP gave (120 → 46 fps in
-Enshrouded), then took watts away to hold that. Now it starts at the game's TDP, raises up to the model's maximum
+Enshrouded), then took watts away to hold that. Now the target is a minimum (any second under it raises at once; lowering is judged
+on the lowest second of the last 12, not the average). It starts at the game's TDP, raises up to the model's maximum
 while under the target (up to 12 W at once; every reading counts, fps under 35 % of the target is no longer skipped
 as "a menu"), lowers only while the fps after the step would still be 3 % over it (or 1 W at a time at a frame limit
 with GPU headroom), stays at the maximum when the target is out of reach, and saves the TDP that held the target for
