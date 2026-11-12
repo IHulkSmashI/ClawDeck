@@ -1342,6 +1342,33 @@ def test_autotune_gives_up_on_a_game_without_a_frame_rate(fake_hw, monkeypatch):
     at.session = None
 
 
+def test_autotune_without_a_frame_rate_gives_back_the_limit_you_picked(fake_hw, monkeypatch):
+    """What start() applied stayed on the chip after autotune gave up on a game without a frame rate: a saved result
+    (here 17 W, CPU 90 %, boost, a GPU floor), or a target's mid-range start (22 W of a 35 W pick; Enshrouded,
+    2026-11-12: 30-40 fps instead of 60). Now the pick goes back."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    pw.apply_profile("", {"tdp": 35, "cpu_max_pct": 85, "boost": False}, False)       # the pick: Custom 35 W
+    at.start("1", {"tdp": 17, "ceiling": 35, "max_fps": 60.0, "cpu_max_pct": 90, "boost": True, "gpu_min_mhz": 1300},
+             8, 35, False)
+    p = fake_hw.paths
+    assert chip["tdp"] == 17 and sysfs.read_int(p.cpu_max_perf_pct) == 90 and sysfs.read_int(p.cpu_no_turbo) == 0
+    assert sysfs.read_int(p.gpu_min_freq) == 1300
+    at.sampler.sample = lambda: autotune.Sample(t=time.monotonic(), frametime_ms=None, fps=None, gpu_mhz=1500,
+                                                gpu_max_mhz=2400, cpu_pct=40, pkg_w=22.0, gpu_busy=99,
+                                                source="presented", shown_fps=None)
+    for _ in range(autotune.NO_FPS_S):
+        at._step()
+    st = at.status()
+    assert st["no_frames"] and st["paused"] and st["tdp"] == 35 and chip["tdp"] == 35
+    assert sysfs.read_int(p.cpu_max_perf_pct) == 85 and sysfs.read_int(p.cpu_no_turbo) == 1
+    assert sysfs.read_int(p.gpu_min_freq) == 300
+    at.session = None
+
+
 def test_game_list_tags_say_what_clawdecks_optiscaler_runs(plugin):
     p = plugin
     assert p._game_tags({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3}) == [

@@ -349,6 +349,7 @@ class Session:
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
     no_fps_s: int = 0                   # seconds in a row without a frame rate before the first one
     no_frames: bool = False             # gave up: this game's frame rate can't be read
+    pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
     skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
     settled: bool = False               # reached hold and stayed there SETTLED_WINDOWS: what it found is worth saving
@@ -413,6 +414,7 @@ class Autotune:
         self.sampler.set_prefix(xell_log)
         if target:
             self._start_target(s, known, int(target), auto_fps)
+        s.pick = self._on_chip(l, ceiling_tdp)
         self._apply(l)
         self._tau(s, bool(target) or not reuse)
         if self.task is None or self.task.done():
@@ -551,6 +553,33 @@ class Autotune:
                     "summary": summary(s)}
         return None
 
+    def _on_chip(self, l: Learned, tdp: int) -> Learned:
+        """The levers as the chip has them now: the user's pick, before autotune changes anything. A lever that can't
+        be read keeps autotune's value, so giving back leaves it alone."""
+        p = self.hw.paths
+        cpu = sysfs.read_int(p.cpu_max_perf_pct) if p.cpu_max_perf_pct else None
+        turbo = self.power.turbo()
+        return Learned(tdp=tdp, cpu_max_pct=l.cpu_max_pct if cpu is None else cpu,
+                       gpu_min_mhz=sysfs.read_int(p.gpu_min_freq) if p.gpu_min_freq else None,
+                       boost=l.boost if turbo is None else turbo, gpu_profile=self._gpu_active())
+
+    def _give_back(self, s: Session) -> None:
+        """Autotune gives up on this game: the chip goes back to how the user's pick left it. What start() applied
+        stayed for the rest of the game otherwise: a target's mid-range start is 22 W of a 35 W pick (Enshrouded,
+        2026-11-12: 30-40 fps until autotune was switched off, then 60)."""
+        l, pick = s.learned, s.pick
+        if l.tdp != s.ceiling_tdp:                        # your pick (under the temperature guard's step, if any)
+            self._tdp(l, s.ceiling_tdp)
+        if pick is None:
+            return
+        if pick.cpu_max_pct != l.cpu_max_pct and self.power.set_cpu_max_pct(pick.cpu_max_pct):
+            l.cpu_max_pct = pick.cpu_max_pct
+        self._boost(l, pick.boost)
+        if l.gpu_min_mhz is not None and pick.gpu_min_mhz is not None and self.power.set_gpu_window(pick.gpu_min_mhz, None):
+            l.gpu_min_mhz = None
+        if pick.gpu_profile:
+            self._gpu_profile(l, pick.gpu_profile)
+
     def _apply(self, l: Learned) -> None:
         self.power.set_tdp(l.tdp, self.plugged)
         self.power.set_cpu_max_pct(l.cpu_max_pct)
@@ -585,12 +614,14 @@ class Autotune:
         if not smp.fps and not s.paused and s.learned.samples == 0:
             # no frame rate at all: a game without XeSS / XeLL (the shim's log) whose MangoHud log isn't written
             # (Onimusha without OptiScaler sat in "measure" for minutes, 2026-11-05). Give up: the limit you picked
-            # stays, nothing more is changed, and the panel says why
+            # goes back on the chip, nothing more is changed, and the panel says why
             s.no_fps_s += 1
             if s.no_fps_s >= NO_FPS_S:
                 s.paused, s.no_frames = True, True
+                self._give_back(s)
                 self._tau(s, False)
-                log.info("autotune: no frame rate from %s after %d s: it stays out of this game", s.appid, NO_FPS_S)
+                log.info("autotune: no frame rate from %s after %d s: it stays out of this game (%d W, your limit)",
+                         s.appid, NO_FPS_S, s.learned.tdp)
         if not smp.fps or s.paused:
             return
         base = smp.fps
