@@ -212,9 +212,17 @@ fi
 # every present for nothing when Autotune is off (audit 2026-11-05)
 if [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && [ -f "$RUNTIME/autotune.on" ] && command -v mangohud >/dev/null 2>&1; then
   export MANGOHUD=1
-  # keep the user's own MANGOHUD_CONFIG keys if any were set; no_display keeps the overlay off unless they want it
-  base="${MANGOHUD_CONFIG:-no_display}"
+  # keep the user's own MANGOHUD_CONFIG keys if any were set; else nothing is shown. Not with no_display: MangoHud up
+  # to 0.8.4 skips its per-frame update while the HUD is hidden and no log runs, and autostart_log starts from that
+  # update, so the log never started and autotune had no frame rate in any game without XeLL (Enshrouded on the Claw
+  # 8 EX, 2026-11-12; fixed after 0.8.4 by MangoHud 567d7aa6). An empty layout at zero alpha draws nothing.
+  hide="legacy_layout=0,background_alpha=0,alpha=0"
+  base=",${MANGOHUD_CONFIG:-$hide},"
+  base="${base//,no_display,/,$hide,}"; base="${base#,}"
   export MANGOHUD_CONFIG="${base%,},output_folder=$LOGDIR,log_interval=1000,autostart_log=1,log_duration=0"
+  say "MangoHud frame-time log for autotune: $LOGDIR"
+elif [ "${CLAWDECK_NO_MANGOHUD:-0}" != 1 ] && [ -f "$RUNTIME/autotune.on" ]; then
+  say "no MangoHud: autotune can only read this game's frame rate from XeLL"
 fi
 # E-cores only for this game (Per-game, CLAWDECK_CORES=e): the game and everything it starts inherit the affinity,
 # the P-cores stay free; nothing to undo, it ends with the game. The E-cores on the L3 (Panther Lake: 2-9), not the
