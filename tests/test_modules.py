@@ -88,6 +88,26 @@ def test_launch_wrapper_reads_env_file(tmp_path):
     assert "WINEDLLOVERRIDES=dxgi=n,b;foo=n" in out and "IGDEXT_TRACE=1" in out   # the user's own overrides are kept
 
 
+def test_launch_wrapper_starts_mangohuds_log_with_nothing_shown(tmp_path):
+    """MangoHud up to 0.8.4 never starts autostart_log while no_display hides the HUD, so autotune had no frame rate
+    (Enshrouded, 2026-11-12): an empty layout at zero alpha hides it instead, also in place of the user's no_display."""
+    import subprocess
+    _w(tmp_path / "autotune.on", "1")
+    _w(tmp_path / "bin" / "mangohud", "#!/bin/sh")
+    os.chmod(tmp_path / "bin" / "mangohud", 0o755)
+    cfg = lambda **env: subprocess.run(
+        ["bash", os.path.join(ROOT, "tools", "clawdeck-launch.sh"), "printenv", "MANGOHUD_CONFIG"], capture_output=True,
+        text=True, env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "HOME": str(tmp_path), "CLAWDECK_RUNTIME": str(tmp_path),
+                        "SteamAppId": "42", **env}).stdout.strip().split(",")
+    hide = ["legacy_layout=0", "background_alpha=0", "alpha=0"]
+    keys = cfg()
+    assert "no_display" not in keys and keys[:3] == hide and "autostart_log=1" in keys
+    assert f"output_folder={tmp_path / 'mangohud'}" in keys and "MangoHud frame-time log" in (tmp_path / "launch" / "42.log").read_text()
+    assert cfg(MANGOHUD_CONFIG="fps_only,no_display")[:4] == ["fps_only", *hide]
+    assert cfg(MANGOHUD_CONFIG="fps_only")[:2] == ["fps_only", f"output_folder={tmp_path / 'mangohud'}"]   # the user's HUD
+    assert cfg(CLAWDECK_NO_MANGOHUD="1") == [""]
+
+
 def test_launch_wrapper_keeps_the_users_own_dxvk_options(tmp_path):
     import subprocess
     (tmp_path / "launch").mkdir()
