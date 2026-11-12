@@ -52,6 +52,11 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**MangoHud's frame-time log starts again (2026-11-12):** the wrapper hid MangoHud with `no_display`, and MangoHud up to
+0.8.4 never starts `autostart_log` then, so autotune had no frame rate in any game without XeLL. Now an empty layout at
+zero alpha hides it. Check on the EX: autotune on, start a game without XeSS (Enshrouded): nothing is drawn, a CSV
+appears in `~/homebrew/data/ClawDeck/mangohud/`, and the status line shows fps.
+
 **XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
 with five more session variables that ClawDeck carries per game. Check on the EX: Setup → Update XeSS XMX, then CONTROL
