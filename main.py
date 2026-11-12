@@ -1329,6 +1329,8 @@ class Plugin:
         rec, d, folder = await self._bg(self._rec, appid)
         if not d or not folder:
             return {"ok": False, "error": "can't find this game's install folder or its exe"}
+        if rec.get("pd_upscaler") and upscaler != "own":
+            return {"ok": False, "error": rec["reasons"][0]}
         if upscaler.startswith("fsr4_xmx") and self._xmx_off(appid):
             return {"ok": False, "error": "FSR 4.1.2 needs the XMX cores, and XMX is off for this game: pick XeSS 2, or switch XMX on first"}
         if upscaler.startswith("fsr4_xmx"):

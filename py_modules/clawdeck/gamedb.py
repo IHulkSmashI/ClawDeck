@@ -89,6 +89,25 @@ def _has(game_dir: str | None, names: tuple[str, ...]) -> bool:
     return False
 
 
+# OptiScaler's own list puts the older RE Engine games (RE2, RE3, RE4 2023, RE7, Village, DMC5, Street Fighter 6) under
+# "REF PDUpscaler branch": they have no DLSS in the game (RE4 only its built-in FSR 2, which OptiScaler can't use), so
+# OptiScaler only gets an input through REFramework's pd-upscaler build plus PureDark's UpscalerBasePlugin
+# (PDPerfPlugin.dll), and there is no frame generation (OptiScaler wiki, Resident Evil 4 (2023)). The Capcom setup
+# swaps the game's DLSS and DLSS-G and has nothing to take there: RE4 ran as if nothing was installed (Kisenir,
+# Claw 8 EX on Bazzite, 2026-11-11). Not offered until ClawDeck has a tested pd-upscaler setup.
+PD_UPSCALER_ID = "ref-pdupscaler-branch"
+PD_UPSCALER_WHY = ("This Capcom game has no DLSS in its menu, so ClawDeck's Capcom setup (it swaps the game's DLSS "
+                   "and DLSS frame generation for XeSS on the XMX cores) has nothing to work with here, and ClawDeck "
+                   "doesn't install it. OptiScaler's own list sets these games up by hand with REFramework's "
+                   "pd-upscaler build and PureDark's UpscalerBasePlugin, without frame generation; ClawDeck will "
+                   "offer that once it's tested on a Claw.")
+
+
+def no_dlss_re_engine(doc: dict, g: dict | None, exes: list[str]) -> bool:
+    """An RE Engine game OptiScaler's list puts under the pd-upscaler branch (no DLSS in the game)."""
+    return is_re_engine(doc, exes) and (g or {}).get("id") == PD_UPSCALER_ID
+
+
 def capcom_tested(doc: dict, exes: list[str]) -> str | None:
     """Where the Capcom setup was seen working for this game (games.json "capcom" "tested"), else None."""
     tested = {k.lower(): v for k, v in ((doc.get("capcom") or {}).get("tested") or {}).items()}
@@ -116,6 +135,7 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
     exes = exes_in(game_dir)
     g = match(doc, exes)
     re_engine = is_re_engine(doc, exes)
+    pd = no_dlss_re_engine(doc, g, exes)
     ini = dict((g or {}).get("ini") or {})
     ini.update(((g or {}).get("when") or {}).get("xefg") or {})          # frame generation goes out through XeSS-FG
     later = sorted(((g or {}).get("later") or {}).keys())
@@ -134,6 +154,9 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         own = ["XeSS"] + (["XeSS frame generation"] if "XeSS-FG" in ships["fg"] else []) + (["XeLL"] if "XeLL" in ships["latency"] else [])
         why = (f"This game ships {', '.join(own[:-1]) + ' and ' + own[-1] if len(own) > 1 else own[0]}: use them in its graphics "
                "menu; they run on the XMX cores by themselves, nothing to add.")
+    elif pd:
+        route, launch, opti = "re_engine_pd", {}, False
+        why = PD_UPSCALER_WHY
     elif re_engine:
         # the Capcom setup: the game's own DLSS frame generation is what OptiScaler turns into XeSS-FG, so it
         # is the frame generation source whatever files the game ships; the wiki's Spoofing_Dxgi=false would hide
@@ -163,12 +186,13 @@ def recommend(doc: dict, game_dir: str | None) -> dict:
         reasons.append(f"Newer OptiScaler also fixes this game in code ({', '.join(g['quirks'])})")
     reasons += [WINE_CHECK[e] for e in exes if e in WINE_CHECK]
     tested = capcom_tested(doc, exes) if re_engine else None
-    if re_engine:
+    if re_engine and not pd:
         reasons.append(f"The Capcom setup, tested on a Claw: {tested}" if tested else
                        "The Capcom setup; not tested on a Claw in this game yet")
     return {
         "route": route, "known": bool(g), "frame_gen": ofg if opti else None, "fg_source": fg_source, "id": (g or {}).get("id"), "name": (g or {}).get("name"),
-        "re_engine": re_engine, "capcom": re_engine, "capcom_tested": tested, "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
+        "re_engine": re_engine, "capcom": re_engine and not pd, "capcom_tested": tested, "pd_upscaler": pd,
+        **({"recommended": False} if pd else {}), "optiscaler": opti, "ini": ini if opti else {}, "later": later if opti else [],
         "launch": launch, "reasons": reasons, "ships": ships, "upscaler": launch.get("opti") if opti else None, "ini_version": doc.get("ini_version"),
         "source_commit": doc.get("optiscaler_commit"), "exes": exes[:8],
         "main_exes": [e.lower() for e in (g or {}).get("exes", [])] + [e for e in exes if e in {x.lower() for x in doc.get("re_engine_exes", [])}],
