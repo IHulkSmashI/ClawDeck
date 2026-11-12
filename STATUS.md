@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune reads only the running game's MangoHud log (2026-11-12):** it took the newest CSV in the log folder and
+read it from the start, so after a plugin restart a game's first reading was another game's old log (Order of the
+Sinking Star got Enshrouded's fps), and it looked for a new log only every 30 s. Now only a log written since the game
+started counts, looked for every second until it appears. Check on the EX: autotune on, play one game, then start
+another and restart the plugin: the status line shows the second game's fps, never the first one's.
+
 **XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
 with five more session variables that ClawDeck carries per game. Check on the EX: Setup → Update XeSS XMX, then CONTROL
