@@ -1633,7 +1633,7 @@ def test_target_raises_at_once_however_low_the_fps(fake_hw, monkeypatch):
     _BusyGame(at, 2.0)                                           # 16 fps at 8 W, 70 at 35 W
     run(10)
     steps = [t for i, t in enumerate(run.seen["tdp"]) if i == 0 or t != run.seen["tdp"][i - 1]]
-    assert steps == [8, 20, 32, 35] and "120 fps minimum" in s.last_action  # +12 W raises, 35 W within 10 s
+    assert steps == [8, 35] and "120 fps minimum" in s.last_action   # one raise, straight to the maximum
     at.session = None
 
 

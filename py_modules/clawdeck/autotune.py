@@ -35,15 +35,15 @@ energy counter. The log directory listing and PowerStation's GPU load are cached
 Target fps (optional, Power -> Autotune target): instead of "nearly the most frames", the fewest watts that keep
 every second at the fps you picked or over (a minimum, not an average), judged every second on rendered (base) frames. The rules are DeckyTDPTuner's governor (GPL-3,
 backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in mind:
-  - a miss is any second under G_AT of the target: +G_RAISE W at once (+G_RAISE_BIG far under, proportional up to
-    G_STEP_UP), at most every G_RAISE_GAP s, then judged on fresh frames only;
+  - a miss is any second under G_AT of the target: +G_RAISE W at once (+G_RAISE_BIG far under, proportional to the
+    shortfall, up to the maximum in one step), at most every G_RAISE_GAP s, then judged on fresh frames only;
   - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), judged on the
     lowest second in that time: a step is taken only if, with frames following watts (Handheld Companion's
     assumption, which overstates the loss), that lowest second would still be G_SAFE of the target. 1 W near the target, far above it half the way to where the watts would just hold it, at most G_STEP_MAX W.
     A frame limit at the target pins fps there: at G_AT with PowerStation's GPU busy under G_BUSY, 1 W at a time;
   - it starts at the set TDP (your pick for the game) and goes from there: up to the model's maximum for this power
-    source while under the target, down only as above; raises are proportional (at least +2 W, +4 W far under, at
-    most G_STEP_UP). Every reading counts, a low one too. The TDP that held the target for G_SETTLE_S readings in a
+    source while under the target, down only as above; raises are proportional (at least +2 W, +4 W far under, no
+    cap). Every reading counts, a low one too. The TDP that held the target for G_SETTLE_S readings in a
     row is saved as the game's own TDP at exit (main.py), so the next start is there;
   - a miss within G_BLAME s of lowering makes the watts before it the floor (a calm scene can't talk it below what the
     heavy ones need: the RE4 report, 2026-11-08); the floor comes down 1 W per G_FLOOR_DECAY s without a miss;
@@ -99,13 +99,12 @@ SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmwa
 # target fps (DeckyTDPTuner's governor, see above)
 G_WIN = 3               # seconds of history a miss is judged on (theirs: 4 ticks of 0.5 s)
 G_RAISE, G_RAISE_BIG = 2, 4
-G_STEP_UP = 12          # the most one raise moves: far under the target, 8 W -> 35 W in three raises (~6 s)
 G_SETTLE_S = 60         # readings in a row at one TDP, at the target and without a miss: that TDP holds it
 G_RAISE_GAP = 2         # s between raises: the last one has to kick in
 G_LOWER_AFTER = 12      # s with no change and no miss before lowering near the target
 G_LOWER_FAST = 5        # ... and while clearly above it (G_FAR): the PL1 window is 8 s, so a step shows within that
 G_FAR = 1.15            # this far above the target: proportional steps down, G_LOWER_FAST apart
-G_STEP_MAX = 6          # the most one step down moves (up: G_STEP_UP)
+G_STEP_MAX = 6          # the most one step down moves (up: no cap)
 G_SAFE = 1.03           # a step down only if the fps after it, with frames following watts, is still this share of
                         # the target (the target met with room to spare, never lowered into a miss)
 G_AT = 0.99             # the minimum, within 1 % (a frame limit at 60 reads 59.9): any second under it is a miss;
@@ -700,9 +699,11 @@ class Autotune:
                 return
             if now - s.g_last_change < G_RAISE_GAP:
                 return
-            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_UP
+            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), up to the maximum in one
+            # step. No cap: a raise that overshoots (a loading hitch isn't short of watts) costs a few seconds of watts,
+            # a capped one costs frames under the minimum (maintainer, 2026-11-12)
             need = -(-int(l.tdp * (T / max(fps, 1.0) - 1) * 10) // 10)
-            step = max(G_RAISE_BIG if fps < T * 0.75 else G_RAISE, min(G_STEP_UP, need))
+            step = max(G_RAISE_BIG if fps < T * 0.75 else G_RAISE, need)
             w, was = min(top, l.tdp + step), l.tdp
             if blamed:
                 w, s.g_last_drop = min(top, max(s.g_drop_from, l.tdp + 1)), None   # exactly back to what held

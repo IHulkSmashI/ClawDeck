@@ -57,7 +57,7 @@ sleep/wake several times fine.
 is busy there), and Auto FPS replaced an out-of-reach target with what the full TDP gave (120 → 46 fps in
 Enshrouded), then took watts away to hold that. Now the target is a minimum (any second under it raises at once; lowering is judged
 on the lowest second of the last 12, not the average). It starts at the game's TDP, raises up to the model's maximum
-while under the target (up to 12 W at once; every reading counts, fps under 35 % of the target is no longer skipped
+while under the target (straight to what the shortfall needs, no cap; every reading counts, fps under 35 % of the target is no longer skipped
 as "a menu"), lowers only while the fps after the step would still be 3 % over it (or 1 W at a time at a frame limit
 with GPU headroom), stays at the maximum when the target is out of reach, and saves the TDP that held the target for
 60 readings in a row as the game's own (not the TDP at exit: a quit menu at 400 fps lowers it). Auto FPS is gone. Check on the EX with a reachable target: start the game at 8 W (it climbs) and at
