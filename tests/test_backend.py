@@ -159,6 +159,20 @@ def test_sampler_averages_every_new_mangohud_row(fake_hw, tmp_path):
 
 
 
+def test_sampler_reads_only_the_running_games_mangohud_log(fake_hw, tmp_path):
+    """After a plugin restart the newest log was another game's, read whole: Enshrouded's fps for the next game
+    (2026-11-12). Only a log written since the game started counts, and it is found the second it appears."""
+    old = tmp_path / "enshrouded_2026.csv"
+    old.write_text("fps,frametime\n50,20.0\n")
+    os.utime(old, (time.time() - 3600, time.time() - 3600))
+    smp = autotune.Sampler(fake_hw, str(tmp_path))
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))           # a game starts
+    assert smp.frametime() == (None, None)                       # not Enshrouded's 50 fps
+    (tmp_path / "sinking_star_2026.csv").write_text("fps,frametime\n120,8.3\n")
+    smp._log_checked -= 1.0                                      # a second later
+    assert smp.frametime() == (8.3, 120.0)
+
+
 def test_sampler_caches_the_dear_reads(fake_hw, tmp_path, monkeypatch):
     (tmp_path / "a.csv").write_text("fps,frametime\n60,16.6\n")
     smp = autotune.Sampler(fake_hw, str(tmp_path))

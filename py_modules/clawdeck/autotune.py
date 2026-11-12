@@ -145,16 +145,27 @@ class Sampler:
         # file per launch, not per second) and PowerStation's GPU load (a D-Bus call, needed once per decision)
         self._log: str | None = None
         self._log_checked = 0.0
+        self._since = 0.0                          # wall clock when the running game started (set_prefix)
         self._busy: tuple[float, int | None] = (-1e9, None)
         self._busy_retry = 0.0
 
     def _newest_log(self) -> str | None:
+        """The running game's MangoHud log: the newest one written since the game started. An older one is another
+        game's: read whole after a plugin restart, it handed Enshrouded's fps to Order of the Sinking Star (2026-11-12).
+        Looked for every second until it appears (a game's first frame can come a minute after launch), then every
+        LOG_RESCAN_S."""
         now = time.monotonic()
         if self._log and now - self._log_checked < LOG_RESCAN_S and os.path.exists(self._log):
             return self._log
         self._log_checked = now
-        files = glob.glob(os.path.join(self.log_dir, "*.csv"))
-        self._log = max(files, key=os.path.getmtime) if files else None
+
+        def mtime(f: str) -> float:
+            try:
+                return os.path.getmtime(f)
+            except OSError:
+                return 0.0
+        files = [f for f in glob.glob(os.path.join(self.log_dir, "*.csv")) if mtime(f) >= self._since]
+        self._log = max(files, key=mtime) if files else None
         return self._log
 
     def frametime(self) -> tuple[float | None, float | None]:
@@ -188,8 +199,10 @@ class Sampler:
         return sum(ft_rows) / len(ft_rows), sum(fps_rows) / len(fps_rows)
 
     def set_prefix(self, xell_log: str | None) -> None:
-        """The game's prefix log where the shim writes XeLL's frame timing; read from its end, new lines only."""
+        """The game's prefix log where the shim writes XeLL's frame timing; read from its end, new lines only. A game
+        starts here: MangoHud logs from before now are not its frames."""
         self.xell_log, self._xell = xell_log, None
+        self._since, self._log = (time.time() - 2, None) if xell_log else (0.0, None)
         try:
             self._xell_pos = os.path.getsize(xell_log) if xell_log else 0
         except OSError:
