@@ -55,7 +55,8 @@ sleep/wake several times fine.
 **Autotune without a frame rate gives your limit back (2026-11-12):** a game whose frame rate autotune can't read
 (no XeSS/XeLL, no MangoHud log) used to keep autotune's starting point after it gave up, so a target's mid-range start
 (22 W of a 35 W pick) stayed for the whole game: Enshrouded ran at 30-40 fps instead of 60 until autotune was switched
-off. Now the TDP, CPU ceiling, boost, GPU floor and GPU efficiency mode go back to what your pick set.
+off. Now the TDP, CPU ceiling, boost, GPU floor and GPU efficiency mode go back to what your pick set, and frames that
+come later (Order of the Sinking Star shows its first one 54 s after launch) hand the game back to autotune.
 Check on the EX: Custom 35 W, autotune on with a target, start a Vulkan game without XeSS (Enshrouded). After 30 s,
 the status line says it stays out, the log line ends "(35 W, your limit)", and
 `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw` reads 35000000.

@@ -533,9 +533,11 @@ class Autotune:
     def pause(self, reason: str = "manual change") -> None:
         """Never fight the user: a manual power change stops autotune for the rest of this session (values the user
         set stay; what was found so far is still saved at game exit)."""
-        if self.session and not self.session.paused:
-            self.session.paused = True
-            log.info("autotune paused: %s", reason)
+        s = self.session
+        if s:
+            if not s.paused:
+                log.info("autotune paused: %s", reason)
+            s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
 
     def running(self) -> bool:
         return self.session is not None
@@ -609,12 +611,19 @@ class Autotune:
             del s.history[:-600]
         if self.csv_log:
             self._log(s, smp)
+        if smp.fps and s.no_frames:
+            # frames after all: a game slower than NO_FPS_S to its first frame (Order of the Sinking Star takes 54 s).
+            # Giving up put your pick back; autotune takes over from there
+            s.no_frames, s.paused, s.no_fps_s = False, False, 0
+            log.info("autotune: frame rate from %s after all: it takes over from %d W", s.appid, s.learned.tdp)
+            if s.phase != "target":
+                self._remeasure(s, "frames after all")
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
         if not smp.fps and not s.paused and s.learned.samples == 0:
             # no frame rate at all: a game without XeSS / XeLL (the shim's log) whose MangoHud log isn't written
             # (Onimusha without OptiScaler sat in "measure" for minutes, 2026-11-05). Give up: the limit you picked
-            # goes back on the chip, nothing more is changed, and the panel says why
+            # goes back on the chip, nothing more is changed until frames come, and the panel says why
             s.no_fps_s += 1
             if s.no_fps_s >= NO_FPS_S:
                 s.paused, s.no_frames = True, True

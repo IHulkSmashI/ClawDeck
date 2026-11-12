@@ -1342,6 +1342,28 @@ def test_autotune_gives_up_on_a_game_without_a_frame_rate(fake_hw, monkeypatch):
     at.session = None
 
 
+def test_autotune_takes_over_when_the_first_frames_come_late(fake_hw, monkeypatch):
+    """Order of the Sinking Star shows its first frame 54 s after launch: autotune gave up at 30 s for the whole
+    session. Giving up puts your pick back and waits; frames after that hand it back to autotune. A manual change
+    still pauses it for good."""
+    at, s = _tuner(fake_hw, monkeypatch)
+    at.sampler.sample = lambda: autotune.Sample(t=time.monotonic(), frametime_ms=None, fps=None, gpu_mhz=1500,
+                                                gpu_max_mhz=2400, cpu_pct=40, pkg_w=20.0, gpu_busy=70,
+                                                source="presented", shown_fps=None)
+    for _ in range(autotune.NO_FPS_S + 20):
+        at._step()
+    assert s.paused and s.no_frames
+    _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp))
+    at._step()
+    assert not s.paused and not s.no_frames and s.phase == "measure" and not at.status()["no_frames"]
+    at.pause("manual CPU ceiling")
+    s.no_frames = True                                           # even if it had given up before
+    at.pause("again")
+    at._step()
+    assert s.paused and not s.no_frames                          # yours stays yours
+    at.session = None
+
+
 def test_autotune_without_a_frame_rate_gives_back_the_limit_you_picked(fake_hw, monkeypatch):
     """What start() applied stayed on the chip after autotune gave up on a game without a frame rate: a saved result
     (here 17 W, CPU 90 %, boost, a GPU floor), or a target's mid-range start (22 W of a 35 W pick; Enshrouded,
