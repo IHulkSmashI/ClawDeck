@@ -100,10 +100,10 @@ export const setDebugLaunch = callable<[appid: string, on: boolean], { ok: boole
 export type GameEntry = { appid: string; name: string; dir: string; shortcut?: boolean; icon_url?: string | null; setup: "optiscaler" | "launch" | null; supported?: boolean; via?: string[];
   tags?: { text: string; kind: "fsr" | "xess" | "fg" }[] };
 export const gamesList = callable<[], GameEntry[]>("games_list");
-export type Recommendation = { route: "own_xess" | "re_engine" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
+export type Recommendation = { route: "own_xess" | "re_engine" | "re_engine_pd" | "fsr_on_xess" | "optiscaler"; known: boolean; name: string | null;
   re_engine: boolean; optiscaler: boolean; ini: Record<string, string>; later: string[]; reasons: string[]; applied: boolean;
   ini_version: string | null; opti_owner?: string | null; frame_gen?: string | null;
-  capcom?: boolean; capcom_tested?: string | null; upscaler?: string | null; recommended?: boolean;
+  capcom?: boolean; capcom_tested?: string | null; pd_upscaler?: boolean; upscaler?: string | null; recommended?: boolean;
   ships?: { upscaler: string[]; fg: string[]; latency: string[] };
   supported_list?: { known: boolean; listed: boolean; intel_ok: boolean | null; name?: string; intel?: string };
   fsr4?: { dx12: boolean; files: boolean; missing: string[]; dir: string; xmx?: boolean }; reframework_state: { present: boolean; ours: boolean; tag?: string | null } | null };

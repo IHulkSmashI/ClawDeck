@@ -218,7 +218,9 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           {rec?.supported_list?.listed && rec.supported_list.intel_ok === false && <Status ok={false} label="Not supported on Intel Arc"
             detail="The public supported-games list marks this game as not working on Intel Arc, so ClawDeck doesn't recommend OptiScaler here." />}
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
-          <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated)} onClick={() => apply()}
+          {rec?.pd_upscaler && !ours && <Status ok={false} label="Not set up by ClawDeck yet: no DLSS in this game"
+            detail={rec.reasons[0]} />}
+          <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated) || (!!rec?.pd_upscaler && !ours)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
             {busy ? "Working…" : !ours ? "Install OptiScaler in this game" : outdated && !changed ? `Update OptiScaler to ${optiVer}` : changed ? "Apply changes" : "Installed"}
           </ButtonItem>

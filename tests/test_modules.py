@@ -1255,6 +1255,22 @@ def test_capcom_route_for_every_re_engine_game_dd2_untested(tmp_path):
     assert not wukong["re_engine"] and "reframework" not in wukong["launch"]
 
 
+def test_no_dlss_re_engine_games_get_no_capcom_setup(tmp_path):
+    """RE4 (2023) and the other games OptiScaler's list puts under the pd-upscaler branch have no DLSS to swap: no
+    OptiScaler, no REFramework, not recommended, and the reason says why (Kisenir, 2026-11-11)."""
+    from clawdeck import gamedb
+    doc = gamedb.load(os.path.join(ROOT, "assets", "games.json"))
+    pd_exes = next(g for g in doc["games"] if g["id"] == gamedb.PD_UPSCALER_ID)["exes"]
+    assert {"re2.exe", "re3.exe", "re4.exe", "re7.exe", "re8.exe", "devilmaycry5.exe", "streetfighter6.exe"} <= set(pd_exes)
+    for exe in pd_exes:
+        r = gamedb.recommend(doc, _game(tmp_path, exe[:-4], [exe]))
+        assert r["route"] == "re_engine_pd" and r["pd_upscaler"] and r["recommended"] is False, exe
+        assert not r["optiscaler"] and r["launch"] == {} and not r["capcom"] and r["re_engine"], exe
+        assert r["reasons"][0] == gamedb.PD_UPSCALER_WHY and "Capcom setup, tested" not in " ".join(r["reasons"]), exe
+    oni = gamedb.recommend(doc, _game(tmp_path, "oni", ["OnimushaWotS.exe", "nvngx_dlss.dll"]))
+    assert oni["route"] == "re_engine" and oni["capcom"] and not oni["pd_upscaler"] and "recommended" not in oni
+
+
 def test_capcom_subfolder_files_dont_count_as_the_games(tmp_path, monkeypatch):
     """v10's libraries in OptiScaler/ must not make Onimusha 'ships XeSS' or 'ships FSR 3.1' once set up."""
     from clawdeck import gamedb, optiscaler

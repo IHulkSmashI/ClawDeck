@@ -1613,3 +1613,23 @@ def test_debug_launch_arms_one_launch_and_never_touches_another_tools_optiscaler
     assert open(os.path.join(rt, "launch", "42.debug")).read() == f"opti={game}\n"
     assert not p.run(p.set_debug_launch("42", False))["debug"]["armed"]
     assert not p.run(p.set_debug_launch("../x", True))["ok"]
+
+
+def test_re4_has_no_dlss_so_nothing_is_installed(plugin, tmp_path, monkeypatch):
+    """Per-game in RE4 (2023): the install is refused with the reason, nothing goes into the game folder, and
+    "own" (Uninstall) still works, so a setup from an older beta can be taken out."""
+    from clawdeck import xess
+    p = plugin
+    game = tmp_path / "steam" / "RESIDENT EVIL 4  BIOHAZARD RE4"
+    _w(game / "re4.exe", "x")
+    before = sorted(str(q.relative_to(game)) for q in game.rglob("*"))
+    monkeypatch.setattr(xess, "steam_install_dir", lambda h, a: str(game))
+    rec = p.run(p.game_recommend("2050650"))
+    assert rec["pd_upscaler"] and rec["recommended"] is False and not rec["optiscaler"]
+    for up in ("xess", "fsr4_xmx"):
+        r = p.run(p.game_choose("2050650", up, 2))
+        assert not r["ok"] and "no DLSS" in r["error"]
+    r = p.run(p.game_apply_recommended("2050650"))
+    assert not r["ok"] and "no DLSS" in r["error"]
+    assert sorted(str(q.relative_to(game)) for q in game.rglob("*")) == before
+    assert p.run(p.game_choose("2050650", "own", 0))["ok"]
