@@ -1617,12 +1617,40 @@ def test_target_raises_above_your_tdp_and_saves_where_it_settles_for_the_next_st
     p.run(p.game_started("42"))
     assert p.chip() == 20 and p.autotune.session.learned.tdp == 20  # the next start is there from launch
     p.autotune.session.thermal_cap = 18                            # a step the temperature guard made is not saved
-    p.autotune.session.settled = True
+    p.autotune.session.settled, p.autotune.session.learned.held = True, 25
     p.run(p.game_stopped("42"))
     assert p.profiles.own("42", False)["tdp"] == 20
     p.run(p.game_started("42"))
     p.run(p.game_stopped("42"))                                    # a quick launch, not settled: nothing saved
     assert p.profiles.own("42", False)["tdp"] == 20
+
+
+def test_target_raises_at_once_however_low_the_fps(fake_hw, monkeypatch):
+    """No reading is skipped as "a menu": 16 fps at 8 W for a 120 target is under it, and raising is the safe side.
+    Fps under 35 % of the target used to be ignored (OotSS sat at 8 W and 11-28 fps for 40 s, 2026-11-12)."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 120, ceiling=8)
+    s.max_tdp = 35
+    _BusyGame(at, 2.0)                                           # 16 fps at 8 W, 70 at 35 W
+    run(10)
+    steps = [t for i, t in enumerate(run.seen["tdp"]) if i == 0 or t != run.seen["tdp"][i - 1]]
+    assert steps == [8, 20, 32, 35] and "120 target" in s.last_action  # +12 W raises, 35 W within 10 s
+    at.session = None
+
+
+def test_target_saves_the_tdp_that_held_not_a_quit_menus(fake_hw, monkeypatch):
+    """A TDP holds the target after G_SETTLE_S readings in a row at it; a 400 fps quit menu that lowers it after
+    that doesn't change what is saved."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=35)
+    game = _BusyGame(at, 3.0)                                    # 20 W gives 60
+    s.learned.tdp = 20
+    run(autotune.G_SETTLE_S - 1)
+    assert not s.settled and s.learned.held is None
+    run(1)
+    assert s.settled and s.learned.held == 20
+    game.per_w = 20.0                                            # the quit menu: 400 fps at 20 W
+    run(20)
+    assert s.learned.tdp < 20 and s.learned.held == 20
+    assert at.stop(revert=False)["learned"]["held"] == 20
 
 
 def test_target_fps_gets_the_tdp_moving_and_locked_fast(fake_hw, monkeypatch):

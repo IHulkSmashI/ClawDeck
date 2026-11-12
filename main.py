@@ -802,9 +802,10 @@ class Plugin:
         # only a finished result: a session cut short (a quick launch, a menu, still lowering) keeps the last good one
         if learned and learned.get("learned") and learned.get("settled"):
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
-            # target mode: the TDP it settled on becomes the game's own TDP, as if you had moved the slider in the game,
-            # so the next start is there from launch (maintainer, 2026-11-12). Not one the temperature guard stepped to.
-            tdp = learned["learned"].get("tdp")
+            # target mode: the TDP that held the target becomes the game's own TDP, as if you had moved the slider in the
+            # game, so the next start is there from launch (maintainer, 2026-11-12); not the TDP at exit (a quit menu at
+            # 400 fps lowers it), and not after a temperature guard step
+            tdp = learned["learned"].get("held")
             if learned["learned"].get("target") and tdp and not learned.get("thermal"):
                 self.profiles.set(appid, plugged, {"base": "custom", "tdp": int(tdp)})
                 decky.logger.info("autotune: %s W saved as %s's TDP (%s)", tdp, appid, "plugged in" if plugged else "battery")

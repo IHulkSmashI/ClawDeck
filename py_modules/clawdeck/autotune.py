@@ -44,7 +44,8 @@ backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in
     A frame limit at the target pins fps there: at G_AT with PowerStation's GPU busy under G_BUSY, 1 W at a time;
   - it starts at the set TDP (your pick for the game) and goes from there: up to the model's maximum for this power
     source while under the target, down only as above; raises are proportional (at least +2 W, +4 W far under, at
-    most G_STEP_MAX). Where it settles is saved as the game's own TDP at exit (main.py), so the next start is there;
+    most G_STEP_UP). Every reading counts, a low one too. The TDP that held the target for G_SETTLE_S readings in a
+    row is saved as the game's own TDP at exit (main.py), so the next start is there;
   - a miss within G_BLAME s of lowering makes the watts before it the floor (a calm scene can't talk it below what the
     heavy ones need: the RE4 report, 2026-11-08); the floor comes down 1 W per G_FLOOR_DECAY s without a miss;
   - at the full TDP and still under: it stays at the full TDP, and after REACH_S says the target is out of reach and
@@ -100,11 +101,13 @@ SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmwa
 G_WIN = 3               # seconds of history a miss is judged on (theirs: 4 ticks of 0.5 s)
 G_MISS = 0.93           # under this share of the target is a miss
 G_RAISE, G_RAISE_BIG = 2, 4
+G_STEP_UP = 12          # the most one raise moves: far under the target, 8 W -> 35 W in three raises (~6 s)
+G_SETTLE_S = 60         # readings in a row at one TDP, at the target and without a miss: that TDP holds it
 G_RAISE_GAP = 2         # s between raises: the last one has to kick in
 G_LOWER_AFTER = 12      # s with no change and no miss before lowering near the target
 G_LOWER_FAST = 5        # ... and while clearly above it (G_FAR): the PL1 window is 8 s, so a step shows within that
 G_FAR = 1.15            # this far above the target: proportional steps down, G_LOWER_FAST apart
-G_STEP_MAX = 6          # the most one step moves (up or down)
+G_STEP_MAX = 6          # the most one step down moves (up: G_STEP_UP)
 G_SAFE = 1.03           # a step down only if the fps after it, with frames following watts, is still this share of
                         # the target (the target met with room to spare, never lowered into a miss)
 G_AT = 0.99             # at the target: within 1 % holds it (a frame limit reads 59.9 for 60). Under it (but over
@@ -319,6 +322,7 @@ class Learned:
     ceiling: int | None = None      # the ceiling max_fps was measured at (a different ceiling: measure again)
     samples: int = 0
     target: int | None = None       # target fps mode: your target this was found for
+    held: int | None = None         # ... the TDP that held it for G_SETTLE_S readings (main.py: the game's next start)
 
 
 NO_FPS_S = 30          # seconds without any frame rate before autotune gives up on a game
@@ -367,6 +371,8 @@ class Session:
     # target fps mode
     target: float | None = None         # your target fps (never changed by autotune)
     max_tdp: int | None = None          # target mode: the most it may raise to (the model's maximum on this power source)
+    g_steady: int = 0                   # readings in a row at g_steady_tdp, at the target and without a miss
+    g_steady_tdp: int | None = None
     g_hist: list[float] = field(default_factory=list)
     g_last_change: float = 0.0
     g_last_miss: float = 0.0
@@ -427,7 +433,8 @@ class Autotune:
         from the first second, and never went above the pick."""
         l = s.learned
         s.phase, s.target = "target", float(target)
-        l.tdp, l.target = min(s.ceiling_tdp, self._top(s)), target
+        l.tdp, l.target, l.held = min(s.ceiling_tdp, self._top(s)), target, None
+        s.g_steady, s.g_steady_tdp = 0, None
         now = time.monotonic()
         s.g_hist, s.g_last_change, s.g_last_miss, s.g_last_drop = [], now, now, None
         s.g_floor, s.g_floor_at = s.floor_tdp, now
@@ -670,8 +677,11 @@ class Autotune:
     def _govern(self, s: Session, fps: float, smp: Sample) -> None:
         """Target fps mode, every second (see the module docstring)."""
         l, now, T = s.learned, time.monotonic(), s.target or 0
-        if not T or fps < T * OFF_LO:                    # a loading screen, menu or pause: not judged
+        if not T:
             return
+        # every reading counts, a low one too: under the target is under it, loading screen or not. Raising is the
+        # safe side; skipping fps under 35 % of the target as "a menu" kept a game at 8 W and 11-28 fps for 40 s
+        # (Order of the Sinking Star, target 120, 2026-11-12)
         s.g_hist.append(fps)
         del s.g_hist[:-G_WIN]
         win = sum(s.g_hist) / len(s.g_hist)
@@ -681,7 +691,7 @@ class Autotune:
         top = self._top(s)
         lim = T * G_MISS
         if len(s.g_hist) >= 2 and win < lim and fps < lim:
-            s.g_last_miss = now
+            s.g_last_miss, s.g_steady = now, 0
             blamed = s.g_last_drop is not None and now - s.g_last_drop < G_BLAME and s.g_drop_from > l.tdp
             if blamed and s.g_drop_from > s.g_floor:
                 s.g_floor, s.g_floor_at = s.g_drop_from, now
@@ -690,9 +700,9 @@ class Autotune:
                 return
             if now - s.g_last_change < G_RAISE_GAP:
                 return
-            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_MAX
+            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_UP
             need = -(-int(l.tdp * (T / max(win, 1.0) - 1) * 10) // 10)
-            step = max(G_RAISE_BIG if win < T * 0.75 else G_RAISE, min(G_STEP_MAX, need))
+            step = max(G_RAISE_BIG if win < T * 0.75 else G_RAISE, min(G_STEP_UP, need))
             w, was = min(top, l.tdp + step), l.tdp
             if blamed:
                 w, s.g_last_drop = min(top, max(s.g_drop_from, l.tdp + 1)), None   # exactly back to what held
@@ -727,8 +737,13 @@ class Autotune:
         if (lighter and s.g_floor > s.floor_tdp and now - s.g_last_miss > G_FLOOR_DECAY
                 and now - s.g_floor_at > G_FLOOR_DECAY):
             s.g_floor, s.g_floor_at = s.g_floor - 1, now
-        if now - s.g_last_change >= 60 and now - s.g_last_miss >= 60:
-            s.settled = True                              # a minute steady: worth saving for the game
+        # a TDP holds the target once G_SETTLE_S readings in a row at it were at the target without a miss. It used to be
+        # a minute on the clock since the last change and miss, which counted skipped readings too: a session marked
+        # settled at 8 W and 15 fps saved the 23 W an exit menu at 400 fps had brought it to (OotSS, 2026-11-12)
+        s.g_steady = s.g_steady + 1 if s.g_steady_tdp == l.tdp and win >= T * G_AT else int(win >= T * G_AT)
+        s.g_steady_tdp = l.tdp
+        if s.g_steady >= G_SETTLE_S:
+            s.settled, l.held = True, l.tdp
         low = max(s.floor_tdp, s.g_floor)
         far = win >= T * G_FAR
         wait = G_LOWER_FAST if far else G_LOWER_AFTER
