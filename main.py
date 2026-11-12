@@ -472,7 +472,6 @@ class Plugin:
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
         st["autotune_target"] = int(self.settings.get("autotune_target") or 0)
-        st["autotune_auto_fps"] = self.settings.get("autotune_auto_fps", True) is not False
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -711,8 +710,7 @@ class Plugin:
                                 keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
-                                auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
-                                fg=self._game_fg(appid))
+                                fg=self._game_fg(appid), max_tdp=hi)
             result["autotune"] = "started"
             quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
@@ -790,7 +788,7 @@ class Plugin:
             if self.autotune.session is not None:
                 sess = self.autotune.session
                 return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
-                                        limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release)
+                                        limit_w=self.autotune.limit_w(), raise_tdp=self.autotune.thermal_release)
             # your limit for this power source (the game's pick, or the last one): where stepping back up stops
             limit = self._pick(self.running_appid, plugged)["tdp"]
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
@@ -804,6 +802,12 @@ class Plugin:
         # only a finished result: a session cut short (a quick launch, a menu, still lowering) keeps the last good one
         if learned and learned.get("learned") and learned.get("settled"):
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
+            # target mode: the TDP it settled on becomes the game's own TDP, as if you had moved the slider in the game,
+            # so the next start is there from launch (maintainer, 2026-11-12). Not one the temperature guard stepped to.
+            tdp = learned["learned"].get("tdp")
+            if learned["learned"].get("target") and tdp and not learned.get("thermal"):
+                self.profiles.set(appid, plugged, {"base": "custom", "tdp": int(tdp)})
+                decky.logger.info("autotune: %s W saved as %s's TDP (%s)", tdp, appid, "plugged in" if plugged else "battery")
         return learned
 
     async def game_started(self, appid: str) -> dict:
@@ -928,18 +932,18 @@ class Plugin:
         fg = launch.get("fg") or 0
         return int(fg) if fg >= 2 and launch.get("opti_fg") != "off" else 0
 
-    async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
+    async def set_autotune_target(self, fps: int | None) -> dict:
         """Autotune target: 0 / None = nearly the most frames for the watts (as before); a number = the fewest watts
-        that hold that many rendered fps. Auto FPS: an out-of-reach target becomes the closest fps it can hold.
-        Applies to the running game at once (from the full TDP), and to every game from its start."""
+        that hold that many rendered fps, from your TDP down; out of reach, it stays at your TDP. Applies to the running
+        game at once (from the full TDP), and to every game from its start."""
         t = int(fps or 0)
         t = 0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240))
-        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, bool(auto_fps)
+        self.settings["autotune_target"] = t
+        self.settings.pop("autotune_auto_fps", None)      # Auto FPS is gone: the target is never lowered
         self._save_settings()
-        self.autotune.set_target(t or None, bool(auto_fps))
-        words = (f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
-                 if t else "Autotune: nearly the most frames for the watts")
-        return {"ok": True, "target": t, "auto_fps": bool(auto_fps), "summary": words, "error": None}
+        self.autotune.set_target(t or None)
+        words = f"Autotune holds {t} fps with the fewest watts" if t else "Autotune: nearly the most frames for the watts"
+        return {"ok": True, "target": t, "summary": words, "error": None}
 
     async def get_autotune(self) -> dict:
         st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid}

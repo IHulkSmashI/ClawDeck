@@ -173,7 +173,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     target: at?.target ? `holding ${at.target} fps` : "target" }[at?.phase ?? "measure"];
   // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
   const fpsText = at?.avg_fps != null
-    ? `${Math.round(at.avg_fps)} fps` + (at.phase === "target" && at.target ? ` (target ${at.target}${at.unreachable && at.user_target && at.target < at.user_target ? `, Auto FPS: ${at.user_target} out of reach` : at.unreachable ? ", out of reach" : ""})`
+    ? `${Math.round(at.avg_fps)} fps` + (at.phase === "target" && at.target ? ` (target ${at.target}${at.unreachable ? ", out of reach" : ""})`
         : at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : "") +
       ((at.source === "rendered" || at.source === "frame-gen pick") && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
   const atLine = !autotune ? "Autotune off"
@@ -186,7 +186,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const limitW = running ? (at?.ceiling_tdp ?? tdp) : null;
   const savesW = running && at?.tdp != null && limitW != null && limitW > at.tdp ? limitW - at.tdp : 0;
   const usingLine = running && at?.tdp != null
-    ? `Autotune: using ${at.tdp} W of your ${limitW} W` + (savesW ? ` · saves ${savesW} W` : "") +
+    ? (limitW != null && at.tdp > limitW ? `Autotune: using ${at.tdp} W, up from your ${limitW} W for the ${at.target} fps target`
+      : `Autotune: using ${at.tdp} W of your ${limitW} W` + (savesW ? ` · saves ${savesW} W` : "")) +
       ` · ${at.avg_fps != null ? `${Math.round(at.avg_fps)} fps` : "measuring…"}` : null;
   const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
   const atDetail = running
@@ -239,15 +240,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {autotune && (
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
             selectedOption={st?.autotune_target ?? 0}
-            onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
-            description={explain("A frame rate to hold with the fewest watts: watts come back within seconds when a heavy scene drops below it, and go down slowly while it holds. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+            onChange={async (o) => { const r = await setAutotuneTarget(o.data); toast(r.summary); refresh(); }}
+            description={explain("A frame rate to hold with the fewest watts: starts at the TDP above, raises it (up to the most this Claw allows) while the game is under the target, lowers it only while the game stays above the target with room to spare, and the TDP it settles on becomes this game's TDP for its next start. Out of reach, it stays at the most this Claw allows. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
               quick ? undefined : "No target: nearly the most frames the TDP above gives, for less power.", undefined)} />
-        )}
-        {autotune && !!st?.autotune_target && (
-          <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
-            onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
-            description={explain(`If the TDP above can't reach ${st?.autotune_target} fps for a minute, Autotune holds the closest frame rate it can (95 % of what the full TDP gives) instead of running flat out, and goes back toward ${st?.autotune_target} when the game gets lighter.`,
-              undefined, "off: an out-of-reach target keeps the full TDP and says so.")} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
         {autotune && !!at?.game_fg && (

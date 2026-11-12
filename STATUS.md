@@ -52,6 +52,15 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune target starts at your TDP and keeps your target (2026-11-12):** target mode started mid-range (22 W of a
+35 W pick), never went above the pick, lowered at 97 % of the target (and not at all in a power-bound game: the GPU
+is busy there), and Auto FPS replaced an out-of-reach target with what the full TDP gave (120 → 46 fps in
+Enshrouded), then took watts away to hold that. Now it starts at the game's TDP, raises up to the model's maximum
+while under the target, lowers only while the fps after the step would still be 3 % over it (or 1 W at a time at a
+frame limit with GPU headroom), stays at the maximum when the target is out of reach, and saves the TDP it settles on
+as the game's own. Auto FPS is gone. Check on the EX with a reachable target: start the game at 8 W (it climbs) and at
+35 W (it comes down, never under the target); the next start is at the saved TDP. An out-of-reach target stays at 35 W.
+
 **XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
 with five more session variables that ClawDeck carries per game. Check on the EX: Setup → Update XeSS XMX, then CONTROL
@@ -83,12 +92,12 @@ the shim trace and OptiScaler's lines; start again and check OptiScaler.ini is b
 Remove takes it out (no cold boot needed for him, but he already had MSI's firmware loaded). Still worth a run on the
 maintainer's EX from stock (firmware never loaded before): Install -> cold boot -> gyro in Steam -> Remove.
 
-**Autotune target fps + faster recovery (2026-11-08):** not run on the Claw yet. Target mode (Power → Autotune target,
-Auto FPS) follows DeckyTDPTuner's governor; most-frames mode now raises at once when a heavy scene drops clearly under
+**Autotune target fps + faster recovery (2026-11-08):** not run on the Claw yet. Target mode (Power → Autotune target)
+follows DeckyTDPTuner's governor; most-frames mode now raises at once when a heavy scene drops clearly under
 its line (RE4 report: Autotune lowered the TDP in a calm scene, then took minutes to come back). Check: RE4 or CONTROL,
 target 40 and 60 with Steam's frame limit at the same number: watts settle within a few minutes, a heavy fight gets
 watts back within ~5 s, no saw-tooth; with frame generation (2x) the target counts rendered frames. An out-of-reach
-target (60 at 12 W) drops to the closest after a minute with Auto FPS on; off, it stays at the full TDP.
+target (60 at 12 W) stays at the full TDP and says so after a minute.
 
 **MSI BIOS check (2026-11-07):** Setup's checks show "MSI BIOS up to date" or "MSI has BIOS E1T91IMS.10E
 (2026-10-30); this Claw runs E1T91IMS.10D …" with MSI's support link. The sandbox can't reach msi.com, so check the
