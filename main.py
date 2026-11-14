@@ -131,6 +131,7 @@ class Plugin:
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
         self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
+        self.thermal_log = thermal.Recorder(os.path.join(LOG_DIR, "thermal.csv"), self.hw.paths.rapl_energy)
         self._guard_task: asyncio.Task | None = None
         self.running_plugged: bool | None = None
         self._holding_pick = False             # no game runs and ClawDeck holds the user's pick (menus) on the chip
@@ -780,6 +781,11 @@ class Plugin:
                 await self._guard_check()
             except Exception as e:   # a sensor hiccup must never kill the guard
                 decky.logger.exception("temperature guard: %s", e)
+            try:                     # thermal.csv: the check's temperature next to the power and the fans
+                self.thermal_log.row(thermal.read_c(self.guard.path), self.power.read_tdp(), self.guard.stepped_w,
+                                     fan.speeds(getattr(self, "fan_hw", None)))
+            except Exception as e:   # ... and never kill the guard either
+                decky.logger.warning("thermal.csv: %s", e)
         self.guard.reset()          # thermald is back in charge
 
     async def _guard_check(self) -> int | None:
