@@ -5,6 +5,7 @@ import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } fro
 import { powerSourceSwitched } from "./steam";
 import { LogoIcon } from "./components/LogoIcon";
 import { FullPage, QuickPanel, ROUTE } from "./pages";
+import { forgetGamePick } from "./tabs/Game";
 
 declare const SteamClient: any;
 
@@ -15,6 +16,7 @@ export default definePlugin(() => {
   try {
     const hook = SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.((e: { unAppID: number; bRunning: boolean }) => {
       const appid = String(e.unAppID);
+      forgetGamePick();                     // a pick in the Game section holds until a game starts or stops
       if (e.bRunning) {
         gameStarted(appid).then((r: any) => {
           if (r?.failed?.length) toaster.toast({ title: "ClawDeck", body: `Profile applied, but ${r.failed.join(", ")} failed` });
