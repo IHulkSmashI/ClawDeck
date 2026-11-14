@@ -142,7 +142,7 @@ export const getChanges = callable<[], Changes>("get_changes");
 
 // fan presets and the battery charge limit (fan.py)
 export type FanState = { supported: boolean; preset?: string; custom?: number[]; kind?: "msi" | "oxp"; presets?: string[];
-  fans?: { fan: number; rpm: number | null; enable: number | null; temps: (number | null)[]; duties: (number | null)[] }[] };
+  fans?: { fan: number; rpm: number | null; enable: number | null; temps?: (number | null)[]; duties?: (number | null)[]; duty?: number | null }[] };
 export type ChargeState = { supported: boolean; limit?: number | null; setting?: number | null };
 export const getFan = callable<[], FanState>("get_fan");
 // OLED brightness where Steam's slider does nothing (ONEXPLAYER 3: gamescope's SDR-on-HDR level, screen.py)
