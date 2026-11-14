@@ -8,6 +8,12 @@ declare const SteamClient: any;
 
 export type RunningApp = { appid: string; name: string };
 
+// the charger plugged or unplugged, once the backend has switched to that power source's picks (index.tsx): an open
+// panel reads its state again, or the PL2 slider and the picks kept showing the other power source's until reopened
+const sourceListeners = new Set<() => void>();
+export const onPowerSource = (cb: () => void) => { sourceListeners.add(cb); return () => { sourceListeners.delete(cb); }; };
+export const powerSourceSwitched = () => sourceListeners.forEach((cb) => cb());
+
 export const runningApp = (): RunningApp | null => {
   try {
     const a = Router?.MainRunningApp;
