@@ -58,10 +58,16 @@ is busy there), and Auto FPS replaced an out-of-reach target with what the full 
 Enshrouded), then took watts away to hold that. Now the target is a minimum (any second under it raises at once; lowering is judged
 on the lowest second of the last 12, not the average). It starts at the game's TDP, raises up to the model's maximum
 while under the target (straight to what the shortfall needs, no cap; every reading counts, fps under 35 % of the target is no longer skipped
-as "a menu"), lowers only while the fps after the step would still be 3 % over it (or 1 W at a time at a frame limit
-with GPU headroom), stays at the maximum when the target is out of reach, and saves the TDP that held the target for
-60 readings in a row as the game's own (not the TDP at exit: a quit menu at 400 fps lowers it). Auto FPS is gone. Check on the EX with a reachable target: start the game at 8 W (it climbs) and at
-35 W (it comes down, never under the target); the next start is at the saved TDP. An out-of-reach target stays at 35 W.
+as "a menu"), lowers only while the lowest second is 20 % over the target and the fps after the step would still be
+3 % over it (or 1 W at a time at a frame limit with GPU headroom: fps vary, and 64 fps already counted as room for 60,
+so Enshrouded, which barely holds 60, was cut six times in 8 minutes), stays at the maximum when the target is out of reach (a miss at the
+maximum makes it the floor), holds a game's own frame cap under the target with the fewest watts (a PS3 game locked
+at 30 for a 60 target: found after 10 steady seconds at the maximum with the GPU idle part of the time, saved per game,
+lifted only at 20 % over it, rechecked +4 W every 20 minutes), and saves the TDP that held the target for 60 readings in
+a row as the game's own (not the TDP at exit: a quit menu at 400 fps lowers it). Auto FPS is gone. Check on the EX with
+a reachable target: start the game at 8 W (it climbs) and at 35 W (it comes down, never under the target); the next
+start is at the saved TDP. An out-of-reach target stays at 35 W. A 30 fps-locked game with a 60 target settles under
+35 W at 30 fps, and its next start begins there.
 
 **XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
