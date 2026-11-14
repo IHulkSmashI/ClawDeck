@@ -1,16 +1,16 @@
-import { ButtonItem, PanelSection, PanelSectionRow } from "@decky/ui";
+import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
-import { collectLogs, getHardware, optiscalerState, selfTest, xessInstall, xessState, Hardware, OptiState, SelfTest, XessState } from "../api";
+import { collectLogs, diagStatus, getHardware, optiscalerState, selfTest, setSetting, xessInstall, xessState, DiagStatus, Hardware, OptiState, SelfTest, XessState } from "../api";
 import { confirmUntested } from "../components/confirm";
 import { explain, Note, Problem, Status, useExplanations } from "../components/Hint";
 import { Updates } from "../components/Updates";
 
 const toast = (body: string) => notify(body);
 
-/** The XeSS XMX driver install, ClawDeck's own OptiScaler (and whether Decky Framegen is installed too), the self-test
- * and the log export. */
+/** The XeSS XMX driver install, ClawDeck's own OptiScaler (and whether Decky Framegen is installed too), the self-test,
+ * the log export and the diagnostics log. */
 export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   useExplanations();
   const [hw, setHw] = useState<Hardware | null>(null);
@@ -19,9 +19,10 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const [op, setOp] = useState<OptiState | null>(null);
   const [test, setTest] = useState<SelfTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [diag, setDiag] = useState<DiagStatus | null>(null);
   const refresh = async () => {
-    const [h, xs, o] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), optiscalerState()]);
-    setHw(h); setX(xs); setOp(o);
+    const [h, xs, o, d] = await Promise.all([quick ? Promise.resolve(null) : getHardware(), xessState(), optiscalerState(), diagStatus()]);
+    setHw(h); setX(xs); setOp(o); setDiag(d);
   };
   useEffect(() => { refresh(); }, []);
 
@@ -82,6 +83,12 @@ export const SetupTab: FC<{ quick?: boolean }> = ({ quick }) => {
       <PanelSectionRow>
         <ButtonItem layout="below" onClick={async () => { const p = await collectLogs(); toast(`Report saved: ${p}`); }}
           description={quick ? undefined : explain("One file on the Desktop with your hardware, the checks and what ClawDeck changed. Attach it to a GitHub issue.")}>Export log to Desktop</ButtonItem>
+        <ToggleField label="Diagnostics log" checked={!!diag?.on}
+          onChange={async (v) => { await setSetting("diag_log", v); setDiag(await diagStatus()); }}
+          description={quick ? undefined : explain(
+            `Writes every second: power, limits, temperature, clocks, battery, fans, Autotune and the busiest programs, and every mode change the controller reports. The export above adds the last 10 minutes.${diag?.days ? ` Now ${diag.days} day${diag.days === 1 ? "" : "s"}, ${(diag.bytes / 1e6).toFixed(1)} MB in ${diag.folder}.` : ""}`,
+            "turn it on before a problem you want to report: the log shows what happened before it.",
+            "about 0.4 % of one CPU core while on; 30 days kept, at most 200 MB.")} />
         <Problem error={err} what="Setup" />
       </PanelSectionRow>
       <Updates quick={quick} />

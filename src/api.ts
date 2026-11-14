@@ -38,6 +38,8 @@ export type WriteResult = { ok: boolean; what?: string; wanted?: any; read?: any
 export const getHardware = callable<[], Hardware>("get_hardware");
 export const getHealth = callable<[force?: boolean], Health[]>("get_health");
 export const collectLogs = callable<[], string>("collect_logs");
+export type DiagStatus = { on: boolean; folder: string; days: number; bytes: number };
+export const diagStatus = callable<[], DiagStatus>("diag_status");
 export interface UpdateState {
   ok: boolean; error?: string; update?: boolean;
   installed: { tag: string; commit: string; built: string };

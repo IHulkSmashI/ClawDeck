@@ -117,6 +117,7 @@ export const backend = {
   }),
   get_health: () => health(),
   collect_logs: () => "/home/bazzite/Desktop/clawdeck-report-20261021-181502.json",
+  diag_status: () => ({ on: !!(state as any).diag_log, folder: "/home/bazzite/homebrew/logs/ClawDeck/diag", days: (state as any).diag_log ? 3 : 0, bytes: (state as any).diag_log ? 6_400_000 : 0 }),
   update_check: () => ({ ok: true, update: true, installed: { tag: "v0.2.0-beta.2", commit: "d2eb120", built: "" },
     latest: { tag: "v0.2.0-beta.3", name: "ClawDeck 0.2.0 beta 3", url: "https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.3/ClawDeck.zip",
       sha256: "", notes: "https://github.com/IHulkSmashI/ClawDeck/releases/tag/v0.2.0-beta.3", prerelease: true } }),
@@ -141,6 +142,7 @@ export const backend = {
     if (k === "autotune") state.autotune = v;
     if (k === "setup_done") state.setupDone = v;
     if (k === "autotune_plugged") (state as any).autotune_plugged = v;
+    if (k === "diag_log") (state as any).diag_log = v;
     return true;
   },
   self_test: () => (scenario.game

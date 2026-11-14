@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, debuglaunch, frontend, quiet, shortcuts, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, debuglaunch, diaglog, frontend, quiet, shortcuts, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -167,6 +167,10 @@ class Plugin:
         if self.settings.get("overlay_power"):   # sysfs resets at boot: reapply the user's choice at every start
             r = telemetry.apply(True)
             decky.logger.info("watts in the overlay: %s", "on" if r["ok"] else r["error"])
+        # Setup -> Diagnostics log: on from the switch until the switch is turned off, restarts included (diaglog.py)
+        self.diag = diaglog.DiagLog(os.path.join(LOG_DIR, "diag"), self.hw.paths, self.fan_hw, self.battery.plugged)
+        self._diag_task: asyncio.Task | None = None
+        self._ensure_diag()
 
     async def _first_fixes(self) -> None:
         """Fixes every Claw of that model needs, applied by themselves once (on install, and again after a system
@@ -203,6 +207,9 @@ class Plugin:
     async def _unload(self):
         if getattr(self, "_frontend_watch", None):
             self._watch_frontend(False)
+        if getattr(self, "_diag_task", None):
+            self._diag_task.cancel()
+            self.diag.stop()
         self.autotune.stop()
         self.autotune.release_frames()
         quiet.background(False)
@@ -343,7 +350,7 @@ class Plugin:
 
     async def collect_logs(self) -> str:
         dest = os.path.join(DESKTOP, f"clawdeck-report-{time.strftime('%Y%m%d-%H%M%S')}.json")
-        path = await self._bg(health.collect_logs, self.hw, HOME, dest, RUNTIME_DIR)
+        path = await self._bg(health.collect_logs, self.hw, HOME, dest, RUNTIME_DIR, self.diag.folder)
         userexec.chown_tree(path, HOME)
         return path
 
@@ -436,7 +443,36 @@ class Plugin:
             self._autotune_late = bool(value) and self.running_appid is not None
             if not value:
                 self.autotune.pause("autotune switched off")
+        if key == "diag_log":
+            self._ensure_diag()          # off: the loop sees the setting and ends within a second
         return True
+
+    async def diag_status(self) -> dict:
+        """Setup -> Diagnostics log: on or off, and the days and room the log keeps."""
+        return {"on": bool(self.settings.get("diag_log")), **(await self._bg(diaglog.status, self.diag.folder))}
+
+    def _ensure_diag(self) -> None:
+        """Start the diagnostics log's 1 Hz task if the switch is on (and it isn't running)."""
+        if self.settings.get("diag_log") and (self._diag_task is None or self._diag_task.done()):
+            self._diag_task = asyncio.get_event_loop().create_task(self._diag_loop())
+
+    async def _diag_loop(self) -> None:
+        """One row a second while the switch is on; the controller's reports come in between (diaglog.py). The reads
+        run off the event loop."""
+        os.makedirs(self.diag.folder, exist_ok=True)
+        userexec.chown_tree(self.diag.folder, HOME)
+        self.diag.start(asyncio.get_running_loop())
+        try:
+            while self.settings.get("diag_log"):
+                await asyncio.sleep(1 - time.time() % 1)
+                try:
+                    state = {"game": self.running_key, "at": self.autotune.status(), "guard_w": self.guard.stepped_w}
+                    await self._bg(self.diag.row, state)
+                    self.diag.tick()
+                except Exception as e:   # the log must never take ClawDeck down
+                    decky.logger.warning("diagnostics log: %s", e)
+        finally:
+            self.diag.stop()
 
     @staticmethod
     def _autotune_flag(on: bool) -> None:
