@@ -524,17 +524,22 @@ def test_overlay_power_without_counters_says_so(tmp_path):
     assert not r["ok"] and "no RAPL" in r["error"]
 
 
-def test_battery_watts_corrects_the_ex_100x_current(tmp_path):
+def test_battery_watts_takes_back_the_ex_16_bit_current(tmp_path):
     from clawdeck import telemetry
     b = tmp_path / "BAT1"
     b.mkdir()
-    (b / "current_now").write_text("-64580000\n")     # what the Claw 8 EX reports at about 10 W
-    (b / "voltage_now").write_text("15400000\n")
+    (b / "current_now").write_text("-64602000\n")     # the EC's -934 mA (0xfc5a) after the DSDT's unmasked negation
+    (b / "voltage_now").write_text("14668000\n")
     (b / "status").write_text("Discharging\n")
-    assert telemetry.battery_watts(str(b)) == -9.9
-    (b / "current_now").write_text("645800\n")        # a correctly scaled battery stays as it is
+    assert telemetry.battery_watts(str(b)) == -13.7    # 0.934 A x 14.668 V
+    assert telemetry.battery_watts(str(b), fix_16bit=False) == -947.6
+    (b / "current_now").write_text("934000\n")        # a kernel with the ACPI fix: the same reading, unchanged
+    assert telemetry.battery_watts(str(b)) == -13.7
+    (b / "current_now").write_text("-2500000\n")      # a real current that is negative stays as it is
+    assert telemetry.battery_watts(str(b)) == -36.7
+    (b / "current_now").write_text("645800\n")
     (b / "status").write_text("Charging\n")
-    assert telemetry.battery_watts(str(b)) == 9.9
+    assert telemetry.battery_watts(str(b)) == 9.5
 
 
 # ---- XeSS on XMX per game (xmxscope.py) -----------------------------------------------------------------------------
