@@ -157,15 +157,18 @@ export const DialogButton: FC<{ style?: any; disabled?: boolean; onClick?: () =>
     <button type="button" className="qam-button" style={style} disabled={disabled} onClick={onClick}>{children}</button>
   );
 
-// Quick Access tabs (pages.tsx): a div that passes clicks through; the bumpers are keyboard [ and ] here
-export enum GamepadButton { BUMPER_LEFT = 5, BUMPER_RIGHT = 6 }
-export type GamepadEvent = CustomEvent<{ button: number }>;
-export const Focusable: FC<{ children?: ReactNode; style?: any; onActivate?: () => void; onClick?: () => void;
-  onButtonDown?: (e: GamepadEvent) => void; actionDescriptionMap?: any; noFocusRing?: boolean; "flow-children"?: string }> =
-  ({ children, style, onClick, onActivate, onButtonDown }) => (
-    <div style={style} onClick={onClick ?? onActivate} tabIndex={onClick || onActivate ? 0 : undefined}
-      onKeyDown={onButtonDown ? (e) => {
-        const b = e.key === "[" ? GamepadButton.BUMPER_LEFT : e.key === "]" ? GamepadButton.BUMPER_RIGHT : 0;
-        if (b) { e.stopPropagation(); onButtonDown(new CustomEvent("b", { detail: { button: b } }) as GamepadEvent); }
-      } : undefined}>{children}</div>
+// Quick Access tabs (pages.tsx): Steam's Tabs as a plain tab row; findClassModule finds nothing here, so no CSS
+export const findClassModule = (_f: (m: any) => boolean): any => undefined;
+export const Tabs: FC<{ tabs: { id: string; title: ReactNode; content: ReactNode }[]; activeTab: string; onShowTab: (id: string) => void }> =
+  ({ tabs, activeTab, onShowTab }) => (
+    <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
+      <div style={{ display: "flex", gap: 4, padding: "4px 4px 8px" }}>
+        {tabs.map((t) => (
+          <div key={t.id} onClick={() => onShowTab(t.id)} style={{ flex: 1, textAlign: "center", padding: "8px 2px", cursor: "pointer",
+            fontSize: 13, fontWeight: 700, borderRadius: 4, background: t.id === activeTab ? "#3d4450" : "transparent",
+            color: t.id === activeTab ? "#fff" : "#b8bcbf" }}>{t.title}</div>
+        ))}
+      </div>
+      {tabs.find((t) => t.id === activeTab)?.content}
+    </div>
   );

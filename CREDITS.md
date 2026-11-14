@@ -25,6 +25,9 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   the initramfs, and the HID-BPF program needs udev-hid-bpf's own udev rule to be loaded.
 - **[udev-hid-bpf](https://gitlab.freedesktop.org/libevdev/udev-hid-bpf)** (libevdev) — loads HID-BPF programs from
   `/etc/udev-hid-bpf/` and writes the udev rule that loads the gyro program; its headers build the gyro program.
+- **[unifideck](https://github.com/mubaraknumann/unifideck)** by mubaraknumann (GPL-3.0) — how to use Steam's own Tabs
+  inside Decky's Quick Access panel: the measured height from Decky's content slot and the CSS that fits the tab row
+  into the narrow panel. ClawDeck's LB / RB tabs (`src/pages.tsx`) follow it.
 - **[DeckyTDPTuner](https://github.com/sidharthify/DeckyTDPTuner)** by sidharthify (GPL-3.0) — Autotune's target fps
   mode follows its governor (`backend/internal/tdp/governor.go`): a miss over a short window and the last tick, +2 W at
   once (+4 W far under), -1 W only after 15 s steady with GPU headroom, a miss right after lowering makes the watts
