@@ -1564,6 +1564,57 @@ def test_target_a_miss_at_the_full_tdp_keeps_the_full_tdp(fake_hw, monkeypatch):
     at.session = None
 
 
+def test_target_holds_a_games_own_frame_cap_with_the_fewest_watts(fake_hw, monkeypatch):
+    """A PS3 game locked at 30 fps, target 60 (maintainer, 2026-11-14): under the target at the full TDP, steady, GPU
+    idle part of the time. More watts can't raise it, so its own cap is the minimum, held with the fewest watts,
+    instead of the full TDP for the whole session."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    _BusyGame(at, 3.0, cap=30.0, busy_capped=50)                  # locked at 30 fps; 10 W gives 30
+    t = 0
+    while s.learned.cap is None and t < 60:
+        run(1)
+        t += 1
+    assert s.learned.cap == 30 and t <= 11 and "own cap" in s.last_action   # found at the full TDP in seconds
+    assert s.g_floor == 8 and s.learned.tdp == 30                 # the misses against 60 don't hold the watts
+    run(400)
+    assert s.learned.tdp == 10 and min(run.seen["fps"][30:]) >= 30 * autotune.G_AT   # held with 10 W, never under
+    at.session = None
+
+
+def test_target_a_frame_cap_lifts_when_the_game_runs_faster(fake_hw, monkeypatch):
+    """The cap goes as soon as the game runs over it (a menu at 60, the lock removed), and a game unlocked while the
+    power alone held it at the old cap is found by the check every RESCAN_S (+G_RAISE_BIG W)."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    game = _BusyGame(at, 3.0, cap=30.0, busy_capped=50)
+    run(430)
+    assert s.learned.cap == 30 and s.learned.tdp == 10
+    game.cap = 90.0                                               # unlocked: 30 fps at 10 W is the power now
+    run(autotune.RESCAN_S)
+    assert s.learned.cap is None                                  # +4 W ran it over 30: the cap is gone
+    run(60)
+    assert s.learned.tdp >= 20 and min(run.seen["fps"][-20:]) >= 60 * autotune.G_AT   # 60 again, with the watts
+    at.session = None
+
+
+def test_target_a_saved_frame_cap_holds_from_the_next_start(fake_hw, monkeypatch):
+    """The cap is saved with what the game learned: the next start holds it at the saved watts from the first second,
+    instead of going to the full TDP and down again."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    _BusyGame(at, 3.0, cap=30.0, busy_capped=50)
+    run(430)
+    saved = at.stop(revert=False)["learned"]
+    assert saved["cap"] == 30 and saved["tdp"] == 10
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    at.start("1", saved, 8, 10, False, target=60, max_tdp=30)    # main.py: the saved 10 W is the game's TDP now
+    _BusyGame(at, 3.0, cap=30.0, busy_capped=50)
+    seen = []
+    for _ in range(60):
+        run(1)
+        seen.append(at.session.learned.tdp)
+    assert set(seen) == {10} and at.session.learned.cap == 30
+    at.session = None
+
+
 def test_target_out_of_reach_stays_at_your_tdp_and_keeps_your_target(fake_hw, monkeypatch):
     """Enshrouded, 2026-11-12: 120 fps target, about 50 at 35 W. Auto FPS made that a 46 fps target and took watts
     away; now the target stays 120 and the TDP stays 35 W."""
