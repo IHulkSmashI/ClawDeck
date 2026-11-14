@@ -9,6 +9,8 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   by ShadowBlip — the controller and power services on current Bazzite. ClawDeck detects them, works alongside them
   instead of replacing them, and reads PowerStation's GPU load and InputPlumber's controller status over D-Bus.
 - **[Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)** — the plugin system ClawDeck runs in.
+- **[ES-DE](https://gitlab.com/es-de/emulationstation-de)** — its custom event scripts (game-start / game-end with the
+  ROM path, game name and system) tell ClawDeck which game runs, so each one gets its own power and Autotune.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)** — Intel xe/i915 GPU clock paths, RAPL package domain,
   intel_pstate levers, the AC-state listener pattern, reading PowerStation through `busctl`. Not forked.
 - **PL2 = PL1 + 2 W** follows Handheld Daemon (`adjustor/core/rapl.py`), PowerControl (`cpu.py`) and PowerStation

@@ -3,6 +3,7 @@ import { notify } from "../components/notify";
 import { FC, useEffect, useState } from "react";
 
 import { getFixes, getHealth, runFix, setWideVrr, Fixes, Health } from "../api";
+import { getLaunchOptions, hasWrapper, setLaunchOptions, withWrapper } from "../steam";
 import { confirmRestart } from "../components/confirm";
 import { Brightness } from "../components/Brightness";
 import { explain, Group, Problem, Status, useExplanations } from "../components/Hint";
@@ -35,6 +36,10 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
     setBusy(true);
     try {
       const r = await runFix(id, false);
+      if (r.ok && r.appid && r.wrapper) {     // ES-DE per game: its shortcut gets the launch wrapper through Steam
+        const opts = (await getLaunchOptions(r.appid)) ?? "";
+        if (!hasWrapper(opts)) setLaunchOptions(r.appid, withWrapper(opts, r.wrapper));
+      }
       toast(r.ok ? (r.next ?? (r.removed ? "Face-button fix removed; InputPlumber restarted" : "Done")) : `Not done: ${r.error ?? r.log ?? "see the log"}`);
       setErr(r.ok ? null : (r.error ?? "unknown error"));
     } finally { setBusy(false); load(true); }
@@ -125,6 +130,21 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </ButtonItem>
         </PanelSectionRow>
       )}
+      {f?.esde?.present && (
+        <PanelSectionRow>
+          <Group title="ES-DE" />
+          <Status ok={f.esde.ok ? true : null}
+            label={f.esde.ok ? "ES-DE: each game its own power" : "ES-DE: one limit for all its games"}
+            detail={f.esde.ok ? "power picks and Autotune per ROM" : f.esde.scripts && !f.esde.setting ? "its custom event scripts setting is off"
+              : f.esde.scripts && !f.esde.wrapper ? "no launch wrapper on its shortcut, so no frame rate" : "Steam only sees ES-DE"} />
+          <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.esde!.ok ? "esde_per_game_off" : "esde_per_game")}
+            description={explain(f.esde.ok ? "Takes ClawDeck's game-start/end scripts out of ES-DE. Its launch wrapper stays, so Autotune still reads ES-DE's frame rate."
+              : "Steam only sees ES-DE, so every game in it shares one limit. ClawDeck adds a game-start/end script to ES-DE and turns its custom event scripts on, so each game gets its own power and Autotune, starting from where its system's last game settled. It also puts ClawDeck's launch wrapper on ES-DE's shortcut, so every emulator writes the frame times Autotune reads.",
+              undefined, f.esde.ok ? "none; from ES-DE's next start." : "close ES-DE first: it writes its settings when it quits.")}>
+            {f.esde.ok ? "Remove ES-DE per game" : f.esde.scripts ? "Finish ES-DE per game" : "Set up ES-DE per game"}
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <Group title="Health check" />
         <Status ok={f ? f.health.ok : null} label={f ? `Health: ${f.health.line}` : "Health: checking…"} detail={f ? `${f.health.total - f.health.problems} of ${f.health.total} checks pass` : undefined} />
@@ -133,7 +153,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
       {!quick && problems.map((h) => (
         <PanelSectionRow key={h.id}>
           <Status ok={false} label={h.title} detail={h.detail} />
-          {h.fix && <ButtonItem layout="below" disabled={busy} onClick={() => fix(h.fix!)}>{h.fix === "install_xess" ? "Install the XeSS XMX driver (Setup)" : h.fix === "quiet_split_lock_log" ? "Silence the split-lock flood" : h.fix === "report_unknown_model" ? "Save a hardware survey for an issue" : "Fix"}</ButtonItem>}
+          {h.fix && <ButtonItem layout="below" disabled={busy} onClick={() => fix(h.fix!)}>{h.fix === "install_xess" ? "Install the XeSS XMX driver (Setup)" : h.fix === "quiet_split_lock_log" ? "Silence the split-lock flood" : h.fix === "report_unknown_model" ? "Save a hardware survey for an issue" : h.fix === "esde_per_game" ? "Set up ES-DE per game" : "Fix"}</ButtonItem>}
         </PanelSectionRow>
       ))}
       {!quick && (

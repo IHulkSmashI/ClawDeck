@@ -69,6 +69,8 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const app = runningApp();
   const appid = app?.appid ?? null;
   const [slot, setSlot] = useState<PowerSlot | null>(null);
+  // a game an emulator frontend (ES-DE) started is saved apart from the frontend: shown by its own name
+  const gameName = slot?.title ? `${slot.title} (${app?.name ?? "frontend"})` : app?.name ?? "";
 
   // Only the newest read-back may change what the profile list and the slider show, and none while a pick is still
   // on its way to the hardware: an older answer arriving late put the previous profile or watts back on screen
@@ -217,17 +219,17 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C, then back up 2 W every 30 s once under 80 °C, to your limit.`
             : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`
-            : app ? app.name : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
+            : app ? gameName : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
             : "No game running: this limit is on the chip now, and comes back when a game closes"} />
         <Problem error={err} what="Power limit" />
         {app && slot && (
           <Field focusable bottomSeparator="none"
             label={<span style={{ fontSize: 12, color: "#b8bcbf" }}>{slot.base
-              ? `Saved for ${app.name} · ${slot.plugged ? "plugged in" : "on battery"}: ${PROFILES.find((p) => p.id === slot.base)?.short ?? "Custom"}${slot.base === "custom" && slot.tdp ? ` ${slot.tdp} W` : ""}`
-              : `${app.name} · ${slot.plugged ? "plugged in" : "on battery"}: your last pick (pick one to save it for this game)`}</span>}
+              ? `Saved for ${gameName} · ${slot.plugged ? "plugged in" : "on battery"}: ${PROFILES.find((p) => p.id === slot.base)?.short ?? "Custom"}${slot.base === "custom" && slot.tdp ? ` ${slot.tdp} W` : ""}`
+              : `${gameName} · ${slot.plugged ? "plugged in" : "on battery"}: your last pick (pick one to save it for this game)`}</span>}
             description={explain("A pick while a game runs is saved for that game, on battery and plugged in separately, and comes back at its next start. Unplugging switches to its other one.")}>
             {slot.base && <DialogButton style={{ minWidth: 0, width: "auto", padding: "0 10px", height: 28 }}
-              onClick={async () => { await resetPowerSlot(app.appid); toast(`${app.name}: back to your last pick`); setSlot(await powerSlot(app.appid)); refresh(); }}>Use default</DialogButton>}
+              onClick={async () => { await resetPowerSlot(app.appid); toast(`${gameName}: back to your last pick`); setSlot(await powerSlot(app.appid)); refresh(); }}>Use default</DialogButton>}
           </Field>
         )}
       </PanelSectionRow>
