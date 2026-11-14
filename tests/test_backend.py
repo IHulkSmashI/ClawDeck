@@ -1053,6 +1053,18 @@ def test_each_game_an_emulator_frontend_starts_has_its_own_power_and_autotune(pl
     assert p.running_key is None and p.running_title is None
 
 
+def test_a_frontend_game_has_no_launch_file_of_its_own(plugin, monkeypatch):
+    """At start, every saved game's launch file is rewritten; a game an emulator frontend started launches as the
+    frontend, so it has none ("launch file not rewritten: appid must be numeric" at each start, 2026-11-14)."""
+    p = plugin
+    p.profiles.set("3119184808#ps3/Ratchet", False, {"base": "custom", "tdp": 12})
+    p.profiles.set("42", False, {"base": "custom", "tdp": 12})
+    seen = []
+    monkeypatch.setattr(p, "_write_launch", lambda appid: seen.append(appid) or {})
+    p._refresh_game_launches()
+    assert "42" in seen and "3119184808#ps3/Ratchet" not in seen
+
+
 def test_a_frontend_event_from_before_the_game_started_is_ignored(plugin):
     p = plugin
     esde = "3119184808"
