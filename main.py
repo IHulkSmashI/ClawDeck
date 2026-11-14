@@ -1575,6 +1575,12 @@ class Plugin:
 
     # ---- the VRR range fix -------------------------------------------------------------
     def _steamos_vrr_at_start(self) -> None:
+        try:
+            r = gyro.repair()                          # a gyro from beta 16 or earlier: initramfs + udev rule (#180)
+            if r is not None:
+                decky.logger.info("gyro repaired (the next cold boot applies it): %s", r)
+        except Exception as e:                         # never stop the VRR checks below
+            decky.logger.warning("gyro repair: %s", e)
         r = edid.limine_marker_repair()                # CachyOS + Limine: the fix's line from beta 14 or earlier (#155)
         if r is not None:
             decky.logger.info("Limine: VRR range fix line repaired (the next restart applies it): %s", r)
