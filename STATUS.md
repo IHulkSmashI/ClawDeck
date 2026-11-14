@@ -52,6 +52,11 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Quick Access tabs (2026-11-14, #171):** the four folding sections are now Steam's own Tabs (Power, Game, Fixes,
+Setup), sized as unifideck does in Quick Access. Released without an EX run on the maintainer's word. Check on the EX:
+LB / RB switch tabs (also with the focus inside a tab), the Power tab scrolls to its end, a dropdown's menu closing
+keeps the tab, and the first-run steps above the tabs still fit.
+
 **Gyro: firmware in the initramfs and a udev rule (2026-11-14, #180):** on Bazzite testing (kernel 7.3) the gyro never
 came up: intel_ish_ipc probes inside the initramfs before /etc/firmware exists and loads Intel's generic image ("ISH
 loader: cmd 2 failed 10"), and nothing loaded the HID-BPF program (the distro rule only loads hwdb-listed ones). Install
