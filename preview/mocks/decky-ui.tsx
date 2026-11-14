@@ -156,3 +156,16 @@ export const DialogButton: FC<{ style?: any; disabled?: boolean; onClick?: () =>
   ({ style, disabled, onClick, children }) => (
     <button type="button" className="qam-button" style={style} disabled={disabled} onClick={onClick}>{children}</button>
   );
+
+// Quick Access tabs (pages.tsx): a div that passes clicks through; the bumpers are keyboard [ and ] here
+export enum GamepadButton { BUMPER_LEFT = 5, BUMPER_RIGHT = 6 }
+export type GamepadEvent = CustomEvent<{ button: number }>;
+export const Focusable: FC<{ children?: ReactNode; style?: any; onActivate?: () => void; onClick?: () => void;
+  onButtonDown?: (e: GamepadEvent) => void; actionDescriptionMap?: any; noFocusRing?: boolean; "flow-children"?: string }> =
+  ({ children, style, onClick, onActivate, onButtonDown }) => (
+    <div style={style} onClick={onClick ?? onActivate} tabIndex={onClick || onActivate ? 0 : undefined}
+      onKeyDown={onButtonDown ? (e) => {
+        const b = e.key === "[" ? GamepadButton.BUMPER_LEFT : e.key === "]" ? GamepadButton.BUMPER_RIGHT : 0;
+        if (b) { e.stopPropagation(); onButtonDown(new CustomEvent("b", { detail: { button: b } }) as GamepadEvent); }
+      } : undefined}>{children}</div>
+  );
