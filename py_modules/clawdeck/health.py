@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import debuglaunch, distro, edid, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import debuglaunch, distro, edid, frontend, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -108,6 +108,14 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                 "fix": None if xs["installed"] else "install_xess"})
     out.append({"id": "mangohud", "title": "MangoHud (needed by autotune for frame times)", "ok": shutil.which("mangohud") is not None,
                 "detail": "installed" if shutil.which("mangohud") else "not found", "fix": None})
+    es = frontend.esde_status(home)
+    if es["present"]:
+        out.append({"id": "esde_per_game", "title": "ES-DE: power and Autotune per game", "ok": es["ok"],
+                    "detail": "each game ES-DE starts is a game of its own" if es["ok"] else
+                              "Steam only sees ES-DE, so every game in it shares one limit and Autotune gets no frame "
+                              "rate; the fix adds ClawDeck's game-start/end scripts to ES-DE (closed) and its launch "
+                              "wrapper to ES-DE's shortcut",
+                    "fix": None if es["ok"] else "esde_per_game"})
     ql = quietlog.status()
     if ql["applies"]:
         out.append({"id": "quiet_log", "title": "System log kept (no split-lock flood)", "ok": ql["installed"],

@@ -933,6 +933,7 @@ def plugin(fake_hw, tmp_path, monkeypatch):
     p.settings = {"autotune": True, "autotune_plugged": True}
     p._save_settings = lambda: None
     p.running_appid, p.running_plugged, p._holding_pick = None, None, False
+    p.running_key, p.running_title, p._frontend_watch, p._frontend_seen = None, None, None, None
     p.guard = thermal.Guard(None, None)
     p._guard_task = None
 
@@ -954,6 +955,56 @@ def _lower(p, steps=30):
     for _ in range(steps):
         p.autotune._step()
     return s
+
+
+def _frontend_event(p, event, system, rom, name):
+    """What ClawDeck's ES-DE script writes on game-start / game-end (frontend.py)."""
+    home = p.game_started.__globals__["HOME"]
+    path = os.path.join(home, ".local/share/clawdeck/frontend-game")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"{event}\n{system}\n{rom}\n{name}\n")
+    t = time.time() + len(getattr(p, "_events", [])) + 1        # a new mtime for every event
+    p._events = getattr(p, "_events", []) + [t]
+    os.utime(path, (t, t))
+    return p.run(p._frontend_poll())
+
+
+def test_each_game_an_emulator_frontend_starts_has_its_own_power_and_autotune(plugin):
+    """ES-DE is one Steam shortcut: an NES ROM, a PS3 game and a Switch game all ran at ES-DE's limit, with one Autotune
+    session that had no frame rate (maintainer, 2026-11-14). With ES-DE's game-start/end events each one is its own
+    game: its own pick and learning, a new one starting at ES-DE's pick (never with ES-DE's learning), ES-DE's menus at
+    ES-DE's own pick."""
+    p = plugin
+    esde, demons, ratchet = "3119184808", "3119184808#ps3/Demon's Souls", "3119184808#ps3/Ratchet"
+    p.profiles.set(esde, False, {"base": "custom", "tdp": 12})        # ES-DE's own pick: 12 W in its menus
+    p.run(p.game_started(esde))
+    assert p.chip() == 12 and p.autotune.session.appid == esde
+    assert _frontend_event(p, "start", "ps3", "/roms/ps3/Demon's Souls.iso", "Demon's Souls")
+    assert p.running_key == demons and p.running_appid == esde and p.autotune.session.appid == demons
+    assert p.chip() == 12                                              # never played: starts at ES-DE's pick
+    p.run(p.set_tdp(18))                                               # a pick in this game is this game's
+    assert p.profiles.own(demons, False)["tdp"] == 18 and p.profiles.own(esde, False)["tdp"] == 12
+    slot = p.run(p.power_slot(esde))
+    assert slot["title"] == "Demon's Souls" and slot["tdp"] == 18
+    assert p.run(p.get_autotune())["game"] == esde                     # Steam's app: the panel doesn't report it again
+    assert _frontend_event(p, "end", "ps3", "/roms/ps3/Demon's Souls.iso", "Demon's Souls")
+    assert p.running_key == esde and p.chip() == 12 and p.autotune.session.appid == esde
+    p.profiles.set(esde, False, {"learned": {"tdp": 9, "ceiling": 12, "max_fps": 200}})   # Autotune's result in ES-DE's menus
+    assert _frontend_event(p, "start", "ps3", "/roms/ps3/Ratchet.iso", "Ratchet")
+    assert p.running_key == ratchet and p.chip() == 12                 # a new game: ES-DE's pick, not its learned 9 W
+    assert _frontend_event(p, "start", "ps3", "/roms/ps3/Ratchet.iso", "Ratchet") is None   # the same game: no restart
+    p.run(p.game_stopped(esde))
+    assert p.running_key is None and p.running_title is None
+
+
+def test_a_frontend_event_from_before_the_game_started_is_ignored(plugin):
+    p = plugin
+    esde = "3119184808"
+    _frontend_event(p, "start", "nes", "/roms/nes/Mario.nes", "Mario")     # left over from an earlier ES-DE session
+    p.run(p.game_started(esde))
+    assert p.run(p._frontend_poll()) is None and p.running_key == esde
+    p.run(p.game_stopped(esde))
 
 
 def test_game_exit_puts_your_pick_back_not_the_firmwares_limits(plugin):

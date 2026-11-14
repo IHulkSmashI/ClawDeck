@@ -93,7 +93,9 @@ The backend never polls. The frontend registers Steam's own notifications and fo
 `GameSessions.RegisterForAppLifetimeNotifications` (game start/stop), `System.RegisterForBatteryStateChanges`
 (the running game switches profile slot), `System.RegisterForOnResumeFromSuspend` (re-apply the running game).
 Timers exist only while autotune runs for a game, and the temperature guard's 10 s check while thermald is paused
-(which includes the menus while ClawDeck holds a limit the user picked).
+(which includes the menus while ClawDeck holds a limit the user picked). An emulator frontend's games (ES-DE) come
+from its custom event scripts: ClawDeck's script writes the game to a file, and while a game runs an inotify watch on
+that file's folder wakes the backend (`frontend.py`).
 
 ## Who sets the TDP
 On the Claw 8 EX the MSI firmware attributes are accepted but ignored (docs/HARDWARE-FINDINGS.md §12); the SoC
@@ -118,6 +120,11 @@ fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
   is on now goes back on the chip. With no pick on that power source the chip keeps the firmware's limits and thermald
   starts again. Unplugging with no game switches to the other power source's pick the same way.
 - **Unload:** `revert_all()` as always: every value back to boot, thermald started.
+- **Emulator frontends (ES-DE):** Steam sees only the frontend, so each game it starts is kept under its own key,
+  `<frontend appid>#<system>/<ROM file name>` (`running_key`; `running_appid` stays Steam's, which the panel compares).
+  At game-start what the last one learned is saved and the new one starts like a game launch; a game without its own
+  pick starts at the frontend's pick, never with another game's learning. At game-end the frontend's own pick and
+  session come back.
 
 ## Temperature guard (§21)
 While thermald is stopped, `thermal.Guard` takes over its temperature job for ClawDeck's own TDP. main.py runs it

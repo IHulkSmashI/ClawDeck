@@ -35,7 +35,7 @@ for _v in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME"):
 
 import decky  # noqa: E402
 
-from clawdeck import (autotune, debuglaunch, quiet, shortcuts, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
+from clawdeck import (autotune, debuglaunch, frontend, quiet, shortcuts, osupdate, msibios, battery, screen, selfupdate, buttons, gyro, changes, downloads, edid, framegen, health, hw, launchenv,  # noqa: E402
                       fan, gamedb, livedb, optiscaler, power, profiles, quietlog, reframework, stack, storage, sysfs, thermal, telemetry, userexec, xess, xmxscope)
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -112,6 +112,12 @@ class Plugin:
         self.autotune.enabled = bool(self.settings.get("autotune"))
         self._autotune_flag(self.autotune.enabled)
         self.running_appid: str | None = None
+        # the key the running game's power and Autotune are kept under: its appid, or with an emulator frontend the game
+        # it started (frontend.py), with that game's name for the panel
+        self.running_key: str | None = None
+        self.running_title: str | None = None
+        self._frontend_watch = None
+        self._frontend_seen: int | None = None
         self._health: tuple[float, list] | None = None
         # is a Bazzite update waiting (kernel, Intel graphics driver, Mesa, gamescope)? Once per start, off the event loop
         asyncio.get_event_loop().run_in_executor(None, osupdate.refresh)
@@ -187,6 +193,8 @@ class Plugin:
             self._save_settings()
 
     async def _unload(self):
+        if getattr(self, "_frontend_watch", None):
+            self._watch_frontend(False)
         self.autotune.stop()
         quiet.background(False)
         n = self.power.revert_all()
@@ -344,6 +352,18 @@ class Plugin:
             return {"ok": r.returncode == 0, "log": (r.stdout + r.stderr)[-2000:]}
         if fix == "install_xess":
             return await self.xess_install(allow_unpinned)
+        if fix == "esde_per_game":
+            u = userexec.user_of(HOME)
+            r = await self._bg(frontend.esde_install, HOME, u.pw_uid if u else None, u.pw_gid if u else None)
+            if r.get("ok") and r.get("appid"):
+                r["wrapper"] = WRAPPER                   # the UI puts it in ES-DE's launch options (Steam's own call)
+                r["next"] = "ES-DE set up: from its next start, each game in it gets its own power and Autotune"
+            return r
+        if fix == "esde_per_game_off":
+            r = await self._bg(frontend.esde_remove, HOME)
+            if r.get("ok"):
+                r["next"] = "ES-DE: one limit for all its games again, from its next start"
+            return r
         if fix in ("fix_face_buttons", "undo_face_buttons", "quiet_split_lock_log", "undo_quiet_split_lock_log"):
             undo = fix.startswith("undo_")
             key = "face_buttons" if "face" in fix else "quiet_log"
@@ -382,7 +402,8 @@ class Plugin:
         return {"vrr": vrr, "buttons": buttons.status(self.hw.model_id), "health": health.summary(checks),
                 "gyro": await self._bg(gyro.status, self.hw.model_id),
                 "overlay_power": {**telemetry.status(), "battery_w": telemetry.battery_watts()},
-                "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)}}
+                "quiet_log": {**quietlog.status(), "per_minute": await self._bg(quietlog.flood_rate)},
+                "esde": await self._bg(frontend.esde_status, HOME)}
 
     async def ui_log(self, msg: str) -> None:
         """A line from the panel (VRR switching), so it shows in ClawDeck's log next to the backend's."""
@@ -514,7 +535,7 @@ class Plugin:
             self.settings[f"last_profile_{slot}"], self.settings[f"custom_tdp_{slot}"] = "custom", want
             self._save_settings()
             if self.running_appid:                      # the game remembers it for this power source
-                self.profiles.set(self.running_appid, bool(plugged), {"base": "custom", "tdp": want, "learned": None})
+                self.profiles.set(self._game_key(), bool(plugged), {"base": "custom", "tdp": want, "learned": None})
             sysfs.clear_error()
             r = self._apply_pick_now(bool(plugged))     # the guard's step and autotune's learned TDP start over
             ok = r.get("applied", {}).get("tdp") is not None
@@ -552,23 +573,23 @@ class Plugin:
         """What the running game remembers for this power source (Power's "Saved for <game>" line), and `pick`: the
         limit that applies now on this power source (the game's own pick, else your last pick on it, else the default),
         which is what the profile list and the slider show. The game ClawDeck set up wins over the UI's guess."""
-        gid = str(self.running_appid or appid or "")
+        gid = str((self._game_key() if self.running_appid else appid) or "")
         plugged = bool(self.battery.plugged())
         own = self.profiles.own(gid, plugged) if gid else {}
         pk = self._pick(gid or None, plugged)
         return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp"),
-                "running": self.running_appid is not None,
+                "running": self.running_appid is not None, "title": self.running_title if self.running_appid else None,
                 "pick": {"profile": pk["profile"], "tdp": pk["tdp"], "from": pk["from"]}}
 
     async def reset_power_slot(self, appid: str | None = None) -> dict:
         """Forget this game's pick for this power source: it follows the last pick for all games again."""
-        gid = str(appid or self.running_appid or "")
+        gid = str(self._game_key(appid) or "")
         if not gid:
             return {"ok": False, "error": "no game running"}
         plugged = bool(self.battery.plugged())
         self.profiles.set(gid, plugged, {"base": None, "tdp": None, "learned": None})
         r = {"ok": True}
-        if self.running_appid == gid:
+        if self.running_appid and self._game_key() == gid:
             async with self._power_lock:
                 r = {"ok": True, **self._restart_game_power(gid, plugged)}
         return r
@@ -586,7 +607,7 @@ class Plugin:
             self.settings["last_profile"] = name
             self.settings[f"last_profile_{'plugged' if plugged else 'battery'}"] = name
             self._save_settings()
-            gid = self.running_appid or appid
+            gid = self._game_key() if self.running_appid else appid
             if gid:                                     # the game remembers it for this power source
                 self.profiles.set(gid, bool(plugged), {"base": name, "tdp": None, "learned": None})
             sysfs.clear_error()
@@ -674,8 +695,11 @@ class Plugin:
         Returns profile (a name or "custom"), tdp (the watts it sets here), from (game / last / default), and what
         power.apply_profile needs (apply, overrides) plus the merged profile (prof: autotune, learned)."""
         slot = "plugged" if plugged else "battery"
-        own = self.profiles.own(appid, plugged) if appid else {}
-        prof = self.profiles.get(appid or "", plugged)
+        src = self._profile_source(appid, plugged) if appid else appid
+        own = self.profiles.own(src, plugged) if src else {}
+        prof = self.profiles.get(src or "", plugged)
+        if src != appid:          # a frontend's game without a slot yet starts at the frontend's pick,
+            prof = {k: v for k, v in prof.items() if k != "learned"}       # never with another game's learning
         if own.get("base"):
             base, src = own["base"], "game"
         elif self.settings.get(f"last_profile_{slot}"):
@@ -693,6 +717,19 @@ class Plugin:
         return {"profile": base, "tdp": None if w is None else self.power.clamp_tdp(int(w), plugged), "from": src,
                 "apply": apply, "overrides": overrides, "prof": prof}
 
+    def _game_key(self, appid: str | None = None) -> str | None:
+        """The key a game's power and Autotune are kept under: the running game's (its appid, or the game an emulator
+        frontend started, frontend.py) for None or the running appid, else that appid."""
+        if appid is None or str(appid) == self.running_appid:
+            return getattr(self, "running_key", None) or self.running_appid
+        return str(appid)
+
+    def _profile_source(self, key: str, plugged: bool) -> str:
+        """Whose slot a game starts from: its own; a frontend's game without one, the frontend's own pick."""
+        if "#" not in key or self.profiles.own(key, plugged):
+            return key
+        return frontend.steam_appid(key)
+
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         pk = self._pick(appid, plugged)
         prof = pk["prof"]
@@ -709,10 +746,10 @@ class Plugin:
             floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
             self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
                                 keep_pct=self.settings.get("autotune_keep"),
-                                xell_log=os.path.join(xess.prefix_dir(HOME, appid), "igdext_xell.log"),
+                                xell_log=os.path.join(xess.prefix_dir(HOME, frontend.steam_appid(appid)), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
                                 auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
-                                fg=self._game_fg(appid))
+                                fg=self._game_fg(frontend.steam_appid(appid)))
             result["autotune"] = "started"
             quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
@@ -754,7 +791,7 @@ class Plugin:
         chip as it is."""
         if self.running_appid:
             self.running_plugged = plugged
-            return self._restart_game_power(self.running_appid, plugged)
+            return self._restart_game_power(self._game_key(), plugged)
         return self._apply_idle_pick(plugged) or {"applied": {}, "failed": ["tdp"]}
 
     # ---- temperature guard (findings §21): only while thermald is paused --------------------------------------------
@@ -792,7 +829,7 @@ class Plugin:
                 return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
                                         limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release)
             # your limit for this power source (the game's pick, or the last one): where stepping back up stops
-            limit = self._pick(self.running_appid, plugged)["tdp"]
+            limit = self._pick(self._game_key(), plugged)["tdp"]
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
                                     limit_w=limit)
 
@@ -811,13 +848,61 @@ class Plugin:
         async with self._power_lock:
             if self.running_appid and self.running_appid != appid:
                 # a second game (or a launcher) started while one runs: save what the first one learned first
-                self._save_learned(self.running_appid, bool(self.running_plugged))
+                self._save_learned(self._game_key(), bool(self.running_plugged))
             plugged = bool(self.battery.plugged())
             self.running_appid, self.running_plugged = appid, plugged
+            self.running_key, self.running_title = appid, None
+            self._watch_frontend(True)
             self._holding_pick = False
             self._autotune_late = False
             self.power.revert_all(keep_thermald=True)   # the game starts from what was there before ClawDeck + its pick
             return self._start_game_power(appid, plugged)
+
+    # ---- emulator frontends (frontend.py) ----------------------------------------------------------------------------
+    def _watch_frontend(self, on: bool) -> None:
+        """While a game runs: did an emulator frontend (ES-DE) start or end one of its games? inotify, no timer
+        (frontend.Watch); an event written before this game started doesn't count."""
+        if self._frontend_watch is not None:
+            self._frontend_watch.close()
+            self._frontend_watch = None
+        if not on:
+            return
+        self._frontend_seen = frontend.stamp(HOME)
+        try:
+            self._frontend_watch = frontend.Watch(HOME, self._frontend_event)
+        except (OSError, AttributeError) as e:
+            decky.logger.info("frontend: no watch (%s): games started from ES-DE share its power", e)
+
+    def _frontend_event(self) -> None:
+        asyncio.get_event_loop().create_task(self._frontend_safe())
+
+    async def _frontend_safe(self) -> None:
+        try:
+            await self._frontend_poll()
+        except Exception as e:                            # a torn file must not end the watch for this game
+            decky.logger.warning("frontend: %s", e)
+
+    async def _frontend_poll(self) -> dict | None:
+        """A new frontend event: the game it started is the running game for power and Autotune from now on (what the
+        last one learned is saved first); at its end the frontend's own pick and Autotune again."""
+        st = frontend.stamp(HOME)
+        if st is None or st == self._frontend_seen or self.running_appid is None:
+            return None
+        self._frontend_seen = st
+        ev = frontend.read(HOME)
+        if not ev:
+            return None
+        key = frontend.key(self.running_appid, ev) if ev["event"] == "start" else self.running_appid
+        if key == self._game_key():
+            return None
+        async with self._power_lock:
+            plugged = bool(self.battery.plugged())
+            self._save_learned(self._game_key(), bool(self.running_plugged))
+            self.running_plugged, self.running_key = plugged, key
+            self.running_title = ev["name"] if ev["event"] == "start" else None
+            decky.logger.info("frontend: %s %s (%s): power and Autotune as %s", "started" if ev["event"] == "start"
+                              else "ended", ev["name"], ev["system"], key)
+            return self._restart_game_power(key, plugged)
 
     async def game_stopped(self, appid: str) -> dict:
         appid = str(appid)
@@ -826,8 +911,10 @@ class Plugin:
             return {"ignored": True}
         async with self._power_lock:
             plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
-            learned = self._save_learned(appid, plugged)
+            learned = self._save_learned(self._game_key(), plugged)
             self.running_appid, self.running_plugged = None, None
+            self.running_key, self.running_title = None, None
+            self._watch_frontend(False)
             # everything the game and autotune changed goes back, then the limit you picked for the power source the
             # Claw is on now, not the firmware's boot limits (maintainer, 2026-11-04: "doesn't reset back to what it
             # was set to")
@@ -848,7 +935,7 @@ class Plugin:
                 return {"changed": True, "limit": self._apply_idle_pick(plugged)}
         if plugged == self.running_plugged:
             return {"changed": False}
-        appid = self.running_appid
+        appid = self._game_key()
         async with self._power_lock:
             self._save_learned(appid, bool(self.running_plugged))
             self.running_plugged = plugged
@@ -917,9 +1004,9 @@ class Plugin:
                     return {"reapplied": False}
                 self.power.revert_all(keep_thermald=True)
                 return {"reapplied": True, "limit": self._apply_idle_pick(plugged)}
-            self._save_learned(self.running_appid, bool(self.running_plugged))
+            self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged = plugged
-            return {"reapplied": True, **self._restart_game_power(self.running_appid, plugged)}
+            return {"reapplied": True, **self._restart_game_power(self._game_key(), plugged)}
 
     def _game_fg(self, appid: str | None) -> int:
         """ClawDeck's frame generation multiplier for the game (0: off): Autotune divides presented frames by it when
@@ -942,7 +1029,8 @@ class Plugin:
         return {"ok": True, "target": t, "auto_fps": bool(auto_fps), "summary": words, "error": None}
 
     async def get_autotune(self) -> dict:
-        st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid}
+        st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid,
+              "title": self.running_title}
         # the running game's frame generation (ClawDeck's pick): the Power panel says what that does to Autotune
         st["game_fg"] = self._game_fg(self.running_appid)
         if not st.get("running"):
@@ -959,7 +1047,7 @@ class Plugin:
         plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         if plugged and not self.settings.get("autotune_plugged"):
             return "off on the charger (Advanced → Autotune on the charger)"
-        if self.profiles.get(self.running_appid, plugged).get("autotune") is False:
+        if self.profiles.get(self._game_key(), plugged).get("autotune") is False:
             return "off for this game"
         if getattr(self, "_autotune_late", False):
             return "turned on during this game: restart the game and it starts (it reads frame times from the launch)"
