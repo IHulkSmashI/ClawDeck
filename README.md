@@ -37,8 +37,8 @@
   Uninstall puts every original file back.
 - 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX),
   **Autotune** with a **target frame rate**: pick 30, 40, 60 fps and it holds it with the fewest watts, settles in about
-  a minute, gives the watts back within seconds in a heavy scene, and **Auto FPS** holds the closest it can when your
-  target is out of reach. Plus fan curves and a battery charge limit.
+  a minute, gives the watts back within seconds in a heavy scene, and remembers the TDP it settled on for the game's
+  next start. Plus fan curves and a battery charge limit.
 - 🎯 **Gyro on the Claw 8 EX (beta):** one button turns on the EX's gyro for Steam Input (Kisenir's method).
 - 🛠️ **The fixes Linux doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
   performance overlay, and a log flood that costs battery.
@@ -144,7 +144,7 @@ and **Setup**. **Explain** at the top says what each control does, why you'd use
 |---|---|
 | **Profile** | Battery saver, Battery, Balanced, Performance, Plugged, Max: the most power the game may use. |
 | **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. |
-| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. Counts rendered frames, so frame generation doesn't fool it. |
+| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): a minimum, every second at it or over, with the fewest watts, from your TDP, up when the game needs it and down only with room to spare; the TDP it settles on is the game's next start; out of reach, it stays at the maximum. Counts rendered frames, so frame generation doesn't fool it. |
 | **Fan** | Automatic (MSI), Quiet, Cooling, Full speed, or your own curve. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |
 | **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |

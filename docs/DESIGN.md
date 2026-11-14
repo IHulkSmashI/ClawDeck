@@ -64,7 +64,7 @@ tools/
 
 ## The four panels
 - **Power**: profile dropdown (six, short label, what/why/cost under it), the TDP slider (model range, = Custom,
-  autotune's ceiling), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
+  autotune's ceiling; with an Autotune target, where it starts), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
   that enforces them), Autotune with the set TDP, the TDP it uses, rendered fps against the most the set TDP gives,
   frames per watt, the bottleneck, its phase and the last action.
   Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
@@ -118,6 +118,8 @@ fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
   is on now goes back on the chip. With no pick on that power source the chip keeps the firmware's limits and thermald
   starts again. Unplugging with no game switches to the other power source's pick the same way.
 - **Unload:** `revert_all()` as always: every value back to boot, thermald started.
+- **Autotune target:** the pick is where it starts, not its cap: it may raise up to the model's maximum for the power
+  source while under the target, and the TDP it settles on is saved as the game's own pick at exit (`_save_learned`).
 
 ## Temperature guard (§21)
 While thermald is stopped, `thermal.Guard` takes over its temperature job for ClawDeck's own TDP. main.py runs it
