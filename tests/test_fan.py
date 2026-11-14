@@ -54,6 +54,33 @@ def test_presets_write_both_fans_then_enable_and_survive_revert(tmp_path):
     assert open(f"{h}/pwm1_enable").read().strip() == "2" and open(f"{h}/pwm2_enable").read().strip() == "2"
 
 
+def _rounding_like_the_driver(monkeypatch):
+    """The real driver keeps whole EC percent, rounding down on write and on read."""
+    real = sysfs.write
+
+    def write(path, value, persist=False):
+        if "_auto_point" in str(path) and str(path).endswith("_pwm"):
+            value = (int(value) * 100 // 255) * 255 // 100
+        return real(path, value, persist=persist)
+    monkeypatch.setattr(fan.sysfs, "write", write)
+
+
+def test_every_duty_survives_the_drivers_rounding():
+    for d in range(101):
+        ec = fan.to_pwm(d) * 100 // 255                  # what the EC keeps
+        assert ec == d and fan.to_pct(ec * 255 // 100) == d
+
+
+def test_presets_read_back_ok_through_the_drivers_rounding(tmp_path, monkeypatch):
+    root, h = _hwmon(tmp_path)
+    _rounding_like_the_driver(monkeypatch)
+    for p in ("quiet", "cooling", "full"):
+        r = fan.apply(h, p)
+        assert r["ok"], (p, r)
+        for f in r["read"]["fans"]:
+            assert f["duties"] == fan.PRESETS[p], (p, f)
+
+
 def test_custom_snaps_and_needs_six(tmp_path):
     root, h = _hwmon(tmp_path)
     r = fan.apply(h, "custom", [0, 25, 50, 60, 80, 130])
