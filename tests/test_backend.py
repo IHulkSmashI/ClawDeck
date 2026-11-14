@@ -1505,14 +1505,15 @@ class _BusyGame(_Game):
 
 
 def test_target_starts_at_your_tdp_and_lowers_only_with_room_to_spare(fake_hw, monkeypatch):
-    """From the set TDP down, never under the target: a step only when the fps after it, with frames following
-    watts, is still 3 % over the target. A heavy scene gets watts back at once (DeckyTDPTuner's raise)."""
+    """From the set TDP down, never under the target: a step only while the lowest second is 20 % over the target,
+    and only as far as the fps after it, with frames following watts, is still 3 % over it. A heavy scene gets watts
+    back at once (DeckyTDPTuner's raise)."""
     at, s, run = _target_tuner(fake_hw, monkeypatch, 60)
     game = _BusyGame(at, 4.0, cap=90.0)
     assert s.learned.tdp == 25                                   # your TDP, not mid-range
     run(300)
-    assert s.learned.tdp == 16 and s.phase == "target"          # 64 fps; 15 W (60) would leave no room
-    assert min(run.seen["fps"]) >= 60 and at.status()["saves_w"] == 9
+    assert s.learned.tdp == 17 and s.phase == "target"          # 68 fps; at 16 W (64) it is not 20 % over
+    assert min(run.seen["fps"]) >= 60 and at.status()["saves_w"] == 8
     game.per_w = 2.95                                            # a heavy scene: 47 fps at 16 W
     run(12)
     assert s.learned.tdp >= 19 and "under the 60 fps minimum" in s.last_action   # seconds, not minutes
@@ -1581,7 +1582,7 @@ def test_target_counts_rendered_frames_with_frame_generation(fake_hw, monkeypatc
     s.fg = 2
     _BusyGame(at, 8.0, cap=180.0, source="presented")
     run(300)
-    assert s.learned.tdp == 16 and s.multiplier == 2.0          # 128 presented = 64 rendered at 16 W
+    assert s.learned.tdp == 17 and s.multiplier == 2.0          # 136 presented = 68 rendered at 17 W
     at.session = None
 
 
@@ -1694,15 +1695,15 @@ def test_target_saves_the_tdp_that_held_not_a_quit_menus(fake_hw, monkeypatch):
 def test_target_fps_gets_the_tdp_moving_and_locked_fast(fake_hw, monkeypatch):
     """From your TDP to the settled watts in under a minute, then no more changes while the game holds."""
     at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
-    _BusyGame(at, 5.0, cap=100.0)                                # 13 W gives 65, 12 W would leave no room
+    _BusyGame(at, 5.0, cap=100.0)                                # 14 W gives 70; 15 W (75) is the last 20 % over
     t = 0
-    while s.learned.tdp != 13 and t < 200:
+    while s.learned.tdp != 14 and t < 200:
         run(1)
         t += 1
-    assert s.learned.tdp == 13 and t <= 60, t
+    assert s.learned.tdp == 14 and t <= 60, t
     changes = s.last_change_at
     run(240)
-    assert s.learned.tdp == 13 and s.last_change_at == changes and min(run.seen["fps"]) >= 60   # locked
+    assert s.learned.tdp == 14 and s.last_change_at == changes and min(run.seen["fps"]) >= 60   # locked
     at.session = None
 
 

@@ -38,7 +38,8 @@ backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in
   - a miss is any second under G_AT of the target: +G_RAISE W at once (+G_RAISE_BIG far under, proportional to the
     shortfall, up to the maximum in one step), at most every G_RAISE_GAP s, then judged on fresh frames only;
   - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), judged on the
-    lowest second in that time: a step is taken only if, with frames following watts (Handheld Companion's
+    lowest second in that time: only while it is G_LOWER_OVER (20 %) over the target, and a step is taken only if,
+    with frames following watts (Handheld Companion's
     assumption, which overstates the loss), that lowest second would still be G_SAFE of the target. 1 W near the target, far above it half the way to where the watts would just hold it, at most G_STEP_MAX W.
     A frame limit at the target pins fps there: at G_AT with PowerStation's GPU busy under G_BUSY, 1 W at a time;
   - it starts at the set TDP (your pick for the game) and goes from there: up to the model's maximum for this power
@@ -106,6 +107,9 @@ G_RAISE_GAP = 2         # s between raises: the last one has to kick in
 G_LOWER_AFTER = 12      # s with no change and no miss before lowering near the target
 G_LOWER_FAST = 5        # ... and while clearly above it (G_FAR): the PL1 window is 8 s, so a step shows within that
 G_FAR = 1.15            # this far above the target: proportional steps down, G_LOWER_FAST apart
+G_LOWER_OVER = 1.20     # no step down unless the lowest second is this far over the target (72 fps for 60). It used to
+                        # take only G_SAFE after the step: Enshrouded at 64-66 fps for a 60 target was cut again and
+                        # again (maintainer, 2026-11-14: "far too sensitive. shouldn't lower unless 20% over")
 G_STEP_MAX = 6          # the most one step down moves (up: no cap)
 G_SAFE = 1.03           # a step down only if the fps after it, with frames following watts, is still this share of
                         # the target (the target met with room to spare, never lowered into a miss)
@@ -743,7 +747,7 @@ class Autotune:
         # may take keeps that lowest second G_SAFE over the minimum, with frames following watts. A frame limit at the
         # target pins fps there, so it can never be exceeded: at the target with the GPU under G_BUSY, the limit holds
         # it, not the power, and 1 W is safe (a miss right after it undoes the step and makes it the floor)
-        safe = int(l.tdp * (1 - T * G_SAFE / lowest))
+        safe = int(l.tdp * (1 - T * G_SAFE / lowest)) if lowest >= T * G_LOWER_OVER else 0
         if safe < 1 and lowest >= T * G_AT and smp.gpu_busy is not None and smp.gpu_busy < G_BUSY:
             safe = 1
         if (l.tdp > floor and len(s.g_hist) >= wait and safe >= 1
