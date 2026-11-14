@@ -2,10 +2,11 @@
 
 Fans: hwmon "msi_wmi_platform" has two fans (fan1 CPU, fan2 GPU), each with a six-point table pwmN_auto_point1..6
 (_temp on the EC's fixed axis, _pwm on hwmon's 0-255 scale; the driver converts to the EC's 0-100 %) and
-pwmN_enable: 1 = the fans follow the tables, 2 = MSI's automatic control (the driver puts the factory tables back).
-ClawDeck writes only the duties, never the temperatures, then enable=1; "Automatic" (enable=2) is the revert. The
-presets are the Claw's known-good ones (GamingWidget.MsiFanControl.cs): duties in EC percent, the 1..39 band snapped
-to 40 (the fan's minimum-spin plateau: 1..39 all spin like 40), 0 = fan off at idle.
+pwmN_enable: 1 = the fans follow the tables, 2 = MSI's automatic control (the driver writes back the tables it read at
+boot, temperatures included). Every preset starts from MSI's own tables (enable=2), then writes its duties and, if it
+has them, its own temperatures (PRESET_TEMPS), then enable=1; "Automatic" (enable=2) is the revert. Quiet and Cooling
+are the Claw's known-good presets (GamingWidget.MsiFanControl.cs) on MSI's temperatures: duties in EC percent, the
+1..39 band snapped to 40 (the fan's minimum-spin plateau: 1..39 all spin like 40), 0 = fan off at idle.
 
 Charge limit: power_supply BAT1/charge_control_end_threshold (0 = no limit on the Claw 8 EX, accepts 80, back to 0;
 tested 2026-11-04). Steam's own charge limit (steamos-manager) reports -1 on the Claw, so nothing else offers it.
@@ -25,9 +26,14 @@ PRESETS: dict[str, list[int] | None] = {
     "auto": None,                               # MSI automatic (factory tables)
     "quiet": [0, 40, 40, 45, 60, 75],           # off at idle, gentle ramp
     "cooling": [40, 45, 58, 68, 75, 75],        # on at idle, earlier ramp
+    "extreme": [0, 45, 70, 90, 100, 100],       # its own temperatures (PRESET_TEMPS): full speed from 82 °C
     "full": [100] * POINTS,                     # full speed
 }
-LABELS = {"auto": "Automatic (MSI)", "quiet": "Quiet", "cooling": "Cooling", "full": "Full speed", "custom": "Custom"}
+PRESET_TEMPS: dict[str, list[int]] = {
+    "extreme": [38, 48, 60, 72, 82, 90],        # off under 38 °C, 100 % from 82 °C
+}
+LABELS = {"auto": "Automatic (MSI)", "quiet": "Quiet", "cooling": "Cooling", "extreme": "Extreme",
+          "full": "Full speed", "custom": "Custom"}
 CHARGE_PRESETS = {"off": None, "80": 80, "90": 90}
 
 
@@ -115,6 +121,18 @@ def status(h: str | None) -> dict:
     return out
 
 
+def _write_temps(h: str, n: int, temps: list[int]) -> bool:
+    """Points that go up are written from the top down and points that go down from the bottom up, so the table
+    stays in order after every single write."""
+    cur = [sysfs.read_int(os.path.join(h, f"pwm{n}_auto_point{i}_temp")) for i in range(1, POINTS + 1)]
+    up = [i for i in range(POINTS, 0, -1) if cur[i - 1] is None or temps[i - 1] > cur[i - 1]]
+    down = [i for i in range(1, POINTS + 1) if cur[i - 1] is not None and temps[i - 1] < cur[i - 1]]
+    ok = True
+    for i in up + down:
+        ok &= sysfs.write(os.path.join(h, f"pwm{n}_auto_point{i}_temp"), temps[i - 1], persist=True)
+    return ok
+
+
 def apply(h: str | None, preset: str, custom: list[int] | None = None) -> dict:
     """Writes the preset to both fans and reads it back. Returns a WriteResult-like dict."""
     what = "Fan"
@@ -127,20 +145,28 @@ def apply(h: str | None, preset: str, custom: list[int] | None = None) -> dict:
     duties = [snap(x) for x in (custom or [])] if preset == "custom" else PRESETS[preset]
     if preset == "custom" and len(duties) != POINTS:
         return {"ok": False, "what": what, "summary": "Custom needs six points", "error": "custom needs six duties"}
+    temps = PRESET_TEMPS.get(preset)
     sysfs.clear_error()
     ok = True
+    # MSI's own tables first (temperatures included), so a preset never inherits another one's temperatures. Done for
+    # both fans before writing either: enable=2 on one fan makes the driver put back the tables of both.
     for n in fans(h):
-        if duties is None:
-            ok &= sysfs.write(os.path.join(h, f"pwm{n}_enable"), 2, persist=True)
-            continue
-        for i, d in enumerate(duties, 1):
-            ok &= sysfs.write(os.path.join(h, f"pwm{n}_auto_point{i}_pwm"), to_pwm(d), persist=True)
-        ok &= sysfs.write(os.path.join(h, f"pwm{n}_enable"), 1, persist=True)
+        ok &= sysfs.write(os.path.join(h, f"pwm{n}_enable"), 2, persist=True)
+    if duties is not None:
+        for n in fans(h):
+            if temps:
+                ok &= _write_temps(h, n, temps)
+            for i, d in enumerate(duties, 1):
+                ok &= sysfs.write(os.path.join(h, f"pwm{n}_auto_point{i}_pwm"), to_pwm(d), persist=True)
+        for n in fans(h):
+            ok &= sysfs.write(os.path.join(h, f"pwm{n}_enable"), 1, persist=True)
     st = status(h)
     want_enable = 2 if duties is None else 1
     readback = all(f["enable"] == want_enable for f in st["fans"])
     if duties is not None:
         readback = readback and all(f["duties"] == [to_pct(to_pwm(d)) for d in duties] for f in st["fans"])
+        if temps:
+            readback = readback and all(f["temps"] == temps for f in st["fans"])
     ok = ok and readback
     label = LABELS.get(preset, preset)
     rpm = " / ".join(f"{f['rpm']}" for f in st["fans"] if f["rpm"] is not None)
