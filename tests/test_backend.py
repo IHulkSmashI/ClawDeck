@@ -588,6 +588,47 @@ def test_guard_steps_a_plain_held_tdp_to_the_users_floor_only_while_thermald_is_
     assert held["w"] == 12 and p.guard.status()["line"] == "thermal: stepped to 12 W"
 
 
+def test_thermal_csv_gets_a_row_per_guard_check_and_none_once_thermald_is_back(tmp_path, fake_hw, monkeypatch):
+    """No timer of its own (battery first): the rows come with the guard's checks, which run only while thermald is
+    paused."""
+    import asyncio
+    import csv
+    m = _load_main(tmp_path, monkeypatch)
+    p = m.Plugin.__new__(m.Plugin)
+    pw = power.Power(fake_hw)
+    monkeypatch.setattr(pw, "read_tdp", lambda: 17)
+    t = tmp_path / "pkg_temp"
+    _w(t, 61000)
+    p.hw, p.power, p.settings = fake_hw, pw, {"autotune_floor": 12}
+    p.running_appid, p.profiles = None, profiles.Profiles(str(tmp_path / "profiles.json"))
+    p.battery = type("B", (), {"plugged": lambda self: False})()
+    p.autotune = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    p.thermal_log = thermal.Recorder(str(tmp_path / "thermal.csv"))
+    monkeypatch.setattr(m.thermal, "CHECK_S", 0)
+    checks = {"n": 0}
+    real = pw.thermald_paused
+
+    def paused():                                      # thermald comes back after two checks
+        return real() and checks["n"] < 2
+    monkeypatch.setattr(pw, "thermald_paused", paused)
+
+    async def run():
+        p._power_lock = asyncio.Lock()
+        orig = p._guard_check
+
+        async def counted():
+            checks["n"] += 1
+            return await orig()
+        p._guard_check = counted
+        pw._thermald_paused = True
+        await p._guard_loop()
+    asyncio.run(run())
+    with open(tmp_path / "thermal.csv", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    assert rows[0] == thermal.CSV_FIELDS and [r[1:5] for r in rows[1:]] == [["61", "", "17", ""], ["61", "", "17", ""]]
+
+
 # ---- PL1 time window while autotune learns (findings §22.2) ---------------------------------------------------------
 TAU_FW = 55_970_000          # what the Claw 8 EX's firmware sets: 55.97 s
 

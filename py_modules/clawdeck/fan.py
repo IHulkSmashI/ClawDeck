@@ -95,6 +95,15 @@ def to_pct(pwm: int | None) -> int | None:
     return None if pwm is None else round(pwm * 100 / 255)
 
 
+def speeds(h: str | None) -> list[dict]:
+    """Each fan's rpm and mode (pwmN_enable), without the tables: the cheap read for the temperature guard's log."""
+    if not h:
+        return []
+    return [{"fan": n, "rpm": sysfs.read_int(os.path.join(h, f"fan{n}_input")),
+             "enable": sysfs.read_int(os.path.join(h, f"pwm{n}_enable"))}
+            for n in ([1] if kind(h) == "oxp" else fans(h))]
+
+
 def status(h: str | None) -> dict:
     if not h:
         return {"supported": False}

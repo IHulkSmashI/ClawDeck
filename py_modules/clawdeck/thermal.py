@@ -13,11 +13,15 @@ temperature (the x86_pkg_temp thermal zone, coretemp as a fallback; hw.find_pkg_
 It used to stay stepped until a new pick or the game closed: one hot minute at 35 W left the Claw at 21 W for the rest
 of the session at 55 °C (maintainer, 2026-11-04). Autotune works under the stepped TDP while it runs. The SoC's own limit (TCC) and the EC's fan
 control stay active the whole time; this guard only keeps ClawDeck's TDP from pushing the chip into them.
-Cost: one small file read every 10 s, only while thermald is paused.
+Each check also writes a row to thermal.csv (Recorder): the temperature next to the package power, the TDP and the
+fans, so a trip can be read against what the fans were doing; nothing else records fan speed.
+Cost: a few small file reads every 10 s, only while thermald is paused.
 """
 from __future__ import annotations
 
+import csv
 import logging
+import os
 import time
 from typing import Callable
 
@@ -33,9 +37,52 @@ RECOVER_C = 80.0        # well under the trip: a step back up only once the pack
 RECOVER_CHECKS = 3      # ... for 30 s, and the next step 30 s after that (so it doesn't bounce off TRIP_C)
 
 
+CSV_FIELDS = ["time", "pkg_c", "pkg_w", "tdp_w", "stepped_w", "fan_mode", "fan1_rpm", "fan2_rpm"]
+CSV_MAX_BYTES = 8_000_000   # about two weeks of rows at one per CHECK_S; then the file moves to <name>.1
+FAN_MODES = {1: "table", 2: "msi"}   # pwmN_enable: ClawDeck's table / MSI's automatic control
+
+
 def read_c(path: str | None) -> float | None:
     v = sysfs.read_int(path) if path else None
     return None if v is None else v / 1000.0
+
+
+class Recorder:
+    """thermal.csv, one row per guard check. pkg_w is the average since the previous row (RAPL energy counter)."""
+
+    def __init__(self, path: str | None, energy_path: str | None = None):
+        self.path, self.energy_path = path, energy_path
+        self._last_energy: tuple[float, int] | None = None
+
+    def _package_w(self) -> float | None:
+        e = sysfs.read_int(self.energy_path) if self.energy_path else None
+        if e is None:
+            return None
+        now, prev = time.monotonic(), self._last_energy
+        self._last_energy = (now, e)
+        if not prev or now <= prev[0] or e < prev[1]:   # first row, or the counter wrapped
+            return None
+        return (e - prev[1]) / 1e6 / (now - prev[0])
+
+    def row(self, temp_c: float | None, tdp_w: int | None, stepped_w: int | None, fans: list[dict]) -> None:
+        if not self.path:
+            return
+        pkg_w = self._package_w()
+        rpm = {f["fan"]: f.get("rpm") for f in fans}
+        mode = FAN_MODES.get(fans[0].get("enable"), fans[0].get("enable")) if fans else None
+        vals = [time.strftime("%Y-%m-%d %H:%M:%S"), None if temp_c is None else round(temp_c),
+                None if pkg_w is None else round(pkg_w, 1), tdp_w, stepped_w, mode, rpm.get(1), rpm.get(2)]
+        try:
+            if os.path.exists(self.path) and os.path.getsize(self.path) > CSV_MAX_BYTES:
+                os.replace(self.path, self.path + ".1")
+            new = not os.path.exists(self.path)
+            with open(self.path, "a", encoding="utf-8", newline="") as f:
+                w = csv.writer(f)
+                if new:
+                    w.writerow(CSV_FIELDS)
+                w.writerow(["" if v is None else v for v in vals])
+        except OSError as e:
+            log.debug("thermal.csv: %s", e)
 
 
 class Guard:
