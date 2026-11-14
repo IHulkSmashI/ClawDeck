@@ -1588,7 +1588,10 @@ def test_target_a_frame_cap_lifts_when_the_game_runs_faster(fake_hw, monkeypatch
     game = _BusyGame(at, 3.0, cap=30.0, busy_capped=50)
     run(430)
     assert s.learned.cap == 30 and s.learned.tdp == 10
-    game.cap = 90.0                                               # unlocked: 30 fps at 10 W is the power now
+    game.per_w, game.cap = 4.0, 34.0                              # 13 % over the cap for a while: fps varies
+    run(30)
+    assert s.learned.cap == 30
+    game.per_w, game.cap = 3.0, 90.0                              # unlocked: 30 fps at 10 W is the power now
     run(autotune.RESCAN_S)
     assert s.learned.cap is None                                  # +4 W ran it over 30: the cap is gone
     run(60)

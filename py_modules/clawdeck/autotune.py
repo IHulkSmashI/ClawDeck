@@ -128,7 +128,9 @@ G_CAP_S = 10            # s at the full TDP under the target, steady, with the G
                         # instead of the target, with the fewest watts (maintainer, 2026-11-14: "it shouldn't pin 30W
                         # because 30fps < 60fps target when the locked framerate could be met with a lower power limit")
 G_CAP_SPREAD = 0.03     # ... steady: every one of those seconds within 3 % of their median
-G_CAP_OFF = 1.05        # G_WIN s this far over the cap on average (a menu at 60, the cap removed): it no longer holds
+G_CAP_OFF = 1.20        # G_WIN s this far over the cap on average (a menu at 60, the cap removed): it no longer holds.
+                        # Not less: fps varies, and a lifted cap means watts for the target again (maintainer,
+                        # 2026-11-14: "5% is a very small number. fps is variable")
 MIN_TARGET = 20
 XELL_RE = re.compile(rb"xellSleep stats: 100 calls in (\d+) ms \(([\d.]+) ms/frame\)")
 
