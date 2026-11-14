@@ -46,12 +46,57 @@ def test_presets_write_both_fans_then_enable_and_survive_revert(tmp_path):
     for n in (1, 2):
         assert [int(open(f"{h}/pwm{n}_auto_point{i}_pwm").read()) for i in range(1, 7)] == [fan.to_pwm(d) for d in fan.PRESETS["quiet"]]
         assert open(f"{h}/pwm{n}_enable").read().strip() == "1"
-        # temperatures are the EC's axis: never written
+        # Quiet has no temperatures of its own: MSI's stay
         assert [int(open(f"{h}/pwm{n}_auto_point{i}_temp").read()) for i in range(1, 7)] == FACTORY_T
     sysfs.revert_all()                                   # closing a game must not undo the fan choice
     assert open(f"{h}/pwm1_enable").read().strip() == "1"
     assert fan.apply(h, "auto")["ok"]
     assert open(f"{h}/pwm1_enable").read().strip() == "2" and open(f"{h}/pwm2_enable").read().strip() == "2"
+
+
+def _restore_like_the_driver(monkeypatch):
+    """enable=2 on either fan makes the real driver put back the boot-time tables of both fans."""
+    real = sysfs.write
+
+    def write(path, value, persist=False):
+        ok = real(path, value, persist=persist)
+        if str(path).endswith("_enable") and int(value) == 2:
+            h = os.path.dirname(str(path))
+            for n in (1, 2):
+                for i in range(6):
+                    with open(f"{h}/pwm{n}_auto_point{i + 1}_temp", "w") as f:
+                        f.write(f"{FACTORY_T[i]}\n")
+                    with open(f"{h}/pwm{n}_auto_point{i + 1}_pwm", "w") as f:
+                        f.write(f"{FACTORY_P[i]}\n")
+        return ok
+    monkeypatch.setattr(fan.sysfs, "write", write)
+
+
+def test_a_preset_after_extreme_is_back_on_msis_temperatures(tmp_path, monkeypatch):
+    root, h = _hwmon(tmp_path)
+    _restore_like_the_driver(monkeypatch)
+    for p in ("extreme", "quiet", "cooling", "extreme", "full"):
+        r = fan.apply(h, p)
+        assert r["ok"], (p, r)
+        temps = fan.PRESET_TEMPS.get(p, FACTORY_T)
+        for f in r["read"]["fans"]:                        # both fans: the second fan's restore must not undo the first
+            assert f["duties"] == fan.PRESETS[p] and f["temps"] == temps, (p, f)
+
+
+def test_extreme_writes_its_own_temperatures_on_both_fans_in_order(tmp_path, monkeypatch):
+    root, h = _hwmon(tmp_path)
+    seen, real = [], sysfs.write
+
+    def write(path, value, persist=False):
+        ok = real(path, value, persist=persist)
+        if str(path).endswith("_temp") and "pwm1_" in str(path):
+            seen.append([int(open(f"{h}/pwm1_auto_point{i}_temp").read()) for i in range(1, 7)])
+        return ok
+    monkeypatch.setattr(fan.sysfs, "write", write)
+    assert fan.apply(h, "extreme")["ok"]
+    for n in (1, 2):
+        assert [int(open(f"{h}/pwm{n}_auto_point{i}_temp").read()) for i in range(1, 7)] == fan.PRESET_TEMPS["extreme"]
+    assert seen and all(t == sorted(t) for t in seen)    # never out of order between two writes
 
 
 def test_custom_snaps_and_needs_six(tmp_path):
