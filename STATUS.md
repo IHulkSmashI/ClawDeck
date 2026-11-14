@@ -72,6 +72,12 @@ Check on the EX: Custom 35 W, autotune on with a target, start a Vulkan game wit
 the status line says it stays out, the log line ends "(35 W, your limit)", and
 `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw` reads 35000000.
 
+**XeSS XMX package 20261113 (2026-11-14):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
+One low-latency path for XeSS frame generation: upstream reports CONTROL Resonant 3x on an Arc B390 (the EX's chip)
+from 35.5 ms to about 23 ms. The archive is single-nested again. Check on the EX: Setup → Update XeSS XMX, then
+CONTROL Resonant with FSR 4.1.2 + XeFG 3x: picture right, "XMX cores used in the last launch", and the XeLL line on
+the Game page. The 20261111 checks below still apply (stock mode on Xe3).
+
 **XeSS XMX package 20261111 (2026-11-10):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 New on the EX (Xe3): install.sh's default is "stock mode", the package's unpatched Mesa 26.3 plus its Vulkan layer,
 with five more session variables that ClawDeck carries per game. Check on the EX: Setup → Update XeSS XMX, then CONTROL

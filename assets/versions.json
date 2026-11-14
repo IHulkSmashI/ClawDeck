@@ -2,9 +2,9 @@
  "_comment": "Pinned on purpose: a system driver (xess-xmx-linux) and ClawDeck's own OptiScaler + OptiPatcher are installed only at a tested version (OptiScaler with its sha256); 'pending-verification' asks before installing the latest. tools/upstream_watch.py reports newer ones.",
  "xess_xmx_linux": {
   "repo": "HHHHanasak1/xess-xmx-linux",
-  "tag": "20261111",
+  "tag": "20261113",
   "asset_glob": "xess-xmx-linux-*.zip",
-  "note": "20261111: Mesa 26.3.0 final; on Xe3 (Claw 8 EX / Panther Lake) install.sh now defaults to stock mode: the package's unpatched Mesa 26.3 plus the Vulkan layer VK_LAYER_XESS_xmx (its session file adds MESA, VK_ADD_LAYER_PATH, VK_LOADER_LAYERS_ENABLE, XMX_LAYER_HELPER, XMX_IGC_DIR, which ClawDeck carries per game like the others and sets before the container, as upstream's xmx-stock.sh does; the layer writes the same anv_canary); Xe2 (Claw 8 AI+) and older stay on the patched driver. XESS=latest also serves D3D11 and Vulkan games. 20261107: hardening of the driver, shim and hook, the other missing kernels compiled in the background on a cache miss, Mesa 26.3 patch 0006 (a Cyberpunk 2077 crash), the session check run from ~/.config/xess-xmx (stock drivers when the package folder is gone), any case of the prefix driver store; the session file, hook mark and shim path ClawDeck reads are unchanged. Also an experimental Vulkan layer for the stock driver (xmx-stock.sh), not used by ClawDeck yet. 20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
+  "note": "20261113: one low-latency path for XeSS frame generation, the FSR routes and OFLOW_FG (the shim answers swap-chain queries made after Present; upstream reports CONTROL Resonant 3x on an Arc B390 from 35.5 to about 23 ms), experimental Vulkan XeSS on XMX for Xe-HPG and Xe2 through the patched driver (Xe3 stays on the layer), the session check no longer falls back to the unpatched driver when the patched one fails, the archive is single-nested again; the session file, hook mark and shim path ClawDeck reads are unchanged. 20261111: Mesa 26.3.0 final; on Xe3 (Claw 8 EX / Panther Lake) install.sh now defaults to stock mode: the package's unpatched Mesa 26.3 plus the Vulkan layer VK_LAYER_XESS_xmx (its session file adds MESA, VK_ADD_LAYER_PATH, VK_LOADER_LAYERS_ENABLE, XMX_LAYER_HELPER, XMX_IGC_DIR, which ClawDeck carries per game like the others and sets before the container, as upstream's xmx-stock.sh does; the layer writes the same anv_canary); Xe2 (Claw 8 AI+) and older stay on the patched driver. XESS=latest also serves D3D11 and Vulkan games. 20261107: hardening of the driver, shim and hook, the other missing kernels compiled in the background on a cache miss, Mesa 26.3 patch 0006 (a Cyberpunk 2077 crash), the session check run from ~/.config/xess-xmx (stock drivers when the package folder is gone), any case of the prefix driver store; the session file, hook mark and shim path ClawDeck reads are unchanged. Also an experimental Vulkan layer for the stock driver (xmx-stock.sh), not used by ClawDeck yet. 20261104: low latency with XeSS frame generation on by default (IGDEXT_XELL_CAP), FSR 3.1+ games on XeSS (FSR=xess), XESS_FG up to 8x"
  },
  "decky_framegen": {
   "repo": "xXJSONDeruloXx/Decky-Framegen",
@@ -14,12 +14,15 @@
  },
  "reframework": {
   "repo": "onehoon/REFramework",
-  "tag": "fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0",
+  "tag": "fork-release-19-cdf363c170fa10f23d577d5a84c1f4b410b0ea80",
   "asset_glob": "REFramework.zip",
-  "sha256": "86a43b883f2e7a708918594ca46eaced9468d302c8f3c053e3eefe92e04dbcb4",
-  "dll_sha256": "58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b",
-  "previous_dll_sha256": ["ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98"],
-  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Release 18 (2026-11-05) since 2026-11-09: three upstream syncs over release 15 (Lua JSON and LooseFileLoader fixes, HookManager error paths and thread safety, ARM64EC hooks skipped), dinput8.dll 23262720 bytes; release 15's dll stays recognised (previous_dll_sha256) so Remove still takes it out."
+  "sha256": "963b6fbdc1ad0562acb4b95951a8a46adade79add14e28cb4a535b6e45e3d60d",
+  "dll_sha256": "8db9887fee085bdd52fecddb4d9d8f5faf59484a8f0b64120e475c8cb29da7ec",
+  "previous_dll_sha256": [
+   "58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b",
+   "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98"
+  ],
+  "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Release 18 (2026-11-05) since 2026-11-09: three upstream syncs over release 15 (Lua JSON and LooseFileLoader fixes, HookManager error paths and thread safety, ARM64EC hooks skipped), dinput8.dll 23262720 bytes; release 15's dll stays recognised (previous_dll_sha256) so Remove still takes it out. Release 19 (2026-11-13) since 2026-11-14: one upstream sync over release 18 (pending script state deletions cleared on reset), dinput8.dll 23262208 bytes, REFramework 0.1.0.73; releases 18 and 15 stay recognised."
  },
  "optiscaler": {
   "version": "0.9.4",

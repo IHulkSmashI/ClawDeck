@@ -1076,9 +1076,10 @@ def _ini(text):
 def test_versions_pin_the_capcom_setup():
     v = downloads.load_versions(os.path.join(ROOT, "assets", "versions.json"))
     ref = v["reframework"]
-    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-18-135e7ac98b0703ef157080cbd1ee4f39e54ba8e0"
-    # release 15's dll (games set up before the bump) is still recognised, so Remove takes it out
-    assert ref["previous_dll_sha256"] == ["ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98"]
+    assert ref["repo"] == "onehoon/REFramework" and ref["tag"] == "fork-release-19-cdf363c170fa10f23d577d5a84c1f4b410b0ea80"
+    # releases 18 and 15's dlls (games set up before the bumps) are still recognised, so Remove takes them out
+    assert ref["previous_dll_sha256"] == ["58e65e32e2a12951a81bb342a62b65079efddf56e67301ce7288d4c85daedb9b",
+                                          "ac1901b02e475bd335f7055789c351b843804964e90d111247f0b671439dbc98"]
     assert ref["asset_glob"] == "REFramework.zip" and len(ref["sha256"]) == 64 and downloads.is_pinned(ref)
     o10 = v["optiscaler_v10"]
     assert o10["layout"] == "subfolder" and o10["tag"] == "nightly-20261030"
