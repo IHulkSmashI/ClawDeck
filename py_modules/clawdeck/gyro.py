@@ -7,11 +7,13 @@ Found and tested on a Claw 8 EX by Kisenir (r/MSIClaw, 2026-11-08); ClawDeck pac
      on, so ClawDeck downloads MSI's kit on the Claw, takes that one file, checks its size and sha256 (a wrong image
      makes the hub stop answering until a full power-off), and installs it as /etc/firmware/intel/ish/ish_ptl.bin
      with the kernel argument firmware_class.path=/etc/firmware (the same one the VRR fix uses; whoever removes last
-     takes it out). The kernel looks there before /usr/lib/firmware.
+     takes it out). The kernel looks there before /usr/lib/firmware. The file is also tracked into the initramfs
+     (rpm-ostree initramfs-etc), because intel_ish_ipc can probe there before /etc is mounted (#180).
   2. HID-BPF (tools/gyro/MSI__Claw-ISH-IMU.bpf.c, built from source in CI): the hub declares the IMU as two
      "custom" HID sensors no Linux driver binds; the program relabels them, length-preserving, as a standard
      Accelerometer 3D and Gyrometer 3D, so hid-sensor-hub creates accel_3d / gyro_3d IIO devices. It also subtracts
-     a per-axis gyro bias. Loaded by udev-hid-bpf from /etc/udev-hid-bpf/ and only on the known descriptor (2247 bytes,
+     a per-axis gyro bias. Loaded by udev-hid-bpf from /etc/udev-hid-bpf/ through its own udev rule (udev-hid-bpf
+     install; the distro rule only loads programs its hwdb lists, #180), and only on the known descriptor (2247 bytes,
      checked bytes), so another firmware layout is left alone.
   3. Two small services (gyro_files/): a keepalive that writes the standard HID-sensor config (reporting, power,
      10 ms interval) when InputPlumber opens the gyro, never reading feature reports back and never sending vendor
@@ -25,6 +27,7 @@ from __future__ import annotations
 import glob
 import hashlib
 import io
+import json
 import logging
 import os
 import re
@@ -50,6 +53,10 @@ PTL_ISH_IDS = ("0xe345", "0xe445")                     # Panther Lake ISH (pci-i
 HUB = ("8087", "0AC2")
 BPF_NAME = "MSI__Claw-ISH-IMU.bpf.o"
 BPF_DEST = f"/etc/udev-hid-bpf/{BPF_NAME}"
+# the udev rule that loads it: udev-hid-bpf's own name for it. The distro rule (81-hid-bpf.rules) only loads programs its
+# hwdb lists (.HID_BPF=1), and none lists the Claw's sensor hub, so without this rule the program was never attached
+# (chris-hmmr, #180)
+RULE_DEST = "/etc/udev/rules.d/99-hid-bpf-MSI__Claw-ISH-IMU.rules"
 FILES = os.path.join(os.path.dirname(__file__), "gyro_files")
 HELPER_DIR = "/etc/clawdeck/gyro"
 HELPERS = ("ish_imu_keepalive.py", "ish_gyro_bias.py", "ish_sensor_probe.py")
@@ -147,6 +154,52 @@ def _unit_state(unit: str) -> str:
     return out.splitlines()[-1].strip() if out else ("active" if ok else "inactive")
 
 
+def _tracked() -> set[str] | None:
+    """Files rpm-ostree puts in the initramfs (initramfs-etc) on the deployment the next boot uses, or None if that
+    can't be read."""
+    ok, out = _run(["rpm-ostree", "status", "--json"], 30)
+    if not ok:
+        return None
+    try:
+        deps = json.loads(out).get("deployments", [])
+    except ValueError:
+        return None
+    if not deps:
+        return None
+    d = deps[0]                                       # the newest: the staged one if any, else the booted one
+    files = d.get("initramfs-etc", d.get("initramfs_etc"))
+    return set(files) if isinstance(files, list) else None
+
+
+def _track_firmware() -> tuple[bool, str]:
+    """MSI's firmware into the initramfs. intel_ish_ipc can probe inside the initramfs (Bazzite testing, kernel 7.3:
+    1.6 s into boot, switch-root at 3.1 s), before /etc/firmware is there, and then loads Intel's generic image, which
+    the hub's bootloader rejects at every boot ("ISH loader: cmd 2 failed 10"; chris-hmmr, #180). The VRR fix tracks
+    its EDID the same way."""
+    return _run(["rpm-ostree", "initramfs-etc", f"--track={FW_DEST}"], 300)
+
+
+def _install_rule() -> tuple[bool, str]:
+    """udev-hid-bpf's own rule for the program, from the plugin's copy: `install --force` with the file already at its
+    destination truncates it to 0 bytes (#180), so the source is never BPF_DEST."""
+    ok, out = _run(["udev-hid-bpf", "install", "--force", os.path.join(FILES, BPF_NAME)], 60)
+    if ok and not os.path.exists(RULE_DEST):
+        return False, f"udev-hid-bpf wrote no {os.path.basename(RULE_DEST)}"
+    return ok, out
+
+
+def kernel_says() -> str | None:
+    """The kernel's own reason when the hub doesn't come up: MSI's firmware rejected (it wasn't loaded from the
+    initramfs), or the hub up without the gyro (the program not attached)."""
+    for cmd in (["journalctl", "-k", "-b", "--no-pager", "-o", "cat"], ["dmesg"]):
+        ok, out = _run(cmd, 20)
+        if ok and out:
+            if re.search(r"ISH loader: cmd \d+ failed", out):
+                return "fw_rejected"
+            return None
+    return None
+
+
 def installed() -> bool:
     """ClawDeck's gyro files are in place (firmware, program, helpers, units)."""
     return (_file_sha(FW_DEST) == FW_SHA256 and os.path.exists(BPF_DEST)
@@ -168,6 +221,11 @@ def status(board: str | None) -> dict:
     elif not arg_now or not hub or not gyro:
         state, line = "restart", ("Gyro installed: shut the Claw down fully and turn it on again (a cold boot, not a "
                                   "restart), then recalibrate gyro in Steam (Controller settings)")
+        if arg_now and not hub and kernel_says() == "fw_rejected":
+            line = ("Gyro: the sensor hub rejected the firmware at this boot (the kernel loaded Intel's generic one "
+                    "before MSI's was there). ClawDeck now puts MSI's into the boot image: restart once, then cold boot")
+        elif arg_now and hub and not gyro and not os.path.exists(RULE_DEST):
+            line = "Gyro: the sensor hub is up but the gyro program isn't loaded. ClawDeck has added its udev rule: cold boot once more"
     elif not ip or any(v != "active" for v in services.values()):
         state, line = "partial", "Gyro: the sensor works, but InputPlumber or ClawDeck's gyro services aren't running"
     else:
@@ -178,6 +236,7 @@ def status(board: str | None) -> dict:
     elif not on and not _uhb_present():
         why = "this system has no udev-hid-bpf, which loads the gyro program"
     return {"applies": True, "state": state, "line": why or line, "installed": on, "supported": why is None,
+            "udev_rule": os.path.exists(RULE_DEST),
             "firmware_ok": fw == FW_SHA256, "kernel_arg": arg_now, "hub": hub, "gyro_iio": bool(gyro),
             "inputplumber_imu": ip, "services": services, "accel": buttons.accel_in_override()}
 
@@ -250,6 +309,10 @@ def enable(fetch=None) -> dict:
         for u, text in UNITS.items():
             _write(os.path.join(UNIT_DIR, u), text.encode())
         done.append("units")
+        ok, out = _install_rule()
+        if not ok:
+            raise RuntimeError(f"udev rule: {out}")
+        done.append("rule")
     except Exception as e:  # noqa: BLE001 - network, zip, disk: undo what was written
         _undo_files(done)
         return {"ok": False, "error": f"gyro install: {e}"}
@@ -266,12 +329,16 @@ def enable(fetch=None) -> dict:
     if not r.get("ok"):
         disable()
         return {"ok": False, "error": r.get("error")}
+    ok, out = _track_firmware()
+    if not ok:
+        disable()
+        return {"ok": False, "error": f"initramfs: {out}"}
     if FW_ARG not in pending.split():
         ok, out = _run(["rpm-ostree", "kargs", f"--append-if-missing={FW_ARG}"], 300)
         if not ok:
             disable()
             return {"ok": False, "error": f"kernel argument: {out}"}
-    log.info("gyro installed (firmware, HID-BPF, services, InputPlumber imu source)")
+    log.info("gyro installed (firmware in the initramfs, HID-BPF and its udev rule, services, InputPlumber imu source)")
     return {"ok": True, "restart": True, "manual_off": manual,
             "next": "shut the Claw down fully and turn it on again (a cold boot clears the sensor hub), then "
                     "recalibrate gyro once in Steam (Settings -> Controller -> Gyro)"}
@@ -289,6 +356,8 @@ def set_accel(on: bool) -> dict:
 
 
 def _undo_files(done: list[str]) -> None:
+    if "rule" in done:
+        _rm(RULE_DEST)
     if "units" in done:
         for u in UNITS:
             _rm(os.path.join(UNIT_DIR, u))
@@ -318,10 +387,13 @@ def disable() -> dict:
     shutil.rmtree(HELPER_DIR, ignore_errors=True)
     shutil.rmtree(STATE_DIR, ignore_errors=True)
     _rm(BPF_DEST)
+    _rm(RULE_DEST)
     r = buttons.write_override(imu=False)
     if not r.get("ok"):
         errors.append(r.get("error"))
     if _file_sha(FW_DEST) == FW_SHA256:
+        if shutil.which("rpm-ostree"):
+            _run(["rpm-ostree", "initramfs-etc", f"--untrack={FW_DEST}"], 300)
         _rm(FW_DEST)
     pending = _kargs_pending()
     if shutil.which("rpm-ostree") and FW_ARG in pending.split() and not _other_firmware():
@@ -331,3 +403,20 @@ def disable() -> dict:
     if errors:
         return {"ok": False, "error": "; ".join(str(e) for e in errors)}
     return {"ok": True, "restart": True, "next": "restart the Claw to finish (gyro off again)"}
+
+
+def repair() -> dict | None:
+    """A gyro installed by beta 16 or earlier: its firmware wasn't in the initramfs and its program had no udev rule
+    (#180). Called at plugin start; does nothing once both are in place, or when the deployment's tracked files can't
+    be read (never regenerates the initramfs on a guess)."""
+    if not installed() or not shutil.which("rpm-ostree"):
+        return None
+    done = []
+    if not os.path.exists(RULE_DEST) and shutil.which("udev-hid-bpf"):
+        ok, out = _install_rule()
+        done.append("udev rule" if ok else f"udev rule failed: {out}")
+    tracked = _tracked()
+    if tracked is not None and FW_DEST not in tracked:
+        ok, out = _track_firmware()
+        done.append("firmware in the initramfs" if ok else f"initramfs failed: {out}")
+    return {"done": done} if done else None

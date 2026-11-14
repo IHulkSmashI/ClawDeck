@@ -52,6 +52,13 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Gyro: firmware in the initramfs and a udev rule (2026-11-14, #180):** on Bazzite testing (kernel 7.3) the gyro never
+came up: intel_ish_ipc probes inside the initramfs before /etc/firmware exists and loads Intel's generic image ("ISH
+loader: cmd 2 failed 10"), and nothing loaded the HID-BPF program (the distro rule only loads hwdb-listed ones). Install
+now tracks the firmware into the initramfs and runs `udev-hid-bpf install --force` from the plugin's copy; a gyro from an
+earlier beta gets both at plugin start; Remove untracks and deletes the rule. Check on the EX: after updating, the log
+says "gyro repaired"; reboot, then cold boot: `ls /sys/bus/iio/devices/*/name` shows gyro_3d, Fixes says Gyro on.
+
 **MangoHud's frame-time log starts again (2026-11-12):** the wrapper hid MangoHud with `no_display`, and MangoHud up to
 0.8.4 never starts `autostart_log` then, so autotune had no frame rate in any game without XeLL. Now an empty layout at
 zero alpha hides it. Check on the EX: autotune on, start a game without XeSS (Enshrouded): nothing is drawn, a CSV

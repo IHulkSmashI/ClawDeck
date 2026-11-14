@@ -21,8 +21,10 @@ ClawDeck orchestrates other people's work. Read, learned from, and called — no
   GPL-2.0-only), the keepalive and bias helpers (`py_modules/clawdeck/gyro_files/`) and the InputPlumber imu source.
   ClawDeck installs his method with one button; the BPF program is built from his source. Used with his permission
   (2026-11-08); his helpers are GPL-2.0-or-later. He also exposed the gyro ClawTweaks uses on Windows.
+- **chris-hmmr** — found why the gyro install didn't come up on Bazzite testing (#180): MSI's ISH firmware has to be in
+  the initramfs, and the HID-BPF program needs udev-hid-bpf's own udev rule to be loaded.
 - **[udev-hid-bpf](https://gitlab.freedesktop.org/libevdev/udev-hid-bpf)** (libevdev) — loads HID-BPF programs from
-  `/etc/udev-hid-bpf/`; its headers build the gyro program.
+  `/etc/udev-hid-bpf/` and writes the udev rule that loads the gyro program; its headers build the gyro program.
 - **[DeckyTDPTuner](https://github.com/sidharthify/DeckyTDPTuner)** by sidharthify (GPL-3.0) — Autotune's target fps
   mode follows its governor (`backend/internal/tdp/governor.go`): a miss over a short window and the last tick, +2 W at
   once (+4 W far under), -1 W only after 15 s steady with GPU headroom, a miss right after lowering makes the watts

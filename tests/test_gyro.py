@@ -48,6 +48,7 @@ def _env(tmp_path, monkeypatch, rpm=True):
     monkeypatch.setattr(gyro, "FW_DIR", t + "/etc/firmware")
     monkeypatch.setattr(gyro, "FW_DEST", t + "/etc/firmware/intel/ish/ish_ptl.bin")
     monkeypatch.setattr(gyro, "BPF_DEST", t + "/etc/udev-hid-bpf/" + gyro.BPF_NAME)
+    monkeypatch.setattr(gyro, "RULE_DEST", t + "/etc/udev/rules.d/99-hid-bpf-MSI__Claw-ISH-IMU.rules")
     monkeypatch.setattr(gyro, "HELPER_DIR", t + "/etc/clawdeck/gyro")
     monkeypatch.setattr(gyro, "UNIT_DIR", t + "/etc/systemd/system")
     monkeypatch.setattr(gyro, "STATE_DIR", t + "/var/lib/ish-gyro-bias")
@@ -55,10 +56,25 @@ def _env(tmp_path, monkeypatch, rpm=True):
     monkeypatch.setattr(buttons, "DEVICE_OVERRIDE", t + "/etc/inputplumber/devices.d/50.yaml")
     monkeypatch.setattr(buttons, "MAP_OVERRIDE", t + "/etc/inputplumber/capability_maps.d/m.yaml")
     monkeypatch.setattr(buttons, "GYRO_BPF", gyro.BPF_DEST)
-    ran, kargs = [], {"pending": "quiet splash"}
+    ran, kargs = [], {"pending": "quiet splash", "tracked": []}
 
     def run(cmd, timeout=120):
         ran.append(cmd)
+        if cmd[:2] == ["udev-hid-bpf", "install"]:            # what udev-hid-bpf does: its rule in /etc/udev/rules.d
+            assert cmd[-1] != gyro.BPF_DEST                    # never from the installed copy: that truncates it (#180)
+            os.makedirs(os.path.dirname(gyro.RULE_DEST), exist_ok=True)
+            open(gyro.RULE_DEST, "w").write("# udev-hid-bpf rule\n")
+            return True, ""
+        if cmd[:2] == ["rpm-ostree", "initramfs-etc"]:
+            for a in cmd[2:]:
+                if a.startswith("--track="):
+                    kargs["tracked"].append(a.split("=", 1)[1])
+                if a.startswith("--untrack="):
+                    kargs["tracked"].remove(a.split("=", 1)[1])
+            return True, ""
+        if cmd[:3] == ["rpm-ostree", "status", "--json"]:
+            import json
+            return True, json.dumps({"deployments": [{"initramfs-etc": list(kargs["tracked"])}]})
         if cmd[:2] == ["rpm-ostree", "kargs"] and len(cmd) == 2:
             return True, kargs["pending"]
         if cmd[:2] == ["rpm-ostree", "kargs"]:
@@ -90,12 +106,14 @@ def test_install_puts_every_piece_in_place_and_remove_takes_it_all_out(tmp_path,
     assert "ExecStart=/usr/bin/python3 /etc/clawdeck/gyro/ish_imu_keepalive.py" in unit
     assert ["systemctl", "enable", "--now", *gyro.UNITS] in ran
     assert gyro.FW_ARG.replace(gyro.FW_DIR, gyro.FW_DIR) in kargs["pending"]
+    assert kargs["tracked"] == [gyro.FW_DEST] and os.path.exists(gyro.RULE_DEST)       # #180: initramfs and udev rule
     ov = open(buttons.DEVICE_OVERRIDE).read()
     assert "name: gyro_3d" in ov and "capability_map_id: claw2" in ov            # stock map kept: face fix wasn't on
     assert ov.index("name: gyro_3d") < ov.index("options:")
     r = gyro.disable()
     assert r["ok"]
-    for p in (gyro.FW_DEST, gyro.BPF_DEST, gyro.HELPER_DIR, buttons.DEVICE_OVERRIDE,
+    assert kargs["tracked"] == []
+    for p in (gyro.FW_DEST, gyro.BPF_DEST, gyro.RULE_DEST, gyro.HELPER_DIR, buttons.DEVICE_OVERRIDE,
               os.path.join(gyro.UNIT_DIR, "clawdeck-gyro-bias.service")):
         assert not os.path.exists(p), p
     assert gyro.FW_ARG not in kargs["pending"]
@@ -190,3 +208,39 @@ def test_a_hand_installed_copy_of_the_helpers_is_turned_off_not_doubled(tmp_path
     assert r["ok"] and r["manual_off"] == list(gyro.MANUAL_UNITS)
     assert ["systemctl", "disable", "--now", *gyro.MANUAL_UNITS] in ran
     assert all(os.path.exists(os.path.join(gyro.UNIT_DIR, u)) for u in gyro.MANUAL_UNITS)   # their files stay
+
+
+def test_a_gyro_from_an_earlier_beta_gets_its_initramfs_entry_and_udev_rule_once(tmp_path, monkeypatch):
+    """#180 (chris-hmmr): MSI's firmware wasn't in the initramfs, so the kernel loaded Intel's generic image there,
+    and the program had no udev rule, so it was never attached. A gyro installed before gets both at plugin start,
+    and nothing more once they're there."""
+    ran, kargs = _env(tmp_path, monkeypatch)
+    assert gyro.enable(fetch=lambda url: _kit())["ok"]
+    os.remove(gyro.RULE_DEST)
+    kargs["tracked"].clear()                                   # as beta 16 left it
+    ran.clear()
+    assert gyro.repair() == {"done": ["udev rule", "firmware in the initramfs"]}
+    assert kargs["tracked"] == [gyro.FW_DEST] and os.path.exists(gyro.RULE_DEST)
+    ran.clear()
+    assert gyro.repair() is None
+    assert not any(c[:2] == ["rpm-ostree", "initramfs-etc"] for c in ran)
+    monkeypatch.setattr(gyro, "_run", lambda cmd, timeout=120: (False, "no rpm-ostree status"))
+    kargs["tracked"].clear()
+    assert gyro.repair() is None                               # tracked files unknown: never regenerate on a guess
+
+
+def test_the_status_line_says_why_the_gyro_isnt_there(tmp_path, monkeypatch):
+    ran, kargs = _env(tmp_path, monkeypatch)
+    assert gyro.enable(fetch=lambda url: _kit())["ok"]
+    monkeypatch.setattr(gyro, "BOARD", "B")
+    monkeypatch.setattr(gyro, "_has_ish", lambda: True)
+    monkeypatch.setattr(gyro, "_cmdline", lambda: "quiet " + gyro.FW_ARG)
+    monkeypatch.setattr(gyro, "hub_present", lambda: False)
+    monkeypatch.setattr(gyro, "iio", lambda n: None)
+    monkeypatch.setattr(gyro, "kernel_says", lambda: "fw_rejected")
+    st = gyro.status("B")
+    assert st["state"] == "restart" and "rejected the firmware" in st["line"]
+    monkeypatch.setattr(gyro, "hub_present", lambda: True)
+    os.remove(gyro.RULE_DEST)
+    st = gyro.status("B")
+    assert "gyro program isn't loaded" in st["line"] and st["udev_rule"] is False
