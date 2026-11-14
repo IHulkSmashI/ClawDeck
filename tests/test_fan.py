@@ -87,3 +87,9 @@ def test_kde_charge_limit_written_and_removed(tmp_path, monkeypatch):
     assert "BatteryChargeStopThreshold=80" in t and "foo=1" in t
     assert fan.kde_charge_limit(str(tmp_path), None)
     assert "BatteryChargeStopThreshold" not in rc.read_text()
+
+
+def test_speeds_reads_rpm_and_mode_only(tmp_path):
+    _, h = _hwmon(tmp_path)
+    assert fan.speeds(h) == [{"fan": 1, "rpm": 3428, "enable": 2}, {"fan": 2, "rpm": 3428, "enable": 2}]
+    assert fan.speeds(None) == []
