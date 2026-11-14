@@ -36,8 +36,11 @@ charge-limit write test (7), sleep soak (8), and 11 below.
    ICD json points at it. Fix `mesa_version()`: read `/usr/share/vulkan/icd.d/intel_icd.x86_64.json` → `library_path`,
    then regex `Mesa \d+\.\d+\.\d+` on that file; our old regex matched "Mesa 26.f" (a different string).
 6. **Battery units**: BAT1 reports `charge_*` in µAh with `voltage_now` in µV, no `energy_*`, no `power_now`, and
-   `current_now` is not credible (−65 A idle). Compute Wh = charge × voltage / 1e12, and power from the change of
-   `charge_now` over time (µAh/s × V), never from `current_now`. Health % = charge_full / charge_full_design = 103 %
+   `current_now` reads about −65 A. Cause (2026-11-14): the DSDT's `_BST` negates the EC's signed 16-bit current with
+   `~Local1 + 1` and does not mask the result to 16 bits, so −934 mA (0xfc5a) becomes 0xffff03a6 = −64 602 mA. The low
+   16 bits are the real current: value + 65 536 mA (`telemetry.battery_watts`). The kernel fix ("ACPI: battery: Handle
+   a negated 16-bit discharge rate") was sent to linux-acpi on 2026-11-14. Compute Wh = charge × voltage / 1e12, and
+   power from the change of `charge_now` over time (µAh/s × V) or from the corrected `current_now`. Health % = charge_full / charge_full_design = 103 %
    (new pack); cap display at 100.
 7. **Charge limit**: `charge_control_end_threshold` exists (0 = unset). Writing it is untested; test 80 first and read
    it back; also check whether the EC honours it (battery stops at 80 % on the charger).

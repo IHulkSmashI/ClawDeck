@@ -8,8 +8,8 @@ other programs compute (the "PLATYPUS" side channel). So on a stock Claw the ove
 ClawDeck at every start because sysfs resets at boot, and puts 0400 back when switched off. On the Claw 8 EX the
 package domain covers CPU and graphics together (the xe driver has no separate GPU power sensor on this chip).
 
-The battery's own reading is not touched here: the Claw 8 EX's firmware reports current_now about 100x too high
-(battery_watts() corrects it for ClawDeck's own read-back).
+The battery's own reading is not touched here: on the Claw 8 EX the kernel reports current_now as about −64.6 A
+(HARDWARE-FINDINGS §6); battery_watts() corrects it for ClawDeck's own read-back.
 """
 from __future__ import annotations
 
@@ -82,9 +82,11 @@ def apply(on: bool, root: str = POWERCAP) -> dict:
     return {"ok": ok, "error": "; ".join(errors) or (None if ok else "the counters didn't change"), **st}
 
 
-def battery_watts(bat: str | None = None, scale_fix: bool = True) -> float | None:
-    """Battery power in W (negative = discharging), from power_now or current_now x voltage_now. The Claw 8 EX EC
-    reports current_now in units 100x too large (−64.6 A at ~10 W): readings above 200 W are divided by 100."""
+def battery_watts(bat: str | None = None, fix_16bit: bool = True) -> float | None:
+    """Battery power in W (negative = discharging), from power_now or current_now x voltage_now. The Claw 8 EX's
+    DSDT negates the EC's signed 16-bit current without masking the result to 16 bits: −934 mA becomes 0xffff03a6,
+    which the kernel reports as −64 602 mA. Below −32 768 mA no battery is real, so the low 16 bits are taken back
+    (+ 65 536 mA). Kernels with the ACPI battery fix (sent to linux-acpi 2026-11-14) report the right value."""
     bats = [bat] if bat else sorted(glob.glob("/sys/class/power_supply/BAT*"))
     for b in bats:
         def rd(name: str) -> int | None:
@@ -100,9 +102,9 @@ def battery_watts(bat: str | None = None, scale_fix: bool = True) -> float | Non
             i, v = rd("current_now"), rd("voltage_now")
             if i is None or v is None:
                 continue
+            if fix_16bit and i < -32_768_000:
+                i += 65_536_000
             w = i * v / 1e12
-        if scale_fix and abs(w) > 200:
-            w /= 100
         st = None
         try:
             with open(os.path.join(b, "status"), "r", encoding="utf-8") as f:

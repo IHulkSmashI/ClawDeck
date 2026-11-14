@@ -394,8 +394,8 @@ beta 2.
   - Capcom's DRM kills Onimusha when its FidelityFX DLL is swapped (`FSR=xess`, RaiseFailFastException). Capcom games
     need OptiScaler + REFramework instead.
   - Onimusha flashes on every driver tried (stock Mesa 26.2.4, the package's 26.1.2 and 26.3.0-rc3): not ours.
-  - Overlay watts: `energy_uj` is 0400 and BAT1 `current_now` is 100x too high on the EX. Fixes → "Show watts in the
-    overlay" (new); check the overlay shows CPU W and ClawDeck's battery line reads ~10 W idle.
+  - Overlay watts: `energy_uj` is 0400 and BAT1 `current_now` reads about −64.6 A on the EX (HARDWARE-FINDINGS §6).
+    Fixes → "Show watts in the overlay" (new); check the overlay shows CPU W and ClawDeck's battery line reads ~10 W idle.
   - Speakers silent although PCM runs (RT721 SDCA, sof-sdca-1amp): the vendor power gates stay off
     (stevedamnvan/msi-claw-8-ex-linux, EX-AUD-001/002). Not built yet: its exact sequence still has to be read.
   - VRR 30–120 makes Steam's menus choppy (the screen really runs at the game's 30 fps). New: Fixes → "VRR only in
