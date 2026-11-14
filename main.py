@@ -74,18 +74,13 @@ def _write_user_file(path: str, text: str | bytes) -> str:
 
 class Plugin:
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
-    async def _main(self):
-        self.settings = self._load_settings()
-        selfupdate.update_pending(RUNTIME_DIR, clear=True)   # an update's marker never outlives the update
-        if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
-            self._save_settings()
-        self.hw = hw.detect()
-        self.power = power.Power(self.hw)
-        self.battery = battery.Battery(self.hw)
-        self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
+    def _refresh_game_launches(self) -> None:
+        """At start: every saved game's launch settings and launch file follow this version's rules."""
         # the per-game "XeSS on XMX" off switch is gone (maintainer, 2026-11-05: "the whole point of the Intel driver is
         # to use XMX cores when you can"): a game switched off earlier goes back to automatic
         for appid in self.profiles.games():
+            if "#" in appid:                # a game an emulator frontend started (frontend.py): it launches as the frontend
+                continue
             if self.profiles.get_launch(appid).get("xmx") is False:
                 self.profiles.set_launch(appid, {"xmx": None})
                 decky.logger.info("game %s: XMX switch-off dropped (the switch was removed)", appid)
@@ -98,6 +93,17 @@ class Plugin:
             r = self._write_launch(appid)
             if r.get("error"):
                 decky.logger.warning("game %s: launch file not rewritten: %s", appid, r["error"])
+
+    async def _main(self):
+        self.settings = self._load_settings()
+        selfupdate.update_pending(RUNTIME_DIR, clear=True)   # an update's marker never outlives the update
+        if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
+            self._save_settings()
+        self.hw = hw.detect()
+        self.power = power.Power(self.hw)
+        self.battery = battery.Battery(self.hw)
+        self.profiles = profiles.Profiles(os.path.join(SETTINGS_DIR, "profiles.json"))
+        self._refresh_game_launches()
         mangohud_dir = os.path.join(RUNTIME_DIR, "mangohud")
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)
