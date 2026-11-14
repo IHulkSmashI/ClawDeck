@@ -1544,6 +1544,25 @@ def test_target_fps_a_miss_right_after_lowering_makes_that_the_floor(fake_hw, mo
     at.session = None
 
 
+def test_target_a_miss_at_the_full_tdp_keeps_the_full_tdp(fake_hw, monkeypatch):
+    """Enshrouded, 2026-11-14: 60 fps target, ~66 fps at 30 W in calm scenes and under 60 in heavy ones, GPU 99 % busy.
+    After every miss at the full TDP it was cut to 27-29 W again, six cuts in 8 minutes, each ended by a miss. A miss
+    at the full TDP shows the game needs every watt: nothing is lowered while it stays that heavy (maintainer: "it
+    shouldn't try to lower power in demanding games"). Once it gets clearly lighter, the floor comes down again."""
+    at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=30)
+    t0, scene = autotune.time.monotonic(), {"calm": 66.0}
+    heavy = lambda: (autotune.time.monotonic() - t0) % 120 >= 90          # 90 s calm, 30 s heavy, over and over
+    _Game(at, lambda tdp, *_: (57.0 if heavy() else scene["calm"]) * tdp / 30, gpu_busy=99)
+    run(100)                                                              # the first heavy scene: a miss at 30 W
+    assert s.g_floor == 30 and s.learned.tdp == 30
+    run(600)
+    assert set(run.seen["tdp"][100:]) == {30}                             # five more heavy scenes, no cut
+    scene["calm"], heavy = 75.0, lambda: False                            # a much lighter area from here on
+    run(700)
+    assert s.learned.tdp < 30 and min(run.seen["fps"][-300:]) >= 60       # watts saved again, the minimum kept
+    at.session = None
+
+
 def test_target_out_of_reach_stays_at_your_tdp_and_keeps_your_target(fake_hw, monkeypatch):
     """Enshrouded, 2026-11-12: 120 fps target, about 50 at 35 W. Auto FPS made that a 46 fps target and took watts
     away; now the target stays 120 and the TDP stays 35 W."""

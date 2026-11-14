@@ -46,7 +46,9 @@ backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in
     cap). Every reading counts, a low one too. The TDP that held the target for G_SETTLE_S readings in a
     row is saved as the game's own TDP at exit (main.py), so the next start is there;
   - a miss within G_BLAME s of lowering makes the watts before it the floor (a calm scene can't talk it below what the
-    heavy ones need: the RE4 report, 2026-11-08); the floor comes down 1 W per G_FLOOR_DECAY s without a miss;
+    heavy ones need: the RE4 report, 2026-11-08), and a miss at the full TDP makes the full TDP the floor (a demanding
+    game keeps every watt: Enshrouded, 2026-11-14); the floor comes down 1 W per G_FLOOR_DECAY s without a miss once
+    the game is clearly lighter;
   - at the full TDP and still under: it stays at the full TDP, and after REACH_S says the target is out of reach and
     what the full TDP gives. Your target is never changed (maintainer, 2026-11-12: Auto FPS lowered a 120 fps target
     to 46 in Enshrouded and then took watts away to hold that).
@@ -695,6 +697,14 @@ class Autotune:
             if blamed and s.g_drop_from > s.g_floor:
                 s.g_floor, s.g_floor_at = s.g_drop_from, now
             if l.tdp >= top:
+                # under the minimum at the full TDP: the game needs every watt, so the full TDP is the floor until the
+                # game gets lighter (the floor's decay below). Only a miss right after a step down used to set it, and
+                # Enshrouded (~66 fps at 30 W, under 60 in heavy scenes) was cut to 27-29 W six times in 8 minutes,
+                # every cut ended by a miss (maintainer, 2026-11-14: "it shouldn't try to lower power in demanding games")
+                if s.g_floor < top:
+                    s.g_floor, s.g_floor_at = top, now
+                    log.info("autotune target: under %.0f fps at the full %d W: no lowering until the game gets lighter",
+                             T, top)
                 self._out_of_reach(s, fps, now)
                 return
             if now - s.g_last_change < G_RAISE_GAP:
