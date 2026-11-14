@@ -107,7 +107,7 @@ export const FixesTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <Group title="Performance overlay" />
           <Status ok={f.overlay_power.on ? true : null}
             label={f.overlay_power.on ? "Watts in the overlay: on (shows after a restart)" : "Watts in the overlay: off (shows 0.0 W)"}
-            detail={f.overlay_power.battery_w != null ? `Battery now: ${f.overlay_power.battery_w} W (ClawDeck corrects the EX's 100x battery reading)` : undefined} />
+            detail={f.overlay_power.battery_w != null ? `Battery now: ${f.overlay_power.battery_w} W (ClawDeck corrects the EX's −64 A battery current)` : undefined} />
           <ButtonItem layout="below" disabled={busy} onClick={() => fix(f.overlay_power.on ? "overlay_power_off" : "overlay_power_on")}
             description={explain(f.overlay_power.on ? "Makes the chip's power counter root-only again, as Linux ships it."
               : "Lets the performance overlay read the chip's power counter, so it shows real watts (CPU and graphics together). Linux makes it root-only by default; ClawDeck opens it at every boot while this is on. The overlay checks once per Game Mode session, so the watts appear after the next restart.",
