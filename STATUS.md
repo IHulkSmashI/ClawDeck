@@ -30,6 +30,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
 | Browser preview | `preview/` (`pnpm preview`) | all four | the real panel code with example data |
+| Diagnostics log | `diaglog.py`, `main._diag_loop` | Setup | off by default; while on: 1 row/s (power, limits, °C, clocks, battery, fans, Autotune, busiest processes) and the controller's mode reports; 30 days, 200 MB; the export adds the last 10 minutes |
 
 Removed in the scope reset (2026-10-21): VRR on/off, refresh rate, HDR, display save, fan presets, GPU clock
 window, CPU ceiling, EPP, turbo, charge limit, sleep readouts, dock readouts, benchmark, Proton picker, streaming
@@ -51,6 +52,12 @@ from XeSS games and XeSS-FG then caps at 2x). Autotune reads CONTROL's base fram
 sleep/wake several times fine.
 
 ## Needs the maintainer
+
+**Diagnostics log (2026-11-14):** Setup → Diagnostics log (off by default) writes one row a second to
+`~/homebrew/logs/ClawDeck/diag/<date>.csv` and the controller's reports to `<date>-controller.txt`; Export log adds
+the last 10 minutes. Check on the EX: switch it on, play a game for a few minutes, switch it off: the CSV has rows with
+package W, GPU MHz and the game's appid; the controller file has a "mode xinput" line; the rows stop within a second;
+`python3 tools/soak.py --hours 0.5` with it on stays inside the budget in CONTRIBUTING.md.
 
 **Quick Access tabs (2026-11-14, #171):** the four folding sections are now Steam's own Tabs (Power, Game, Fixes,
 Setup), sized as unifideck does in Quick Access. Released without an EX run on the maintainer's word. Check on the EX:

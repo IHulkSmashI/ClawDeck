@@ -92,8 +92,10 @@ tools/
 The backend never polls. The frontend registers Steam's own notifications and forwards them:
 `GameSessions.RegisterForAppLifetimeNotifications` (game start/stop), `System.RegisterForBatteryStateChanges`
 (the running game switches profile slot), `System.RegisterForOnResumeFromSuspend` (re-apply the running game).
-Timers exist only while autotune runs for a game, and the temperature guard's 10 s check while thermald is paused
-(which includes the menus while ClawDeck holds a limit the user picked). An emulator frontend's games (ES-DE) come
+Timers exist only while autotune runs for a game, the temperature guard's 10 s check while thermald is paused
+(which includes the menus while ClawDeck holds a limit the user picked), and the diagnostics log's 1 Hz row while
+the user has it on (`diaglog.py`: its reads run off the event loop, the controller's reports come through
+`add_reader`). An emulator frontend's games (ES-DE) come
 from its custom event scripts: ClawDeck's script writes the game to a file, and while a game runs an inotify watch on
 that file's folder wakes the backend (`frontend.py`).
 

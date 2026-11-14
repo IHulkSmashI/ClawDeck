@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 
-from . import debuglaunch, distro, edid, frontend, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
+from . import debuglaunch, diaglog, distro, edid, frontend, msibios, osupdate, quietlog, power, buttons, hhd, hw, stack, sysfs, xess
 
 
 def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
@@ -216,9 +216,10 @@ def _safe(fn):
         return {"error": f"{type(e).__name__}: {e}"}
 
 
-def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str | None = None) -> str:
-    """One-tap diagnostic bundle for a bug report: hardware, paths, health, versions. No personal data beyond the
-    username in paths."""
+def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str | None = None,
+                 diag_dir: str | None = None) -> str:
+    """One-tap diagnostic bundle for a bug report: hardware, paths, health, versions, and with the diagnostics log on
+    its last 10 minutes (diaglog.report). No personal data beyond the username in paths."""
     import json
     import time
     bundle = {
@@ -232,6 +233,7 @@ def collect_logs(hardware: hw.Hardware, home: str, dest: str, runtime_dir: str |
         "games": game_reports(home, runtime_dir),
         # the VRR range fix: why a boot override didn't take, if it didn't (edid.boot_report, #155)
         "vrr": _safe(edid.boot_report),
+        "diag": _safe(lambda: diaglog.report(diag_dir)) if diag_dir else None,
     }
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "w", encoding="utf-8") as f:
