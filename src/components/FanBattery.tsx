@@ -16,7 +16,7 @@ const FAN_OPTIONS = [
 const FAN_DOES: Record<string, string> = {
   auto: "MSI's own fan control, as the Claw ships.",
   quiet: "Off at idle, then a gentle ramp: quieter in light games.",
-  cooling: "Spins from idle and ramps earlier than Quiet, up to 75 %. On the Claw 8 EX that is still slower than MSI's own control (60–84 %) at every temperature.",
+  cooling: "Spins from idle and ramps earlier than Quiet. On the Claw 8 EX still slower than MSI's own control at every temperature.",
   full: "Both fans at full speed.",
   custom: "Your own six points (Fan curve below).",
 };
@@ -26,6 +26,17 @@ const CHARGE_OPTIONS = [
   { data: "90", label: "90 %" },
   { data: "custom", label: "Custom" },
 ];
+/** The curve the fans follow now, read back from the EC: "47 °C 0 % · 50 °C 40 % · …" (each fan if they differ), or an
+ *  ONEXPLAYER fan's fixed speed. Shown with the picked preset, which is the one applied. */
+const fanCurve = (fs: FanState | null): string | null => {
+  const fans = fs?.fans ?? [];
+  if (!fans.length) return null;
+  if (fs?.kind === "oxp") return fans[0].enable === 1 && fans[0].duty != null ? `Fixed ${fans[0].duty} %` : null;
+  const line = (f: (typeof fans)[number]) => (f.temps ?? []).map((t, i) => `${t ?? "?"} °C ${f.duties?.[i] ?? "?"} %`).join(" · ");
+  const lines = fans.map(line);
+  if (lines.every((l) => l === lines[0])) return lines[0] || null;
+  return fans.map((f, i) => `${f.fan === 1 ? "CPU" : f.fan === 2 ? "GPU" : `Fan ${f.fan}`}: ${lines[i]}`).join("\n");
+};
 // kept outside the component: Steam's dropdown can re-mount Quick Access (picks were lost, 2026-11-04)
 const kept: { fan?: string; charge?: string; chargePct?: number } = {};
 const snap = (d: number) => (d <= 0 ? 0 : d < 40 ? (d < 20 ? 0 : 40) : Math.min(100, Math.round(d)));
@@ -93,9 +104,12 @@ export const FanBattery: FC<{ quick?: boolean }> = ({ quick }) => {
           <Group title="Fan" />
           <Anchor id="fan"><DropdownItem label={quick ? undefined : "Fan"} layout="below" childrenContainerWidth="max" rgOptions={fanOptions}
             selectedOption={fanNow} onChange={(o) => { markPick("fan"); pickFan(String(o.data)); }}
-            description={explain(oxp ? (fanNow === "auto" ? "The handheld's own fan control, as it ships." : fanNow === "cooling" ? "The fan at a steady 70 %: cooler, so the chip holds its clocks longer." : FAN_DOES[fanNow] ?? "")
-              : FAN_DOES[fanNow] ?? "", quick ? undefined : "Steam has no fan control for this handheld.",
-              fanNow === "full" ? "loud" : fanNow === "quiet" ? "warmer: the chip may lower its clocks sooner in heavy games" : undefined)} /></Anchor>
+            description={<>
+              <div style={{ whiteSpace: "pre-line" }}>{(oxp ? (fanNow === "auto" ? "The handheld's own fan control, as it ships." : fanNow === "cooling" ? "The fan at a steady 70 %: cooler, so the chip holds its clocks longer." : FAN_DOES[fanNow] ?? "")
+                : FAN_DOES[fanNow] ?? "") + (fanCurve(fs) ? `\n${fanCurve(fs)}` : "")}</div>
+              {explain(quick ? undefined : "Steam has no fan control for this handheld.", undefined,
+                fanNow === "full" ? "loud" : fanNow === "quiet" ? "warmer: the chip may lower its clocks sooner in heavy games" : undefined)}
+            </>} /></Anchor>
           <Status ok={fanErr ? false : null} label={`Fans now: ${rpm} rpm`} detail={fs.fans?.[0]?.enable === 1 ? (oxp ? "At ClawDeck's fixed speed" : "Following ClawDeck's fan table") : oxp ? "Automatic" : "MSI automatic"} />
           <Problem error={fanErr} what="Fan" />
         </PanelSectionRow>
