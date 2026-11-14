@@ -1,5 +1,5 @@
-import { ButtonItem, Focusable, GamepadButton, GamepadEvent, Navigation, PanelSection, PanelSectionRow, SidebarNavigation, ToggleField } from "@decky/ui";
-import { FC, ReactNode, useEffect, useState } from "react";
+import { ButtonItem, Navigation, PanelSection, PanelSectionRow, SidebarNavigation, Tabs, ToggleField, findClassModule } from "@decky/ui";
+import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { getSetting, setSetting, uiLog, xessState } from "./api";
 import { FirstRun } from "./components/FirstRun";
@@ -26,38 +26,54 @@ type QuickTab = { id: string; title: string; content: ReactNode };
 // (2026-11-04), and coming back to ClawDeck lands where you left it
 let lastTab = "power";
 
-/** Four tabs always on screen at the top, switched with LB / RB (also the D-pad and A on the strip), one tab's
- * settings below. Replaces the four folding sections, which took a press to open and another to close (#171,
- * maintainer 2026-11-14: "tabs that are always on screen to pick between with rb and lb"). */
+// Steam's tabbed-page CSS module, the one Tabs renders with (class names hashed per build, so looked up at run time)
+const tabClasses = findClassModule((m: any) => m.TabContentsScroll && m.TabRowTabs) as Record<string, string> | undefined;
+const ROOT_CLASS = "clawdeck-qam-tabs";
+// Tabs is laid out for a full page; in the narrow Quick Access panel its side padding and spacers clip the tabs.
+// Four equal tabs, little padding, content under the 46 px header. Empty if Steam renames the module: the panel then
+// keeps Steam's own (wider) spacing instead of breaking.
+const TABS_CSS = ((c) => {
+  if (!c) return "";
+  const s = `.${ROOT_CLASS}`;
+  return `
+    ${s} .${c.TabHeaderRowWrapper} { padding: 4px 4px 0 !important; }
+    ${s} .${c.TabRowSpacer} { display: none !important; }
+    ${s} .${c.TabRow}, ${s} .${c.TabRowTabs}, ${s} .${c.TabsRowScroll} { width: 100%; }
+    ${s} .${c.FixCenterAlignScroll} { display: flex; gap: 4px; width: 100%; padding: 0 !important; }
+    ${s} .${c.Tab} { flex: 1; min-width: 0; padding: 10px 2px !important; justify-content: center; font-size: 0.85em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    ${s} .${c.TabTitle} { flex: 1; min-width: 0; overflow: hidden; }
+    ${s} .${c.TabContentsScroll} { padding: 54px 0 40px !important; }
+  `;
+})(tabClasses);
+
+/** Four tabs always on screen at the top, switched with LB / RB, one tab's settings below; replaces the four folding
+ * sections (#171, maintainer 2026-11-14: "tabs that are always on screen to pick between with rb and lb").
+ * Steam's own Tabs (the Library's), so the bumpers, focus and look are Steam's. Done as unifideck does it in its
+ * Quick Access panel (GPL-3.0, verified there on a Deck): Tabs fills an absolutely positioned pane that needs a
+ * definite height, and Decky's per-plugin wrapper sizes to its content, so the height comes from Decky's Quick
+ * Access content slot, measured at run time. */
 export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
   const [cur, setCur] = useState<string>(() => (tabs.some((t) => t.id === lastTab) ? lastTab : tabs[0].id));
-  const active = tabs.find((t) => t.id === cur) ?? tabs[0];
-  const pick = (id: string) => { lastTab = id; setCur(id); };
-  const step = (d: number) => {
-    const i = tabs.findIndex((t) => t.id === active.id);
-    pick(tabs[(i + d + tabs.length) % tabs.length].id);
-  };
-  const onButtonDown = (e: GamepadEvent) => {
-    if (e.detail.button === GamepadButton.BUMPER_LEFT) step(-1);
-    else if (e.detail.button === GamepadButton.BUMPER_RIGHT) step(1);
-  };
+  const active = tabs.some((t) => t.id === cur) ? cur : tabs[0].id;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number>();
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const slot = root?.closest<HTMLElement>('[id^="quickaccess_content_"]');
+    if (!root || !slot) return;
+    const measure = () => setHeight(Math.max(0, slot.clientHeight - (root.getBoundingClientRect().top - slot.getBoundingClientRect().top + slot.scrollTop)));
+    measure();
+    const o = new ResizeObserver(measure);
+    o.observe(slot);
+    return () => o.disconnect();
+  }, []);
   return (
-    <Focusable onButtonDown={onButtonDown}
-      actionDescriptionMap={{ [GamepadButton.BUMPER_LEFT]: "Previous tab", [GamepadButton.BUMPER_RIGHT]: "Next tab" }}>
-      <Focusable flow-children="horizontal" style={{ display: "flex", gap: 4, padding: "0 16px 8px",
-        borderBottom: "1px solid rgba(255,255,255,0.12)", marginBottom: 4 }}>
-        {tabs.map((t) => (
-          <Focusable key={t.id} onActivate={() => pick(t.id)} onClick={() => pick(t.id)} noFocusRing={false}
-            style={{ flex: 1, textAlign: "center", padding: "6px 2px", fontSize: 13, fontWeight: 700,
-              letterSpacing: "0.04em", textTransform: "uppercase", borderRadius: 4,
-              color: t.id === active.id ? "#1a9fff" : "#b8bcbf",
-              borderBottom: t.id === active.id ? "2px solid #1a9fff" : "2px solid transparent" }}>
-            {t.title}
-          </Focusable>
-        ))}
-      </Focusable>
-      <div key={active.id}>{active.content}</div>
-    </Focusable>
+    <div ref={rootRef} className={ROOT_CLASS} style={{ position: "relative", height: height ?? 600 }}>
+      {TABS_CSS && <style>{TABS_CSS}</style>}
+      <Tabs activeTab={active} onShowTab={(id: string) => { lastTab = id; setCur(id); }}
+        tabs={tabs.map((t) => ({ id: t.id, title: t.title, content: t.content }))} />
+    </div>
   );
 };
 
