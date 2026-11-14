@@ -10,7 +10,7 @@ import { Advanced } from "../components/Advanced";
 import { FanBattery } from "../components/FanBattery";
 import { LaunchWrapper } from "../components/LaunchWrapper";
 import { explain, Group, Note, Problem, Status, useExplanations, Anchor, markPick } from "../components/Hint";
-import { runningApp } from "../steam";
+import { onPowerSource, runningApp } from "../steam";
 
 const toast = (body: string) => notify(body);
 
@@ -102,6 +102,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const atRef = useRef<AutotuneStatus | null>(null);
   atRef.current = at;
   useEffect(() => { refresh(); }, []);
+  useEffect(() => onPowerSource(() => refreshRef.current()), []);   // charger in or out: that source's picks and PL2
   // a game runs but ClawDeck wasn't told (Decky restarted during the game, an update): tell it now, once, so the
   // game's power pick and Autotune start without quitting the game
   const resynced = useRef<string | null>(null);

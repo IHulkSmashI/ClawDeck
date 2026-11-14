@@ -2,6 +2,7 @@ import { staticClasses } from "@decky/ui";
 import { definePlugin, routerHook, toaster } from "@decky/api";
 
 import { gameStarted, gameStopped, getChanges, powerSourceChanged, resumed } from "./api";
+import { powerSourceSwitched } from "./steam";
 import { LogoIcon } from "./components/LogoIcon";
 import { FullPage, QuickPanel, ROUTE } from "./pages";
 
@@ -37,7 +38,7 @@ export default definePlugin(() => {
       if (e.eACState === ac) return;
       const first = ac === undefined;
       ac = e.eACState;
-      if (!first) powerSourceChanged(ac === 2).catch(() => { /* backend logs it */ });
+      if (!first) powerSourceChanged(ac === 2).catch(() => { /* backend logs it */ }).then(powerSourceSwitched);
     });
     if (h?.unregister) unregisters.push(() => h.unregister());
   } catch (err) {
