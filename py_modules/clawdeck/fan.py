@@ -5,7 +5,9 @@ Fans: hwmon "msi_wmi_platform" has two fans (fan1 CPU, fan2 GPU), each with a si
 pwmN_enable: 1 = the fans follow the tables, 2 = MSI's automatic control (the driver puts the factory tables back).
 ClawDeck writes only the duties, never the temperatures, then enable=1; "Automatic" (enable=2) is the revert. The
 presets are the Claw's known-good ones (GamingWidget.MsiFanControl.cs): duties in EC percent, the 1..39 band snapped
-to 40 (the fan's minimum-spin plateau: 1..39 all spin like 40), 0 = fan off at idle.
+to 40 (the fan's minimum-spin plateau: 1..39 all spin like 40), 0 = fan off at idle. MSI's automatic tables on the
+Claw 8 EX (read back 2026-11-13): 60/64/68/74/80/84 % at 47/50/57/64/71/78 °C, so Quiet and Cooling both run the fans
+slower than MSI's own control at every point there.
 
 Charge limit: power_supply BAT1/charge_control_end_threshold (0 = no limit on the Claw 8 EX, accepts 80, back to 0;
 tested 2026-11-04). Steam's own charge limit (steamos-manager) reports -1 on the Claw, so nothing else offers it.
