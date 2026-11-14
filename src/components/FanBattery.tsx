@@ -17,7 +17,7 @@ const FAN_OPTIONS = [
 const FAN_DOES: Record<string, string> = {
   auto: "MSI's own fan control, as the Claw ships.",
   quiet: "Off at idle, then a gentle ramp: quieter in light games.",
-  cooling: "Spins from idle and ramps earlier: cooler, so the chip holds its clocks longer.",
+  cooling: "Spins from idle and ramps earlier than Quiet, up to 75 %. On the Claw 8 EX that is still slower than MSI's own control (60–84 %) at every temperature.",
   extreme: "Off under 38 °C, then up to full speed by 82 °C: the coolest curve short of full speed.",
   full: "Both fans at full speed.",
   custom: "Your own six points (Fan curve below).",
