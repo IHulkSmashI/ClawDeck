@@ -1,7 +1,8 @@
 """Fan presets and the battery charge limit, through the MSI platform driver (msi-wmi-platform) the Claw's kernel ships.
 
 Fans: hwmon "msi_wmi_platform" has two fans (fan1 CPU, fan2 GPU), each with a six-point table pwmN_auto_point1..6
-(_temp on the EC's fixed axis, _pwm on hwmon's 0-255 scale; the driver converts to the EC's 0-100 %) and
+(_temp on the EC's fixed axis, _pwm on hwmon's 0-255 scale; the driver keeps whole EC percent, rounding down both
+ways: % = pwm * 100 / 255 on write, pwm = % * 255 / 100 on read) and
 pwmN_enable: 1 = the fans follow the tables, 2 = MSI's automatic control (the driver puts the factory tables back).
 ClawDeck writes only the duties, never the temperatures, then enable=1; "Automatic" (enable=2) is the revert. The
 presets are the Claw's known-good ones (GamingWidget.MsiFanControl.cs): duties in EC percent, the 1..39 band snapped
@@ -88,7 +89,8 @@ def snap(d: int | float) -> int:
 
 
 def to_pwm(d: int) -> int:
-    return max(0, min(255, round(d * 255 / 100)))
+    """Rounded up: the driver rounds down to whole EC percent, so this is the smallest value that keeps d."""
+    return max(0, min(255, (int(d) * 255 + 99) // 100))
 
 
 def to_pct(pwm: int | None) -> int | None:
@@ -140,7 +142,10 @@ def apply(h: str | None, preset: str, custom: list[int] | None = None) -> dict:
     want_enable = 2 if duties is None else 1
     readback = all(f["enable"] == want_enable for f in st["fans"])
     if duties is not None:
-        readback = readback and all(f["duties"] == [to_pct(to_pwm(d)) for d in duties] for f in st["fans"])
+        # within 1 %: the EC keeps whole percent, so a duty can come back one lower on another driver's rounding
+        readback = readback and all(f["duties"] is not None and len(f["duties"]) == POINTS and
+                                    all(r is not None and abs(r - d) <= 1 for r, d in zip(f["duties"], duties))
+                                    for f in st["fans"])
     ok = ok and readback
     label = LABELS.get(preset, preset)
     rpm = " / ".join(f"{f['rpm']}" for f in st["fans"] if f["rpm"] is not None)
