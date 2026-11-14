@@ -135,8 +135,8 @@ games.
 
 ## What's in the panel
 
-One panel in Quick Access with four headings that fold open: **Power**, **Upscaling and frame generation**, **Fixes**
-and **Setup**. **Explain** at the top says what each control does, why you'd use it and what it costs.
+One panel in Quick Access with four tabs, switched with LB and RB: **Power**, **Game** (upscaling and frame
+generation), **Fixes** and **Setup**. **Explain** at the top says what each control does, why you'd use it and what it costs.
 
 ### Power
 
