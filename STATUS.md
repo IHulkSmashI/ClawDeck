@@ -144,6 +144,14 @@ Check on the EX: Custom 35 W, autotune on with a target, start a Vulkan game wit
 the status line says it stays out, the log line ends "(35 W, your limit)", and
 `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw` reads 35000000.
 
+**XeSS XMX package 20261115 (2026-11-15):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
+Low latency on the FSR routes lets the GPU's queue decide the wait (upstream: CONTROL Resonant 3x on an Arc B390 from
+52.6 to 48.4 ms); a game's own XeSS-FG 30 % lower latency (Cyberpunk 2077 3x: 45.1 to 31.7 ms). Stock mode is now
+also install.sh's default on Xe2 (Claw 8 AI+), and the session file adds `VK_EXT_descriptor_heap` to
+`VKD3D_DISABLE_EXTENSIONS` (ClawDeck carries the session file's values). Nothing ClawDeck reads changed. Check on the
+EX: Setup → Update XeSS XMX, then CONTROL Resonant with FSR 4.1.2 + XeFG 3x: picture right, "XMX cores used in the
+last launch", the XeLL line on the Game page. On an AI+ if one is at hand: the same, now in stock mode.
+
 **XeSS XMX package 20261113 (2026-11-14):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 One low-latency path for XeSS frame generation: upstream reports CONTROL Resonant 3x on an Arc B390 (the EX's chip)
 from 35.5 ms to about 23 ms. The archive is single-nested again. Check on the EX: Setup → Update XeSS XMX, then
