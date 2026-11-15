@@ -684,7 +684,7 @@ def test_looks_that_are_free_do_not_add_up_across_looks_that_are_not():
     g.draw = lambda w, t: float(w)
     g.run(40)
     st, ref, t = g.st, g.st.ref, g.t
-    st.quiet_until = t + 120
+    st.quiet_until, st.ref_at = t + 120, t                           # no step and no look of its own meanwhile
 
     def look(fps, draw, n=1):
         nonlocal t
@@ -692,11 +692,11 @@ def test_looks_that_are_free_do_not_add_up_across_looks_that_are_not():
             t += 0.5
             k = round(fps * 0.5)
             gov.step(st, gov.Obs(t=t, frames=[(t - (k - 1 - i) / fps, 1000.0 / fps) for i in range(k)], draw_w=draw), cfg)
-    look(66.0, 10.0, n=5)                                            # a light moment: 60 frames of it, then four looks
+    look(59.0, 10.0, n=5)                                            # a lighter moment: 60 frames of it, then four looks
     assert len(st.free_fps) == 4 and st.ref == ref
     look(g.rate(), float(g.limit), n=3)                              # the limit holds the game back again
-    look(66.0, 10.0, n=3)                                            # ... and two more free looks
-    assert len(st.free_fps) < gov.FREE_LOOKS and st.ref == ref
+    look(59.0, 10.0, n=3)                                            # ... and two more free looks
+    assert len(st.free_fps) == 2 and st.ref == ref and st.limit == g.limit
 
 
 def test_a_stretch_that_stays_is_the_game_and_what_was_known_before_is_dropped():
