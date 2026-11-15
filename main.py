@@ -606,11 +606,14 @@ class Plugin:
             sysfs.clear_error()
             r = self._apply_pick_now(plugged)
             st = self.power.status()
-            got = st.get("pl2_w")
+            got = (st.get("rapl") or {}).get("pl2_w")
             want = self.power.pl2_w
             ok = r.get("applied", {}).get("tdp") is not None and (want is None or got is None or round(got) == want or
-                                                                   round(got) == max(r["applied"]["tdp"], want))
+                                                                   round(got) == max(r["applied"]["tdp"], want) or
+                                                                   self.power.governed)   # then PL2 is PL1 + 2 W
             line = (f"PL2 {round(got)} W" if got is not None else "PL2 set") + (" (yours)" if want is not None else " (PL1 + 2 W)")
+            if want is not None and self.power.governed:
+                line += "; PL1 + 2 W while Autotune governs this game"
             return {"ok": ok, "manual": bool(manual), "pl2_w": want, "read_w": got, "summary": line,
                     "error": None if ok else (sysfs.last_error() or "the chip didn't take that PL2")}
 
@@ -876,7 +879,7 @@ class Plugin:
             plugged = bool(self.battery.plugged())
             if self.autotune.session is not None:
                 sess = self.autotune.session
-                return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
+                return self.guard.check(self.autotune.held_w(), self._floor_w(), self.autotune.thermal_step,
                                         limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release,
                                         set_clock=self._guard_clock)
             # your limit for this power source (the game's pick, or the last one): where stepping back up stops

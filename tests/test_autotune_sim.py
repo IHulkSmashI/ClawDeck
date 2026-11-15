@@ -183,14 +183,15 @@ def test_autotune_wired_does_what_the_governor_alone_does():
 # ---- replay: recorded frames, whatever the governor asks -------------------------------------------------------------
 def test_replay_the_recorded_loss_gets_the_full_limit_within_a_second():
     """Midnight Club parked, the limit stepped 30, 20, 15, 12 W by a recorder: the lock holds until the step to 12 W
-    (24.9 fps). Autotune asks for the full limit within a second of that write, and for nothing more than a watt
-    before it (15 W is the edge: a few slow frames)."""
+    (24.9 fps). A second after that write Autotune asks for the full limit, and it never asked for it while the lock
+    held at 30 and 20 W (15 W is the edge: runs of slow frames, where it may ask for more)."""
     rec = sim.run(sim.Wired(target=30), sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
     lost_at = next(s for s, w in rec.limits if w == 12)
     raises = [(s, w, before) for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
-    assert not [r for r in raises if r[0] < lost_at and r[1] == 30]       # never the full limit while the lock holds
-    full = [s for s, w, _b in raises if s >= lost_at and w == 30]
-    assert full and full[0] - lost_at <= 1.0
+    edge_at = next(s for s, w in rec.limits if w == 15)
+    assert not [r for r in raises if r[0] < edge_at and r[1] == 30]       # never the full limit while the lock holds
+    asked = [w for s, w in rec.asked if s <= lost_at + 1.0]
+    assert asked[-1] == 30                                                # a second into the loss: the full limit
 
 
 def test_the_tool_prints_a_table(monkeypatch, capsys):

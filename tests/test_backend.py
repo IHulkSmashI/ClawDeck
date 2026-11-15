@@ -390,8 +390,9 @@ def test_autotune_pause_stops_changes(fake_hw, monkeypatch):
     t = s.learned.tdp
     assert 15 <= t < 20                                         # it works down from where it started
     at.pause()
+    assert s.learned.tdp == 20                                  # the limit is yours again, not where Autotune was
     g.run(30)
-    assert s.learned.tdp == t and at.status()["saves_w"] is None
+    assert s.learned.tdp == 20 and at.status()["saves_w"] is None
     at.session = None
 
 

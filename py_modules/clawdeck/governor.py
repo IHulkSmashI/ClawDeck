@@ -56,6 +56,7 @@ AFTER_LOSS_S = 5.0      # ... or after a loss was answered; doubled for each ste
 AFTER_LOSS_MAX_S = 300.0  # up to this (a success, or another scene, starts it over)
 HOME_S = 20.0           # a limit held this long is where to go back to when the scene that drove it out is over
 STEP_W = 2
+CHAIN = 6               # steps down in a row; then a pause of AFTER_LOSS_S in which the rules of holding run
 EDGE_UP_S = 10.0        # the edge: +1 W at most this often
 RETRY_S, RETRY_MAX_S = 120.0, 600.0    # a failed level may be tried again after this; doubled at each further failure
 CHECK_S, CHECK_MAX_S = 60.0, 600.0     # the reference is checked at the full limit: not more often than CHECK_S, when the
@@ -70,8 +71,9 @@ STEADY, STEADY_S = 0.15, 3.0           # a step down starts only while the frame
                                        # STEADY_S is within STEADY of their median
 FREE_LOOKS = 5          # the reference is the median pace of the last looks at a limit that can't hold the game back,
                         # at least this many: one of the game's own dips doesn't move it
-BIND_S = 8.0            # a step down is watched from when the package draw is down at the new limit; a raise is
-RISE_W = 0.3            # judged when the draw has stopped rising by this much a look (both at most BIND_S late)
+BIND_S, BIND_W = 3.0, 2.5   # a step down is watched from when the package draws less than BIND_W over the new limit
+                        # (PL2 allows 2 W over it): a cut made while the chip ran over its limit took 2.3 s to bind. A
+RISE_W = 0.3            # raise is judged when the draw has stopped rising by this much a look. Both at most BIND_S late
 SHIFT, SHIFT_S = 0.15, 5.0             # the pace moved this much for this long at one limit: another scene
 OFF_LO, OFF_HI = 0.35, 2.5             # frames this far under or over the usual rate are a loading screen, a menu, a map
                                        # or a pause: not judged ...
@@ -140,6 +142,7 @@ class State:
     held_for: float | None = None   # how long the limit had held when a loss sent it to the full limit
     retested: dict = field(default_factory=dict)    # watts -> when a level that lost frames was last tried once more
     retest: bool = False            # the step being watched is such a second try
+    chain: int = 0                  # steps down in a row since the last hold
     verify: bool = False            # steps down began at the full limit: the reference is checked when they end
     safe: int | None = None         # the limit the last step down that held began from
     top: int | None = None          # the most that was allowed at the last step (your limit, or the guard's cap)
@@ -284,6 +287,12 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if st.top is not None and top > st.top:          # the guard gave watts back: what they give isn't known yet
         st.ref_at = -1e9
     st.top = top
+    if st.limit < cfg.floor:                         # the floor was raised
+        write(cfg.floor, f"the floor is {cfg.floor} W")
+        st.prev = max(st.prev, cfg.floor)
+        if st.mode != "hold":
+            hold()
+        return act
     if st.limit > top:                               # the guard's cap: under it at once, whatever was being watched
         write(top, f"the temperature guard allows {top} W")
         st.prev = min(st.prev, top)
@@ -356,8 +365,13 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.held_s[st.limit] = st.held_s.get(st.limit, 0.0) + dt
         return _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy, free, write, watch, hold, failed)
 
-    if (st.mode == "probe" and obs.draw_w is not None and obs.draw_w > st.limit + 1.0 and t - st.wrote_at < BIND_S):
+    if st.mode == "probe" and obs.draw_w is not None and obs.draw_w > st.limit + BIND_W and t - st.wrote_at < BIND_S:
         st.since, st.watch = t, []                   # the package still draws more than the new limit: not yet in force
+        if want is not None and cur < want * (1 - SHIFT) and st.prev < top and not st.retest:
+            tried, st.lost = st.limit, cur           # ... but the frames collapse meanwhile: all the watts at once
+            write(st.prev, "")
+            watch("recover", top, f"{cur:.1f} fps at {tried} W, under {want:.1f}: the full {top} W")
+            st.tried = tried
         return act
     seen = t - st.since
     if st.mode == "probe":
@@ -397,9 +411,13 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             hold(HOLD_S)
         elif seen >= DWELL_S:
             st.good = st.limit if st.limit < top else st.good
-            st.safe, st.misses, st.loss_since = st.prev, 0, None
+            st.safe, st.misses, st.loss_since, st.chain = st.prev, 0, None, st.chain + 1
             nxt = _next_down(st, obs, cfg, t)
-            if nxt is not None and _steady(st, t) and t - st.ref_drop_at >= CONFIRM_S:
+            if st.chain >= CHAIN:
+                st.chain = 0
+                act.note = f"holding at {st.limit} W"
+                hold(AFTER_LOSS_S)
+            elif nxt is not None and _steady(st, t) and t - st.ref_drop_at >= CONFIRM_S:
                 was, st.before = st.limit, _fps(st.watch)
                 watch("probe", nxt, f"{was} W holds; trying {nxt} W")
             else:
@@ -651,7 +669,7 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
             ms = [x for _, x in st.recent]
             share = _slow(ms, statistics.median(ms))
             st.base_slow = share if st.limit >= top else min(st.base_slow, share)
-            st.verify, st.before = st.limit >= top, here
+            st.verify, st.before, st.chain = st.limit >= top, here, 0
             was = st.limit
             watch("probe", nxt, f"{cur:.0f} fps holds at {was} W; trying {nxt} W")
     return act

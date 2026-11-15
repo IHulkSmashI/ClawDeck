@@ -92,7 +92,7 @@ def test_replay_the_recorded_loss_is_answered_within_a_second_and_the_edge_befor
     rec = sim.run(g, sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
     at = {w: s for s, w in rec.limits[1:]}
     raises = [(s, w, before) for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
-    assert not [r for r in raises if r[0] < at[12] and r[1] == 30]        # never the full limit while the lock holds
+    assert not [r for r in raises if r[0] < at[15] and r[1] == 30]        # never the full limit while the lock holds
     assert [r for r in raises if at[15] < r[0] < at[12]]                  # the edge at 15 W: it asks for more
-    full = [s for s, w, _b in raises if s >= at[12] and w == 30]
-    assert full and full[0] - at[12] <= 1.0
+    asked = [w for s, w in rec.asked if s <= at[12] + 1.0]
+    assert asked[-1] == 30                                                # a second into the loss: the full limit

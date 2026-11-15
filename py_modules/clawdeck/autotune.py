@@ -72,6 +72,7 @@ CSV_FIELDS = ["time", "appid", "phase", "fps", "shown_fps", "source", "gpu_mhz",
               "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps", "frames", "ft_median", "ft_p95", "slow_pct"]
 GOVERN_TAU_US = 8_000_000  # PL1 time window while Autotune governs: a step down has to bind within its watch
 MIN_TARGET = 20
+REFUSED_S = 30          # a TDP write that was not applied: nothing more is tried for this long
 XELL_RE = re.compile(rb"xellSleep stats: 100 calls in (\d+) ms \(([\d.]+) ms/frame\)")
 
 
@@ -110,6 +111,7 @@ class Sampler:
         self._mango_row_at = 0.0                   # when the last new row came
         self._mango_checked = -1e9
         self.frames_ms: list[float] = []           # the frame times behind the last frametime(), when mangoapp gave them
+        self._mango_frames_at = -1e9               # when mangoapp last gave frames (its log is the source while it does)
         self._pace: deque = deque(maxlen=PACE_FRAMES)   # the frame times before those
         self.xell_log: str | None = None       # the running game's drive_c/igdext_xell.log (set_prefix)
         self._xell_pos = 0
@@ -170,13 +172,20 @@ class Sampler:
 
     def frametime(self) -> tuple[float | None, float | None]:
         self.frames_ms = []
+        now = time.monotonic()
         ft, fps = self._mangoapp_frametime()        # every frame of the focused app, for every game
         if ft is not None:
+            self._mango_frames_at = now
             return ft, fps
-        f = self._newest_log()                      # no mangoapp (or no row yet): the game's own log, a row a second
+        if now - self._mango_frames_at < MANGOAPP_RELOG_S:
+            return None, None                       # between two rows of mangoapp's log: no frames in this look
+        f = self._newest_log()                      # no mangoapp for a while: the game's own log, a row a second
         if not f:
             return None, None
         try:
+            if f not in self._log_pos and self._mango_frames_at > -1e9:
+                self._log_pos[f] = os.path.getsize(f)   # mangoapp gave this game's frames until now: only what this
+                                                        # log writes from here on (not the session's average so far)
             with open(f, "rb") as fh:
                 start = self._log_pos.get(f, 0)
                 fh.seek(start)
@@ -275,6 +284,7 @@ class Sampler:
             self._mango, self._mango_pos = None, 0
         self._mango_asked, self._mango_checked, self._mango_row_at = -1e9, -1e9, time.monotonic()
         self.frames_ms = []
+        self._mango_frames_at = -1e9
         self._pace.clear()                         # another game's pace
         self.xell_log, self._xell = xell_log, None
         self._since, self._log = (time.time() - 2, None) if xell_log else (0.0, None)
@@ -499,6 +509,11 @@ class Session:
     tau_refused: bool = False           # the firmware refused it once: don't retry every step
     history: list[Sample] = field(default_factory=list)
     fg: int = 0                         # ClawDeck's frame generation multiplier for the game (0: none)
+    mult_hist: deque = field(default_factory=lambda: deque(maxlen=5))   # shown / rendered, one per XeLL line
+    mult_seen: float | None = None      # the XeLL line it was last taken at, and the shown frames since
+    mult_n: int = 0
+    mult_ms: float = 0.0
+    refused: bool = False               # the last TDP write was not applied
     user_target: int | None = None
     auto_fps: bool = True
 
@@ -578,9 +593,8 @@ class Autotune:
         s.learned.target, s.learned.target_eff, s.learned.start, s.learned.held = s.user_target, None, None, None
         s.settled = False
         self._govern_from(s, s.learned.tdp)
-        s.paused = False
-        self.power.governed = True
-        self._tau(s, True)
+        if not s.paused:                                  # paused (by hand, xemu, no frames): it applies when that ends
+            self._tau(s, True)
 
     def set_ceiling(self, watts: int) -> int | None:
         """The user picked a profile or moved the TDP slider: the new limit. Autotune goes to it at once and works down
@@ -654,7 +668,20 @@ class Autotune:
         else:
             s.thermal_cap = int(watts)
             self._did(s, f"thermal: cooled, up to {s.thermal_cap} W allowed", "thermal")
+        if s.paused:                                      # nobody governs: the watts it gave back go on the chip
+            self._tdp(s.learned, self._top(s), force=True)
         return True
+
+    def held_w(self) -> int | None:
+        """The limit Autotune holds, for the temperature guard: while it looks at the full limit for a second (after a
+        loss, or to see what the full limit gives), the limit before that. The guard compares it with what the package
+        drew over its last 10 s, and the second at the full limit made a real overload look like a hot spot."""
+        s = self.session
+        if not s:
+            return None
+        if s.gov is not None and not s.paused and s.gov.mode in ("recover", "check"):
+            return min(s.learned.tdp, s.gov.prev)
+        return s.learned.tdp
 
     def _top(self, s: Session) -> int:
         """The most autotune may use: the set TDP, or less while the temperature guard holds it down."""
@@ -667,6 +694,8 @@ class Autotune:
         if s:
             if not s.paused:
                 log.info("autotune paused: %s", reason)
+                self._give_back(s)                        # not a limit of Autotune's for the rest of the session
+                self._tau(s, False)
             s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
             self.power.governed = False
 
@@ -772,6 +801,7 @@ class Autotune:
             s.no_frames, s.paused, s.no_fps_s = False, False, 0.0
             self.power.governed = True
             self._govern_from(s, s.learned.tdp)
+            self._tdp(s.learned, s.learned.tdp, force=True)   # with PL2 as Autotune keeps it, from this look on
             log.info("autotune: frame rate from %s after all: it takes over from %d W", s.appid, s.learned.tdp)
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
@@ -791,11 +821,7 @@ class Autotune:
         l = s.learned
         # frame generation: the governor judges rendered frames. XeLL's figure when the game has it, else ClawDeck's
         # multiplier for the game; a change of it is another game as far as the frames go
-        mult = 1.0
-        if smp.source == "rendered" and smp.fps and smp.shown_fps:
-            mult = max(1.0, round(smp.shown_fps / smp.fps, 1))
-        elif s.fg >= 2:
-            mult = float(s.fg)
+        mult = self._multiplier(s, smp)
         if s.multiplier is not None and abs(mult - s.multiplier) >= 0.5:
             s.gov.fail.clear()
             s.gov.ref, s.gov.ref_at, s.gov.misses = None, -1e9, 0
@@ -814,8 +840,13 @@ class Autotune:
             was = l.tdp
             if self._tdp(l, act.limit_w):
                 self._did(s, act.note or f"{l.tdp} W", f"{l.tdp - was:+d} W")
-            else:                                        # not applied: the governor goes on from what is on the chip
-                s.gov.limit, s.gov.mode = l.tdp, "hold"
+                s.refused = False
+            elif l.tdp != act.limit_w:                   # refused: it goes on from what is on the chip, and waits
+                s.gov.mode, s.gov.quiet_until, s.look_s = "hold", smp.t + REFUSED_S, governor.LOOK_S
+                if not s.refused:
+                    log.warning("autotune: TDP %d W was not applied; trying again in %d s", act.limit_w, REFUSED_S)
+                s.refused = True
+            s.gov.limit = l.tdp                          # what is on the chip (the guard's cap may have cut the write)
         elif act.note and act.note != s.last_action:
             s.last_action = act.note
         if len(s.gov.pace) >= governor.N:
@@ -827,6 +858,27 @@ class Autotune:
         l.target_eff = s.target
         if not s.settled and sum(s.gov.held_s.values()) >= 60:
             s.settled = True                             # a minute of holding: worth saving for the game
+
+    def _multiplier(self, s: Session, smp: Sample) -> float:
+        """Shown frames per rendered frame, for the governor: a whole number that changes rarely. XeLL writes its
+        rendered-frame figure once per 100 rendered frames (every 1.7 s at 60 fps), so a quotient of this look's shown
+        frames and that line stands still between two lines and says nothing about the frames in between; the
+        governor then saw no loss at all (review, 2026-11-15). The quotient is taken once per XeLL line, over the
+        shown frames since the line before, and the median of the last five, rounded, is the multiplier."""
+        line = self.sampler._xell
+        if line is None or smp.source != "rendered":
+            s.mult_seen, s.mult_n, s.mult_ms = None, 0, 0.0
+            s.mult_hist.clear()
+            return float(s.fg) if s.fg >= 2 else 1.0
+        s.mult_n += len(self.sampler.frames_ms)
+        s.mult_ms += sum(self.sampler.frames_ms)
+        if line[0] != s.mult_seen:
+            if s.mult_seen is not None and s.mult_n >= 10 and s.mult_ms > 0:
+                s.mult_hist.append((1000.0 * s.mult_n / s.mult_ms) / line[1])
+            s.mult_seen, s.mult_n, s.mult_ms = line[0], 0, 0.0
+        if not s.mult_hist:
+            return float(s.fg) if s.fg >= 2 else (s.multiplier or 1.0)
+        return float(max(1, round(statistics.median(s.mult_hist))))
 
     def _tau(self, s: Session, governing: bool) -> None:
         """RAPL averages PL1 over a 56 s window: for most of a minute after a change the package can still run up to
@@ -859,7 +911,7 @@ class Autotune:
         if watts == l.tdp and not force:
             return False
         if not self.power.set_tdp(watts, self.plugged):
-            log.warning("autotune: TDP %d W was not applied", watts)
+            log.debug("autotune: TDP %d W was not applied", watts)
             return False
         l.tdp = watts
         return True
