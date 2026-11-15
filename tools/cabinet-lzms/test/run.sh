@@ -5,21 +5,35 @@
 # Needs: wine (64-bit), cc, libwim-dev. Exit status 0 only if everything passed.
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
-work="$(mktemp -d)"; trap 'wineserver -k 2>/dev/null; rm -rf "$work"' EXIT
+# the EXIT trap must not change the exit status: under set -e a failing command there ended a run in which every
+# test passed with its own status (127 where wineserver is not on PATH)
+stop_wine() { [ -z "${wineserver:-}" ] || "$wineserver" -k 2>/dev/null || true; }
+work="$(mktemp -d)"; trap 'stop_wine; rm -rf "$work"' EXIT
 unset TMPDIR                                     # Wine 9 (Ubuntu) aborts in a fresh prefix with TMPDIR set
 export WINEPREFIX="$work/prefix" WINEDEBUG=-all WINEDLLOVERRIDES="cabinet=n,b;mscoree,mshtml="
 wine=$(command -v wine || command -v wine64 || ls /usr/lib/wine/wine64 2>/dev/null) || { echo "wine not found"; exit 1; }
+wineserver=${WINESERVER:-$(command -v wineserver || true)}      # WINESERVER: the variable Wine itself reads
 cc -O2 -Wall -o "$work/mkvector" "$here/test/mkvector.c" -lwim
 # the DLL as ClawDeck places it: ours as cabinet.dll, Wine's builtin next to it as cabinet_wine.dll
 mkdir -p "$work/game"
 cp "$here/out/cabinet.dll" "$here/out/test_cabinet.exe" "$here/out/test_forward.exe" "$work/game/"
-wcab=$(ls /usr/lib/x86_64-linux-gnu/wine/x86_64-windows/cabinet.dll /usr/lib/wine/x86_64-windows/cabinet.dll \
-          /opt/wine*/lib*/wine/x86_64-windows/cabinet.dll 2>/dev/null | head -1)
+# wherever the distribution keeps Wine's DLLs (Ubuntu: lib/x86_64-linux-gnu/wine or lib/wine, Fedora: lib64/wine)
+wcab=$(find /usr /opt -path '*/wine/x86_64-windows/cabinet.dll' 2>/dev/null | head -1)
 [ -n "$wcab" ] || { echo "Wine's x86_64 cabinet.dll not found"; exit 1; }
 cp "$wcab" "$work/game/cabinet_wine.dll"
 # a fresh prefix first (its first start runs wineboot; a test program as that first start can abort)
 "$wine" cmd /c echo Wine prefix ready 2>/dev/null || true
-wineserver -w || true
+# not on PATH everywhere (Ubuntu 26.04's wine): then the server this wine started for the prefix, which Wine finds
+# next to its own loader, wherever the distribution keeps it
+if [ -z "$wineserver" ]; then
+  for pid in $(pgrep wineserver); do
+    if tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qxF "WINEPREFIX=$WINEPREFIX"; then
+      wineserver=$(readlink "/proc/$pid/exe" || true); break
+    fi
+  done
+fi
+echo "wineserver: ${wineserver:-not found, so no wait for the first start of the prefix}"
+[ -z "$wineserver" ] || "$wineserver" -w || true
 # inputs: text-like (compresses well), random (blocks stored as is), the two mixed, one odd size
 v="$work/game"                                  # vectors next to the exe: plain relative names for Wine
 for f in "$here"/wimlib/*.c "$here"/wimlib/wimlib.h; do cat "$f"; done > "$v/text"
