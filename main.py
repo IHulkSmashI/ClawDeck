@@ -606,10 +606,14 @@ class Plugin:
             sysfs.clear_error()
             r = self._apply_pick_now(plugged)
             st = self.power.status()
-            got = st.get("pl2_w")
+            # RAPL's PL2 as the chip has it now (status() keeps it under "rapl"; the top-level key read here before
+            # never existed, so the check below always passed and the line said "PL2 set")
+            got = st["rapl"]["pl2_w"] if st["tdp_backend"] == "rapl" else None
             want = self.power.pl2_w
-            ok = r.get("applied", {}).get("tdp") is not None and (want is None or got is None or round(got) == want or
-                                                                   round(got) == max(r["applied"]["tdp"], want))
+            tdp = r.get("applied", {}).get("tdp")
+            pl1 = st["rapl"]["pl1_w"] or 0                # never below PL1: under Autotune's TDP that is PL1 as read
+            ok = tdp is not None and (want is None or got is None or
+                                      round(got) in (want, max(tdp, want), max(round(pl1), want)))
             line = (f"PL2 {round(got)} W" if got is not None else "PL2 set") + (" (yours)" if want is not None else " (PL1 + 2 W)")
             return {"ok": ok, "manual": bool(manual), "pl2_w": want, "read_w": got, "summary": line,
                     "error": None if ok else (sysfs.last_error() or "the chip didn't take that PL2")}

@@ -1431,6 +1431,7 @@ def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
     assert pl2() == 22                                             # PL1 + 2 W
     r = p.run(p.set_pl2(True, 30))
     assert r["ok"] and r["pl2_w"] == 30 and pl2() == 30
+    assert r["read_w"] == 30 and r["summary"] == "PL2 30 W (yours)"   # read back from the chip, not "PL2 set"
     st = p.run(p.get_power())
     assert st["pl2_manual"] and st["pl2_set_w"] == 30 and st["pl2_max"] == 45
     p.run(p.set_pl2(True, 99))                                     # clamped to the model's PL2
@@ -1441,8 +1442,24 @@ def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
     assert pl2() == sysfs.read_int(p.power.p.rapl_pl1) // 1_000_000 + 2
     p.run(p.set_tdp(20))
     assert pl2() == 45                                             # back to Custom: yours again
-    p.run(p.set_pl2(False))
-    assert pl2() == 22
+    r = p.run(p.set_pl2(False))
+    assert pl2() == 22 and r["ok"] and r["summary"] == "PL2 22 W (PL1 + 2 W)"
+
+
+def test_set_pl2_reads_the_chip_back_and_says_when_it_did_not_take_it(plugin, monkeypatch):
+    """set_pl2 read status()["pl2_w"], a key that only exists under "rapl": the read-back was always None, so a PL2
+    the chip did not take was reported as done and the line said "PL2 set" without the watts."""
+    p = plugin
+    p.run(p.set_tdp(20))                                           # Custom 20 W
+    r = p.run(p.set_pl2(True, 12))                                 # under PL1: the chip gets PL1
+    assert r["ok"] and r["read_w"] == 20 and r["summary"] == "PL2 20 W (yours)"
+    status = p.power.status
+    monkeypatch.setattr(p.power, "status", lambda: {**status(), "rapl": {**status()["rapl"], "pl2_w": 25.0}})
+    r = p.run(p.set_pl2(True, 30))                                 # a chip that keeps PL2 at 25 W
+    assert not r["ok"] and r["read_w"] == 25 and r["summary"] == "PL2 25 W (yours)" and r["error"]
+    monkeypatch.setattr(p.power, "status", lambda: {**status(), "tdp_backend": "hhd"})
+    r = p.run(p.set_pl2(True, 30))                                 # not RAPL's limit to read: no claim
+    assert r["ok"] and r["read_w"] is None and r["summary"] == "PL2 set (yours)"
 
 
 def test_clawdecks_cabinet_dll_next_to_the_wrapper_and_gone_after_uninstall(tmp_path, monkeypatch):
