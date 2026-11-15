@@ -52,6 +52,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
+Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
+Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
+EX: Autotune on, start an Xbox game from ES-DE: within 30 s the Power line says "Autotune stays out of xemu" and the
+TDP is the pick.
+
 **Quick Access tabs (2026-11-14, #171):** the four folding sections are now Steam's own Tabs (Power, Game, Fixes,
 Setup), sized as unifideck does in Quick Access. Released without an EX run on the maintainer's word. Check on the EX:
 LB / RB switch tabs (also with the focus inside a tab), the Power tab scrolls to its end, a dropdown's menu closing

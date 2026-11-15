@@ -182,6 +182,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (!appid ? "Autotune on: starts with the next game"
       : at?.why && at.why !== "not started" ? `Autotune: ${at.why}` : "Autotune on: starting…")
+    : at.own_pace ? `Autotune stays out of ${at.own_pace}: ${at.own_pace_why}, so your limit stays on the chip`
     : at.no_frames ? "Autotune has no frame rate from this game yet, so your limit is on the chip; it takes over when frames come"
     : at.paused ? "Autotune paused: you changed a power setting by hand. Pick a profile or move the slider to hand back control"
     : `Autotune on · ${fpsText}` + (at.fps_per_w ? ` · ${at.fps_per_w} fps/W` : "");
