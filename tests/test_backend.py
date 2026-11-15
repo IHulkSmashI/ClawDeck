@@ -473,10 +473,11 @@ def test_autotune_pause_stops_changes(fake_hw, monkeypatch):
     t = s.learned.tdp
     assert t < 20                                               # it lowered (a 3 W step from the top)
     at.pause()
+    assert s.learned.tdp == 20                                  # the set TDP again, not autotune's
     for _ in range(5):
         at._step()
-    assert s.learned.tdp == t
-    at.session = None
+    assert s.learned.tdp == 20
+    assert at.stop(revert=False)["learned"]["tdp"] == t         # what it had found is what the game's profile gets
 
 
 def test_autotune_a_refused_tdp_is_not_learned(fake_hw, monkeypatch):
@@ -1589,6 +1590,49 @@ def test_autotune_without_a_frame_rate_gives_back_the_limit_you_picked(fake_hw, 
     assert sysfs.read_int(p.cpu_max_perf_pct) == 85 and sysfs.read_int(p.cpu_no_turbo) == 1
     assert sysfs.read_int(p.gpu_min_freq) == 300
     at.session = None
+
+
+def test_pausing_autotune_gives_back_what_autotune_changed_and_keeps_your_change(fake_hw, monkeypatch):
+    """pause() only set a flag: after Autotune was switched off in a game, or after one manual change, Autotune's own
+    TDP and levers stayed on the chip until the game ended (here 17 W of a 35 W pick, CPU 90 %, boost, a GPU floor).
+    Now the pick goes back, the change made by hand stays, and what Autotune had found is still saved."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    pw.apply_profile("", {"tdp": 35, "cpu_max_pct": 85, "boost": False}, False)       # the pick: Custom 35 W
+    at.start("1", {"tdp": 17, "ceiling": 35, "max_fps": 60.0, "cpu_max_pct": 90, "boost": True, "gpu_min_mhz": 1300},
+             8, 35, False)
+    p = fake_hw.paths
+    assert chip["tdp"] == 17 and sysfs.read_int(p.cpu_max_perf_pct) == 90 and sysfs.read_int(p.cpu_no_turbo) == 0
+    at.pause("manual GPU clocks")                                     # main.py: pause(), then the user's write
+    pw.set_gpu_window(900, None)
+    assert at.session.paused and chip["tdp"] == 35 and at.status()["tdp"] == 35
+    assert sysfs.read_int(p.cpu_max_perf_pct) == 85 and sysfs.read_int(p.cpu_no_turbo) == 1
+    assert sysfs.read_int(p.gpu_min_freq) == 900                      # yours, not the pick's 300
+    at.pause("manual CPU ceiling")                                    # a second change by hand: the first one stays
+    pw.set_cpu_max_pct(70)
+    at.pause("autotune switched off")
+    assert sysfs.read_int(p.gpu_min_freq) == 900 and sysfs.read_int(p.cpu_max_perf_pct) == 70 and chip["tdp"] == 35
+    found = at.stop(revert=False)["learned"]
+    assert found["tdp"] == 17 and found["cpu_max_pct"] == 90 and found["gpu_min_mhz"] == 1300
+
+
+def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin):
+    p = plugin
+    p.run(p.set_tdp(26))                                           # Custom 26 W
+    p.run(p.game_started("7"))
+    s = _lower(p)
+    low = p.chip()
+    assert s.ceiling_tdp == 26 and low < 26                        # 60 fps from 15 W: Autotune lowered the TDP
+    pl2 = lambda: sysfs.read_int(p.power.p.rapl_pl2) // 1_000_000
+    assert p.run(p.set_setting("autotune", False)) and s.paused
+    assert p.chip() == 26 and pl2() == 28                          # your limit and PL1 + 2 W, at once
+    for _ in range(10):
+        p.autotune._step()
+    assert p.chip() == 26
+    assert p.run(p.get_power())["autotune_w"] is None
 
 
 def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw, monkeypatch, tmp_path):

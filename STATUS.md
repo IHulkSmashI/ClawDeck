@@ -103,6 +103,14 @@ Sinking Star got Enshrouded's fps), and it looked for a new log only every 30 s.
 started counts, looked for every second until it appears. Check on the EX: autotune on, play one game, then start
 another and restart the plugin: the status line shows the second game's fps, never the first one's.
 
+**A paused Autotune gives its changes back (2026-11-15):** switching Autotune off in a game, or one manual change under
+Advanced, only set a flag: Autotune's own TDP, CPU ceiling, boost and GPU floor stayed on the chip until the game
+ended (a 60 fps target met: 9 W of a 30 W pick, also after the switch). Now the pick goes back at once (TDP, PL2, the
+firmware's window, the levers Autotune moved); the change made by hand is written after that and stays, and what
+Autotune had found is still saved for the game. Check on the EX: Autotune on with a target, a light game until the
+Power line shows fewer watts than the limit, then switch Autotune off: the read-back line shows the limit within a
+second (`constraint_0_power_limit_uw` = the pick, PL2 2 W over it).
+
 **Autotune without a frame rate gives your limit back (2026-11-12):** a game whose frame rate autotune can't read
 (no XeSS/XeLL, no MangoHud log) used to keep autotune's starting point after it gave up, so a target's mid-range start
 (22 W of a 35 W pick) stayed for the whole game: Enshrouded ran at 30-40 fps instead of 60 until autotune was switched
