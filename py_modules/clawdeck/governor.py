@@ -67,7 +67,13 @@ CHECK_FIRST_S = 1.0     # ... and this soon after steps down from the full limit
 ABOVE, ABOVE_S = 0.05, 5.0             # a held limit gives this much MORE than the full limit is believed to give: the
                                        # belief is wrong (a cutscene or a menu set it); looked at at once, this often
 CONFIRM_S = 20.0        # the full limit gave SHIFT less than before (a cutscene, a video, a heavier place): no step down
-REACH_S, REACH_FOR_S = 30.0, 120.0     # for this long, and the full limit is looked at again every REACH_S for REACH_FOR_S
+REACH_S, REACH_FOR_S = 30.0, 120.0     # for this long, and the full limit is looked at again every REACH_S for REACH_FOR_S.
+                                       # For that long nothing goes under the limit that held before; then it is the
+                                       # game (a heavier place, a target out of reach) and steps go on
+BOUND_S, BOUND_W = 2.0, 0.5            # a reference taken while the package drew 2 W or more under a lowered limit, and
+                                       # now the package draws the whole limit (within BOUND_W) for BOUND_S: another
+                                       # scene, which needs watts the last one didn't (a video is over): the full limit
+                                       # is looked at at once
 STEADY, STEADY_S = 0.15, 3.0           # a step down starts only while the frame rate of each half second of the last
                                        # STEADY_S is within STEADY of their median
 FREE_LOOKS = 5          # the reference is the median pace of the last looks at a limit that can't hold the game back,
@@ -130,8 +136,12 @@ class State:
     ref_drop_at: float = -1e9       # when the full limit last gave SHIFT less than the reference before
     drop_floor: int | None = None   # ... and the limit that held before it: no step under it on that lower reference
     ref_high: float | None = None   # ... and the reference before it
+    ref_free: bool = False          # the reference was last taken under the full limit, with the package well under
+                                    # the limit: it says what the game did there, not what more watts would give
+    bound_since: float | None = None  # since when the package draws the whole of a lowered limit
     usual: float | None = None      # the game's frame rate as last judged (what "a loading screen or a menu" is far from)
     free_fps: deque = field(default_factory=lambda: deque(maxlen=2 * FREE_LOOKS))   # the pace at the last free looks
+    free_run: int = 0               # frames in a row that came in looks where the limit couldn't hold the game back
     draw_was: float | None = None   # the package draw at the last look, and when a watched write was made
     wrote_at: float = -1e9
     off_since: float | None = None  # since when the frames are far from it
@@ -261,6 +271,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     def watch(mode: str, watts: int, note: str) -> None:
         st.mode, st.prev, st.since, st.wrote_at, st.watch = mode, st.limit, t, t, []
         st.free_fps.clear()
+        st.free_run, st.bound_since = 0, None
         write(watts, note)
         act.look_s = WATCH_S
 
@@ -339,18 +350,24 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.quiet_until += dt
         st.ref_at += dt
         st.ref_drop_at += dt
+        st.free_fps.clear()                          # what comes after it is another stretch of frames
+        st.free_run = 0
         return act
     st.usual = here
 
-    # the reference follows the pace whenever the limit can't be what holds the game back
+    # the reference follows the pace whenever the limit can't be what holds the game back. The pace is the last
+    # PACE_FRAMES frames, the draw is this look's: when the draw falls (a loading screen, a pause) the pace is still
+    # that of frames the limit did hold back, and taking it lowered the reference with every loading screen (review,
+    # 2026-11-15). So only once every frame of the pace came in a look that was free, and none in a look without frames
     free = st.limit >= top or obs.clipped is False or (obs.draw_w is not None and obs.draw_w <= st.limit - 2)
-    if st.mode == "hold" and free and len(st.pace) == PACE_FRAMES and t - st.changed_at >= BACK_S:
+    st.free_run = st.free_run + len(obs.frames) if free and t - st.changed_at >= BACK_S else 0
+    if st.mode == "hold" and free and obs.frames and st.free_run >= PACE_FRAMES and len(st.pace) == PACE_FRAMES:
         st.free_fps.append(here)
         if len(st.free_fps) >= FREE_LOOKS:
             level = statistics.median(st.free_fps)
             if st.ref is not None and level < st.ref * (1 - SHIFT):
                 st.ref_drop_at = t                   # much less than before: a cutscene, a video, or a heavier place
-            st.ref, st.ref_at = level, t
+            st.ref, st.ref_at, st.ref_free = level, t, st.limit < top
     elif not free:
         st.free_fps.clear()
     rising = obs.draw_w is not None and st.draw_was is not None and obs.draw_w > st.draw_was + RISE_W
@@ -485,7 +502,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.misses = 0
         if st.home is not None and st.home < st.prev and t - st.home_at <= HOME_FOR_S:
             st.good, st.home = st.home, None
-    st.ref, st.ref_at = now, t
+    st.ref, st.ref_at, st.ref_free = now, t, False
     want = goal(st, cfg)
     was = st.lost or now
     st.ref_here = None
@@ -586,7 +603,8 @@ def _next_down(st: State, obs: Obs, cfg: Cfg, t: float) -> int | None:
         nxt = st.limit - STEP_W
         if obs.draw_w is not None and obs.draw_w + 2 < nxt:
             nxt = int(-(-obs.draw_w // 1)) + 2       # a limit the chip doesn't reach changes nothing
-    nxt = max(cfg.floor, nxt, st.drop_floor or 0)
+    held = st.drop_floor if st.drop_floor is not None and (t - st.ref_drop_at < REACH_FOR_S or obs.draw_w is None) else 0
+    nxt = max(cfg.floor, nxt, held)
     return nxt if nxt < st.limit else None
 
 
@@ -669,6 +687,8 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
 
     # the reference grows old while the limit holds the chip: look at the full limit for a moment
     binds = obs.clipped is not False and (obs.draw_w is None or obs.draw_w > st.limit - 2)
+    hard = obs.draw_w is not None and obs.draw_w > st.limit - BOUND_W
+    st.bound_since = (st.bound_since if st.bound_since is not None else t) if hard else None
     # (not from a watt under it: what one watt more gives is not worth a look)
     if _from_ref(st, cfg) and st.limit < top - 1 and binds and not obs.thermal and len(st.pace) == PACE_FRAMES:
         if st.ref_here is None and t - st.changed_at >= DWELL_S:
@@ -680,9 +700,11 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         above = soon and here > st.ref * (1 + max(ABOVE, 2 * small))
         rose = soon and st.ref_here is not None and here > st.ref_here * (1 + max(ABOVE, 2 * small))
         every = REACH_S if t - st.ref_drop_at < REACH_FOR_S else CHECK_MAX_S
-        if above or rose or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S):
+        woke = st.ref_free and st.bound_since is not None and t - st.bound_since >= BOUND_S and t - st.changed_at >= DWELL_S
+        if above or rose or woke or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S):
             st.lost = cur
-            watch("check", top, f"checking what the full {top} W gives")
+            watch("check", top, f"the package draws all of {st.limit} W now: checking what the full {top} W gives" if woke
+                  else f"checking what the full {top} W gives")
             return act
 
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S and t - st.ref_drop_at >= CONFIRM_S

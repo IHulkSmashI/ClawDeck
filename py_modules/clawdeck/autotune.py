@@ -503,7 +503,8 @@ class Session:
     source: str = "presented"
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
     clock_pct: int | None = None        # ... or capped the CPU's top clock at this
-    no_fps_s: float = 0.0               # seconds in a row without a frame rate before the first one
+    no_fps_s: float = 0.0               # seconds in a row without a frame rate
+    row_at: float | None = None         # when a log with a row a second last gave frames (its next row covers the time since)
     no_frames: bool = False             # gave up: this game's frame rate can't be read
     own_pace: str | None = None         # an emulator whose frame rate isn't the game's (OWN_PACE): autotune stays out
     pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
@@ -765,10 +766,19 @@ class Autotune:
 
     def _frames(self, smp: Sample, dt: float) -> list[tuple[float, float]]:
         """The frames since the last step as (end time, frame time ms): mangoapp's, one row per frame; from a log with
-        one row a second, that second's frames at its average."""
+        one row a second, the frames of the time since its row before, at their average (the looks in between have
+        none: with only this look's half second of them the governor saw a frame rate with holes and never called it
+        steady, so it never stepped down on such a log; review, 2026-11-15)."""
         ms = list(self.sampler.frames_ms)
-        if not ms and smp.shown_fps and dt > 0:
-            ms = [1000.0 / smp.shown_fps] * max(1, round(smp.shown_fps * dt))
+        s = self.session
+        if ms:
+            if s is not None:
+                s.row_at = None
+        elif smp.shown_fps and dt > 0:
+            span = dt if s is None or s.row_at is None else max(dt, min(2.0, smp.t - s.row_at))
+            if s is not None:
+                s.row_at = smp.t
+            ms = [1000.0 / smp.shown_fps] * max(1, round(smp.shown_fps * span))
         out, end = [], smp.t
         for x in reversed(ms):
             out.append((end, x))
@@ -811,9 +821,12 @@ class Autotune:
             self._note(s, f"frames after all: it takes over from {s.learned.tdp} W")
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
-        if not smp.fps and not s.paused and s.learned.samples == 0:
-            # no frame rate at all (a game whose frames neither mangoapp nor a MangoHud log shows). Give up: the limit
-            # you picked goes back on the chip, nothing more is changed until frames come, and the panel says why
+        if smp.fps:
+            s.no_fps_s = 0.0
+        elif not s.paused:
+            # no frame rate (a game whose frames neither mangoapp nor a MangoHud log shows; or its frames stopped
+            # coming, and a lowered limit would stay on the chip unwatched). Give up: the limit you picked goes back
+            # on the chip, nothing more is changed until frames come, and the panel says why
             s.no_fps_s += dt
             if s.no_fps_s >= NO_FPS_S:
                 s.paused, s.no_frames = True, True
