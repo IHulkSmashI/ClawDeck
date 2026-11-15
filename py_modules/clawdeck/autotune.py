@@ -63,6 +63,7 @@ import glob
 import logging
 import os
 import re
+import socket
 import statistics
 import time
 from dataclasses import dataclass, field
@@ -91,6 +92,16 @@ OFF_LO, OFF_HI = 0.35, 2.5  # a window this far from the game's usual fps is a l
 DIP = 0.4               # ... and so is one with a second below this share of its average (a load hitch in the window)
 MAX_SKIPS = 3           # three such windows in a row are real (new settings, a much lighter or heavier game): used
 XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer counts
+# A game without its own MangoHud log (no launch wrapper on its shortcut: a Flatpak emulator, a game started some other
+# way) still has Steam's overlay, mangoapp, which gamescope feeds every frame of the focused app. mangoapp writes one
+# row per frame to ~/mangoapp_<date>_<time>.csv while logging is on, turned on and off through its control socket
+# (abstract unix socket "mangohud"); its frame times match the game's own MangoHud log within 0.12 fps (Claw 8 EX,
+# 2026-11-14). A log someone else keeps on is only read; one Autotune turned on, it turns off at the game's end.
+# Steam rewrites mangoapp's config when the overlay level changes, which stops the log: no new row for
+# MANGOAPP_RELOG_S, ask again. A second gamescope on the machine (a nested one) sends its frames to the same mangoapp.
+MANGOAPP_SOCKET = "\0mangohud"
+MANGOAPP_RELOG_S = 20
+MANGOAPP_FRESH_S = 30   # a mangoapp log written this recently is a live one
 LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_S, so a window sees sustained power
 SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
 # target fps (DeckyTDPTuner's governor, see above)
@@ -132,9 +143,16 @@ class Sampler:
     MANGOHUD_CONFIG=output_folder=<dir>,log_interval=1000,autostart_log=1 (ClawDeck sets this through its launch
     wrapper, tools/clawdeck-launch.sh). Without a log, frame time is None and autotune only reports."""
 
-    def __init__(self, hardware: hw.Hardware, log_dir: str):
+    def __init__(self, hardware: hw.Hardware, log_dir: str, home: str | None = None):
         self.p = hardware.paths
         self.log_dir = log_dir
+        self.home = home                           # where mangoapp writes its log (the desktop user's home)
+        self._mango: str | None = None             # the mangoapp log being read
+        self._mango_pos = 0
+        self._mango_own = False                    # Autotune turned mangoapp's log on (and turns it off)
+        self._mango_asked = -1e9                   # when Autotune last asked mangoapp to log
+        self._mango_row_at = 0.0                   # when the last new row came
+        self._mango_checked = -1e9
         self.xell_log: str | None = None       # the running game's drive_c/igdext_xell.log (set_prefix)
         self._xell_pos = 0
         self._xell: tuple[float, float] | None = None   # (monotonic time, rendered fps) of the newest stats line
@@ -168,10 +186,19 @@ class Sampler:
         self._log = max(files, key=mtime) if files else None
         return self._log
 
+    def release(self) -> None:
+        """The game (the Steam app) ended: a mangoapp log Autotune turned on goes off."""
+        if self._mango_own:
+            mangoapp_command("logging=0")
+        self._mango, self._mango_pos, self._mango_own, self._mango_asked = None, 0, False, -1e9
+
     def frametime(self) -> tuple[float | None, float | None]:
         f = self._newest_log()
         if not f:
-            return None, None
+            return self._mangoapp_frametime()
+        if self._mango_own:                        # the game's own log came after all: mangoapp's goes off
+            mangoapp_command("logging=0")
+            self._mango, self._mango_own = None, False
         try:
             with open(f, "rb") as fh:
                 start = self._log_pos.get(f, 0)
@@ -198,9 +225,77 @@ class Sampler:
             return None, None
         return sum(ft_rows) / len(ft_rows), sum(fps_rows) / len(fps_rows)
 
+    def _mangoapp_log(self) -> str | None:
+        """The mangoapp log being written now: the newest ~/mangoapp_*.csv written in the last MANGOAPP_FRESH_S."""
+        now = time.monotonic()
+        if self._mango and now - self._mango_checked < LOG_RESCAN_S and os.path.exists(self._mango):
+            return self._mango
+        self._mango_checked = now
+
+        def mtime(f: str) -> float:
+            try:
+                return os.path.getmtime(f)
+            except OSError:
+                return 0.0
+        files = [f for f in glob.glob(os.path.join(self.home or "", "mangoapp_*.csv")) if not f.endswith("_summary.csv")]
+        f = max(files, key=mtime) if files else None
+        if f and time.time() - mtime(f) > MANGOAPP_FRESH_S:
+            f = None
+        if f != self._mango:
+            # a log that was already running (another tool keeps it on): only what comes from now on is this game's
+            self._mango_pos = 0 if self._mango_own else (os.path.getsize(f) if f and os.path.exists(f) else 0)
+            self._mango = f
+        return f
+
+    def _mangoapp_frametime(self) -> tuple[float | None, float | None]:
+        """Frame time and rate from mangoapp's per-frame log, over the frames since the last read."""
+        if not self.home:
+            return None, None
+        now = time.monotonic()
+        f = self._mangoapp_log()
+        if f is None or now - self._mango_row_at > MANGOAPP_RELOG_S:
+            if now - self._mango_asked >= MANGOAPP_RELOG_S:
+                self._mango_asked, self._mango_row_at = now, now
+                if mangoapp_command("logging=1") and f is None:
+                    self._mango_own = True
+                    log.info("autotune: no MangoHud log from this game; mangoapp logs its frames")
+            if f is None:
+                return None, None
+        try:
+            with open(f, "rb") as fh:
+                fh.seek(self._mango_pos)
+                data = fh.read()
+        except OSError:
+            return None, None
+        end = data.rfind(b"\n")
+        if end < 0:
+            return None, None
+        self._mango_pos += end + 1
+        ft = []
+        for row in csv.reader(data[:end + 1].decode("utf-8", errors="replace").splitlines()):
+            if len(row) >= 2 and row[0].replace(".", "", 1).isdigit():
+                try:
+                    ms = float(row[1])
+                except ValueError:
+                    continue
+                if ms > 0:
+                    ft.append(ms)
+        if not ft:
+            return None, None
+        self._mango_row_at = now
+        mean = sum(ft) / len(ft)                   # one row per frame: frames over their time, not a mean of rates
+        return mean, 1000.0 / mean
+
     def set_prefix(self, xell_log: str | None) -> None:
         """The game's prefix log where the shim writes XeLL's frame timing; read from its end, new lines only. A game
-        starts here: MangoHud logs from before now are not its frames."""
+        starts here: MangoHud logs from before now are not its frames. mangoapp's log stays on: a new session can come
+        inside the running app (an ES-DE game, a new power source), and turning the log off there cuts its frames for
+        MANGOAPP_RELOG_S and the log of every other reader. release() turns it off when the app ends."""
+        try:
+            self._mango_pos = os.path.getsize(self._mango) if self._mango else 0
+        except OSError:
+            self._mango, self._mango_pos = None, 0
+        self._mango_asked, self._mango_checked, self._mango_row_at = -1e9, -1e9, time.monotonic()
         self.xell_log, self._xell = xell_log, None
         self._since, self._log = (time.time() - 2, None) if xell_log else (0.0, None)
         try:
@@ -285,6 +380,18 @@ class Sampler:
                       gpu_max_mhz=sysfs.read_int(self.p.gpu_max_freq) if self.p.gpu_max_freq else None,
                       cpu_pct=self.cpu_pct(), pkg_w=self.package_power(), gpu_busy=self.gpu_busy(),
                       shown_fps=shown, source=src)
+
+
+def mangoapp_command(cmd: str) -> bool:
+    """One command to mangoapp's control socket (":logging=1;"); False when no mangoapp listens."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            s.connect(MANGOAPP_SOCKET)
+            s.sendall(f":{cmd};".encode())
+        return True
+    except OSError:
+        return False
 
 
 def summary(s: Session) -> str:
@@ -421,10 +528,11 @@ class Session:
 
 
 class Autotune:
-    def __init__(self, hardware: hw.Hardware, pw: power.Power, log_dir: str, csv_log: str | None = None):
+    def __init__(self, hardware: hw.Hardware, pw: power.Power, log_dir: str, csv_log: str | None = None,
+                 home: str | None = None):
         self.hw = hardware
         self.power = pw
-        self.sampler = Sampler(hardware, log_dir)
+        self.sampler = Sampler(hardware, log_dir, home)
         self.csv_log = csv_log
         self.session: Session | None = None
         self.plugged: bool | None = None
@@ -581,6 +689,11 @@ class Autotune:
 
     def running(self) -> bool:
         return self.session is not None
+
+    def release_frames(self) -> None:
+        """The game (the Steam app) ended: the mangoapp log Autotune turned on goes off. A session that ends inside the
+        running app (an ES-DE game, a new power source) leaves it on for the next one."""
+        self.sampler.release()
 
     def stop(self, revert: bool = True) -> dict | None:
         """End the session; what it learned is returned for the game's profile. revert=False leaves the power as it is

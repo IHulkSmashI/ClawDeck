@@ -1543,6 +1543,99 @@ def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw,
     at.session = None
 
 
+def _mango_rows(path, frames_ms, header=False):
+    with open(path, "a") as f:
+        if header:
+            f.write("os,cpu,gpu\nLinux,Intel,Intel\nfps,frametime,cpu_load,elapsed\n")
+        for ms in frames_ms:
+            f.write(f"{1000 / ms:.1f},{ms},10,0\n")
+
+
+def test_sampler_follows_a_live_mangoapp_log_without_touching_it(fake_hw, tmp_path, monkeypatch):
+    """A game without its own MangoHud log (xemu's Flatpak, 2026-11-14: "no frame rate after 30 s"): mangoapp's
+    per-frame log of the focused app. One that is already being written is only read, from where it stands."""
+    sent = []
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
+    live = tmp_path / "mangoapp_2026-11-14_23-00-00.csv"
+    _mango_rows(live, [33.3] * 50, header=True)                       # before this game: not its frames
+    smp = autotune.Sampler(fake_hw, str(tmp_path / "mangohud"), home=str(tmp_path))
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))
+    assert smp.frametime() == (None, None)
+    _mango_rows(live, [16.0, 17.0, 16.0, 17.0])                         # this game's frames: 4 in 66 ms
+    ft, fps = smp.frametime()
+    assert round(ft, 2) == 16.5 and round(fps, 1) == 60.6 and sent == []
+    smp.set_prefix(None)
+    smp.release()
+    assert sent == []                                                   # not Autotune's: it stays on
+
+
+def test_sampler_turns_mangoapps_log_on_and_off_and_asks_again_when_it_stops(fake_hw, tmp_path, monkeypatch):
+    sent, clock = [], {"t": 1000.0}
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+    smp = autotune.Sampler(fake_hw, str(tmp_path / "mangohud"), home=str(tmp_path))
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))
+    assert smp.frametime() == (None, None) and sent == ["logging=1"]    # none running: turned on
+    log_file = tmp_path / "mangoapp_2026-11-15_00-10-00.csv"
+    _mango_rows(log_file, [25.0, 25.0], header=True)
+    clock["t"] += 1
+    ft, fps = smp.frametime()
+    assert ft == 25.0 and fps == 40.0                                   # its own log: read from the start
+    clock["t"] += autotune.MANGOAPP_RELOG_S + 1                         # Steam reloaded mangoapp's config: no rows
+    assert smp.frametime() == (None, None) and sent == ["logging=1", "logging=1"]
+    smp.set_prefix(None)
+    assert sent[-1] == "logging=1"                                      # a session ends inside the app: stays on
+    smp.release()
+    assert sent[-1] == "logging=0"                                      # the game ended: Autotune's log goes off
+
+
+def test_sampler_keeps_its_mangoapp_log_through_a_game_switch(fake_hw, tmp_path, monkeypatch):
+    """ES-DE starts a game inside the running app: a new session on the same mangoapp log. Turning the log off at
+    the switch (2026-11-15, Super Mario Bros. and PGR2 from ES-DE) cut the frames for 20 s, and claw-framerec's."""
+    sent, clock = [], {"t": 1000.0}
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+    smp = autotune.Sampler(fake_hw, str(tmp_path / "mangohud"), home=str(tmp_path))
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))
+    smp.frametime()
+    log_file = tmp_path / "mangoapp_2026-11-15_03-08-26.csv"
+    _mango_rows(log_file, [25.0, 25.0], header=True)
+    clock["t"] += 1
+    assert smp.frametime() == (25.0, 40.0)                              # ES-DE's menu
+    _mango_rows(log_file, [50.0])                                       # its last frame before the switch
+    smp.set_prefix(None)
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))                   # the ES-DE game's session
+    _mango_rows(log_file, [20.0, 20.0])
+    clock["t"] += 1
+    assert smp.frametime() == (20.0, 50.0) and sent == ["logging=1"]    # only the game's frames, the log never off
+
+
+def test_mangoapp_log_goes_off_when_the_game_stops_not_at_an_es_de_switch(plugin, monkeypatch):
+    p = plugin
+    calls = []
+    monkeypatch.setattr(p.autotune, "release_frames", lambda: calls.append("release"))
+    esde = "3119184808"
+    p.run(p.game_started(esde))
+    assert _frontend_event(p, "start", "ps3", "/roms/ps3/Ratchet.iso", "Ratchet")
+    assert calls == []                                                  # a game inside ES-DE: the log stays on
+    p.run(p.game_stopped(esde))
+    assert calls == ["release"]
+
+
+def test_sampler_prefers_the_games_own_mangohud_log(fake_hw, tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
+    logs = tmp_path / "mangohud"
+    logs.mkdir()
+    smp = autotune.Sampler(fake_hw, str(logs), home=str(tmp_path))
+    smp.set_prefix(str(tmp_path / "igdext_xell.log"))
+    smp.frametime()
+    assert sent == ["logging=1"]
+    (logs / "game_2026-11-15_00-11-00.csv").write_text("os\nLinux\nfps,frametime\n60.0,16.6\n")
+    smp._log_checked = -1e9
+    assert smp.frametime() == (16.6, 60.0) and sent == ["logging=1", "logging=0"]
+
+
 def test_game_list_tags_say_what_clawdecks_optiscaler_runs(plugin):
     p = plugin
     assert p._game_tags({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3}) == [

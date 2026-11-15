@@ -108,7 +108,8 @@ class Plugin:
         # games run as the desktop user and MangoHud writes its frame-time log here: the folder must be theirs
         os.makedirs(mangohud_dir, exist_ok=True)
         userexec.chown_tree(mangohud_dir, HOME)
-        self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"))
+        self.autotune = autotune.Autotune(self.hw, self.power, mangohud_dir, csv_log=os.path.join(LOG_DIR, "autotune.csv"),
+                                          home=HOME)
         # on by default, on the charger too: the least power for (nearly) the same frames, less heat and fan noise
         # (maintainer, 2026-11-04). The switches in Power still turn either off.
         # beta: off until switched on (Steam has none; maintainer
@@ -203,6 +204,7 @@ class Plugin:
         if getattr(self, "_frontend_watch", None):
             self._watch_frontend(False)
         self.autotune.stop()
+        self.autotune.release_frames()
         quiet.background(False)
         n = self.power.revert_all()
         if self.settings.get("sdr_nits") is not None and self._caps().get("hdr_brightness"):
@@ -924,6 +926,7 @@ class Plugin:
         async with self._power_lock:
             plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
             learned = self._save_learned(self._game_key(), plugged)
+            self.autotune.release_frames()
             self.running_appid, self.running_plugged = None, None
             self.running_key, self.running_title = None, None
             self._watch_frontend(False)
