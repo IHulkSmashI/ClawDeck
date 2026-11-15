@@ -609,9 +609,10 @@ class Autotune:
 
     def set_target(self, target: int | None, auto_fps: bool = True) -> None:
         """The target was changed while a game runs: a new target starts over from the full TDP; none goes back to the
-        most-frames mode (measure again)."""
+        most-frames mode (measure again). Not in a game autotune stays out of (xemu): its frame rate says nothing about
+        the game, and the limit you picked stays on the chip."""
         s = self.session
-        if not s:
+        if not s or s.own_pace:
             return
         if target:
             self._start_target(s, {}, int(target), auto_fps)
