@@ -43,6 +43,7 @@ it in `bin/`). The rest are for development.
 | `sysfs-survey.sh` | Read-only survey of a new machine: what the kernel exposes, which services run. |
 | `efficiency-sweep.sh` | The efficiency curve (findings §22.1): TDP steps, a measured benchmark run at each, one CSV row per step; you start the benchmark by hand. |
 | `soak.py` | CPU %, peak memory and memory growth of the backend against the budget above. |
+| `autotune_sim.py` | Autotune against games as a Claw 8 EX measured them (frame rate at each power limit), with a score: watts over what a scene needs, time the limit cost frames, changes a minute. No Claw needed. |
 | `screenshots.mjs` | Retakes the README screenshots from the browser preview. |
 | `render-banner.mjs` | Renders the logo, banner and download button from `assets/src/`. |
 | `upstream_watch.py` | Newest upstream versions + live canaries for ClawDeck's parsers (see below). |

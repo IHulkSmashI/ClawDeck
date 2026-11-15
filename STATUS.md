@@ -30,6 +30,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
 | Browser preview | `preview/` (`pnpm preview`) | all four | the real panel code with example data |
+| Autotune simulator | `tools/autotune_sim.py`, `tests/data/autotune/` | none (development) | Autotune on recorded games without a Claw: scenes from measured staircases (Enshrouded, Midnight Club LA on RPCS3, Need for Speed: Most Wanted), a score against the watts each scene needs, replay of recorded frames; two tests marked as expected failures name what today's target mode doesn't do yet |
 | Diagnostics log | `diaglog.py`, `main._diag_loop` | Setup | off by default; while on: 1 row/s (power, limits, °C, clocks, battery, fans, Autotune, busiest processes) and the controller's mode reports; 30 days, 200 MB; the export adds the last 10 minutes |
 
 Removed in the scope reset (2026-10-21): VRR on/off, refresh rate, HDR, display save, fan presets, GPU clock
