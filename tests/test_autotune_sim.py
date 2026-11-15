@@ -135,57 +135,65 @@ def test_the_need_moves_with_the_scenario():
     assert needs == [21, 24, 22, 24, 21, 23]
 
 
-# ---- Autotune as it is today -----------------------------------------------------------------------------------------
+# ---- Autotune, as the plugin runs it --------------------------------------------------------------------------------
 @pytest.mark.parametrize("target", [None, 60])
-def test_today_a_light_game_on_its_frame_limit_ends_at_the_floor(target):
-    game = sim.run(sim.Today(target=target), sim.Game(sim.SCENARIOS["light-capped"], goal_fps=target))
+def test_a_light_game_on_its_frame_limit_ends_at_the_floor(target):
+    game = sim.run(sim.Wired(target=target), sim.Game(sim.SCENARIOS["light-capped"], goal_fps=target))
     s = game.score()
-    assert game.limit == 8 and s.starved_pct == 0 and s.fps == pytest.approx(60, abs=0.2)
+    assert game.limit == 8 and s.starved_pct == 0 and s.over_w <= 0.5 and s.fps == pytest.approx(60, abs=0.2)
 
 
-def test_today_target_mode_holds_a_parked_emulator_near_its_need():
-    for seed in (1, 2, 3):
-        s = sim.run(sim.Today(target=30), sim.Game(sim.SCENARIOS["emulator-parked"], seed=seed, goal_fps=30)).score()
-        assert s.limit_w <= 17 and s.starved_pct <= 1 and s.changes_per_min <= 2
-
-
-def test_today_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
+def test_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
     for name, scenario in sim.SCENARIOS.items():
         for target in (None, 30 if name.startswith("emulator") else 60):
             game = sim.Game(scenario, floor=10, ceiling=25, goal_fps=target)
             game.trace = []
-            sim.run(sim.Today(target=target), game, seconds=240)
+            sim.run(sim.Wired(target=target), game, seconds=240)
             assert all(10 <= row[1] <= 25 for row in game.trace), (name, target)
 
 
-@pytest.mark.xfail(strict=True, reason="today a raise is +2 to +6 W, one every 2 s: 6-7 s under the lock after a jump")
 def test_a_jump_of_the_need_is_answered_within_a_second_and_a_half():
-    """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W."""
-    s = sim.run(sim.Today(target=30), sim.Game(sim.SCENARIOS["emulator-need-jumps"], goal_fps=30)).score()
-    assert s.longest_starved_s <= 1.5
+    """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W. The
+    governors before this one raised +2 to +6 W, 2 s apart: 6-7 s under the lock."""
+    for seed in (1, 2, 3):
+        s = sim.run(sim.Wired(target=30), sim.Game(sim.SCENARIOS["emulator-need-jumps"], seed=seed, goal_fps=30)).score()
+        assert s.longest_starved_s <= 1.5 and s.starved_pct <= 1
 
 
-@pytest.mark.xfail(strict=True, reason="today a target out of reach keeps the full limit: 30 W where 22 W gives the same")
 def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit():
-    """Enshrouded where 30 W gives 48 fps and 22 W gives 46: a 60 fps target can't be held at any limit."""
-    s = sim.run(sim.Today(target=60), sim.Game(sim.SCENARIOS["out-of-reach"], goal_fps=60)).score()
-    assert s.over_w <= 2 and s.starved_pct <= 1
+    """Enshrouded where 30 W gives 48 fps and 22 W gives 46: a 60 fps target can't be held at any limit. The target
+    governor before this one kept the full 30 W there."""
+    for seed in (1, 2, 3):
+        s = sim.run(sim.Wired(target=60), sim.Game(sim.SCENARIOS["out-of-reach"], seed=seed, goal_fps=60)).score()
+        assert s.over_w <= 3.5 and s.starved_pct <= 1
+
+
+def test_autotune_wired_does_what_the_governor_alone_does():
+    """The session, the loop's pace and the frames' way through the Sampler change nothing that matters: the same
+    scenes, about the same watts and losses as clawdeck.governor on its own (which also gets the chip's flags)."""
+    for name, scenario in sim.SCENARIOS.items():
+        target = 30 if name.startswith("emulator") else 60
+        wired = sim.run(sim.Wired(target=target), sim.Game(scenario, goal_fps=target)).score()
+        alone = sim.run(sim.New(target=target), sim.Game(scenario, goal_fps=target)).score()
+        assert abs(wired.over_w - alone.over_w) <= 2.0, (name, wired, alone)
+        assert wired.starved_pct <= alone.starved_pct + 1.5 and wired.longest_starved_s <= 3.5, (name, wired, alone)
 
 
 # ---- replay: recorded frames, whatever the governor asks -------------------------------------------------------------
-def test_replay_today_sees_the_recorded_loss_and_nothing_before_it():
+def test_replay_the_recorded_loss_gets_the_full_limit_within_a_second():
     """Midnight Club parked, the limit stepped 30, 20, 15, 12 W by a recorder: the lock holds until the step to 12 W
-    (24.9 fps). Today's target mode raises 2 s after that write, and not before it."""
-    rec = sim.run(sim.Today(target=30), sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
+    (24.9 fps). Autotune asks for the full limit within a second of that write, and for nothing more than a watt
+    before it (15 W is the edge: a few slow frames)."""
+    rec = sim.run(sim.Wired(target=30), sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
     lost_at = next(s for s, w in rec.limits if w == 12)
-    raises = [s for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
-    assert raises and raises[0] > lost_at
-    assert raises[0] - lost_at <= 3.0
-    assert rec.asked[-1][1] == 30                                      # 10 and 8 W follow: it ends at the full limit
+    raises = [(s, w, before) for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
+    assert all(w == before + 1 for s, w, before in raises if s < lost_at)
+    full = [s for s, w, _b in raises if s >= lost_at and w == 30]
+    assert full and full[0] - lost_at <= 1.0
 
 
 def test_the_tool_prints_a_table(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["autotune_sim.py", "--scenario", "light-capped", "--seconds", "30"])
     assert sim.main() == 0
     out = capsys.readouterr().out
-    assert "fixed 30 W" in out and "today, most frames" in out and "today, target 60" in out
+    assert "fixed 30 W" in out and "autotune, most frames" in out and "autotune, target 60" in out

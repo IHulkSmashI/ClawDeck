@@ -22,9 +22,9 @@ The score (Score). For every moment the simulator knows the frame rate the full 
 limit that gives it within TOLERANCE (the "need"). From that: watts spent over the need, the share of time the limit
 cost frames, the longest such stretch, and the changes a minute.
 
-Governors. Today is clawdeck.autotune.Autotune itself, stepped once a second as main.py does, with a simulated clock.
-Another governor is an object with period (s between looks), start(game, floor, ceiling) and tick(frames, draw_w);
-it calls game.set_limit(watts).
+Governors. Wired is clawdeck.autotune.Autotune itself, stepped at its own pace as main.py does, with a simulated
+clock. New is clawdeck.governor alone. Another governor is an object with period (s between looks), start(game, floor,
+ceiling), tick(frames, draw_w) and stop(); it calls game.set_limit(watts).
 
 Replay (--replay). A recording's frames go to the governor as they came, whatever it asks for (it is not obeyed:
 the limit is the recorded one). It shows when a governor notices a loss that really happened.
@@ -374,15 +374,15 @@ class _Running:
         return False
 
 
-class Today:
-    """Autotune as it is in py_modules/clawdeck/autotune.py: one step a second on one frame rate a second, the frames
-    of that second over their time (what its Sampler makes of a MangoHud or mangoapp log)."""
-    period = 1.0
+class Wired:
+    """Autotune as the plugin runs it (py_modules/clawdeck/autotune.py): its session, its loop's own pace, the frames
+    as its Sampler hands them over (here: every frame, as from mangoapp's log), on the simulation's clock."""
 
     def __init__(self, target: int | None = None, keep_pct: float | None = None, auto_fps: bool = True):
         self.target, self.keep_pct, self.auto_fps = target, keep_pct, auto_fps
+        self.name = f"autotune, target {target}" if target else "autotune, most frames"
+        self.period = governor.LOOK_S
         self._saved = None
-        self.name = f"today, target {target}" if target else "today, most frames"
 
     def start(self, game, floor: int, ceiling: int) -> None:
         self.game = game
@@ -402,6 +402,7 @@ class Today:
     def _sample(self) -> autotune.Sample:
         frames, watts = self._seen
         scene, work = self.game.place(self.game.t)
+        self.at.sampler.frames_ms = [f[1] for f in frames]
         ms = sum(f[1] for f in frames) / len(frames) if frames else None
         fps = 1000.0 / ms if ms else None
         return autotune.Sample(t=autotune.time.monotonic(), frametime_ms=ms, fps=fps, gpu_mhz=scene.mhz(self.game.limit),
@@ -411,6 +412,7 @@ class Today:
     def tick(self, frames: list, draw_w: float | None) -> None:
         self._seen = (frames, draw_w)
         self.at._step()
+        self.period = self.at.session.look_s
 
     def stop(self) -> None:
         if self._saved:
@@ -419,7 +421,8 @@ class Today:
 
 
 class New:
-    """clawdeck.governor: twice a second while it holds, ten times a second while it watches a write."""
+    """clawdeck.governor alone, with what the simulator knows of the chip's "limited by power" flags (Autotune doesn't
+    read those yet): twice a second while it holds, ten times a second while it watches a write."""
 
     def __init__(self, target: int | None = None, keep_pct: float = 5.0, auto_fps: bool = True, start_w: int | None = None):
         self.target, self.keep_pct, self.auto_fps, self.start_w = target, keep_pct, auto_fps, start_w
@@ -491,7 +494,7 @@ def main() -> int:
     a = ap.parse_args()
 
     if a.replay:
-        rec = run(Today(target=a.target or 30), Recording.load(a.replay))
+        rec = run(Wired(target=a.target or 30), Recording.load(a.replay))
         print(f"{a.replay}: {len(rec.frame_ms)} frames, {rec.length:.0f} s")
         print("recorded limit:", ", ".join(f"{s:.0f} s {w:g} W" for s, w in rec.limits))
         print("the governor asked:", ", ".join(f"{s:.0f} s {w:g} W" for s, w in rec.asked))
@@ -504,13 +507,9 @@ def main() -> int:
         target = a.target or (30 if name.startswith("emulator") else 60)
         govs = [Fixed(CEILING_W)]
         if a.mode in ("most", "both"):
-            govs.append(Today())
+            govs.append(Wired())
         if a.mode in ("target", "both"):
-            govs.append(Today(target=target))
-        if a.mode in ("most", "both"):
-            govs.append(New())
-        if a.mode in ("target", "both"):
-            govs.append(New(target=target))
+            govs.append(Wired(target=target))
         for g in govs:
             game = Game(SCENARIOS[name], seed=a.seed, goal_fps=getattr(g, "target", None))
             if a.trace and len(names) == 1 and g is govs[-1]:

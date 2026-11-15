@@ -1,59 +1,33 @@
-"""Autotune: for the running game, find the most frames the set TDP gives, share that power between CPU and GPU so
-the game gets the most out of it, then find the lowest TDP that still gives nearly as many frames (HARDWARE-FINDINGS
-§22). No target fps: with a frame limit (Steam's, or the game's) the most the TDP gives is the limit, so this holds
-it with the least power; without one it finds where more watts stop buying frames.
+"""Autotune: for the running game, the fewest watts that still give the frames it has to deliver.
 
-It counts rendered frames, never generated ones. With XeSS frame generation the game presents 2-4 frames for every
-one it renders, and MangoHud counts all of them. XeLL's xellSleep runs once per rendered frame; the xess-xmx-linux
-shim logs it ("xellSleep stats: 100 calls in W ms (P ms/frame)", IGDEXT_XELL_LOG=1, set by the launch wrapper while
-autotune is on), so 1000 / P is the rendered frame rate and MangoHud's rate divided by it is the frame-generation
-multiplier. A game without XeLL has no XeSS frame generation, and MangoHud's count is its rendered rate.
+With a target fps (Power -> Autotune target) that is your target; without one, nearly the most frames your limit gives
+(within KEEP_PCT or KEEP_FPS). The limit you picked (profile or slider) is the most it uses.
 
-Loop (1 Hz while a game runs; one asyncio task, no threads, nothing at all when no game runs). Decisions are taken
-on 10 s windows of rendered fps that restart after every change, one change per window:
-  1. measure: at the set TDP (the ceiling), the median of three windows is the most this TDP gives (`max_fps`);
-  2. balance: one lever at a time toward the side that holds the game back (GPU-bound: CPU ceiling -10 % to give the
-     GPU the shared budget, then GPU floor +100 MHz; CPU-bound: CPU boost on, CPU ceiling 100 %, drop a GPU floor).
-     A lever stays only if it raises fps by BALANCE_GAIN; otherwise it is undone and balancing ends;
-  3. lower: TDP down while the rendered fps stays within the margin of max_fps (KEEP % or KEEP_FPS, whichever is
-     more): -BIG_STEP_W while clearly above the line (in the upper half of the band) and the last step was flat, then -1 W. Plateau knee: a step that
-     cost <= FLAT_FPS_PER_W per watt is flat, so a miss just after it is taken as noise and lowering goes on; near the
-     line a 1 W step that costs > STEEP_FPS_PER_W per watt is past the knee, so it holds there. Otherwise the first
-     miss is measured again; a second miss goes back up to the last TDP that held. At a new TDP the balance is tried once more (the bottleneck can
-     move as watts drop); if a lever helps, lowering goes on from there;
-  4. hold: watch. Below the line for two windows -> +1 W. A sustained shift of SHIFT either way (a new area, changed
-     graphics settings), a change of the frame-generation multiplier, or RESCAN_S on the clock -> measure again.
-A window far from the game's usual fps (a loading screen, a menu, a pause) or with a load hitch in it is skipped, not
-decided on; three in a row are taken as real. Only a finished result (hold, settled) is saved for the game; a session
-cut short keeps the last good one. While a game runs the loop runs on the E-cores at nice 10 (quiet.py).
-Frames per watt (rendered fps / package power) is shown; it is not what is chased: it improves all the way down to
-the minimum TDP, which is why the rule is "within KEEP of the most", not "the best ratio".
+The deciding is in governor.py: one question asked all the time (would more watts give frames that are owed?), a step
+down that is watched on every frame and taken back at the first loss, the full limit at once when frames are lost. It
+has no clock and no I/O, so tools/autotune_sim.py and the tests run it on recorded and simulated games. This module is
+the rest: the frames (Sampler), the session of a game, the loop, the writes, and what the panel and the log show.
 
-Cost, per second while a game runs: the new lines of two small logs, /proc/stat, two GPU clock files and the RAPL
-energy counter. The log directory listing and PowerStation's GPU load are cached (LOG_RESCAN_S, BUSY_EVERY_S).
+Frames. Every frame of every game comes from mangoapp's log (below). It counts presented frames; with XeSS frame
+generation the game presents 2-4 frames for every one it renders. XeLL's xellSleep runs once per rendered frame; the
+xess-xmx-linux shim logs it ("xellSleep stats: 100 calls in W ms (P ms/frame)", IGDEXT_XELL_LOG=1, set by the launch
+wrapper while autotune is on), so 1000 / P is the rendered rate and the presented rate divided by it the multiplier
+the governor gets. Without XeLL, ClawDeck's own frame generation multiplier for the game.
 
-Target fps (optional, Power -> Autotune target): instead of "nearly the most frames", the fewest watts that hold the
-fps you picked, judged every second on rendered (base) frames. The rules are DeckyTDPTuner's governor (GPL-3,
-backend/internal/tdp/governor.go), proven on the Steam Deck, with Intel's PL1 in mind:
-  - a miss is the last G_WIN seconds AND the last second under G_MISS of the target: +G_RAISE W at once (+G_RAISE_BIG
-    far under), at most every G_RAISE_GAP s, then judged on fresh frames only;
-  - lower only after G_LOWER_AFTER s with no change and no miss (G_LOWER_FAST s while G_FAR above), at G_LOWER_OK of
-    the target or more, with GPU headroom: 1 W near the target, far above it half the way to where the watts would
-    just hold it (frames roughly follow watts; Handheld Companion's assumption), at most G_STEP_MAX W;
-  - it starts mid-range (Winhanced), or at the watts that held the same target in this game last time; raises are
-    proportional too (at least +2 W, +4 W far under, at most G_STEP_MAX);
-  - a miss within G_BLAME s of lowering makes the watts before it the floor (a calm scene can't talk it below what the
-    heavy ones need: the RE4 report, 2026-11-08); the floor comes down 1 W per G_FLOOR_DECAY s without a miss;
-  - at the full TDP and still under for AUTO_FPS_S: Auto FPS (Winhanced's idea) holds the closest fps it can reach
-    instead (95 % of what the full TDP gives), and goes back up toward your target when there is headroom again;
-    without Auto FPS it stays at the full TDP and says the target is out of reach.
-The PL1 time window stays short (LEARN_TAU_US) while it governs, so a lower limit takes effect within seconds. With
-frame generation the target counts rendered frames: XeLL's figure, or the presented rate divided by ClawDeck's frame
-generation multiplier for the game when XeLL isn't there.
+The loop looks twice a second, and ten times a second for the 1-2.5 s after a write of its own (governor.LOOK_S,
+WATCH_S); one asyncio task, nothing at all when no game runs. While a game runs it is on the E-cores at nice 10
+(quiet.py). Per look: the new lines of two small logs, /proc/stat, two GPU clock files and the RAPL energy counter;
+PowerStation's GPU load at most every BUSY_EVERY_S.
 
-Rules: a manual change (Advanced) pauses it for the session; picking a profile or
-moving the TDP slider starts it over from the new limit (main.py); everything applied is reverted on game exit, and
-main.py puts the user's limit back.
+What Autotune owns while it governs: PL1; PL2 at PL1 + 2 W, also when you set a PL2 by hand (that one belongs to your
+limit and comes back with it: with PL2 far over PL1 the chip runs over a lowered limit for seconds, and a step down
+would be judged on frames it didn't cost yet); the PL1 time window at 8 s from the game's start to its end. It does
+not touch the CPU and GPU levers: they stay as your pick set them.
+
+Rules: a game it has no history of starts mid-range, one it knows where it held last time under the same limit and
+target; a limit picked while the game runs goes on the chip as picked. A manual change (Advanced) pauses it for the
+session; xemu and a game without any frame rate get your limit and are left alone; everything is reverted on game
+exit, and main.py puts the user's limit back. The temperature guard's step is a cap it works under (thermal.py).
 """
 from __future__ import annotations
 
@@ -69,32 +43,18 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from . import hw, power, shadowblip, sysfs
+from . import governor, hw, power, shadowblip, sysfs
 
 log = logging.getLogger("clawdeck.autotune")
 
-CPU_MIN_PCT = 60        # autotune never trims the CPU below this: below it, frame pacing suffers in most games
-GPU_STEP_MHZ = 100
 LOG_RESCAN_S = 30       # look for a new MangoHud log file this often (a new file appears only when a game starts)
-BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (one D-Bus call per decision window)
-WINDOW_S = 10           # seconds of fps behind every decision
-MAX_WINDOWS = 3         # windows whose median is the most the set TDP gives
-KEEP_PCT = 5            # lowest TDP whose fps stays within this % of the most (user setting, 2-15)
-KEEP_FPS = 2.0          # ... or within this many fps, whichever is more: at 30-60 fps, giving up ~2 fps is fine when
-                        # it saves watts (maintainer, 2026-11-04: "lose 1-2 fps, save 5-10 W: save the watts")
-BIG_STEP_W = 3          # TDP step while clearly above the line and the last step was flat: 35 -> 20 W in few windows
-FLAT_FPS_PER_W = 0.2    # a step that cost at most this per watt is a plateau: a miss right after it is noise
-STEEP_FPS_PER_W = 1.0   # near the line, a 1 W step that costs more than this is past the knee: stop there
-BALANCE_GAIN = 0.02     # a CPU/GPU lever stays only if it adds this much fps
-SHIFT = 0.15            # a sustained change this large (two windows) means a new scene: measure again
-RESCAN_S = 1200         # and every this long anyway. Was 300 s: every 5 min it went back to the full TDP and down
-                        # again, ~2 min of changes in every 5 (the maintainer saw it as stutter, 2026-11-04)
-OFF_LO, OFF_HI = 0.35, 2.5  # a window this far from the game's usual fps is a loading screen, menu or pause: skipped
-DIP = 0.4               # ... and so is one with a second below this share of its average (a load hitch in the window)
-MAX_SKIPS = 3           # three such windows in a row are real (new settings, a much lighter or heavier game): used
+BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (one D-Bus call)
+KEEP_PCT = 5            # no target: the frames stay within this % of what your limit gives (user setting, 2-15)
+KEEP_FPS = governor.KEEP_FPS   # ... or within this many fps, whichever is more (maintainer, 2026-11-04: "lose 1-2 fps,
+                        # save 5-10 W: save the watts")
 XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer counts
-# A game without its own MangoHud log (no launch wrapper on its shortcut: a Flatpak emulator, a game started some other
-# way) still has Steam's overlay, mangoapp, which gamescope feeds every frame of the focused app. mangoapp writes one
+# Frames: every game has Steam's overlay, mangoapp, which gamescope feeds every frame of the focused app (also a game
+# without ClawDeck's launch wrapper on its shortcut: a Flatpak emulator, a game started some other way). mangoapp writes one
 # row per frame to ~/mangoapp_<date>_<time>.csv while logging is on, turned on and off through its control socket
 # (abstract unix socket "mangohud"); its frame times match the game's own MangoHud log within 0.12 fps (Claw 8 EX,
 # 2026-11-14). A log someone else keeps on is only read; one Autotune turned on, it turns off at the game's end.
@@ -110,24 +70,7 @@ SLOW = 1.10             # a frame this much longer than the pace is a slow one
 PACE_FRAMES = 60        # the pace: the median frame time of this many frames before
 CSV_FIELDS = ["time", "appid", "phase", "fps", "shown_fps", "source", "gpu_mhz", "gpu_max_mhz", "cpu_pct", "pkg_w", "tdp",
               "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps", "frames", "ft_median", "ft_p95", "slow_pct"]
-LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_S, so a window sees sustained power
-SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
-# target fps (DeckyTDPTuner's governor, see above)
-G_WIN = 3               # seconds of history a miss is judged on (theirs: 4 ticks of 0.5 s)
-G_MISS = 0.93           # under this share of the target is a miss
-G_RAISE, G_RAISE_BIG = 2, 4
-G_RAISE_GAP = 2         # s between raises: the last one has to kick in
-G_LOWER_AFTER = 12      # s with no change and no miss before lowering near the target
-G_LOWER_FAST = 5        # ... and while clearly above it (G_FAR): the PL1 window is 8 s, so a step shows within that
-G_FAR = 1.15            # this far above the target: proportional steps down, G_LOWER_FAST apart
-G_STEP_MAX = 6          # the most one step moves (up or down)
-G_LOWER_OK = 0.97       # ... and at least this share of the target (hysteresis: lower above, raise under 0.93)
-G_BLAME = 20            # s: a miss this soon after lowering blames the lowering (theirs 5 s; Intel's PL1 window here)
-G_FLOOR_DECAY = 300     # s without a miss: the learned floor comes down 1 W (theirs 120 s: one dip every 2 min
-                        # in a game that stays heavy; 5 min here)
-G_BUSY = 85             # GPU busy under this % is headroom (when PowerStation reports it)
-AUTO_FPS_S = 60         # s at the full TDP and still under: the target is out of reach
-AUTO_FPS_UP_S = 30      # s with headroom well above a lowered target: back up toward yours
+GOVERN_TAU_US = 8_000_000  # PL1 time window while Autotune governs: a step down has to bind within its watch
 MIN_TARGET = 20
 XELL_RE = re.compile(rb"xellSleep stats: 100 calls in (\d+) ms \(([\d.]+) ms/frame\)")
 
@@ -227,12 +170,12 @@ class Sampler:
 
     def frametime(self) -> tuple[float | None, float | None]:
         self.frames_ms = []
-        f = self._newest_log()
+        ft, fps = self._mangoapp_frametime()        # every frame of the focused app, for every game
+        if ft is not None:
+            return ft, fps
+        f = self._newest_log()                      # no mangoapp (or no row yet): the game's own log, a row a second
         if not f:
-            return self._mangoapp_frametime()
-        if self._mango_own:                        # the game's own log came after all: mangoapp's goes off
-            mangoapp_command("logging=0")
-            self._mango, self._mango_own = None, False
+            return None, None
         try:
             with open(f, "rb") as fh:
                 start = self._log_pos.get(f, 0)
@@ -452,8 +395,9 @@ def summary(s: Session) -> str:
     if not s.settled or not l.max_fps:
         return "Autotune was still learning; nothing new saved. It goes on next time."
     fps = l.fps or l.max_fps
-    saved = (l.ceiling or s.ceiling_tdp) - l.tdp
-    return (f"Autotune saved {l.tdp} W of your {l.ceiling or s.ceiling_tdp} W: {fps:.0f} of {l.max_fps:.0f} fps"
+    use = l.start if l.start is not None else l.tdp
+    saved = (l.ceiling or s.ceiling_tdp) - use
+    return (f"Autotune held {fps:.0f} fps with {use} W of your {l.ceiling or s.ceiling_tdp} W"
             + (f", saves {saved} W" if saved > 0 else ""))
 
 
@@ -474,19 +418,21 @@ def classify(s: Sample) -> str:
 
 @dataclass
 class Learned:
-    """What a game ended up with, saved per game and power source: the levers together, and the reference fps."""
-    tdp: int
+    """What a game ended up with, saved per game and power source."""
+    tdp: int                        # the limit in use now
     cpu_max_pct: int = 100
     gpu_min_mhz: int | None = None
     boost: bool = True              # CPU boost (intel_pstate no_turbo = 0)
-    gpu_profile: str | None = None  # xe power_profile autotune chose (base / power_saving); None = left as it was
+    gpu_profile: str | None = None  # xe power_profile; None = left as it was
     bound: str = "balanced"
-    max_fps: float | None = None    # the most the ceiling gave, rendered fps
-    fps: float | None = None        # what the chosen TDP gives
-    ceiling: int | None = None      # the ceiling max_fps was measured at (a different ceiling: measure again)
+    max_fps: float | None = None    # what your full limit gives (the governor's reference), rendered fps
+    fps: float | None = None        # what the limit in use gives
+    ceiling: int | None = None      # your limit this was found under (another limit: start over)
     samples: int = 0
     target: int | None = None       # target fps mode: your target this was found for
-    target_eff: float | None = None # ... the fps Auto FPS held when yours was out of reach
+    target_eff: float | None = None # ... the fps held when yours was out of reach (Auto FPS)
+    start: int | None = None        # where to start next time: the level under which 80 % of the holding time lay
+    held: dict | None = None        # watts -> seconds held there, this session
 
 
 NO_FPS_S = 30          # seconds without any frame rate before autotune gives up on a game
@@ -525,18 +471,16 @@ class Session:
     ceiling_tdp: int
     learned: Learned
     keep_pct: float = KEEP_PCT
-    settle: int = WINDOW_S
-    phase: str = "measure"          # measure | balance | lower | hold
+    phase: str = "hold"             # "target" with a target fps, else "hold" (what the panel words hang on)
     paused: bool = False
-    window: list[float] = field(default_factory=list)   # rendered fps, per second, since the last change
-    watts: list[float] = field(default_factory=list)    # package power over the same seconds
-    shown: list[float] = field(default_factory=list)    # presented fps over the same seconds
-    max_runs: list[float] = field(default_factory=list) # window averages while measuring
-    misses: int = 0
-    balance_undo: tuple | None = None   # (lever, previous value, fps before) of the lever on trial
-    balance_tried: set = field(default_factory=set)
+    gov: governor.State | None = None   # the governor's memory (governor.py)
+    cfg: governor.Cfg | None = None
+    look_s: float = governor.LOOK_S     # when the loop looks again
+    started_at: float = 0.0
+    stepped_at: float | None = None
+    logged_at: float = -1e9
+    own_checks: int = 0             # OWN_PACE_CHECK_S entries done
     multiplier: float | None = None     # presented / rendered when frame generation is on
-    measured_at: float | None = None
     last_change_at: float | None = None
     last_action: str | None = None
     last_delta: str | None = None
@@ -545,38 +489,30 @@ class Session:
     fps_per_w: float | None = None
     source: str = "presented"
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
-    no_fps_s: int = 0                   # seconds in a row without a frame rate before the first one
+    clock_pct: int | None = None        # ... or capped the CPU's top clock at this
+    no_fps_s: float = 0.0               # seconds in a row without a frame rate before the first one
     no_frames: bool = False             # gave up: this game's frame rate can't be read
     own_pace: str | None = None         # an emulator whose frame rate isn't the game's (OWN_PACE): autotune stays out
     pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
-    quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
-    skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
-    settled: bool = False               # reached hold and stayed there SETTLED_WINDOWS: what it found is worth saving
-    short_tau: bool = False             # the PL1 time window is LEARN_TAU_US right now (findings §22.2)
-    tau_refused: bool = False           # the firmware refused it once: don't retry every window
-    eff_trial: bool = False             # GPU efficiency mode on trial at the TDP floor (judged on the next window)
-    eff_tried: bool = False             # tried once this measurement
-    last_good: tuple | None = None      # (tdp, fps) of the last TDP that held the line: where a miss goes back to
-    fine: bool = False                  # a big step overshot once: 1 W steps from here
+    settled: bool = False               # it held a limit for a minute: what it found is worth saving
+    short_tau: bool = False             # the PL1 time window is GOVERN_TAU_US right now
+    tau_refused: bool = False           # the firmware refused it once: don't retry every step
     history: list[Sample] = field(default_factory=list)
     fg: int = 0                         # ClawDeck's frame generation multiplier for the game (0: none)
-    # target fps mode
-    target: float | None = None         # the fps held now (yours, or what Auto FPS settled on)
     user_target: int | None = None
     auto_fps: bool = True
-    g_hist: list[float] = field(default_factory=list)
-    g_last_change: float = 0.0
-    g_last_miss: float = 0.0
-    g_last_drop: float | None = None
-    g_drop_from: int = 0
-    g_floor: int = 0
-    g_floor_at: float = 0.0
-    g_maxed: list[float] = field(default_factory=list)
-    g_maxed_since: float | None = None
-    g_up_since: float | None = None
-    g_under_since: float | None = None  # just under the target band (0.93-0.95) since
-    best_fps: float | None = None       # what the full TDP gave when the target was out of reach
-    unreachable: bool = False
+
+    @property
+    def target(self) -> float | None:
+        """The fps held now: yours, or what the full limit gives when yours is out of reach (Auto FPS)."""
+        if not self.user_target or self.gov is None or self.cfg is None:
+            return float(self.user_target) if self.user_target else None
+        return self.gov.ref if governor.out_of_reach(self.gov, self.cfg) else float(self.user_target)
+
+    @property
+    def unreachable(self) -> bool:
+        return bool(self.user_target and self.gov is not None and self.gov.ref is not None
+                    and self.gov.ref < self.user_target * governor.REACHED)
 
 
 class Autotune:
@@ -595,85 +531,71 @@ class Autotune:
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
     def start(self, appid: str, learned: dict | None, floor_tdp: int, ceiling_tdp: int, plugged: bool | None = None,
               keep_pct: float | None = None, xell_log: str | None = None, target: int | None = None,
-              auto_fps: bool = True, fg: int = 0) -> None:
-        """Start for a game. A saved result measured at the same ceiling starts in hold (checked within RESCAN_S);
-        anything else starts by measuring the most the ceiling gives."""
+              auto_fps: bool = True, fg: int = 0, at_limit: bool = False) -> None:
+        """Start for a game: where it held last time under the same limit and for the same target, else mid-range.
+        at_limit: the limit was picked just now, in the game: it goes on the chip as picked, and Autotune works down
+        from there."""
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
-        reuse = known.get("ceiling") == ceiling_tdp and known.get("max_fps") and known.get("tdp") is not None
-        l = Learned(**known) if reuse else Learned(tdp=ceiling_tdp, cpu_max_pct=known.get("cpu_max_pct", 100),
-                                                   gpu_min_mhz=known.get("gpu_min_mhz"), boost=known.get("boost", True))
-        l.tdp = max(floor_tdp, min(int(l.tdp), ceiling_tdp))
-        l.ceiling = ceiling_tdp
+        same = known.get("ceiling") == ceiling_tdp and (known.get("target") or None) == (int(target) if target else None)
+        l = Learned(tdp=ceiling_tdp, cpu_max_pct=known.get("cpu_max_pct", 100), gpu_min_mhz=known.get("gpu_min_mhz"),
+                    boost=known.get("boost", True), ceiling=ceiling_tdp, target=int(target) if target else None)
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
-                    keep_pct=float(keep_pct or KEEP_PCT), phase="hold" if reuse else "measure")
-        s.measured_at = time.monotonic() if reuse else None
-        s.quiet = SETTLED_WINDOWS if reuse else 0           # a saved result is already learned: keep the boost window
-        s.settled = bool(reuse)
-        s.fg = int(fg or 0)
+                    keep_pct=float(keep_pct or KEEP_PCT), phase="target" if target else "hold",
+                    user_target=int(target) if target else None, auto_fps=bool(auto_fps), fg=int(fg or 0))
+        s.started_at = time.monotonic()
         self.session = s
         self.sampler.set_prefix(xell_log)
-        if target:
-            self._start_target(s, known, int(target), auto_fps)
+        self.power.governed = True
         s.pick = self._on_chip(l, ceiling_tdp)
+        # a result saved by an earlier build has no start level: the limit it ended with is the next best thing
+        before = (known.get("start") or known.get("tdp")) if same else None
+        self._govern_from(s, ceiling_tdp if at_limit else before)
+        l.start = None if at_limit else before
         self._apply(l)
-        self._tau(s, bool(target) or not reuse)
+        self._tau(s, True)
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
 
-    def _start_target(self, s: Session, known: dict, target: int, auto_fps: bool) -> None:
-        """Target fps mode: from the TDP this game held the same target with last time, else from the full TDP."""
-        l = s.learned
-        s.phase, s.user_target, s.auto_fps = "target", target, bool(auto_fps)
-        s.target = float(target)
-        same = known.get("target") == target and known.get("tdp") is not None
-        if same:
-            l.tdp = max(s.floor_tdp, min(int(known["tdp"]), s.ceiling_tdp))
-            if auto_fps and known.get("target_eff"):
-                s.target = float(min(target, known["target_eff"]))
-        else:                                             # mid-range (Winhanced): misses climb back in seconds
-            l.tdp = max(s.floor_tdp, min(s.ceiling_tdp, -(-(s.floor_tdp + s.ceiling_tdp) // 2)))
-        l.target, l.target_eff = target, s.target
-        now = time.monotonic()
-        s.g_hist, s.g_last_change, s.g_last_miss, s.g_last_drop = [], now, now, None
-        s.g_floor, s.g_floor_at = s.floor_tdp, now
-        s.g_maxed, s.g_maxed_since, s.g_up_since, s.unreachable, s.best_fps = [], None, None, False, None
-        s.settled = same
-        s.last_action = f"holding {s.target:.0f} fps from {l.tdp} W"
+    def _govern_from(self, s: Session, start_w: int | None) -> None:
+        """A fresh governor for this session, from `start_w` (None: mid-range). The limit it starts at is in learned.tdp;
+        the caller writes it."""
+        s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target) if s.user_target else None,
+                             keep_pct=s.keep_pct, auto_fps=s.auto_fps, start_w=start_w)
+        s.gov, act = governor.start(s.cfg, time.monotonic())
+        s.learned.tdp = min(act.limit_w, self._top(s))
+        s.gov.limit = s.learned.tdp
+        s.look_s, s.stepped_at = governor.LOOK_S, None
+        s.last_action = act.note
 
     def set_target(self, target: int | None, auto_fps: bool = True) -> None:
-        """The target was changed while a game runs: a new target starts over from the full TDP; none goes back to the
-        most-frames mode (measure again)."""
+        """The target was changed while a game runs: the governor starts over from the limit in use, for the new goal."""
         s = self.session
         if not s:
             return
-        if target:
-            self._start_target(s, {}, int(target), auto_fps)
-            self._tdp(s.learned, min(s.learned.tdp, self._top(s)))
-            self._tau(s, True)
-            s.paused = False
-        elif s.phase == "target":
-            s.target = s.user_target = None
-            s.learned.target = s.learned.target_eff = None
-            self._remeasure(s, "target switched off")
-            s.paused = False
+        s.user_target, s.auto_fps = (int(target) if target else None), bool(auto_fps)
+        s.phase = "target" if target else "hold"
+        s.learned.target, s.learned.target_eff, s.learned.start, s.learned.held = s.user_target, None, None, None
+        s.settled = False
+        self._govern_from(s, s.learned.tdp)
+        s.paused = False
+        self.power.governed = True
+        self._tau(s, True)
 
     def set_ceiling(self, watts: int) -> int | None:
-        """The user picked a profile or moved the TDP slider: the new set TDP. The most it gives has to be measured
-        again, so autotune goes back to it at once and starts over (and hands control back after a manual change).
-        Returns the watts applied."""
+        """The user picked a profile or moved the TDP slider: the new limit. Autotune goes to it at once and works down
+        from there again (and takes control back after a manual change). Returns the watts applied."""
         s = self.session
         if not s:
             return None
         s.ceiling_tdp = max(s.floor_tdp, int(watts))
         s.thermal_cap = None                              # the user's new choice replaces the guard's step
-        if s.phase == "target":                           # the most it may use: from there down again
-            self._tdp(s.learned, s.ceiling_tdp)
-            s.g_hist, s.g_last_change, s.g_maxed_since, s.unreachable = [], time.monotonic(), None, False
-            s.g_floor = min(s.g_floor, s.ceiling_tdp)
-        else:
-            self._remeasure(s, "TDP set to %d W" % s.ceiling_tdp)
+        s.learned.ceiling, s.learned.start, s.learned.held, s.settled = s.ceiling_tdp, None, None, False
         s.paused = False
+        self.power.governed = True
+        self._govern_from(s, s.ceiling_tdp)
+        self._tdp(s.learned, s.learned.tdp, force=True)
+        self._did(s, f"your limit is {s.ceiling_tdp} W: from there down", f"{s.ceiling_tdp} W")
         return s.learned.tdp
 
     def set_floor(self, watts: int) -> None:
@@ -683,59 +605,52 @@ class Autotune:
             return
         lo = self.hw.model["tdp"]["min"]
         s.floor_tdp = max(lo, min(int(watts), s.ceiling_tdp))
-        if s.learned.tdp < s.floor_tdp:
-            self._tdp(s.learned, s.floor_tdp)
+        if s.cfg:
+            s.cfg.floor = s.floor_tdp
+        if s.learned.tdp < s.floor_tdp and self._tdp(s.learned, s.floor_tdp) and s.gov:
+            s.gov.limit = s.learned.tdp
 
     def set_keep(self, pct: float) -> None:
         if self.session:
             self.session.keep_pct = max(1.0, min(float(pct), 25.0))
+            if self.session.cfg:
+                self.session.cfg.keep_pct = self.session.keep_pct
 
     def thermal_step(self, watts: int) -> bool:
-        """The temperature guard (thermal.py) brings the TDP down: from now on autotune works under `watts`. What was
-        being measured or tried at the old TDP no longer counts, so that starts over at the new one."""
+        """The temperature guard (thermal.py) brings the TDP down: from now on autotune works under `watts`."""
         s = self.session
         if not s:
             return False
         s.thermal_cap = int(watts)
         l = s.learned
-        if s.balance_undo:                                # a lever on trial can't be judged across a TDP change
-            s.balance_undo[1]()
-            s.balance_undo = None
-        if not self._tdp(l, s.thermal_cap):
+        if not self._tdp(l, min(l.tdp, s.thermal_cap), force=True):
             return False
-        s.window, s.watts, s.shown, s.misses = [], [], [], 0
-        if s.phase == "measure":
-            s.max_runs = []
+        if s.gov:
+            s.gov.limit, s.gov.mode = l.tdp, "hold"
         self._did(s, f"thermal: stepped to {l.tdp} W", "thermal")
         return True
 
     def thermal_clock(self, pct: int | None) -> None:
-        """The temperature guard capped the CPU's top clock (a hot spot) or took the cap off: what was being measured
-        or tried under the old clock no longer counts."""
+        """The temperature guard capped the CPU's top clock (a hot spot) or took the cap off: the same watts give other
+        frames now, so what failed or held before says nothing, and what the full limit gives is looked at again."""
         s = self.session
         if not s:
             return
-        if s.balance_undo:
-            s.balance_undo[1]()
-            s.balance_undo = None
-        s.window, s.watts, s.shown, s.misses = [], [], [], 0
-        if s.phase == "measure":
-            s.max_runs = []
+        s.clock_pct = pct
+        if s.gov:
+            s.gov.fail.clear()
+            s.gov.misses, s.gov.ref_at, s.gov.good, s.gov.home = 0, -1e9, None, None
         self._did(s, "thermal: CPU clock " + ("uncapped" if pct is None else f"capped at {pct} %"), "thermal")
 
     def thermal_release(self, watts: int) -> bool:
-        """The package cooled down: the guard lets autotune use up to `watts` again (the set TDP: the step is gone and
-        autotune measures again what the full TDP gives). Autotune's own TDP isn't raised here; it climbs if the game
-        needs it (hold: +1 W below the line), or starts over at the full TDP."""
+        """The package cooled down: the guard lets autotune use up to `watts` again. Nothing is raised here; the
+        governor looks at what the watts it got back give, and climbs if the game needs them."""
         s = self.session
         if not s or s.thermal_cap is None:
             return False
         if watts >= s.ceiling_tdp:
             s.thermal_cap = None
-            if s.phase == "target":                       # it climbs again by itself if the target needs it
-                self._did(s, "thermal: cooled, the full TDP allowed again", "thermal")
-            else:
-                self._remeasure(s, "cooled down")
+            self._did(s, "thermal: cooled, the full TDP allowed again", "thermal")
         else:
             s.thermal_cap = int(watts)
             self._did(s, f"thermal: cooled, up to {s.thermal_cap} W allowed", "thermal")
@@ -753,6 +668,7 @@ class Autotune:
             if not s.paused:
                 log.info("autotune paused: %s", reason)
             s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
+            self.power.governed = False
 
     def running(self) -> bool:
         return self.session is not None
@@ -768,12 +684,23 @@ class Autotune:
         s = self.session
         self.session = None
         self.sampler.set_prefix(None)
+        self.power.governed = False
         if s:
+            self._remember(s)
             if revert:
                 self.power.revert_all()
             return {"learned": s.learned.__dict__, "samples": len(s.history), "settled": s.settled,
                     "summary": summary(s)}
         return None
+
+    def _remember(self, s: Session) -> None:
+        """What the next start of this game needs: where it held (governor.start_level)."""
+        if s.gov is None:
+            return
+        level = governor.start_level(s.gov.held_s, s.floor_tdp, s.ceiling_tdp)
+        if level is not None:
+            s.learned.start, s.settled = level, True
+            s.learned.held = {str(w): round(sec) for w, sec in sorted(s.gov.held_s.items()) if sec >= 1}
 
     def _on_chip(self, l: Learned, tdp: int) -> Learned:
         """The levers as the chip has them now: the user's pick, before autotune changes anything. A lever that can't
@@ -786,31 +713,13 @@ class Autotune:
                        boost=l.boost if turbo is None else turbo, gpu_profile=self._gpu_active())
 
     def _give_back(self, s: Session) -> None:
-        """Autotune gives up on this game: the chip goes back to how the user's pick left it. What start() applied
-        stayed for the rest of the game otherwise: a target's mid-range start is 22 W of a 35 W pick (Enshrouded,
-        2026-11-12: 30-40 fps until autotune was switched off, then 60)."""
-        l, pick = s.learned, s.pick
-        if l.tdp != s.ceiling_tdp:                        # your pick (under the temperature guard's step, if any)
-            self._tdp(l, s.ceiling_tdp)
-        if pick is None:
-            return
-        if pick.cpu_max_pct != l.cpu_max_pct and self.power.set_cpu_max_pct(pick.cpu_max_pct):
-            l.cpu_max_pct = pick.cpu_max_pct
-        self._boost(l, pick.boost)
-        if l.gpu_min_mhz is not None and pick.gpu_min_mhz is not None and self.power.set_gpu_window(pick.gpu_min_mhz, None):
-            l.gpu_min_mhz = None
-        if pick.gpu_profile:
-            self._gpu_profile(l, pick.gpu_profile)
+        """Autotune stays out of this game: your limit goes back on the chip (under the temperature guard's step, if
+        any), with the PL2 you set by hand, if you did."""
+        self.power.governed = False
+        self._tdp(s.learned, s.ceiling_tdp, force=True)
 
     def _apply(self, l: Learned) -> None:
         self.power.set_tdp(l.tdp, self.plugged)
-        self.power.set_cpu_max_pct(l.cpu_max_pct)
-        if self.hw.paths.cpu_no_turbo and self.power.turbo() != l.boost:
-            self.power.set_cpu_turbo(l.boost)
-        if l.gpu_min_mhz:
-            self.power.set_gpu_window(l.gpu_min_mhz, None)
-        if l.gpu_profile:
-            self._gpu_profile(l, l.gpu_profile, force=True)
 
     # ---- the loop ----------------------------------------------------------------------------------------------------
     async def _loop(self) -> None:
@@ -819,19 +728,36 @@ class Autotune:
                 self._step()
             except Exception as e:   # never let a sampling error kill the loop
                 log.exception("autotune step failed: %s", e)
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(self.session.look_s if self.session is not None else 1.0)
+
+    def _frames(self, smp: Sample, dt: float) -> list[tuple[float, float]]:
+        """The frames since the last step as (end time, frame time ms): mangoapp's, one row per frame; from a log with
+        one row a second, that second's frames at its average."""
+        ms = list(self.sampler.frames_ms)
+        if not ms and smp.shown_fps and dt > 0:
+            ms = [1000.0 / smp.shown_fps] * max(1, round(smp.shown_fps * dt))
+        out, end = [], smp.t
+        for x in reversed(ms):
+            out.append((end, x))
+            end -= x / 1000.0
+        out.reverse()
+        return out
 
     def _step(self) -> None:
         s = self.session
         if s is None:
             return
         smp = self.sampler.sample()
+        dt = smp.t - s.stepped_at if s.stepped_at is not None else 0.0
+        s.stepped_at = smp.t
         s.history.append(smp)
         if len(s.history) > 600:
             del s.history[:-600]
-        if self.csv_log:
+        if self.csv_log and smp.t - s.logged_at >= 0.95:  # a row a second, also while it looks ten times a second
+            s.logged_at = smp.t
             self._log(s, smp)
-        if s.own_pace is None and len(s.history) in OWN_PACE_CHECK_S:
+        if s.own_pace is None and s.own_checks < len(OWN_PACE_CHECK_S) and smp.t - s.started_at >= OWN_PACE_CHECK_S[s.own_checks]:
+            s.own_checks += 1
             emu = own_pace_emulator()
             if emu:
                 # your limit back on the chip and nothing more changed, whatever frames come later
@@ -843,496 +769,103 @@ class Autotune:
         if smp.fps and s.no_frames:
             # frames after all: a game slower than NO_FPS_S to its first frame (Order of the Sinking Star takes 54 s).
             # Giving up put your pick back; autotune takes over from there
-            s.no_frames, s.paused, s.no_fps_s = False, False, 0
+            s.no_frames, s.paused, s.no_fps_s = False, False, 0.0
+            self.power.governed = True
+            self._govern_from(s, s.learned.tdp)
             log.info("autotune: frame rate from %s after all: it takes over from %d W", s.appid, s.learned.tdp)
-            if s.phase != "target":
-                self._remeasure(s, "frames after all")
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
         if not smp.fps and not s.paused and s.learned.samples == 0:
-            # no frame rate at all: a game without XeSS / XeLL (the shim's log) whose MangoHud log isn't written
-            # (Onimusha without OptiScaler sat in "measure" for minutes, 2026-11-05). Give up: the limit you picked
-            # goes back on the chip, nothing more is changed until frames come, and the panel says why
-            s.no_fps_s += 1
+            # no frame rate at all (a game whose frames neither mangoapp nor a MangoHud log shows). Give up: the limit
+            # you picked goes back on the chip, nothing more is changed until frames come, and the panel says why
+            s.no_fps_s += dt
             if s.no_fps_s >= NO_FPS_S:
                 s.paused, s.no_frames = True, True
                 self._give_back(s)
                 self._tau(s, False)
                 log.info("autotune: no frame rate from %s after %d s: it stays out of this game (%d W, your limit)",
                          s.appid, NO_FPS_S, s.learned.tdp)
-        if not smp.fps or s.paused:
+        if s.paused or s.gov is None:
+            s.look_s = 1.0
             return
-        base = smp.fps
-        if smp.source == "presented" and s.fg >= 2:      # frame generation without XeLL's figure: rendered frames
-            base = smp.fps / s.fg
-            s.multiplier = float(s.fg)
-        s.learned.samples += 1
-        s.source = smp.source if smp.source == "rendered" or s.fg < 2 else "frame-gen pick"
-        if s.phase == "target":
-            self._govern(s, base, smp)
-            self._tau(s, True)
-            return
-        if s.phase in ("lower", "hold") and self._fast_miss(s, base):
-            return
-        s.window.append(base)
-        if smp.pkg_w:
-            s.watts.append(smp.pkg_w)
-        if smp.shown_fps:
-            s.shown.append(smp.shown_fps)
-        if len(s.window) < s.settle:
-            return                                       # judge a setting on a full window of its own numbers
-        fps = sum(s.window) / len(s.window)
-        if self._not_gameplay(s, fps, min(s.window)):
-            s.window, s.watts, s.shown = [], [], []
-            return
-        s.avg_fps, s.low_fps = fps, min(s.window)
-        s.fps_per_w = fps / (sum(s.watts) / len(s.watts)) if s.watts else None
-        self._multiplier(s)
-        s.window, s.watts, s.shown = [], [], []
         l = s.learned
-        l.bound = classify(smp)
-        changed_at = s.last_change_at
-        if s.phase == "measure":
-            self._measure(s, fps)
-        elif s.phase == "balance":
-            self._balance(s, fps)
-        elif s.phase == "lower":
-            self._lower(s, fps)
-        else:
-            self._hold(s, fps)
-        s.quiet = 0 if s.last_change_at != changed_at else s.quiet + 1
-        if s.phase == "hold" and s.quiet >= SETTLED_WINDOWS:
-            s.settled = True
-        self._tau(s, s.phase != "hold" or s.quiet < SETTLED_WINDOWS)
-
-    def _fast_miss(self, s: Session, fps: float) -> bool:
-        """Most-frames mode, lowering or holding: a heavy scene (last G_WIN s and the last second clearly under the
-        line) gets watts back at once instead of after two 10 s windows and 1 W at a time (the RE4 report:
-        performance dropped for minutes after autotune had lowered the TDP in a calm scene). The TDP that held before
-        the last step down is the floor from then on: lowering stops."""
-        l, now = s.learned, time.monotonic()
-        ref = l.fps or l.max_fps
-        if not ref or fps < ref * OFF_LO:                 # loading, menu, pause: not judged here
-            return False
-        s.g_hist.append(fps)
-        del s.g_hist[:-G_WIN]
-        lim = self._line(s) - self._margin(s)            # clearly under: one more margin below the line
-        win = sum(s.g_hist) / len(s.g_hist)
-        if not (len(s.g_hist) >= G_WIN and win < lim and fps < lim) or l.tdp >= self._top(s):
-            return False
-        if now - s.g_last_change < G_RAISE_GAP:
-            return True
-        back = s.last_good[0] if s.last_good and s.last_good[0] > l.tdp else 0
-        w, was = min(self._top(s), max(back, l.tdp + (G_RAISE_BIG if win < ref * 0.75 else G_RAISE))), l.tdp
-        if self._tdp(l, w):
-            s.g_last_change, s.g_hist = now, []
-            s.window, s.watts, s.shown, s.misses = [], [], [], 0
-            s.floor_tdp = max(s.floor_tdp, min(w, self._top(s)))   # no lowering under this for the session
-            s.phase = "hold"
-            self._did(s, f"{win:.0f} fps, well under {self._line(s):.0f}: back up to {w} W at once", f"+{w - was} W")
-        return True
-
-    def _govern(self, s: Session, fps: float, smp: Sample) -> None:
-        """Target fps mode, every second (see the module docstring)."""
-        l, now, T = s.learned, time.monotonic(), s.target or 0
-        if not T or fps < T * OFF_LO:                    # a loading screen, menu or pause: not judged
-            return
-        s.g_hist.append(fps)
-        del s.g_hist[:-G_WIN]
-        win = sum(s.g_hist) / len(s.g_hist)
-        s.avg_fps, s.low_fps = win, min(s.g_hist)
-        if smp.pkg_w:
-            s.fps_per_w = fps / smp.pkg_w
-        top = self._top(s)
-        lim = T * G_MISS
-        if len(s.g_hist) >= 2 and win < lim and fps < lim:
-            s.g_last_miss = now
-            s.g_up_since = None
-            blamed = s.g_last_drop is not None and now - s.g_last_drop < G_BLAME and s.g_drop_from > l.tdp
-            if blamed and s.g_drop_from > s.g_floor:
-                s.g_floor, s.g_floor_at = s.g_drop_from, now
-            if l.tdp >= top:
-                self._out_of_reach(s, win, now)
-                return
-            if now - s.g_last_change < G_RAISE_GAP:
-                return
-            # watts roughly follow frames: the share missing, at least +2 W (+4 W far under), at most G_STEP_MAX
-            need = -(-int(l.tdp * (T / max(win, 1.0) - 1) * 10) // 10)
-            step = max(G_RAISE_BIG if win < T * 0.75 else G_RAISE, min(G_STEP_MAX, need))
-            w, was = min(top, l.tdp + step), l.tdp
-            if blamed:
-                w, s.g_last_drop = min(top, max(s.g_drop_from, l.tdp + 1)), None   # exactly back to what held
-            if self._tdp(l, w):
-                s.g_last_change, s.g_hist = now, []
-                self._did(s, f"{win:.0f} fps, under the {T:.0f} target: raised TDP to {w} W", f"+{w - was} W")
-            return
-        s.g_maxed_since = None
-        # the last step down lost the target band without being a miss (56 fps for 60): undone, and that's the floor
-        if (s.g_last_drop is not None and now - s.g_last_drop < G_BLAME and len(s.g_hist) >= G_WIN
-                and win < T * (G_MISS + G_LOWER_OK) / 2 and s.g_drop_from > l.tdp):
+        # frame generation: the governor judges rendered frames. XeLL's figure when the game has it, else ClawDeck's
+        # multiplier for the game; a change of it is another game as far as the frames go
+        mult = 1.0
+        if smp.source == "rendered" and smp.fps and smp.shown_fps:
+            mult = max(1.0, round(smp.shown_fps / smp.fps, 1))
+        elif s.fg >= 2:
+            mult = float(s.fg)
+        if s.multiplier is not None and abs(mult - s.multiplier) >= 0.5:
+            s.gov.fail.clear()
+            s.gov.ref, s.gov.ref_at, s.gov.misses = None, -1e9, 0
+            s.gov.last.clear()
+            s.gov.pace.clear()
+        s.multiplier = mult
+        s.source = smp.source if smp.source == "rendered" or s.fg < 2 else "frame-gen pick"
+        if smp.fps:
+            l.samples += 1
+        self._tau(s, True)
+        obs = governor.Obs(t=smp.t, frames=self._frames(smp, dt), draw_w=smp.pkg_w, cap_w=s.thermal_cap,
+                           thermal=s.clock_pct is not None, multiplier=mult)
+        act = governor.step(s.gov, obs, s.cfg)
+        s.look_s = act.look_s
+        if act.limit_w is not None:
             was = l.tdp
-            if self._tdp(l, min(top, s.g_drop_from)):
-                s.g_floor, s.g_floor_at = max(s.g_floor, l.tdp), now
-                s.g_last_drop, s.g_last_change, s.g_hist = None, now, []
-                self._did(s, f"{win:.0f} fps at {was} W is just under the {T:.0f} target: back to {l.tdp} W", f"+{l.tdp - was} W")
-            return
-        # just under the band (57 fps for 60) for G_LOWER_AFTER s: +1 W (a miss under 0.93 gets +2 W at once)
-        if win < T * (G_MISS + G_LOWER_OK) / 2 and l.tdp < top:
-            s.g_under_since = s.g_under_since or now
-            if now - s.g_under_since >= G_LOWER_AFTER and now - s.g_last_change >= G_LOWER_AFTER:
-                was = l.tdp
-                if self._tdp(l, l.tdp + 1):
-                    s.g_under_since, s.g_last_change, s.g_hist = None, now, []
-                    self._did(s, f"{win:.0f} fps, just under the {T:.0f} target: TDP {l.tdp} W", "+1 W")
-                return
-        else:
-            s.g_under_since = None
-        # Auto FPS lowered the target earlier and there is room now (a lighter part of the game): toward yours again
-        if s.auto_fps and s.user_target and T < s.user_target and l.tdp < top and win >= T * 1.08:
-            s.g_up_since = s.g_up_since or now
-            if now - s.g_up_since >= AUTO_FPS_UP_S:
-                s.target = float(min(s.user_target, int(win * 0.95)))
-                l.target_eff, s.g_up_since, s.unreachable = s.target, None, s.target < s.user_target
-                self._did(s, f"Auto FPS: room again, holding {s.target:.0f} fps (yours {s.user_target})", "target up")
-                return
-        else:
-            s.g_up_since = None
-        # the floor comes down only when the game got lighter (well above the target, or the GPU clearly idle under a
-        # frame limit): a game that stays as heavy keeps its watts locked instead of a probe dip every few minutes
-        lighter = win >= T * G_FAR or (smp.gpu_busy is not None and smp.gpu_busy < 60)
-        if (lighter and s.g_floor > s.floor_tdp and now - s.g_last_miss > G_FLOOR_DECAY
-                and now - s.g_floor_at > G_FLOOR_DECAY):
-            s.g_floor, s.g_floor_at = s.g_floor - 1, now
-        if now - s.g_last_change >= 60 and now - s.g_last_miss >= 60:
-            s.settled = True                              # a minute steady: worth saving for the game
-        headroom = smp.gpu_busy is None or smp.gpu_busy < G_BUSY
-        low = max(s.floor_tdp, s.g_floor)
-        far = win >= T * G_FAR
-        wait = G_LOWER_FAST if far else G_LOWER_AFTER
-        if (headroom and l.tdp > low and len(s.g_hist) >= G_WIN and win >= T * G_LOWER_OK
-                and now - s.g_last_change >= wait and now - s.g_last_miss >= wait):
-            # far above: half the way to where the watts would just hold the target (frames roughly follow watts),
-            # at most G_STEP_MAX; near it: 1 W
-            step = max(1, min(G_STEP_MAX, int((l.tdp - l.tdp * T / win) / 2))) if far else 1
-            w, was = max(low, l.tdp - step), l.tdp
-            if self._tdp(l, w):
-                s.g_drop_from, s.g_last_drop, s.g_last_change, s.g_hist = was, now, now, []
-                self._did(s, f"{win:.0f} fps holds the {T:.0f} target: lowered TDP to {w} W", f"−{was - w} W")
+            if self._tdp(l, act.limit_w):
+                self._did(s, act.note or f"{l.tdp} W", f"{l.tdp - was:+d} W")
+            else:                                        # not applied: the governor goes on from what is on the chip
+                s.gov.limit, s.gov.mode = l.tdp, "hold"
+        elif act.note and act.note != s.last_action:
+            s.last_action = act.note
+        if len(s.gov.pace) >= governor.N:
+            s.avg_fps = 1000.0 / statistics.median(s.gov.pace)
+            s.low_fps = 1000.0 / max(s.gov.pace)
+            s.fps_per_w = s.avg_fps / smp.pkg_w if smp.pkg_w else None
+            l.fps = s.avg_fps
+        l.max_fps, l.bound = s.gov.ref, classify(smp)
+        l.target_eff = s.target
+        if not s.settled and sum(s.gov.held_s.values()) >= 60:
+            s.settled = True                             # a minute of holding: worth saving for the game
 
-    def _out_of_reach(self, s: Session, win: float, now: float) -> None:
-        """At the full TDP and still under the target. After AUTO_FPS_S: with Auto FPS, the closest fps it can hold;
-        without, it stays at the full TDP and says so."""
-        if s.g_maxed_since is None:
-            s.g_maxed_since, s.g_maxed = now, []
-        s.g_maxed.append(win)
-        if now - s.g_maxed_since < AUTO_FPS_S:
-            return
-        s.best_fps = statistics.median(s.g_maxed)
-        s.g_maxed_since = None
-        T = s.target or 0
-        if s.auto_fps:
-            new = float(max(MIN_TARGET, int(s.best_fps * 0.95)))
-            if new < T:
-                s.target, s.learned.target_eff, s.unreachable = new, new, True
-                s.g_hist, s.g_last_change = [], now
-                self._did(s, f"Auto FPS: {T:.0f} fps is out of reach ({self._top(s)} W gives {s.best_fps:.0f}): "
-                             f"holding {new:.0f} fps", "target down")
-        elif not s.unreachable:
-            s.unreachable = True
-            self._did(s, f"{T:.0f} fps is out of reach: {self._top(s)} W gives {s.best_fps:.0f} fps", "out of reach")
-
-    def _tau(self, s: Session, learning: bool) -> None:
-        """RAPL averages PL1 over a 56 s window: right after a change the package can still boost, and a 10 s window
-        would judge the boost. While learning, an 8 s window; once learned, the firmware's again so play keeps its
-        short bursts (findings §22.2). Both through sysfs.write, so a revert restores it in any case."""
-        if learning and not s.short_tau and not s.tau_refused and self.hw.paths.rapl_pl1_window:
-            if self.power.set_pl1_window(LEARN_TAU_US):
+    def _tau(self, s: Session, governing: bool) -> None:
+        """RAPL averages PL1 over a 56 s window: for most of a minute after a change the package can still run up to
+        PL2, and a step down judged on a few seconds of frames would be judged on the burst. While Autotune governs,
+        an 8 s window, set once; the firmware's again when it stops or stays out (findings §22.2). Both through
+        sysfs.write, so a revert restores it in any case."""
+        if governing and not s.short_tau and not s.tau_refused and self.hw.paths.rapl_pl1_window:
+            if self.power.set_pl1_window(GOVERN_TAU_US):
                 s.short_tau = True
-                log.info("autotune learning: PL1 time window %d s", LEARN_TAU_US // 1_000_000)
+                log.info("autotune: PL1 time window %d s while it governs", GOVERN_TAU_US // 1_000_000)
             else:
                 s.tau_refused = True
                 self.power.restore_pl1_window()
-                log.warning("autotune: the firmware did not take a %d s PL1 window; keeping its own", LEARN_TAU_US // 1_000_000)
-        elif not learning and s.short_tau:
+                log.warning("autotune: the firmware did not take a %d s PL1 window; keeping its own", GOVERN_TAU_US // 1_000_000)
+        elif not governing and s.short_tau:
             self.power.restore_pl1_window()
             s.short_tau = False
-            log.info("autotune settled: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
-
-    def _not_gameplay(self, s: Session, fps: float, low: float) -> bool:
-        """A loading screen, a menu or a pause is not the game: deciding on it is how 11 fps in a loading screen once
-        sent the TDP back up (Onimusha, 2026-11-04). Such a window is skipped, unless MAX_SKIPS in a row say it is the
-        game now."""
-        ref = s.learned.fps or s.learned.max_fps
-        off = bool(ref) and not (ref * OFF_LO <= fps <= ref * OFF_HI)
-        if (off or low < fps * DIP) and s.skips + 1 < MAX_SKIPS:
-            s.skips += 1
-            log.info("autotune: skipped a %.0f fps window (low %.0f%s): loading, menu or pause", fps, low,
-                     f", usual {ref:.0f}" if ref else "")
-            return True
-        s.skips = 0
-        return False
-
-    # ---- the phases ----------------------------------------------------------------------------------------------
-    def _margin(self, s: Session) -> float:
-        m = s.learned.max_fps or 0
-        return max(m * s.keep_pct / 100, KEEP_FPS) if m else 0.0
-
-    def _line(self, s: Session) -> float:
-        return (s.learned.max_fps or 0) - self._margin(s)
+            log.info("autotune: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
     def _did(self, s: Session, action: str, delta: str) -> None:
         s.last_action, s.last_delta, s.last_change_at = action, delta, time.monotonic()
-        log.info("autotune %s (%s-bound, %s fps): %s", s.phase, s.learned.bound, f"{s.avg_fps:.0f}" if s.avg_fps else "?", action)
+        log.info("autotune (%s fps): %s", f"{s.avg_fps:.0f}" if s.avg_fps else "?", action)
 
-    def _remeasure(self, s: Session, why: str) -> None:
-        l = s.learned
-        s.phase, s.max_runs, s.misses, s.balance_undo = "measure", [], 0, None
-        s.balance_tried, s.eff_trial, s.eff_tried, s.last_good, s.fine = set(), False, False, None, False
-        s.window, s.watts, s.shown = [], [], []
-        top = self._top(s)
-        if l.tdp != top:
-            self._tdp(l, top)
-        l.ceiling = s.ceiling_tdp
-        s.quiet = 0
-        self._tau(s, True)                               # learning again: sustained power only, from the first window
-        self._did(s, f"measuring the most {top} W gives ({why})", f"{top} W")
-
-    def _measure(self, s: Session, fps: float) -> None:
-        s.max_runs.append(fps)
-        if len(s.max_runs) < MAX_WINDOWS:
-            return
-        l = s.learned
-        l.max_fps = statistics.median(s.max_runs)
-        l.fps = l.max_fps
-        s.measured_at = time.monotonic()
-        s.phase, s.balance_tried = "balance", set()
-        self._did(s, f"{self._top(s)} W gives {l.max_fps:.0f} fps", "measured")
-
-    def _levers(self, s: Session) -> list:
-        """(name, apply, undo, words) for the next untried lever toward the side that holds the game back."""
-        l, p = s.learned, self.hw.paths
-        out = []
-        if l.bound == "gpu":
-            # first: let the GPU clock up as eagerly as it can (efficiency mode off) - before any floor or CPU trade
-            if self._gpu_active() == "power_saving":
-                out.append(("gpu_base", lambda: self._gpu_profile(l, "base"), lambda: self._gpu_profile(l, "power_saving"),
-                            "turned GPU efficiency mode off (clocks up faster)", "GPU efficiency off"))
-            # no CPU-ceiling trim (max_perf_pct): no proven tool does it and it hurts frame pacing (audit 2026-11-05);
-            # PL2 = PL1 + 2 W already keeps CPU bursts from taking the GPU's budget
-            rpe, top = self._gpu_limits()
-            nxt = (l.gpu_min_mhz or rpe or 0) + GPU_STEP_MHZ
-            if p.gpu_min_freq and (top is None or nxt <= top):
-                was = l.gpu_min_mhz
-                out.append(("gpu_floor_up", lambda n=nxt: self._gpu_floor(l, n), lambda w=was: self._gpu_floor(l, w),
-                            f"raised GPU floor to {nxt} MHz", f"+{GPU_STEP_MHZ} MHz GPU floor"))
-        elif l.bound == "cpu":
-            if p.cpu_no_turbo and not l.boost:
-                out.append(("boost_on", lambda: self._boost(l, True), lambda: self._boost(l, False), "turned CPU boost on", "CPU boost on"))
-            if p.cpu_max_perf_pct and l.cpu_max_pct < 100:
-                was = l.cpu_max_pct
-                out.append(("cpu_up", lambda: self._cpu(l, 100), lambda w=was: self._cpu(l, w), "raised CPU ceiling to 100 %", "CPU ceiling 100 %"))
-            if l.gpu_min_mhz is not None:
-                was = l.gpu_min_mhz
-                out.append(("gpu_floor_off", lambda: self._gpu_floor(l, None), lambda w=was: self._gpu_floor(l, w),
-                            "dropped the GPU floor (budget back to the CPU)", "GPU floor off"))
-        return [x for x in out if x[0] not in s.balance_tried]
-
-    def _balance(self, s: Session, fps: float) -> None:
-        l = s.learned
-        if s.balance_undo:                                # judge the lever on trial
-            name, undo, before, words, delta = s.balance_undo
-            s.balance_undo = None
-            if fps >= before * (1 + BALANCE_GAIN):
-                s.balance_tried.discard(name)             # it helped: the same lever may go one more step
-                l.fps = fps
-                if l.tdp == self._top(s):
-                    l.max_fps = max(l.max_fps or 0, fps)  # the set TDP gives more than measured: that is the most now
-                self._did(s, f"{words}: {before:.0f} → {fps:.0f} fps, kept", delta)
-            else:
-                undo()
-                self._did(s, f"{words} didn't help ({before:.0f} → {fps:.0f} fps), undone", "undone")
-                s.phase = "lower" if l.tdp > s.floor_tdp else "hold"
-                return
-        levers = self._levers(s)
-        if not levers:                                   # nothing (left) to try: this window judges the TDP itself
-            s.phase = "lower"
-            self._lower(s, fps)
-            return
-        name, apply, undo, words, delta = levers[0]
-        s.balance_tried.add(name)
-        if apply():
-            s.balance_undo = (name, undo, fps, words, delta)
-            self._did(s, f"trying: {words}", delta)
-        # a lever that couldn't be written is just skipped; the next window tries the next one
-
-    def _lower(self, s: Session, fps: float) -> None:
-        l = s.learned
-        line, margin = self._line(s), self._margin(s)
-        prev = s.last_good
-        # fps lost per watt saved since the last TDP that held (None at the first step)
-        cost = None if not prev or prev[0] <= l.tdp else max(0.0, prev[1] - fps) / (prev[0] - l.tdp)
-        flat = cost is not None and cost <= FLAT_FPS_PER_W
-        if fps >= line or (flat and fps >= line - margin / 2):
-            s.misses, l.fps = 0, fps
-            if (cost is not None and fps < line + margin and cost > STEEP_FPS_PER_W
-                    and prev and prev[0] - l.tdp <= 1):
-                s.phase = "hold"                           # past the knee: the next watt costs more than it saves
-                self._did(s, f"holding at {l.tdp} W: the last watt cost {cost:.1f} fps", "knee")
-                s.last_good = (l.tdp, fps)
-                return
-            s.last_good = (l.tdp, fps)
-            if l.tdp <= s.floor_tdp:
-                s.phase = "hold"
-                self._try_efficiency(s)                    # on the line at the floor: the GPU's efficiency mode next
-                return
-            # clearly above the line (the upper half of the band) and the last step was flat: a bigger step
-            step = BIG_STEP_W if not s.fine and fps >= line + margin / 2 and (cost is None or cost <= FLAT_FPS_PER_W) else 1
-            w, was = max(s.floor_tdp, l.tdp - step), l.tdp
-            if self._tdp(l, w):
-                s.balance_tried = set()                    # the bottleneck can move as watts drop: try again here
-                s.phase = "balance"
-                self._did(s, f"lowered TDP to {w} W ({fps:.0f} fps, {100 * fps / l.max_fps:.0f} % of {l.max_fps:.0f})", f"−{was - w} W")
-            else:
-                s.phase = "hold"
-            return
-        s.misses += 1
-        if s.misses < 2:
-            return                                         # one window can be a heavier patch of the map: again
-        s.misses = 0
-        if prev and prev[0] - l.tdp > 1 and not s.fine:
-            # a big step went past the line: back to 1 W under the last TDP that held, and on in 1 W steps
-            s.fine = True
-            w, was = prev[0] - 1, l.tdp
-            if self._tdp(l, w):
-                s.phase = "balance"
-                s.balance_tried = set()
-                self._did(s, f"{fps:.0f} fps at {was} W is below {line:.0f}: trying {w} W", f"+{w - was} W")
-            return
-        back = prev[0] if prev and prev[0] > l.tdp else l.tdp + 1
-        w, was = min(self._top(s), back), l.tdp
-        if w != l.tdp and self._tdp(l, w):
-            self._did(s, f"{fps:.0f} fps is below {line:.0f}: back up to {w} W, holding", f"+{w - was} W")
-        s.phase = "hold"
-
-    def _try_efficiency(self, s: Session) -> None:
-        """At the TDP floor and still within keep %: GPU efficiency mode (power_saving) for one window, kept only if
-        the game stays on the line. It saves a little more where watts can't go lower."""
-        l = s.learned
-        if s.eff_tried or self._gpu_active() != "base" or "power_saving" not in self.power.gpu_power_profile()[1]:
-            return
-        s.eff_tried = True
-        if self._gpu_profile(l, "power_saving"):
-            s.eff_trial = True
-            s.window, s.watts, s.shown = [], [], []
-            self._did(s, f"at the {s.floor_tdp} W floor: trying GPU efficiency mode", "GPU efficiency on")
-
-    def _hold(self, s: Session, fps: float) -> None:
-        l = s.learned
-        if s.eff_trial:                                  # judge GPU efficiency mode at the floor
-            s.eff_trial = False
-            if fps < self._line(s):
-                self._gpu_profile(l, "base")
-                self._did(s, f"GPU efficiency mode cost frames ({fps:.0f} fps, under {self._line(s):.0f}), undone", "undone")
-            else:
-                self._did(s, f"GPU efficiency mode kept ({fps:.0f} fps)", "kept")
-            return
-        ref = l.fps or l.max_fps or fps
-        shifted = abs(fps - ref) / ref >= SHIFT if ref else False
-        if shifted:
-            s.misses += 1
-            if s.misses >= 2:
-                self._remeasure(s, f"fps moved from {ref:.0f} to {fps:.0f}")
-            return
-        if s.measured_at and time.monotonic() - s.measured_at >= RESCAN_S:
-            self._remeasure(s, "routine check")
-            return
-        if l.max_fps and fps < self._line(s):
-            s.misses += 1
-            if s.misses >= 2 and l.bound == "gpu" and self._gpu_active() == "power_saving":
-                s.misses = 0                             # short and GPU-bound: the GPU's full clock ramp before watts
-                if self._gpu_profile(l, "base"):
-                    self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: GPU efficiency mode off", "GPU efficiency off")
-                return
-            if s.misses >= 2 and l.tdp < self._top(s):
-                s.misses = 0
-                if self._tdp(l, l.tdp + 1):
-                    self._did(s, f"{fps:.0f} fps is below {self._line(s):.0f}: raised TDP to {l.tdp} W", "+1 W")
-            return
-        s.misses = 0
-
-    def _multiplier(self, s: Session) -> None:
-        """Presented / rendered over the window: 1 without frame generation, 2-4 with it. A change (frame generation
-        switched on or off in the game) makes the old max meaningless: measure again."""
-        if s.source != "rendered" or not s.shown or not s.avg_fps:
-            m = None
-        else:
-            m = round((sum(s.shown) / len(s.shown)) / s.avg_fps, 1)
-        old = s.multiplier
-        s.multiplier = m
-        if s.phase != "measure" and old is not None and m is not None and abs(m - old) >= 0.5:
-            self._remeasure(s, f"frame generation changed: {old:g}x → {m:g}x")
-
-    # ---- the levers --------------------------------------------------------------------------------------------------
-    def _tdp(self, l: Learned, watts: int) -> bool:
+    def _tdp(self, l: Learned, watts: int, force: bool = False) -> bool:
         """Set the TDP and record it only if it was really applied (a refused write is not a change to learn from).
         Never above the temperature guard's step."""
         s = self.session
         if s is not None and s.thermal_cap is not None and watts > s.thermal_cap:
             watts = s.thermal_cap
-            if watts == l.tdp:
-                return False
+        if watts == l.tdp and not force:
+            return False
         if not self.power.set_tdp(watts, self.plugged):
             log.warning("autotune: TDP %d W was not applied", watts)
             return False
         l.tdp = watts
         return True
 
-    def _gpu_limits(self) -> tuple[int | None, int | None]:
-        """(efficient clock, current ceiling) of the GPU: where a floor starts, and where it must stop."""
-        p = self.hw.paths
-        rpe = sysfs.read_int(p.gpu_rpe_freq) if p.gpu_rpe_freq else None
-        top = (sysfs.read_int(p.gpu_max_freq) if p.gpu_max_freq else None) or \
-            (sysfs.read_int(p.gpu_rp0_freq) if p.gpu_rp0_freq else None)
-        return rpe, top
-
-    def _gpu_floor(self, l: Learned, mhz: int | None) -> bool:
-        if not self.hw.paths.gpu_min_freq or mhz == l.gpu_min_mhz:
-            return False
-        ok = self.power.reset_gpu_floor() if mhz is None else self.power.set_gpu_window(mhz, None)
-        if ok:
-            l.gpu_min_mhz = mhz
-        return ok
-
     def _gpu_active(self) -> str | None:
         return self.power.gpu_power_profile()[0] if self.hw.paths.gpu_power_profile else None
-
-    def _gpu_profile(self, l: Learned, value: str, force: bool = False) -> bool:
-        if not self.hw.paths.gpu_power_profile or (not force and self._gpu_active() == value):
-            return False
-        try:
-            ok = self.power.set_gpu_power_profile(value)
-        except ValueError:
-            return False
-        if ok:
-            l.gpu_profile = value
-        return ok
-
-    def _cpu(self, l: Learned, pct: int) -> bool:
-        pct = max(CPU_MIN_PCT, min(100, pct))
-        if pct == l.cpu_max_pct or not self.hw.paths.cpu_max_perf_pct:
-            return False
-        if self.power.set_cpu_max_pct(pct):
-            l.cpu_max_pct = pct
-            return True
-        return False
-
-    def _boost(self, l: Learned, on: bool) -> bool:
-        if not self.hw.paths.cpu_no_turbo or l.boost == on:
-            return False
-        if self.power.set_cpu_turbo(on):
-            l.boost = on
-            return True
-        return False
 
     def _log(self, s: Session, smp: Sample) -> None:
         try:
@@ -1351,10 +884,10 @@ class Autotune:
                     w.writerow(CSV_FIELDS)
                 l = s.learned
                 r = lambda v, n: None if v is None else round(v, n)
-                w.writerow([f"{smp.t:.1f}", s.appid, s.phase, r(smp.fps, 1), r(smp.shown_fps, 1), smp.source, smp.gpu_mhz,
-                            smp.gpu_max_mhz, r(smp.cpu_pct, 1), r(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz,
-                            int(l.boost), l.bound, r(l.max_fps, 1), smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2),
-                            r(smp.slow_pct, 1)])
+                w.writerow([f"{smp.t:.1f}", s.appid, s.gov.mode if s.gov and not s.paused else "out", r(smp.fps, 1),
+                            r(smp.shown_fps, 1), smp.source, smp.gpu_mhz, smp.gpu_max_mhz, r(smp.cpu_pct, 1),
+                            r(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz, int(l.boost), l.bound, r(l.max_fps, 1),
+                            smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2), r(smp.slow_pct, 1)])
         except OSError:
             pass
 
@@ -1365,19 +898,22 @@ class Autotune:
         l = s.learned
         last = s.history[-1] if s.history else None
         r = lambda v: None if v is None else round(v, 1)
+        governing = not s.paused and s.gov is not None
         return {"running": True, "enabled": self.enabled, "appid": s.appid, "paused": s.paused, "phase": s.phase,
+                "step": s.gov.mode if governing else None,
                 "learned": l.__dict__, "bound": l.bound, "tdp": l.tdp, "ceiling_tdp": s.ceiling_tdp,
                 "floor_tdp": s.floor_tdp, "plugged": self.plugged, "keep_pct": s.keep_pct, "keep_fps": KEEP_FPS,
-                "saves_w": (s.ceiling_tdp - l.tdp) if (s.phase in ("hold", "target") and l.tdp is not None and s.ceiling_tdp > l.tdp) else None, "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps),
-                "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
+                "saves_w": (s.ceiling_tdp - l.tdp) if (governing and s.ceiling_tdp > l.tdp) else None,
+                "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps), "low_fps": r(s.low_fps),
+                "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
-                "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap, "no_frames": s.no_frames,
-                "own_pace": s.own_pace, "own_pace_why": OWN_PACE.get(s.own_pace or ""),
-                "learning": s.short_tau or s.phase != "hold" or s.quiet < SETTLED_WINDOWS,
+                "multiplier": s.multiplier, "window_s": governor.DWELL_S, "thermal_cap": s.thermal_cap,
+                "no_frames": s.no_frames, "own_pace": s.own_pace, "own_pace_why": OWN_PACE.get(s.own_pace or ""),
+                "learning": governing and not s.settled,
                 "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,
                 "target": None if s.target is None else round(s.target), "user_target": s.user_target,
-                "auto_fps": s.auto_fps, "unreachable": s.unreachable, "best_fps": r(s.best_fps),
-                "floor_learned": s.g_floor if s.phase == "target" and s.g_floor > s.floor_tdp else None, "fg": s.fg,
+                "auto_fps": s.auto_fps, "unreachable": s.unreachable, "best_fps": r(l.max_fps) if s.unreachable else None,
+                "floor_learned": None, "fg": s.fg,
                 "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),
                 "last": None if last is None else last.__dict__}

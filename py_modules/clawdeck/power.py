@@ -55,6 +55,8 @@ class Power:
         self._hhd_orig: dict | None = None    # HHD's TDP state before ClawDeck's first change, for revert_all
         self.boost = True                     # TDP boost (short bursts above the TDP); off = PL2 is TDP + 1 W
         self.pl2_w: int | None = None         # PL2 set by hand (Power → Custom → "Set PL2 yourself"); None = PL1 + 2 W
+        self.governed = False                 # Autotune governs the limit: PL2 = PL1 + 2 W whatever was set by hand,
+                                              # or a step down doesn't bind while its frames are judged
         self._thermald_paused = False         # True while ClawDeck holds a TDP and has stopped thermald (see _set_rapl)
         self.cpu_cap: int | None = None       # the temperature guard's cap on the CPU's top clock, % (thermal.py)
         self._cpu_asked: int | None = None    # the CPU's top clock a profile, Autotune or the user asked for, %
@@ -141,7 +143,7 @@ class Power:
         # (cpu.py), PowerStation (intel_apu_database max_boost 2.0); Handheld Companion uses PL2 = PL1 (+1 W on Lunar
         # Lake). ClawDeck used to scale PL2 up to 45 W (35 W -> 45 W): the package burst, then got clamped, and CPU
         # bursts took the GPU's share - noisy frame times (audit 2026-11-05). Boost off: +1 W.
-        if self.pl2_w is not None:            # by hand: never below PL1, never above the model's PL2
+        if self.pl2_w is not None and not self.governed:   # by hand: never below PL1, never above the model's PL2
             return max(watts, min(int(self.pl2_w), lim["sppt_max"]))
         return min(watts + (2 if self.boost else 1), lim["sppt_max"])
 

@@ -165,6 +165,11 @@ def goal(st: State, cfg: Cfg) -> float | None:
     return st.ref - max(st.ref * cfg.keep_pct / 100.0, KEEP_FPS)
 
 
+def out_of_reach(st: State, cfg: Cfg) -> bool:
+    """Target mode with Auto FPS: the full limit gives less than the target, so what it gives is held instead."""
+    return bool(cfg.target) and _from_ref(st, cfg)
+
+
 def _from_ref(st: State, cfg: Cfg) -> bool:
     """The goal hangs on the reference (so the reference has to be kept true)."""
     return not cfg.target or (cfg.auto_fps and st.ref is not None and st.ref < cfg.target * REACHED)
