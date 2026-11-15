@@ -161,10 +161,10 @@ export const DialogButton: FC<{ style?: any; disabled?: boolean; onClick?: () =>
 export const findClassModule = (_f: (m: any) => boolean): any => undefined;
 export const Tabs: FC<{ tabs: { id: string; title: ReactNode; content: ReactNode }[]; activeTab: string; onShowTab: (id: string) => void }> =
   ({ tabs, activeTab, onShowTab }) => (
-    <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
+    <div className="qam-tabs" style={{ position: "absolute", inset: 0, overflow: "auto" }}>
       <div style={{ display: "flex", gap: 4, padding: "4px 4px 8px" }}>
         {tabs.map((t) => (
-          <div key={t.id} onClick={() => onShowTab(t.id)} style={{ flex: 1, textAlign: "center", padding: "8px 2px", cursor: "pointer",
+          <div key={t.id} className="qam-tab" onClick={() => onShowTab(t.id)} style={{ flex: 1, textAlign: "center", padding: "8px 2px", cursor: "pointer",
             fontSize: 13, fontWeight: 700, borderRadius: 4, background: t.id === activeTab ? "#3d4450" : "transparent",
             color: t.id === activeTab ? "#fff" : "#b8bcbf" }}>{t.title}</div>
         ))}
