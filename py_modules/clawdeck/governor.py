@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import statistics
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 N = 10                  # a clear loss: the last N frames are CLEAR under the goal ...
 CLEAR = 0.03
@@ -84,7 +84,8 @@ RISE_W = 0.3            # raise is judged when the draw has stopped rising by th
 SHIFT, SHIFT_S = 0.15, 5.0             # the pace moved this much for this long at one limit: another scene
 OFF_LO, OFF_HI = 0.35, 2.5             # frames this far under or over the usual rate are a loading screen, a menu, a map
                                        # or a pause: not judged ...
-ADOPT_S = 5.0           # ... unless they stay this long: then that is the game now
+ADOPT_S = 5.0           # ... unless they stay this long: then that is the game now. Far more frames than usual harm
+ADOPT_FAST_S = 30.0     # nothing (a map, an inventory): only after this long, so a visit keeps what is known of the game
 NO_FRAMES_S = 1.5
 RECENT_S = 10.0
 LOOK_S, WATCH_S = 0.5, 0.1             # how soon to look again: holding, and while a write is being watched
@@ -136,8 +137,10 @@ class State:
     ref_drop_at: float = -1e9       # when the full limit last gave SHIFT less than the reference before
     drop_floor: int | None = None   # ... and the limit that held before it: no step under it on that lower reference
     ref_high: float | None = None   # ... and the reference before it
-    ref_free: bool = False          # the reference was last taken under the full limit, with the package well under
-                                    # the limit: it says what the game did there, not what more watts would give
+    ref_free: bool = False          # when the reference was last taken, the package did not draw the whole of the
+                                    # lowered limit that is held: it says what the game did then, not what more watts
+                                    # give a scene that does draw it all
+    slack: bool = False             # ... as it was when the look at the full limit began
     bound_since: float | None = None  # since when the package draws the whole of a lowered limit
     usual: float | None = None      # the game's frame rate as last judged (what "a loading screen or a menu" is far from)
     free_fps: deque = field(default_factory=lambda: deque(maxlen=2 * FREE_LOOKS))   # the pace at the last free looks
@@ -145,6 +148,8 @@ class State:
     draw_was: float | None = None   # the package draw at the last look, and when a watched write was made
     wrote_at: float = -1e9
     off_since: float | None = None  # since when the frames are far from it
+    was_off: bool = False           # the last look was such a stretch ...
+    off_left: int = 0               # ... and this many frames of the game have to come before its pace is known again
     noise: float = 0.0              # how much the game's rate of N frames wobbles by itself (relative), from the pace
     noises: deque = field(default_factory=lambda: deque(maxlen=21))
     dips: deque = field(default_factory=lambda: deque(maxlen=8))   # when it lost frames at a limit that can't be the cause
@@ -259,6 +264,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     t = obs.t
     dt = max(0.0, t - st.t) if st.t is not None else 0.0
     st.t = t
+    if obs.cap_w is not None and obs.cap_w < cfg.floor:
+        cfg = replace(cfg, floor=int(obs.cap_w))     # the guard's cap is under your floor: the guard wins
     top = cfg.ceiling if obs.cap_w is None else int(max(cfg.floor, min(cfg.ceiling, obs.cap_w)))
     act = Action(look_s=LOOK_S if st.mode == "hold" else WATCH_S)
 
@@ -269,6 +276,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         act.note = note
 
     def watch(mode: str, watts: int, note: str) -> None:
+        if st.mode == "hold":
+            st.slack = st.bound_since is None and obs.draw_w is not None and st.limit < top
         st.mode, st.prev, st.since, st.wrote_at, st.watch = mode, st.limit, t, t, []
         st.free_fps.clear()
         st.free_run, st.bound_since = 0, None
@@ -289,6 +298,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.good = None
 
     for end, ms in obs.frames:
+        if not ms > 0:                               # not a frame time (zero, negative, not a number)
+            continue
         ms *= obs.multiplier                         # a rendered frame is `multiplier` shown ones
         st.last.append(ms)
         st.pace.append(ms)
@@ -323,7 +334,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     off = bool(usual) and cur is not None and not usual * OFF_LO <= cur <= usual * OFF_HI
     if off and not silent and len(st.pace) == PACE_FRAMES:
         st.off_since = st.off_since if st.off_since is not None else t
-        if t - st.off_since >= ADOPT_S:
+        if t - st.off_since >= (ADOPT_FAST_S if cur > usual * OFF_HI else ADOPT_S):
             # it stayed: this is the game now (a much lighter or heavier part, a frame limit switched on or off, a
             # target far from what the game does). Its pace is the usual one, and nothing known before applies
             st.usual, st.ref, st.ref_at, st.off_since = here, None, -1e9, None
@@ -352,7 +363,22 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.ref_drop_at += dt
         st.free_fps.clear()                          # what comes after it is another stretch of frames
         st.free_run = 0
+        st.was_off = st.was_off or off
         return act
+    if st.was_off or st.off_left > 0:
+        # back from a menu, a map or a loading screen: the last frames are a mix of both. Judged again once N frames
+        # of the game have come, on a pace of those alone (the menu's frames in the pace read as a game that gives
+        # more than the reference: a look at the full limit, and all that was known forgotten; review, 2026-11-15)
+        st.off_left = N if st.was_off else st.off_left - len(obs.frames)
+        st.was_off = False
+        if st.off_left > 0:
+            st.quiet_until += dt
+            st.ref_at += dt
+            st.ref_drop_at += dt
+            return act
+        st.pace = deque(st.last, maxlen=PACE_FRAMES)
+        st.recent = deque(list(st.recent)[-len(st.last):])
+        pace_ms, here = statistics.median(st.pace), _fps(st.pace)
     st.usual = here
 
     # the reference follows the pace whenever the limit can't be what holds the game back. The pace is the last
@@ -366,7 +392,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         if len(st.free_fps) >= FREE_LOOKS:
             level = statistics.median(st.free_fps)
             if st.ref is not None and level < st.ref * (1 - SHIFT):
-                st.ref_drop_at = t                   # much less than before: a cutscene, a video, or a heavier place
+                # much less than before: a cutscene, a video, or a heavier place. As below: nothing under this limit
+                st.ref_drop_at, st.ref_high = t, max(st.ref, st.ref_high or 0.0)
+                if st.limit < top:
+                    st.drop_floor = st.limit if st.drop_floor is None else max(st.drop_floor, st.limit)
             st.ref, st.ref_at, st.ref_free = level, t, st.limit < top
     elif not free:
         st.free_fps.clear()
@@ -388,6 +417,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
 
     if st.mode == "hold":
         st.held_s[st.limit] = st.held_s.get(st.limit, 0.0) + dt
+        hard = obs.draw_w is not None and obs.draw_w > st.limit - BOUND_W
+        st.bound_since = (st.bound_since if st.bound_since is not None else t) if hard else None
         return _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy, free, write, watch, hold, failed)
 
     if st.mode == "probe" and obs.draw_w is not None and obs.draw_w > st.limit + BIND_W and t - st.wrote_at < BIND_S:
@@ -471,9 +502,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.verify = False
         return act
 
-    if seen < BACK_S or len(st.watch) < N // 2:
-        if seen > 3 * BACK_S:                        # no judgement possible: stay where it is
-            hold()
+    if seen < BACK_S or (len(st.watch) < 3 * N and seen < 3 * BACK_S):
+        return act                                   # a second, and 3 N frames of it (a 20 fps game takes longer)
+    if len(st.watch) < N // 2:                       # no judgement possible: stay where it is
+        hold()
         return act
     if rising and t - st.wrote_at < BIND_S:          # the watts are still arriving: judged on the frames after that
         st.since, st.watch = t - BACK_S / 2, st.watch[-N:]
@@ -502,7 +534,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.misses = 0
         if st.home is not None and st.home < st.prev and t - st.home_at <= HOME_FOR_S:
             st.good, st.home = st.home, None
-    st.ref, st.ref_at, st.ref_free = now, t, False
+    st.ref, st.ref_at, st.ref_free = now, t, st.slack
     want = goal(st, cfg)
     was = st.lost or now
     st.ref_here = None
@@ -676,7 +708,10 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
     mine = [ms for end, ms in st.recent if end >= st.changed_at + SETTLE_S]
     if st.limit < top and len(mine) >= 3 * N and t - st.edge_at >= EDGE_UP_S and t - st.changed_at >= DWELL_S:
         mid, half = statistics.median(mine), len(mine) // 2
-        still = abs(statistics.median(mine[:half]) - statistics.median(mine[half:])) <= CHECK_MOVED * mid
+        # (the medians of both halves, and their rates: a few seconds of a faster menu at the end leave the medians
+        # where they were and make every frame of the game a slow one)
+        still = (abs(statistics.median(mine[:half]) - statistics.median(mine[half:])) <= CHECK_MOVED * mid
+                 and abs(_fps(mine[:half]) - _fps(mine[half:])) <= CHECK_MOVED * _fps(mine))
         if still and not dippy and st.base_slow is not None and _edge(mine, st.base_slow):
             failed(st.limit)
             st.edge_at = t
@@ -687,8 +722,6 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
 
     # the reference grows old while the limit holds the chip: look at the full limit for a moment
     binds = obs.clipped is not False and (obs.draw_w is None or obs.draw_w > st.limit - 2)
-    hard = obs.draw_w is not None and obs.draw_w > st.limit - BOUND_W
-    st.bound_since = (st.bound_since if st.bound_since is not None else t) if hard else None
     # (not from a watt under it: what one watt more gives is not worth a look)
     if _from_ref(st, cfg) and st.limit < top - 1 and binds and not obs.thermal and len(st.pace) == PACE_FRAMES:
         if st.ref_here is None and t - st.changed_at >= DWELL_S:
