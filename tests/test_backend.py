@@ -1,5 +1,6 @@
 """Backend tests against a fake sysfs tree (no hardware needed): detection, clamping, revert, profiles,
 autotune control logic. Run: python3 -m pytest -q tests"""
+import csv
 import json
 import os
 import sys
@@ -1473,6 +1474,26 @@ def test_a_sample_from_the_games_own_mangohud_log_has_no_frame_times(fake_hw, tm
     assert smp.frames_ms == []
 
 
+def test_autotune_csv_says_why_the_limit_moved(fake_hw, tmp_path, monkeypatch):
+    """A row of the log has the goal and, in "note", what was decided since the row before: each change of the limit
+    with its watts and reason, and a pause. Without it a run on a device shows that the limit moved and not why."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=20, target=60)
+    at.csv_log = str(tmp_path / "autotune.csv")
+    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp))          # 60 fps from 15 W
+    g.run(120)
+    at.pause("manual CPU boost")
+    g.run(3)
+    at.session = None
+    rows = [dict(zip(autotune.CSV_FIELDS, r)) for r in csv.reader(open(at.csv_log))][1:]
+    notes = [r["note"] for r in rows if r["note"]]
+    moved = [n for n in notes if " W: " in n]
+    assert moved and all(n.split(" W: ")[0].lstrip("+-").isdigit() for n in moved)       # "-2 W: <why>"
+    assert any(r["goal"] == "57.0" for r in rows)                                       # 60 fps less 5 %
+    assert notes[-1].startswith("paused: manual CPU boost") and rows[-1]["goal"] == ""
+    assert len(notes) < len(rows) / 2                                                    # a note once, not every row
+    assert s.notes == []
+
+
 def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(fake_hw, tmp_path, monkeypatch):
     log = tmp_path / "autotune.csv"
     old = "time,appid,phase,fps,shown_fps,source,gpu_mhz,gpu_max_mhz,cpu_pct,pkg_w,tdp,cpu_max_pct,gpu_min_mhz,boost,bound,max_fps\n1.0,7,hold,60.0,60.0,presented,,,,,20,100,,1,balanced,60.0\n"
@@ -1489,8 +1510,11 @@ def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(
     at.session = None
     assert (tmp_path / "autotune.csv.1").read_text() == old            # the earlier build's rows, whole
     rows = log.read_text().splitlines()
-    assert rows[0] == ",".join(autotune.CSV_FIELDS) and rows[0].endswith(",max_fps,frames,ft_median,ft_p95,slow_pct")
-    assert rows[1].endswith(",30,33.3,38.04,6.7") and rows[2].endswith(",,,,") and len(rows) == 3
+    assert rows[0] == ",".join(autotune.CSV_FIELDS)
+    assert rows[0].endswith(",max_fps,frames,ft_median,ft_p95,slow_pct,goal,mult,look_s,note")
+    cols = [dict(zip(autotune.CSV_FIELDS, r)) for r in csv.reader(rows[1:])]
+    assert [cols[0][k] for k in ("frames", "ft_median", "ft_p95", "slow_pct")] == ["30", "33.3", "38.04", "6.7"]
+    assert [cols[1][k] for k in ("frames", "ft_median", "ft_p95", "slow_pct")] == ["", "", "", ""] and len(rows) == 3
     # the same columns the next time: the log goes on
     at2, _s = _tuner(fake_hw, monkeypatch)
     at2.csv_log = str(log)

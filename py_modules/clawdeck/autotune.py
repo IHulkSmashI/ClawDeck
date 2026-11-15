@@ -69,7 +69,9 @@ MANGOAPP_FRESH_S = 30   # a mangoapp log written this recently is a live one
 SLOW = 1.10             # a frame this much longer than the pace is a slow one
 PACE_FRAMES = 60        # the pace: the median frame time of this many frames before
 CSV_FIELDS = ["time", "appid", "phase", "fps", "shown_fps", "source", "gpu_mhz", "gpu_max_mhz", "cpu_pct", "pkg_w", "tdp",
-              "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps", "frames", "ft_median", "ft_p95", "slow_pct"]
+              "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps", "frames", "ft_median", "ft_p95", "slow_pct",
+              "goal", "mult", "look_s", "note"]
+TRACE_NOTES = 20        # what the governor decided since the last log row: no more than this many are kept
 GOVERN_TAU_US = 8_000_000  # PL1 time window while Autotune governs: a step down has to bind within its watch
 MIN_TARGET = 20
 REFUSED_S = 30          # a TDP write that was not applied: nothing more is tried for this long
@@ -493,6 +495,7 @@ class Session:
     multiplier: float | None = None     # presented / rendered when frame generation is on
     last_change_at: float | None = None
     last_action: str | None = None
+    notes: list = field(default_factory=list)   # decisions since the last row of autotune.csv (its "note" column)
     last_delta: str | None = None
     avg_fps: float | None = None
     low_fps: float | None = None
@@ -694,6 +697,7 @@ class Autotune:
         if s:
             if not s.paused:
                 log.info("autotune paused: %s", reason)
+                self._note(s, f"paused: {reason}")
                 self._give_back(s)                        # not a limit of Autotune's for the rest of the session
                 self._tau(s, False)
             s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
@@ -795,6 +799,7 @@ class Autotune:
                 self._tau(s, False)
                 log.info("autotune: %s runs, %s: it stays out of this game (%d W, your limit)",
                          emu, OWN_PACE[emu], s.learned.tdp)
+                self._note(s, f"out: {emu} runs, {s.learned.tdp} W (your limit)")
         if smp.fps and s.no_frames:
             # frames after all: a game slower than NO_FPS_S to its first frame (Order of the Sinking Star takes 54 s).
             # Giving up put your pick back; autotune takes over from there
@@ -803,6 +808,7 @@ class Autotune:
             self._govern_from(s, s.learned.tdp)
             self._tdp(s.learned, s.learned.tdp, force=True)   # with PL2 as Autotune keeps it, from this look on
             log.info("autotune: frame rate from %s after all: it takes over from %d W", s.appid, s.learned.tdp)
+            self._note(s, f"frames after all: it takes over from {s.learned.tdp} W")
         if s.paused:
             self._tau(s, False)                          # the user has the controls: the firmware's window again
         if not smp.fps and not s.paused and s.learned.samples == 0:
@@ -815,6 +821,7 @@ class Autotune:
                 self._tau(s, False)
                 log.info("autotune: no frame rate from %s after %d s: it stays out of this game (%d W, your limit)",
                          s.appid, NO_FPS_S, s.learned.tdp)
+                self._note(s, f"out: no frame rate, {s.learned.tdp} W (your limit)")
         if s.paused or s.gov is None:
             s.look_s = 1.0
             return
@@ -845,10 +852,12 @@ class Autotune:
                 s.gov.mode, s.gov.quiet_until, s.look_s = "hold", smp.t + REFUSED_S, governor.LOOK_S
                 if not s.refused:
                     log.warning("autotune: TDP %d W was not applied; trying again in %d s", act.limit_w, REFUSED_S)
+                    self._note(s, f"refused: {act.limit_w} W was not applied")
                 s.refused = True
             s.gov.limit = l.tdp                          # what is on the chip (the guard's cap may have cut the write)
         elif act.note and act.note != s.last_action:
             s.last_action = act.note
+            self._note(s, act.note)
         if len(s.gov.pace) >= governor.N:
             s.avg_fps = 1000.0 / statistics.median(s.gov.pace)
             s.low_fps = 1000.0 / max(s.gov.pace)
@@ -898,8 +907,14 @@ class Autotune:
             s.short_tau = False
             log.info("autotune: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
+    def _note(self, s: Session, text: str) -> None:
+        """For the log's "note" column: why the limit moved or stayed, next to the frames of that second."""
+        s.notes.append(text)
+        del s.notes[:-TRACE_NOTES]
+
     def _did(self, s: Session, action: str, delta: str) -> None:
         s.last_action, s.last_delta, s.last_change_at = action, delta, time.monotonic()
+        self._note(s, f"{delta}: {action}")
         log.info("autotune (%s fps): %s", f"{s.avg_fps:.0f}" if s.avg_fps else "?", action)
 
     def _tdp(self, l: Learned, watts: int, force: bool = False) -> bool:
@@ -939,7 +954,10 @@ class Autotune:
                 w.writerow([f"{smp.t:.1f}", s.appid, s.gov.mode if s.gov and not s.paused else "out", r(smp.fps, 1),
                             r(smp.shown_fps, 1), smp.source, smp.gpu_mhz, smp.gpu_max_mhz, r(smp.cpu_pct, 1),
                             r(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz, int(l.boost), l.bound, r(l.max_fps, 1),
-                            smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2), r(smp.slow_pct, 1)])
+                            smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2), r(smp.slow_pct, 1),
+                            r(governor.goal(s.gov, s.cfg), 1) if s.gov and s.cfg and not s.paused else None,
+                            s.multiplier, s.look_s, " | ".join(s.notes)])
+                s.notes.clear()
         except OSError:
             pass
 
