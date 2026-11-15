@@ -517,7 +517,8 @@ class Session:
     mult_seen: float | None = None      # the XeLL line it was last taken at, and the shown frames since
     mult_n: int = 0
     mult_ms: float = 0.0
-    refused: bool = False               # the last TDP write was not applied
+    refused: bool = False               # the last TDP write was not applied ...
+    refused_until: float = -1e9         # ... and until then no other is tried (the governor rests)
     user_target: int | None = None
     auto_fps: bool = True
 
@@ -835,7 +836,7 @@ class Autotune:
                 log.info("autotune: no frame rate from %s after %d s: it stays out of this game (%d W, your limit)",
                          s.appid, NO_FPS_S, s.learned.tdp)
                 self._note(s, f"out: no frame rate, {s.learned.tdp} W (your limit)")
-        if s.paused or s.gov is None:
+        if s.paused or s.gov is None or smp.t < s.refused_until:
             s.look_s = 1.0
             return
         l = s.learned
@@ -862,7 +863,9 @@ class Autotune:
                 self._did(s, act.note or f"{l.tdp} W", f"{l.tdp - was:+d} W")
                 s.refused = False
             elif l.tdp != act.limit_w:                   # refused: it goes on from what is on the chip, and waits
+                # (the governor is not asked meanwhile: a raise it wants was tried again at every look, review 2026-11-15)
                 s.gov.mode, s.gov.quiet_until, s.look_s = "hold", smp.t + REFUSED_S, governor.LOOK_S
+                s.refused_until = smp.t + REFUSED_S
                 if not s.refused:
                     log.warning("autotune: TDP %d W was not applied; trying again in %d s", act.limit_w, REFUSED_S)
                     self._note(s, f"refused: {act.limit_w} W was not applied")

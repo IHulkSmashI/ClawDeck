@@ -1707,13 +1707,69 @@ def test_the_guard_is_told_the_limit_autotune_holds_and_its_release_reaches_a_pa
 
 def test_a_refused_write_is_tried_again_later_not_ten_times_a_second(fake_hw, monkeypatch, caplog):
     at, s = _tuner(fake_hw, monkeypatch, tdp=16)
-    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)   # e.g. HHD's TDP controls not enabled
+    tries = []
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: tries.append(w) and False)   # e.g. HHD's TDP controls off
     g = _Game(at, lambda *_: 40.0)                                           # under the target: it wants the full limit
     s.user_target, s.cfg.target = 60, 60.0
     with caplog.at_level("WARNING", logger="clawdeck.autotune"):
         g.run(20)
-    assert s.learned.tdp == 16 and s.gov.limit == 16 and s.look_s == 0.5
+    assert s.learned.tdp == 16 and s.gov.limit == 16 and s.look_s == 1.0     # resting, a look a second
     assert len([r for r in caplog.records if "not applied" in r.getMessage()]) == 1
+    assert len(tries) <= 2                                                   # once, and not again within REFUSED_S
+    g.run(autotune.REFUSED_S + 5)
+    assert 2 <= len(tries) <= 4                                              # ... and again after it
+    at.session = None
+
+
+def test_a_log_with_a_row_a_second_gives_the_governor_whole_seconds_of_frames(fake_hw, monkeypatch):
+    """Only the game's own MangoHud log (mangoapp silent): a row a second, two looks a second. Each row was handed on
+    as half a second of frames and the look in between as none: a frame rate with holes, never "steady", so Autotune
+    never stepped down on such a log (19 W for a game that needs 8; review, 2026-11-15)."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    g = _Game(at, lambda tdp, *_: min(60.0, 7.5 * tdp))                       # 60 fps from 8 W
+    whole, look = g.sample, {"n": 0}
+
+    def every_other():
+        smp = whole()
+        look["n"] += 1
+        if look["n"] % 2:                                                     # no new row in this look
+            smp.fps = smp.shown_fps = smp.frametime_ms = None
+        return smp
+    at.sampler.sample = every_other
+    start = s.learned.tdp
+    g.run(4)
+    assert len(s.gov.recent) >= 0.9 * 60 * 3 and not s.no_frames              # about 60 frames a second arrived
+    g.run(60)
+    assert s.learned.tdp <= 10 < start and not s.paused
+    at.session = None
+
+
+def test_frames_that_stop_for_good_give_the_limit_you_picked_back(fake_hw, monkeypatch):
+    """The frame log stops in the middle of a game (mangoapp's logging switched off and not coming back): the governor
+    is blind, and the lowered limit stayed on the chip for the rest of the game with "holding at 14 W" in the panel,
+    whatever the game needed by then. After NO_FPS_S without a frame the pick goes back, as for a game that never
+    showed a frame; frames coming back hand the game to Autotune again."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    monkeypatch.setattr(autotune, "own_pace_emulator", lambda proc=None: None)
+    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
+    at.start("1", None, 8, 30, False, target=60)
+    s = at.session
+    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp))                       # 60 fps from 15 W
+    g.run(90)
+    low = chip["tdp"]
+    assert low <= 17 and not s.paused
+    frames, g.fps = g.fps, lambda *_: None                                    # the log stops
+    g.run(autotune.NO_FPS_S - 3)
+    assert chip["tdp"] == low and not s.paused                                # a long loading screen is not it yet
+    g.run(6)
+    st = at.status()
+    assert chip["tdp"] == 30 and st["paused"] and st["no_frames"] and not pw.governed
+    g.fps = frames                                                            # frames again
+    g.run(60)
+    assert not s.paused and not s.no_frames and chip["tdp"] < 30
     at.session = None
 
 

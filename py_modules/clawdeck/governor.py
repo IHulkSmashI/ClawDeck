@@ -707,11 +707,11 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
     # pace stands still (a game that got faster makes the frames before it look slow)
     mine = [ms for end, ms in st.recent if end >= st.changed_at + SETTLE_S]
     if st.limit < top and len(mine) >= 3 * N and t - st.edge_at >= EDGE_UP_S and t - st.changed_at >= DWELL_S:
-        mid, half = statistics.median(mine), len(mine) // 2
-        # (the medians of both halves, and their rates: a few seconds of a faster menu at the end leave the medians
-        # where they were and make every frame of the game a slow one)
-        still = (abs(statistics.median(mine[:half]) - statistics.median(mine[half:])) <= CHECK_MOVED * mid
-                 and abs(_fps(mine[:half]) - _fps(mine[half:])) <= CHECK_MOVED * _fps(mine))
+        # (the frame rates of five parts of it: a few seconds of a faster menu anywhere in it leave the medians of both
+        # halves where they were and make every frame of the game a slow one)
+        k = max(N, len(mine) // 5)
+        rates = [_fps(mine[i:i + k]) for i in range(0, len(mine) - k + 1, k)]
+        still = max(rates) - min(rates) <= 2 * CHECK_MOVED * statistics.median(rates)
         if still and not dippy and st.base_slow is not None and _edge(mine, st.base_slow):
             failed(st.limit)
             st.edge_at = t

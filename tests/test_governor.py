@@ -38,7 +38,8 @@ class Game:
                 out.append((self.end, ms / self.mult))           # shown frames: `mult` of them per rendered one
             if not frames:
                 self.end = self.t
-            obs = gov.Obs(t=self.t, frames=out, draw_w=self.draw, cap_w=self.cap, thermal=self.thermal, multiplier=self.mult)
+            draw = self.draw(self.limit, self.t) if callable(self.draw) else self.draw    # watts, or draw(limit, t)
+            obs = gov.Obs(t=self.t, frames=out, draw_w=draw, cap_w=self.cap, thermal=self.thermal, multiplier=self.mult)
             act = gov.step(self.st, obs, self.cfg)
             if act.limit_w is not None:
                 self.limit = act.limit_w
@@ -395,3 +396,140 @@ def test_after_six_steps_down_in_a_row_the_rules_of_holding_get_a_turn():
     gaps = [round(b - a, 1) for a, b in zip(at, at[1:])]
     assert len(at) >= 8 and max(gaps[:5]) <= 2.7 and gaps[5] >= gov.AFTER_LOSS_S       # 2.5 s a step, then a pause
 
+
+
+# ---- second review (2026-11-15): what broke, as tests ----------------------------------------------------------------
+def test_a_target_out_of_reach_from_the_first_look_does_not_pin_the_start_level():
+    """The full limit gives 46 fps, 12 W already do: the first look at the full limit read as "much less than the 60
+    before" and set a floor at the start level that never went away (19 W for the whole session, and saved for the
+    next). The floor stands for REACH_FOR_S, then the way down goes on."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w: 46.0 if w >= 12 else 46.0 * w / 12)
+    g.draw = lambda w, t: float(w)                                   # it draws what it gets (an emulator that spins)
+    g.run(gov.REACH_FOR_S - 5)
+    assert min(w for _, w in g.writes) >= 19                         # nothing under the start level meanwhile
+    g.run(400)
+    assert g.limit <= 13 and g.st.mode == "hold"
+
+
+def _video_game(video_from, video_to):
+    """A 60 fps game on a frame limit that needs 16 W and gives 30 fps at 8 W; a 30 fps video (6 W at any limit)."""
+    video = lambda t: video_from <= t < video_to
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60),
+             fps=lambda w, t: 30.0 if video(t) else min(60.0, 30.0 + 30.0 * (w - 8) / 8.0))
+    g.draw = lambda w, t: 6.0 if video(t) else min(float(w), 16.0)
+    return g
+
+
+def test_a_short_video_keeps_the_level_that_held_before_it():
+    g = _video_game(150, 190)
+    g.run(150)
+    held = g.limit
+    assert 16 <= held <= 18
+    g.run(40)                                                        # the video: half the frames at every limit
+    assert all(w >= held for t, w in g.writes if t >= 150)           # nothing under it for REACH_FOR_S
+    g.run(60)
+    assert g.limit <= held + 2 and g.st.ref > 57                     # the game is back, at its frame rate
+
+
+def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
+    """After REACH_FOR_S the lower reference is the game and the limit goes down. When the game is back, the low limit
+    may give just what the video gave (30 fps at 8 W): no loss shows. But the package now draws all of the limit, which
+    it did not when the reference was taken: the full limit is looked at within seconds (it stayed at half the frame
+    rate for the rest of the session otherwise)."""
+    g = _video_game(150, 400)
+    g.run(400)
+    assert g.limit <= 10                                             # down during the long video
+    g.run(6)
+    assert any("draws all of" in n for t, n in g.notes if t >= 400)
+    assert 30 in g.since(400)
+    g.run(60)
+    assert g.limit >= 16 and g.st.ref > 57
+
+
+def test_a_loading_screen_does_not_lower_the_reference():
+    """No frames and a package far under the limit for some seconds. The pace is still that of the frames before
+    (rendered with the limit holding the game back) while the look's draw says the limit holds nothing back: the looks
+    as the loading screen began and ended took that pace as the reference (55.8 -> 53.8 -> 51.6 fps over three
+    loading screens, and the limit followed it down). Here as the plugin hands frames on: stamped at the look's time,
+    so three looks without frames are not yet "no frames"."""
+    cfg = gov.Cfg(floor=8, ceiling=30)
+    g = Game(cfg, fps=lambda w: 56.0 if w >= 24 else 56.0 - (24 - w))        # a frame less for each watt under 24
+    g.draw = lambda w, t: float(w)
+    g.run(90)
+    st, ref = g.st, g.st.ref
+    assert 21 <= g.limit <= 23 and abs(ref - 56.0) < 0.5 and st.mode == "hold"
+    ms, t = 1000.0 / g.rate(), g.t
+
+    def look(frames, draw):
+        nonlocal t
+        t += 0.5
+        gov.step(st, gov.Obs(t=t, frames=[(t - (frames - 1 - i) * ms / 1000.0, ms) for i in range(frames)], draw_w=draw), cfg)
+    for _ in range(3):
+        look(13, g.limit - 5.0)                     # the loading screen begins in this look: half its frames, half its draw
+        for _ in range(9):
+            look(0, 12.0)                           # the loading screen
+        look(13, g.limit - 5.0)                     # play again, half a look of it
+        for _ in range(20):
+            look(27, float(g.limit))
+    assert st.ref == pytest.approx(ref, rel=0.005)
+
+
+def test_a_visit_to_a_fast_map_changes_nothing_and_a_long_stay_is_the_game():
+    """A map at 144 fps in a 40 fps game: over 2.5 times the usual rate is not judged. After 5 s it was taken for the
+    game (all that was known dropped, the full limit for 20 s on the way back); its frames in the pace read as a game
+    that gives more than the reference. More frames harm nothing: 30 s before it is the game, and the pace starts
+    again from the game's frames when it is over."""
+    in_map = lambda t: 200 <= t < 208 or t >= 400
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: 144.0 if in_map(t) else (40.0 if w >= 14 else 40.0 * w / 14))
+    g.draw = lambda w, t: 9.0 if in_map(t) else min(float(w), 14.0)
+    g.run(200)
+    held, ref, fail = g.limit, g.st.ref, dict(g.st.fail)
+    assert held <= 15
+    g.run(30)                                                        # 8 s in the map and back
+    assert g.since(200) == [] and g.st.ref == pytest.approx(ref, rel=0.02) and set(fail) <= set(g.st.fail)
+    g.run(170 + gov.ADOPT_FAST_S + 10)                               # ... and a stay of over half a minute
+    assert g.st.usual > 100
+
+
+def test_a_faster_menu_does_not_read_as_slow_frames_at_the_limit():
+    """A 60 fps menu for 3 s in a 40 fps game (1.5 times: judged). With its frames at the end of the last 10 s the mean
+    frame time falls and every frame of the game is "slow" against it, while the medians of both halves stand still:
+    the edge rule gave a watt at every visit."""
+    menu = lambda t: any(a <= t < a + 3 for a in (120, 180, 240))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=40), fps=lambda w, t: 60.0 if menu(t) else (40.0 if w >= 13 else 40.0 * w / 13))
+    g.draw = lambda w, t: 9.0 if menu(t) else min(float(w), 13.0)
+    g.run(300)
+    assert not any("slow frames" in n for _, n in g.notes)
+
+
+def test_a_slow_game_gets_the_frames_a_look_at_the_full_limit_needs():
+    """A look at the full limit was judged after a second: 20 frames of a 20 fps game, some from before the watts had
+    arrived, and the reference came out too low (22.5 for 24.5). It waits for 3 N frames, at most 3 s."""
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w: 20.0 if w >= 20 else 20.0 * w / 20)
+    g.draw = lambda w, t: float(w)
+    g.run(60)
+    looks = [(t, n) for t, n in g.notes if "the full 30 W" in n or "measuring what" in n]
+    assert looks
+    t0 = looks[0][0]
+    after = min(t for t, n in g.notes if t > t0)
+    assert after - t0 >= 3 * gov.N / 20.0                            # 30 frames at 20 fps
+
+
+def test_frame_times_that_are_not_frame_times_are_left_out():
+    st, _ = gov.start(gov.Cfg(floor=8, ceiling=30, target=60), 0.0)
+    for k in range(40):
+        frames = [(k * 0.5 + 0.1, 0.0), (k * 0.5 + 0.2, -3.0), (k * 0.5 + 0.3, float("nan"))] + \
+                 [(k * 0.5 + 0.3 + i / 60.0, 16.7) for i in range(10)]
+        gov.step(st, gov.Obs(t=(k + 1) * 0.5, frames=frames), gov.Cfg(floor=8, ceiling=30, target=60))
+    assert all(ms > 0 for ms in st.pace) and len(st.pace) == gov.PACE_FRAMES
+
+
+def test_the_guards_cap_under_the_floor_wins():
+    g = Game(gov.Cfg(floor=15, ceiling=30, target=60))
+    g.run(5)
+    g.cap = 12
+    g.run(5)
+    assert g.limit == 12                                             # under your floor: the guard's step is for safety
+    g.cap = None
+    g.run(30)
+    assert g.limit >= 15
