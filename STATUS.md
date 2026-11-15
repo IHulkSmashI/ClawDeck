@@ -54,6 +54,16 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
+its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
+percentile frame time and the share of slow frames (more than 10 % over the pace of the 60 frames before): a limit
+that is just too low shows as a few slow frames while the frame rate still reads full (Midnight Club: Los Angeles on
+RPCS3 at 15 W: 29.7 of 30 fps, 6.4 % slow frames). Nothing Autotune decides on changed, and a game with its own
+MangoHud log (one row a second) leaves the four columns empty. An `autotune.csv` from an earlier build is kept as
+`autotune.csv.1`. Check on the EX: Autotune on, a game from ES-DE for a minute: the newest rows of
+`~/homebrew/logs/ClawDeck/autotune.csv` end in four figures (about 60, 16.7, 17, 0 for a 60 fps game), and
+`autotune.csv.1` holds the earlier rows.
+
 **Autotune reads frames from mangoapp (2026-11-14):** a game without its own MangoHud log (no launch wrapper: xemu's
 Flatpak, a game started another way) gave Autotune no frame rate ("no frame rate after 30 s"). Now it follows
 mangoapp's per-frame log (Steam's overlay, fed every frame of the focused app): a running one is only read; else
