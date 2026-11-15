@@ -165,8 +165,9 @@ windows in hold) autotune sets tau to 8 s; once settled the firmware's tau comes
 Paused → firmware's tau; every write revertible.
 The floor is the model minimum (8 W) or the user's. Saved per game and power source: TDP, CPU ceiling, GPU floor,
 boost, `max_fps` and the ceiling it was measured at (a different set TDP is measured again). Frames per watt is
-shown, never chased: it keeps improving down to the minimum TDP. A manual change (Advanced) pauses it; picking a
-profile or moving the slider measures again and hands control back. ~70 µs of CPU per step.
+shown, never chased: it keeps improving down to the minimum TDP. A manual change (Advanced) or switching it off in a
+game pauses it: what it changed goes back to the pick, the change made by hand stays; picking a profile or moving the
+slider measures again and hands control back. ~70 µs of CPU per step.
 
 ## Open items (need the device)
 - Low latency log lines ("low latency: on", "auto: waited in N of 100 frames") come from upstream's
