@@ -153,7 +153,7 @@ generation), **Fixes** and **Setup**. **Explain every control** (in Setup) says 
 | **Temperature guard** | Over 95 °C it caps the CPU's top clock when a few busy cores make the heat, and steps the watts down from what the chip draws otherwise; both come back once it's cool, also while Autotune is switched off. |
 | **Fan** | Automatic (MSI), Quiet, Cooling, Extreme, Full speed, or your own curve; the panel shows the curve the fans follow now. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |
-| **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor |
+| **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |
 
 ### Upscaling and frame generation
 
