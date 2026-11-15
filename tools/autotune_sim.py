@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "py_modules"))
 
-from clawdeck import autotune, hw, power  # noqa: E402
+from clawdeck import autotune, governor, hw, power  # noqa: E402
 
 LAG_S = 0.15            # the chip's sustained power follows a new limit with this time constant
 PRESENT_MS = 0.2        # spread of a frame held by the game's frame limit (recorded: 33.33 ms median, 33.9 ms p99)
@@ -159,6 +159,7 @@ class Score:
     longest_starved_s: float = 0.0
     changes_per_min: float = 0.0
     fps: float = 0.0                # frames shown over the run
+    slow_pct: float = 0.0           # frames more than 10 % longer than the full limit's frame time, % of all
 
 
 class Game:
@@ -179,7 +180,7 @@ class Game:
         self._frames: list[tuple[float, float]] = []   # (end time s, frame time ms) since the last take()
         self._joules, self._taken_at = 0.0, 0.0
         self._need: dict = {}
-        self._acc = dict(limit=0.0, draw=0.0, need=0.0, over=0.0, starved=0.0, lost=0.0, frames=0)
+        self._acc = dict(limit=0.0, draw=0.0, need=0.0, over=0.0, starved=0.0, lost=0.0, frames=0, slow=0)
         self._run, self._longest = 0.0, 0.0
         self.trace: list[tuple] | None = None      # (t, limit, watts, frame ms, need) per frame, when asked for
 
@@ -236,6 +237,7 @@ class Game:
             a["over"] += max(0.0, self.limit - need) * dt
             a["lost"] += cost * dt
             a["frames"] += 1
+            a["slow"] += ms > 1100.0 / best
             if now < best * (1 - TOLERANCE) - SLACK_FPS:
                 a["starved"] += dt
                 self._run += dt
@@ -267,7 +269,13 @@ class Game:
                      need_w=round(a["need"] / t, 1), over_w=round(a["over"] / t, 1),
                      starved_pct=round(100 * a["starved"] / t, 1), lost_pct=round(100 * a["lost"] / t, 1),
                      longest_starved_s=round(self._longest, 1), changes_per_min=round(self.changes * 60 / t, 1),
-                     fps=round(a["frames"] / t, 1))
+                     fps=round(a["frames"] / t, 1), slow_pct=round(100 * a["slow"] / max(1, a["frames"]), 2))
+
+    def clipped(self) -> bool:
+        """What the chip's "limited by power" flags would say: an emulator that spins is always clipped; anything
+        else when the limit gives fewer frames than the full one would."""
+        scene, work = self.place(self.t)
+        return scene.fills or scene.shown(self.limit, work) < scene.shown(self.ceiling, work) - 0.01
 
 
 @dataclass
@@ -332,6 +340,9 @@ class Recording:
 
     def place(self, t: float) -> tuple[Scene, float]:
         return self.scene, 1.0
+
+    def clipped(self) -> None:
+        return None
 
     def advance(self, until: float) -> None:
         self.t = until
@@ -407,6 +418,35 @@ class Today:
             self._saved, self.at.session = None, None
 
 
+class New:
+    """clawdeck.governor: twice a second while it holds, ten times a second while it watches a write."""
+
+    def __init__(self, target: int | None = None, keep_pct: float = 5.0, auto_fps: bool = True, start_w: int | None = None):
+        self.target, self.keep_pct, self.auto_fps, self.start_w = target, keep_pct, auto_fps, start_w
+        self.name = f"new, target {target}" if target else "new, most frames"
+        self.period = governor.LOOK_S
+        self.notes: list[tuple[float, str]] = []
+
+    def start(self, game, floor: int, ceiling: int) -> None:
+        self.game = game
+        self.cfg = governor.Cfg(floor=floor, ceiling=ceiling, target=self.target, keep_pct=self.keep_pct,
+                                auto_fps=self.auto_fps, start_w=self.start_w)
+        self.st, act = governor.start(self.cfg, game.t)
+        game.set_limit(act.limit_w)
+
+    def tick(self, frames: list, draw_w: float | None) -> None:
+        act = governor.step(self.st, governor.Obs(t=self.game.t, frames=frames, draw_w=draw_w,
+                                                  clipped=self.game.clipped()), self.cfg)
+        if act.limit_w is not None:
+            self.game.set_limit(act.limit_w)
+        if act.note and (not self.notes or self.notes[-1][1] != act.note):
+            self.notes.append((round(self.game.t, 2), act.note))
+        self.period = act.look_s
+
+    def stop(self) -> None:
+        pass
+
+
 class Fixed:
     """A limit that never moves: the ends of the scale (the full limit wastes the most, the floor loses the most)."""
     period = 1.0
@@ -459,7 +499,7 @@ def main() -> int:
 
     names = a.scenario or sorted(SCENARIOS)
     print(f"{'scenario':<20} {'governor':<22} {'limit W':>7} {'need W':>6} {'over W':>6} {'draw W':>6} "
-          f"{'starved %':>9} {'longest s':>9} {'lost %':>6} {'changes/min':>11} {'fps':>5}")
+          f"{'starved %':>9} {'longest s':>9} {'lost %':>6} {'changes/min':>11} {'fps':>5} {'slow %':>6}")
     for name in names:
         target = a.target or (30 if name.startswith("emulator") else 60)
         govs = [Fixed(CEILING_W)]
@@ -467,13 +507,18 @@ def main() -> int:
             govs.append(Today())
         if a.mode in ("target", "both"):
             govs.append(Today(target=target))
+        if a.mode in ("most", "both"):
+            govs.append(New())
+        if a.mode in ("target", "both"):
+            govs.append(New(target=target))
         for g in govs:
-            game = Game(SCENARIOS[name], seed=a.seed, goal_fps=g.target if isinstance(g, Today) and g.target else None)
+            game = Game(SCENARIOS[name], seed=a.seed, goal_fps=getattr(g, "target", None))
             if a.trace and len(names) == 1 and g is govs[-1]:
                 game.trace = []
             s = run(g, game, a.seconds).score()
             print(f"{name:<20} {g.name:<22} {s.limit_w:>7} {s.need_w:>6} {s.over_w:>6} {s.draw_w:>6} "
-                  f"{s.starved_pct:>9} {s.longest_starved_s:>9} {s.lost_pct:>6} {s.changes_per_min:>11} {s.fps:>5}")
+                  f"{s.starved_pct:>9} {s.longest_starved_s:>9} {s.lost_pct:>6} {s.changes_per_min:>11} {s.fps:>5} "
+                  f"{s.slow_pct:>6}")
             if game.trace:
                 with open(a.trace, "w", newline="", encoding="utf-8") as f:
                     w = csv.writer(f)
