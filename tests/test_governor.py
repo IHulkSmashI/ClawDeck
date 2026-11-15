@@ -228,10 +228,9 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
 
 def test_frame_time_spread_widens_what_counts_as_a_loss():
     """9 % frame-time spread moves the rate of 10 frames by 3-4 % all the time: every such wobble was a clear loss."""
-    wobble = [1.0 + 0.04 * x for x in (1.0, -1.0, 0.3, -0.6, 1.2, -0.2, -1.1, 0.8, 0.1, -0.5, 0.9, -1.2, 0.4)]
     g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
-             shape=lambda i, w, t: wobble[(i // 10) % len(wobble)]).run(300)      # each run of 10 frames 0-5 % off
-    assert g.st.noise > 0.015 and g.limit <= 24 and g.since(100).count(30) <= 2, g.writes[-10:]
+             shape=lambda i, w, t: 1.06 if (i // 30) % 2 else 0.94).run(300)      # half a second 6 % slow, half 6 % fast
+    assert g.st.noise > 0.03 and g.limit <= 24 and g.since(100).count(30) <= 1, g.writes[-10:]
     assert gov._spread([16.7] * 60) == 0 and gov._spread([11.7, 21.7] * 30) == pytest.approx(0, abs=1e-9)
 
 
@@ -317,7 +316,8 @@ def test_after_a_heavier_scene_the_level_that_held_is_tried_first():
     g.fps = HOLDS_FROM_14
     t0 = g.t
     g.run(30)
-    assert home in g.since(t0)[:4] and g.limit <= home, g.since(t0)       # a look at the full limit, then home
+    lower = [w for w in g.since(t0) if w < 28]                             # after a look at the full limit: home at
+    assert lower and lower[0] == home and g.limit <= home, g.since(t0)     # once, not 2 W at a time
 
 
 def test_failed_steps_are_approached_by_halving_and_wait_longer_each_time():
@@ -364,3 +364,34 @@ def test_a_raised_floor_is_obeyed_at_once():
     g.cfg.floor = 15
     g.run(0.6)
     assert g.limit == 15
+
+
+def test_one_dip_at_the_full_limit_does_not_move_the_reference():
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: 60.0)
+    g.st.quiet_until = 1e9                                   # no steps down in this test
+    g.run(10)
+    assert g.st.ref == pytest.approx(60, abs=0.5)
+    t0 = g.t
+    g.fps = lambda w, t: 40.0 if t < t0 + 0.6 else 60.0      # one dip of the game's own
+    seen = []
+    for _ in range(8):
+        g.run(0.5)
+        seen.append(g.st.ref)
+    assert min(seen) > 57, seen                              # the median of the last looks, not the last look
+
+
+def test_steps_that_fail_one_after_the_other_wait_longer_each_time():
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 30 else 55.0).run(40)
+    downs = [(at, w) for at, w in g.writes if w < 30]
+    backs = [at for at, w in g.writes if w == 30]
+    assert [w for _, w in downs] == [28, 29]                 # 2 W down, then halfway: both lose frames
+    assert downs[1][0] - backs[0] >= gov.AFTER_LOSS_S - 1.1  # 5 s after the first, and
+    assert g.st.quiet_until - backs[1] >= 2 * gov.AFTER_LOSS_S - 1.1     # 10 s after the second
+
+
+def test_after_six_steps_down_in_a_row_the_rules_of_holding_get_a_turn():
+    g = Game(gov.Cfg(floor=4, ceiling=40, target=60, start_w=40), fps=lambda w: 60.0).run(40)
+    at = [t for t, w in g.writes]
+    gaps = [round(b - a, 1) for a, b in zip(at, at[1:])]
+    assert len(at) >= 8 and max(gaps[:5]) <= 2.7 and gaps[5] >= gov.AFTER_LOSS_S       # 2.5 s a step, then a pause
+
