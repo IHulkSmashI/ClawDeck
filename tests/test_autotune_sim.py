@@ -152,12 +152,13 @@ def test_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
             assert all(10 <= row[1] <= 25 for row in game.trace), (name, target)
 
 
-def test_a_jump_of_the_need_is_answered_within_a_second_and_a_half():
+def test_a_jump_of_the_need_is_answered_within_seconds():
     """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W. The
-    governors before this one raised +2 to +6 W, 2 s apart: 6-7 s under the lock."""
+    governors before this one raised +2 to +6 W, 2 s apart: 6-7 s under the lock. A level that had held for a while
+    is tried once more before it is given up (the game's own dips look the same), which is the second second."""
     for seed in (1, 2, 3):
         s = sim.run(sim.Wired(target=30), sim.Game(sim.SCENARIOS["emulator-need-jumps"], seed=seed, goal_fps=30)).score()
-        assert s.longest_starved_s <= 1.5 and s.starved_pct <= 1
+        assert s.longest_starved_s <= 2.5 and s.starved_pct <= 1.5
 
 
 def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit():
@@ -187,7 +188,7 @@ def test_replay_the_recorded_loss_gets_the_full_limit_within_a_second():
     rec = sim.run(sim.Wired(target=30), sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
     lost_at = next(s for s, w in rec.limits if w == 12)
     raises = [(s, w, before) for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
-    assert all(w == before + 1 for s, w, before in raises if s < lost_at)
+    assert not [r for r in raises if r[0] < lost_at and r[1] == 30]       # never the full limit while the lock holds
     full = [s for s, w, _b in raises if s >= lost_at and w == 30]
     assert full and full[0] - lost_at <= 1.0
 

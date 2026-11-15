@@ -76,13 +76,12 @@ def test_a_step_down_that_loses_frames_is_taken_back_within_a_second_and_not_tri
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=22), fps=lambda w: 60.0 if w >= 20 else 48.0)
     g.run(40)
     # 20 W holds, 18 W loses a fifth of the frames: more than 2 W usually cost, so the full limit at once, and back
-    # to 20 W when the full limit shows the scene is the same
-    assert [w for _, w in g.writes] == [20, 18, 30, 20]
-    assert g.writes[2][0] - g.writes[1][0] <= 1.0
-    # 18 W failed, and 19 W with it: a straight line from 48 fps at 18 W to 60 at 20 W puts 19 W under the goal too
+    # to 20 W when the full limit shows the scene is the same. Then the level between, which fails too
+    assert [w for _, w in g.writes] == [20, 18, 30, 20, 19, 20]
+    assert g.writes[2][0] - g.writes[1][0] <= 1.0 and g.writes[5][0] - g.writes[4][0] <= 1.0
     assert g.limit == 20 and set(g.st.fail) == {18, 19}
     g.run(60)
-    assert len(g.writes) == 4                            # nothing more for RETRY_S
+    assert len(g.writes) == 6                            # nothing more for RETRY_S
 
 
 def test_the_guards_cap_is_obeyed_at_once_and_nothing_is_raised_when_it_goes():
@@ -94,11 +93,9 @@ def test_the_guards_cap_is_obeyed_at_once_and_nothing_is_raised_when_it_goes():
     assert g.limit <= 22
     g.cap = None                                         # the guard gives the watts back
     n = len(g.writes)
-    g.run(0.4)
-    assert all(w <= 22 for _, w in g.writes[n:])         # nothing is raised just because it may be
     g.run(20)
-    assert 30 in [w for _, w in g.writes[n:]]            # ... but what the full limit gives now is looked at
-    assert g.st.ref == pytest.approx(50, abs=0.5)
+    assert 30 in [w for _, w in g.writes[n:]]            # what the full limit gives now is looked at ...
+    assert g.st.ref == pytest.approx(50, abs=0.5) and g.limit >= 24   # ... and it gives 10 fps more: it stays up
 
 
 def test_no_frames_decides_nothing():

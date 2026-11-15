@@ -46,8 +46,9 @@ from clawdeck import autotune, governor, hw, power  # noqa: E402
 
 LAG_S = 0.15            # the chip's sustained power follows a new limit with this time constant
 PRESENT_MS = 0.2        # spread of a frame held by the game's frame limit (recorded: 33.33 ms median, 33.9 ms p99)
-TOLERANCE = 0.05        # a limit "costs frames" when it gives this much less than the full limit would ...
-SLACK_FPS = 0.5         # ... and half a frame a second more, so a level right on the 5 % line counts as holding
+TOLERANCE = 0.05        # a limit "costs frames" when it gives this much less than the full limit would (without a
+KEEP_FPS = 2.0          # target: or 2 fps less, whichever is more, as Autotune's own rule says) ...
+SLACK_FPS = 0.5         # ... and half a frame a second more, so a level right on that line counts as holding
 FLOOR_W, CEILING_W = 8, 30
 
 
@@ -202,11 +203,15 @@ class Game:
         top = scene.shown(self.ceiling, work)
         return min(top, self.goal) if self.goal else top
 
+    def line(self, best: float) -> float:
+        """The frame rate under which the limit costs frames."""
+        return best - (best * TOLERANCE if self.goal else max(best * TOLERANCE, KEEP_FPS)) - SLACK_FPS
+
     def need(self, scene: Scene, work: float) -> int:
         """The lowest whole-watt limit that gives the best rate within TOLERANCE."""
         key = (id(scene), work)
         if key not in self._need:
-            line = self.best(scene, work) * (1 - TOLERANCE) - SLACK_FPS
+            line = self.line(self.best(scene, work))
             self._need[key] = next((w for w in range(self.floor, self.ceiling + 1) if scene.shown(w, work) >= line),
                                    self.ceiling)
         return self._need[key]
@@ -238,7 +243,7 @@ class Game:
             a["lost"] += cost * dt
             a["frames"] += 1
             a["slow"] += ms > 1100.0 / best
-            if now < best * (1 - TOLERANCE) - SLACK_FPS:
+            if now < self.line(best):
                 a["starved"] += dt
                 self._run += dt
                 self._longest = max(self._longest, self._run)
