@@ -168,6 +168,28 @@ It asks one question all the time: would more watts, up to your limit, give fram
 - **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a menu, a pause). A
   step being watched is taken back; a lowered limit goes to the full one while frames still come.
 
+- **What is not the limit's doing** (added after an adversarial review, 2026-11-15, which broke the first version on
+  each of these):
+  - *A cutscene or a video* gives fewer frames at every limit. When the full limit gives 15 % less than it did, the
+    level that held before stays the lowest one for as long as that lower reference stands, no step down is tried for
+    20 s, and the full limit is looked at again every 30 s for 2 minutes. More frames at a held limit than the full
+    limit is believed to give (the game is back) has the full limit looked at at once.
+  - *A menu, a map, fast-forward, a loading screen:* frames under 35 % or over 250 % of the usual rate are not judged.
+    When they stay for 5 s they are the game (a 20 fps stretch, a target far above what the game does), and nothing
+    known before applies.
+  - *The game's own dips and hitches:* a loss at a limit that can't be its cause (the full limit, or the package well
+    under the limit) that is over within 2 s is a dip of the game's own. After two of them a loss counts only when it
+    is still there a second later, and a step is judged at the end of its watch on its typical frame. A level that had
+    held for 20 s is tried once more before it is given up.
+  - *A game whose frame rate wobbles* (the rates of its last six runs of ten frames differ): the thresholds widen to
+    2.5 times that wobble, at most fourfold. Frame rates are frames over their time, without frames over 2.5 times the
+    median; frames that alternate short and long (generated frames) are read as their rate.
+  - *Slow frames* count against the mean frame time of their own stretch and against the share the game had before
+    the step, with a margin for chance; not at all while the pace moves or in a game that dips by itself.
+  - *The reference* at the full limit is the median of the last five looks, not the last one.
+  - A step down is watched from when the package draws under 2.5 W over the new limit (at most 3 s late); a raise is
+    judged when the draw and the frame rate have stopped climbing.
+
 Frames: every frame of every game from mangoapp's log (Steam's overlay; `Sampler` turns its logging on through its
 control socket and deletes the log at the game's end). The launch wrapper's MangoHud log (a row a second) is read only
 while mangoapp gives nothing, and that second's frames are taken at their average. Rendered, not presented: with XeSS

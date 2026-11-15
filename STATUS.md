@@ -73,6 +73,14 @@ Check on the EX, Autotune on:
 - `tools/soak.py` over two hours with a game: the backend under 0.5 % CPU (it looks twice a second now, ten times a
   second for a second or two after its own change);
 - cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
+- a 30 fps cutscene or video in a 60 fps game, 20 s and a minute: the TDP does not go under what it was before the
+  video, and the game is at its frame rate within a second of the video's end;
+- a game with XeSS frame generation: the status says "rendered, 2x shown" and the TDP follows the rendered frames
+  (in the first version every loss was missed with XeLL; fixed, tested with made-up XeLL lines only);
+- known from the simulator, to watch for: a game with very uneven frame rates (hitch runs every 2 s, or 9 % frame-time
+  spread without a frame limit) may be held a watt or two under where it loses 5 % for up to a minute;
+- if Decky kills the backend while a game runs, the limit Autotune held, PL2 = PL1 + 2 W, the 8 s PL1 window and the
+  stopped thermald stay until the next plugin start reverts them (an old mechanism; the 8 s window is new in it).
 
 **Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
 its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
