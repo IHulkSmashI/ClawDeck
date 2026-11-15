@@ -1880,6 +1880,42 @@ def test_target_fps_fewest_watts_that_hold_it_and_fast_back_up_in_a_heavy_scene(
     at.session = None
 
 
+def test_a_new_target_leaves_xemu_alone(fake_hw, monkeypatch, tmp_path):
+    """set_target() ended every pause, also the one for xemu: Autotune governed the game again on xemu's 60 presented
+    fps and took the TDP from the 30 W pick to the 8 W floor within two minutes."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+    proc = tmp_path / "proc"
+    for pid, name in (("1", "systemd"), ("4242", "es-de"), ("4300", "xemu")):
+        _w(str(proc / pid / "comm"), name)
+    monkeypatch.setattr(autotune, "PROC", str(proc))
+    pw.apply_profile("", {"tdp": 30}, False)                          # the pick: Custom 30 W
+    at.start("3119184808#xbox/Project Gotham Racing 2", None, 8, 30, False, target=60)
+    at.sampler.sample = lambda: autotune.Sample(t=clock["t"], frametime_ms=16.7, fps=60.0, gpu_mhz=1000,
+                                                gpu_max_mhz=2400, cpu_pct=30, pkg_w=19.0, gpu_busy=40,
+                                                source="presented", shown_fps=None)
+
+    def run(n):
+        for _ in range(n):
+            clock["t"] += 1
+            at._step()
+    run(10)
+    assert at.status()["own_pace"] == "xemu" and at.session.paused and chip["tdp"] == 30
+    at.set_target(30)                                                 # a new target in the panel
+    run(120)
+    st = at.status()
+    assert st["own_pace"] == "xemu" and st["paused"] and chip["tdp"] == 30
+    at.set_target(None)                                               # the target switched off: the same
+    run(120)
+    assert at.session.paused and chip["tdp"] == 30
+    at.session = None
+
+
 def test_target_fps_a_miss_right_after_lowering_makes_that_the_floor(fake_hw, monkeypatch):
     at, s, run = _target_tuner(fake_hw, monkeypatch, 60, ceiling=20)
     _Game(at, lambda tdp, *_: 62.0 if tdp >= 18 else 50.0)      # calm at 18 W, misses under it

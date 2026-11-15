@@ -60,6 +60,13 @@ Autotune turns it on through mangoapp's control socket and off at the game's end
 row (Steam's overlay-level change stops it). Check on the EX: Autotune on, a game without the wrapper: the Power line
 shows fps within a minute; `~/mangoapp_*.csv` appears and stops growing after the game ends.
 
+**A new Autotune target leaves xemu alone (2026-11-15):** a new target, the target switched off or the Auto FPS switch
+ended every pause in the running game, also the one for xemu: Autotune governed the game again on xemu's 60 presented
+fps and took the TDP from a 30 W pick to 8 W within two minutes. Now a game Autotune stays out of stays as it is, and
+the new target counts from the next game. After a manual change a new target still hands control back, as before.
+Check on the EX: Autotune on, an Xbox game from ES-DE until the Power line says "Autotune stays out of xemu", then
+pick another target: the line and the TDP (the pick) stay.
+
 **Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
 Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
