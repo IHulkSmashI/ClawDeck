@@ -178,6 +178,7 @@ class Game:
         self.limit = float(ceiling)
         self.watts = float(ceiling)                # what the chip sustains now (follows the limit, LAG_S)
         self.changes = 0
+        self.asked: list[float] = []
         self._frames: list[tuple[float, float]] = []   # (end time s, frame time ms) since the last take()
         self._joules, self._taken_at = 0.0, 0.0
         self._need: dict = {}
@@ -194,6 +195,7 @@ class Game:
         return self.segs[i][1], self.segs[i][2]
 
     def set_limit(self, watts: float) -> None:
+        self.asked.append(float(watts))            # as asked: the chip clamps, a test may want to know
         w = float(max(self.floor, min(self.ceiling, watts)))
         if w != self.limit:
             self.limit, self.changes = w, self.changes + 1
@@ -426,11 +428,12 @@ class Wired:
 
 
 class New:
-    """clawdeck.governor alone, with what the simulator knows of the chip's "limited by power" flags (Autotune doesn't
-    read those yet): twice a second while it holds, ten times a second while it watches a write."""
+    """clawdeck.governor alone: twice a second while it holds, ten times a second while it watches a write. flags:
+    it also gets what the simulator knows of the chip's "limited by power" flags (Autotune doesn't read those yet)."""
 
-    def __init__(self, target: int | None = None, keep_pct: float = 5.0, auto_fps: bool = True, start_w: int | None = None):
-        self.target, self.keep_pct, self.auto_fps, self.start_w = target, keep_pct, auto_fps, start_w
+    def __init__(self, target: int | None = None, keep_pct: float = 5.0, auto_fps: bool = True, start_w: int | None = None,
+                 flags: bool = False):
+        self.target, self.keep_pct, self.auto_fps, self.start_w, self.flags = target, keep_pct, auto_fps, start_w, flags
         self.name = f"new, target {target}" if target else "new, most frames"
         self.period = governor.LOOK_S
         self.notes: list[tuple[float, str]] = []
@@ -444,7 +447,7 @@ class New:
 
     def tick(self, frames: list, draw_w: float | None) -> None:
         act = governor.step(self.st, governor.Obs(t=self.game.t, frames=frames, draw_w=draw_w,
-                                                  clipped=self.game.clipped()), self.cfg)
+                                                  clipped=self.game.clipped() if self.flags else None), self.cfg)
         if act.limit_w is not None:
             self.game.set_limit(act.limit_w)
         if act.note and (not self.notes or self.notes[-1][1] != act.note):

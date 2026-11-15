@@ -1501,6 +1501,104 @@ def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(
     assert len(log.read_text().splitlines()) == 4 and (tmp_path / "autotune.csv.1").read_text() == old
 
 
+def test_a_look_without_a_new_mangoapp_row_has_no_frames_not_the_other_logs_average(fake_hw, tmp_path, monkeypatch):
+    """A game with the launch wrapper has both logs. One look without a new mangoapp row (a 0.6 s stall) fell through
+    to the MangoHud log and got the average of every second it had written so far as "this look's frames": 42.8 fps
+    in a 60 fps game, and the full limit for it (review, 2026-11-15)."""
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: True)
+    logs = tmp_path / "mangohud"
+    logs.mkdir()
+    own = logs / "game_2026-11-15_14-00-00.csv"
+    own.write_text("os\nLinux\nfps,frametime\n" + "30.0,33.3\n" * 40)          # 40 s of a slow start, never read
+    live = tmp_path / "mangoapp_2026-11-15_14-00-01.csv"
+    _mango_rows(live, [16.7] * 3, header=True)
+    smp = autotune.Sampler(fake_hw, str(logs), home=str(tmp_path))
+    smp.set_prefix(None)
+    smp.frametime()                                                       # finds both logs
+    _mango_rows(live, [16.7] * 30)
+    clock["t"] += 0.5
+    assert smp.frametime() == (pytest.approx(16.7), pytest.approx(59.9, abs=0.1))
+    clock["t"] += 0.5
+    assert smp.frametime() == (None, None) and smp.frames_ms == []       # a stall: no frames, not 30 fps
+    clock["t"] += autotune.MANGOAPP_RELOG_S + 1                           # mangoapp gone for good: the other log,
+    with open(own, "a") as f:                                             # from here on only
+        f.write("60.0,16.7\n")
+    smp._log_checked = -1e9
+    assert smp.frametime() == (16.7, 60.0)
+
+
+def test_the_frame_generation_multiplier_is_a_whole_number_that_changes_rarely(fake_hw, monkeypatch):
+    """XeLL writes its figure once per 100 rendered frames. Shown fps of this look over that line stood still between
+    two lines, times every frame: the governor saw a constant rate and no loss at all (review, 2026-11-15)."""
+    at, s = _tuner(fake_hw, monkeypatch, tdp=20)
+    seen = []
+
+    def look(t, shown_fps, xell):
+        at.sampler._xell = xell
+        at.sampler.frames_ms = [1000.0 / shown_fps] * int(shown_fps / 2)
+        smp = autotune.Sample(t=t, frametime_ms=1000.0 / xell[1], fps=xell[1], gpu_mhz=None, gpu_max_mhz=None, cpu_pct=None,
+                              pkg_w=20.0, shown_fps=shown_fps, source="rendered")
+        seen.append(at._multiplier(s, smp))
+    for i in range(8):                                   # 2x frame generation: 120 shown, 60 rendered, a line each 1.5 s
+        look(1.0 + i * 0.5, 120.0, (1.0 + (i // 3) * 1.5, 60.0))
+    assert seen[-1] == 2.0
+    for i in range(3):                                   # the game slows down between two lines: 90 shown, the line says 60
+        look(5.0 + i * 0.5, 90.0, (4.0, 60.0))
+    assert seen[-3:] == [2.0, 2.0, 2.0]                  # 90 / 2 = 45 rendered: the governor sees the loss
+    at.sampler._xell = None
+    s.fg = 3                                             # no XeLL: ClawDeck's own multiplier for the game
+    assert at._multiplier(s, autotune.Sample(t=9.0, frametime_ms=16.7, fps=60.0, gpu_mhz=None, gpu_max_mhz=None, cpu_pct=None,
+                                             pkg_w=20.0, shown_fps=60.0)) == 3.0
+    at.session = None
+
+
+def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, tdp=14)
+    s.own_pace, s.paused = "xemu", True
+    at._give_back(s)
+    at.set_target(60)
+    assert s.paused and s.learned.tdp == 20 and s.user_target == 60       # the target is kept for when it governs
+    _Game(at, lambda *_: 60.0).run(30)
+    assert s.learned.tdp == 20 and not at.power.governed                  # your limit, for as long as xemu runs
+    at.session = None
+    at, s = _tuner(fake_hw, monkeypatch, tdp=14)
+    at.pause("manual CPU ceiling")
+    at.set_target(30)
+    assert s.paused and s.learned.tdp == 20
+    assert at.set_ceiling(18) == 18 and not s.paused and s.cfg.target == 30   # a new limit hands control back
+    at.session = None
+
+
+def test_the_guard_is_told_the_limit_autotune_holds_and_its_release_reaches_a_paused_game(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, tdp=17)
+    g = _Game(at, lambda tdp, *_: 2.0 * tdp).run(4)
+    s.gov.mode, s.gov.prev, s.learned.tdp = "check", 17, 30               # its second at the full limit
+    assert at.held_w() == 17                                             # ... is not what it holds (a guard check then
+    s.gov.mode = "hold"                                                  # took a real overload for a hot spot)
+    s.learned.tdp = 17
+    assert at.held_w() == 17
+    at.pause("manual change")
+    assert s.learned.tdp == 30
+    assert at.thermal_step(24) and s.learned.tdp == 24
+    assert at.thermal_release(26) and s.learned.tdp == 26                # nobody governs: the watts go on the chip
+    assert at.thermal_release(30) and s.learned.tdp == 30 and s.thermal_cap is None
+    at.session = None
+
+
+def test_a_refused_write_is_tried_again_later_not_ten_times_a_second(fake_hw, monkeypatch, caplog):
+    at, s = _tuner(fake_hw, monkeypatch, tdp=16)
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)   # e.g. HHD's TDP controls not enabled
+    g = _Game(at, lambda *_: 40.0)                                           # under the target: it wants the full limit
+    s.user_target, s.cfg.target = 60, 60.0
+    with caplog.at_level("WARNING", logger="clawdeck.autotune"):
+        g.run(20)
+    assert s.learned.tdp == 16 and s.gov.limit == 16 and s.look_s == 0.5
+    assert len([r for r in caplog.records if "not applied" in r.getMessage()]) == 1
+    at.session = None
+
+
 def test_sampler_turns_mangoapps_log_on_and_off_and_asks_again_when_it_stops(fake_hw, tmp_path, monkeypatch):
     sent, clock = [], {"t": 1000.0}
     monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
