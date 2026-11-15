@@ -52,6 +52,14 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Temperature guard: CPU clock for a hot spot, watts from the draw (2026-11-14):** in xemu two busy threads held the
+package at 95-97 °C at ~20 W under a 30 W limit; the guard stepped the TDP 2 W every 10 s from 30 W, nothing happened
+until it was under 20 W, PL1's window hid the next steps, and it reached 10 W in 90 s (the game at a third of its speed).
+Now a hot spot under the limit gets the CPU's top clock (-10 % per check, not under 60 %), the TDP steps from what the
+package draws, and the next watts step waits until the package came down to the last one; the clock comes back first.
+Check on the EX: an xemu game (or two busy threads on cpu0-1) with Autotune off: over 95 °C the Power line says
+"thermal: CPU clock 90 %" and the TDP stays at the pick; the game keeps its speed.
+
 **Quick Access tabs (2026-11-14, #171):** the four folding sections are now Steam's own Tabs (Power, Game, Fixes,
 Setup), sized as unifideck does in Quick Access. Released without an EX run on the maintainer's word. Check on the EX:
 LB / RB switch tabs (also with the focus inside a tab), the Power tab scrolls to its end, a dropdown's menu closing

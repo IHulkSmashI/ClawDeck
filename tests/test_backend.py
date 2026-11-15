@@ -526,6 +526,88 @@ def test_thermal_guard_steps_2w_per_check_from_95_to_under_90_never_below_floor(
     assert thermal.Guard(None).check(17, 8, set_w) is None               # no sensor: never acts
 
 
+def _hot_guard(tmp_path, monkeypatch):
+    """A guard with a package temperature and a RAPL energy counter, 10 s between checks."""
+    t, e = tmp_path / "temp", tmp_path / "energy_uj"
+    _w(e, 0)
+    clock = {"t": 0.0, "uj": 0}
+    monkeypatch.setattr(thermal.time, "monotonic", lambda: clock["t"])
+    g = thermal.Guard(str(t), "x86_pkg_temp", str(e))
+
+    def check(c, draw_w, tdp, set_w, cap=None, limit=None):
+        clock["t"] += 10
+        clock["uj"] += int(draw_w * 10 * 1e6)
+        _w(t, int(c * 1000))
+        _w(e, clock["uj"])
+        return g.check(tdp["w"], 8, set_w, limit_w=limit, set_clock=cap)
+    return g, check
+
+
+def test_thermal_guard_caps_the_cpu_clock_for_a_hot_spot_under_the_limit(tmp_path, monkeypatch):
+    """xemu: two busy threads at 95-97 °C while the package draws ~20 W of a 30 W limit. Stepping the TDP did nothing
+    until it was under 20 W, and 2 W every 10 s took it to 10 W in 90 s (2026-11-14), the game at a third of its
+    speed. A hot spot under the limit gets the CPU's top clock; the TDP stays."""
+    g, check = _hot_guard(tmp_path, monkeypatch)
+    tdp, caps = {"w": 30}, []
+    set_w = lambda w: tdp.update(w=w) or True
+    cap = lambda pct: caps.append(pct) or True
+    assert check(80, 20, tdp, set_w, cap) is None                       # the first reading: no draw yet
+    assert check(96, 20, tdp, set_w, cap) is None and caps == [90] and tdp["w"] == 30
+    for _ in range(3):
+        check(96, 20, tdp, set_w, cap)
+    assert caps == [90, 80, 70, 60] and g.clock_pct == 60 and tdp["w"] == 30    # not under CLOCK_FLOOR_PCT
+    assert g.status()["line"] == "thermal: CPU clock 60 %"
+    # clock at its floor and still hot: now the TDP, from what the package draws, not from the 30 W set
+    caps.clear()
+    assert check(96, 20, tdp, set_w, cap) == 18 and caps == []
+
+
+def test_thermal_guard_steps_watts_from_the_draw_and_waits_for_each_step(tmp_path, monkeypatch):
+    """No hot spot (the package draws its limit): the TDP steps from the draw, and the next step waits until the
+    package came down to the last one (PL1 is averaged over up to a minute)."""
+    g, check = _hot_guard(tmp_path, monkeypatch)
+    tdp = {"w": 25}
+    set_w = lambda w: tdp.update(w=w) or True
+    check(80, 25, tdp, set_w)
+    assert check(97, 24.6, tdp, set_w) == 22                            # 24 W drawn: 22 W
+    assert check(96, 24.0, tdp, set_w) is None and tdp["w"] == 22       # still drawing 24 W: wait
+    assert check(96, 22.4, tdp, set_w) == 20                            # it came down: the next step
+    assert check(89, 20, tdp, set_w) is None and not g.tripped and tdp["w"] == 20
+
+
+def test_thermal_guard_gives_the_clock_back_first_then_the_watts(tmp_path, monkeypatch):
+    g, check = _hot_guard(tmp_path, monkeypatch)
+    tdp, caps = {"w": 30}, []
+    set_w = lambda w: tdp.update(w=w) or True
+    cap = lambda pct: caps.append(pct) or True
+    check(80, 20, tdp, set_w, cap, limit=30)
+    check(96, 20, tdp, set_w, cap, limit=30)
+    check(96, 20, tdp, set_w, cap, limit=30)
+    assert g.clock_pct == 80
+    check(75, 12, tdp, set_w, cap, limit=30)                            # under 90 °C: the trip ends, the cap stays
+    assert not g.tripped and g.clock_pct == 80
+    for _ in range(3):
+        check(75, 12, tdp, set_w, cap, limit=30)
+    assert g.clock_pct == 90 and caps[-1] == 90
+    for _ in range(3):
+        check(75, 12, tdp, set_w, cap, limit=30)
+    assert g.clock_pct is None and caps[-1] is None and g.status()["line"] is None
+
+
+def test_cpu_clock_cap_holds_under_every_other_write_and_lets_it_back(fake_hw):
+    """Autotune and profiles write the CPU's top clock too: under the guard's cap the chip gets the lower value, and
+    what they asked for comes back when the cap goes."""
+    pw = power.Power(fake_hw)
+    p = fake_hw.paths.cpu_max_perf_pct
+    assert pw.cap_cpu_max_pct(80) and sysfs.read_int(p) == 80               # nothing asked: the chip's 100 under 80
+    assert pw.set_cpu_max_pct(95) and sysfs.read_int(p) == 80
+    assert pw.set_cpu_max_pct(70) and sysfs.read_int(p) == 70
+    assert pw.set_cpu_max_pct(90) and pw.cap_cpu_max_pct(None) and sysfs.read_int(p) == 90
+    pw.cap_cpu_max_pct(60)
+    pw.revert_all()
+    assert pw.cpu_cap is None and sysfs.read_int(p) == 100
+
+
 def test_autotune_stays_under_the_thermal_step_until_the_user_sets_a_tdp(fake_hw, monkeypatch):
     at, s = _tuner(fake_hw, monkeypatch, ceiling=25)
     _Game(at, lambda tdp, *_: 2.0 * tdp)                  # every watt buys frames: autotune wants the full 25 W

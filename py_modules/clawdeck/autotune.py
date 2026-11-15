@@ -521,6 +521,20 @@ class Autotune:
         self._did(s, f"thermal: stepped to {l.tdp} W", "thermal")
         return True
 
+    def thermal_clock(self, pct: int | None) -> None:
+        """The temperature guard capped the CPU's top clock (a hot spot) or took the cap off: what was being measured
+        or tried under the old clock no longer counts."""
+        s = self.session
+        if not s:
+            return
+        if s.balance_undo:
+            s.balance_undo[1]()
+            s.balance_undo = None
+        s.window, s.watts, s.shown, s.misses = [], [], [], 0
+        if s.phase == "measure":
+            s.max_runs = []
+        self._did(s, "thermal: CPU clock " + ("uncapped" if pct is None else f"capped at {pct} %"), "thermal")
+
     def thermal_release(self, watts: int) -> bool:
         """The package cooled down: the guard lets autotune use up to `watts` again (the set TDP: the step is gone and
         autotune measures again what the full TDP gives). Autotune's own TDP isn't raised here; it climbs if the game

@@ -236,6 +236,14 @@ Temperature guard done in code (2026-10-22, `thermal.py`): while thermald is pau
 under 90 °C, never below the floor. It works for autotune (a cap it stays under) and for a plain held TDP. The status
 line says "thermal: stepped to N W"; picking a profile or moving the slider clears it. Needs a hot run on the Claw.
 
+Hot spots (2026-11-14): MSI's own DPTF table (thermald --adaptive, PSVT on TCPU) also lowers PL1 above 95 °C (balanced;
+90 °C battery, 100 °C performance), and the chip throttles its cores itself at 97 °C (TjMax 100 °C, TCC offset 3 °C).
+But two busy threads at the top clock (xemu: cpu0-1 at 4.1-4.7 GHz) hold the package at 95-97 °C while it draws ~20 W
+of a 30 W limit: a TDP step above the draw does nothing, and PL1's averaging window (56 s) hides the steps that do,
+so 2 W per 10 s from 30 W reached 10 W in 90 s and the game ran at a third of its speed. The guard now caps the CPU's
+top clock for a hot spot under the limit (intel_pstate max_perf_pct, through Power's cap so Autotune's own writes stay
+under it), steps the TDP from the measured draw otherwise, and waits for each watts step to show.
+
 ## 22. Autotune without a target: the most the set TDP gives, balanced, then the lowest TDP within 5 % (maintainer, 2026-10-22) — done in code
 
 The maintainer's call: no target fps. At the set TDP, find the most frames, balance power between CPU and GPU, and

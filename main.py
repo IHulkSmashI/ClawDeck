@@ -142,7 +142,7 @@ class Plugin:
             asyncio.get_event_loop().run_in_executor(None, self._vrr_live_again)
         self._power_lock = asyncio.Lock()      # one power write at a time: a fast profile change never interleaves
         self._install_lock = asyncio.Lock()    # one download/install at a time: two taps never race on one file
-        self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor)
+        self.guard = thermal.Guard(self.hw.paths.pkg_temp, self.hw.paths.pkg_temp_sensor, self.hw.paths.rapl_energy)
         self.thermal_log = thermal.Recorder(os.path.join(LOG_DIR, "thermal.csv"), self.hw.paths.rapl_energy)
         self._guard_task: asyncio.Task | None = None
         self.running_plugged: bool | None = None
@@ -740,7 +740,7 @@ class Plugin:
     def _start_game_power(self, appid: str, plugged: bool) -> dict:
         pk = self._pick(appid, plugged)
         prof = pk["prof"]
-        self.guard.reset()
+        self._guard_reset()
         self._pl2_for(pk, plugged)
         result = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
         result["limit_w"] = result["applied"].get("tdp")
@@ -786,7 +786,7 @@ class Plugin:
             self.power.release_thermald()
             return None
         pk = self._pick(None, plugged)
-        self.guard.reset()
+        self._guard_reset()
         self._pl2_for(pk, plugged)
         r = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
         self._holding_pick = True
@@ -829,7 +829,7 @@ class Plugin:
                                      fan.speeds(getattr(self, "fan_hw", None)))
             except Exception as e:   # ... and never kill the guard either
                 decky.logger.warning("thermal.csv: %s", e)
-        self.guard.reset()          # thermald is back in charge
+        self._guard_reset()         # thermald is back in charge
 
     async def _guard_check(self) -> int | None:
         async with self._power_lock:
@@ -839,11 +839,26 @@ class Plugin:
             if self.autotune.session is not None:
                 sess = self.autotune.session
                 return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
-                                        limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release)
+                                        limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release,
+                                        set_clock=self._guard_clock)
             # your limit for this power source (the game's pick, or the last one): where stepping back up stops
             limit = self._pick(self._game_key(), plugged)["tdp"]
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
-                                    limit_w=limit)
+                                    limit_w=limit, set_clock=self._guard_clock)
+
+    def _guard_clock(self, pct: int | None) -> bool:
+        """The temperature guard's cap on the CPU's top clock (a hot spot, thermal.py); what Autotune measures under it
+        starts over."""
+        ok = self.power.cap_cpu_max_pct(pct)
+        if ok and self.autotune.session is not None:
+            self.autotune.thermal_clock(pct)
+        return ok
+
+    def _guard_reset(self) -> None:
+        """The guard's steps no longer apply: its CPU clock cap goes with them."""
+        if self.guard.clock_pct is not None:
+            self.power.cap_cpu_max_pct(None)
+        self.guard.reset()
 
     def _save_learned(self, appid: str, plugged: bool) -> dict | None:
         """Stop autotune and keep what it found for this game and power source. The power stays as it is: the caller
@@ -931,7 +946,7 @@ class Plugin:
             # Claw is on now, not the firmware's boot limits (maintainer, 2026-11-04: "doesn't reset back to what it
             # was set to")
             n = self.power.revert_all(keep_thermald=True)
-            self.guard.reset()
+            self._guard_reset()
             idle = self._apply_idle_pick(bool(self.battery.plugged()))
             return {"reverted": n, "learned": learned, "limit": idle}
 
