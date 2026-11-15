@@ -6,7 +6,9 @@ other programs compute (the "PLATYPUS" side channel). So on a stock Claw the ove
 
 "Watts in the overlay" (Fixes) makes the package counters readable by everyone (0444) while it is on, reapplied by
 ClawDeck at every start because sysfs resets at boot, and puts 0400 back when switched off. On the Claw 8 EX the
-package domain covers CPU and graphics together (the xe driver has no separate GPU power sensor on this chip).
+package domain covers CPU and graphics together. The xe driver has no GPU power sensor for an integrated GPU, so the
+overlay reads the GPU's watts from the uncore sub-domain (the graphics part of Intel client chips; MangoHud from
+flightlessmango/MangoHud#2211): that counter opens and closes with the package counters.
 
 The battery's own reading is not touched here: the Claw 8 EX's firmware reports current_now about 100x too high
 (battery_watts() corrects it for ClawDeck's own read-back).
@@ -20,13 +22,28 @@ import os
 log = logging.getLogger("clawdeck.telemetry")
 
 POWERCAP = "/sys/class/powercap"
-# package domains only: core/uncore/dram sub-domains are not what the overlay shows
+# package domains, and the uncore sub-domain for the GPU's watts; core and dram are not what the overlay shows
 DOMAINS = ("intel-rapl:0", "intel-rapl-mmio:0")
+SUB_DOMAINS = ("uncore",)
 OPEN, CLOSED = 0o444, 0o400
 
 
+def sub_counters(root: str = POWERCAP) -> list[str]:
+    """The sub-domain counters by name: their numbers (intel-rapl:0:N) differ between chips."""
+    found = []
+    for d in sorted(glob.glob(os.path.join(root, "intel-rapl:0:*"))):
+        try:
+            with open(os.path.join(d, "name"), encoding="utf-8") as f:
+                name = f.read().strip()
+        except OSError:
+            continue
+        if name in SUB_DOMAINS and os.path.exists(os.path.join(d, "energy_uj")):
+            found.append(os.path.join(d, "energy_uj"))
+    return found
+
+
 def counters(root: str = POWERCAP) -> list[str]:
-    return [p for d in DOMAINS for p in [os.path.join(root, d, "energy_uj")] if os.path.exists(p)]
+    return [p for d in DOMAINS for p in [os.path.join(root, d, "energy_uj")] if os.path.exists(p)] + sub_counters(root)
 
 
 def status(root: str = POWERCAP) -> dict:
@@ -54,6 +71,8 @@ def boot_rule(on: bool, path: str = TMPFILES, root: str = POWERCAP) -> str | Non
                 f.write("# ClawDeck: watts in the performance overlay (Fixes). Remove this file to undo.\n")
                 for d in DOMAINS:
                     f.write(f"z {root}/{d}/energy_uj 0444 - - -\n")
+                for p in sub_counters(root):
+                    f.write(f"z {p} 0444 - - -\n")
         elif os.path.exists(path):
             os.remove(path)
     except OSError as e:

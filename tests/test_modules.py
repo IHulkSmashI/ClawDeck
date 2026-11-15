@@ -501,21 +501,25 @@ def test_launch_wrapper_asks_the_shim_for_its_xell_log(tmp_path):
 
 
 # ---- watts in the overlay (telemetry.py) ----------------------------------------------------------------------------
-def test_overlay_power_opens_and_closes_only_the_package_counters(tmp_path):
+def test_overlay_power_opens_and_closes_the_package_and_uncore_counters(tmp_path):
     from clawdeck import telemetry
-    for d in ("intel-rapl:0", "intel-rapl:0:0", "intel-rapl-mmio:0"):
+    for d, name in (("intel-rapl:0", "package-0"), ("intel-rapl:0:0", "core"), ("intel-rapl:0:1", "uncore"),
+                    ("intel-rapl-mmio:0", "package-0")):
         (tmp_path / d).mkdir()
+        (tmp_path / d / "name").write_text(name + "\n")
         f = tmp_path / d / "energy_uj"
         f.write_text("123\n")
         f.chmod(0o400)
     st = telemetry.status(str(tmp_path))
-    assert st["available"] and not st["on"] and len(st["files"]) == 2   # the core sub-domain isn't touched
+    assert st["available"] and not st["on"] and len(st["files"]) == 3   # the core sub-domain isn't touched
     r = telemetry.apply(True, str(tmp_path))
     assert r["ok"] and r["on"]
+    assert oct((tmp_path / "intel-rapl:0:1" / "energy_uj").stat().st_mode & 0o777) == "0o444"
     assert oct((tmp_path / "intel-rapl:0:0" / "energy_uj").stat().st_mode & 0o777) == "0o400"
     r = telemetry.apply(False, str(tmp_path))
     assert r["ok"] and not r["on"]
     assert oct((tmp_path / "intel-rapl-mmio:0" / "energy_uj").stat().st_mode & 0o777) == "0o400"
+    assert oct((tmp_path / "intel-rapl:0:1" / "energy_uj").stat().st_mode & 0o777) == "0o400"
 
 
 def test_overlay_power_without_counters_says_so(tmp_path):
@@ -716,6 +720,12 @@ def test_overlay_power_boot_rule(tmp_path):
     assert telemetry.boot_rule(True, str(p)) is None
     assert "z /sys/class/powercap/intel-rapl:0/energy_uj 0444 - - -" in p.read_text()
     assert telemetry.boot_rule(False, str(p)) is None and not p.exists()
+    unc = tmp_path / "powercap" / "intel-rapl:0:1"
+    unc.mkdir(parents=True)
+    (unc / "name").write_text("uncore\n")
+    (unc / "energy_uj").write_text("1\n")
+    assert telemetry.boot_rule(True, str(p), str(tmp_path / "powercap")) is None
+    assert f"z {unc}/energy_uj 0444 - - -" in p.read_text()
 
 
 def test_launch_wrapper_puts_fsr4_xmx_in_after_fgmod_and_takes_it_out_again(tmp_path):

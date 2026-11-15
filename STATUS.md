@@ -398,6 +398,8 @@ beta 2.
     overlay" (new); check the overlay shows CPU W and ClawDeck's battery line reads ~10 W idle.
   - Speakers silent although PCM runs (RT721 SDCA, sof-sdca-1amp): the vendor power gates stay off
     (stevedamnvan/msi-claw-8-ex-linux, EX-AUD-001/002). Not built yet: its exact sequence still has to be read.
+  - GPU watts in the overlay: "Show watts in the overlay" also opens the uncore counter (`intel-rapl:0:1` on the EX).
+    MangoHud with flightlessmango/MangoHud#2211 shows that counter as the GPU's watts; check GPU W follows the game.
   - VRR 30–120 makes Steam's menus choppy (the screen really runs at the game's 30 fps). New: Fixes → "VRR only in
     games" (src/vrr.ts): watches Steam's Perf state and sets is_vrr_enabled on while current_game_id ≠ 0, off
     otherwise, with skip_storage_update. **Test:** VRR fix installed; library scrolls sharp at 120 Hz; in a game the
