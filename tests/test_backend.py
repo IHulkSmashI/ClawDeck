@@ -2009,3 +2009,26 @@ def test_re4_has_no_dlss_so_nothing_is_installed(plugin, tmp_path, monkeypatch):
     assert not r["ok"] and "no DLSS" in r["error"]
     assert sorted(str(q.relative_to(game)) for q in game.rglob("*")) == before
     assert p.run(p.game_choose("2050650", "own", 0))["ok"]
+
+
+def test_a_mangoapp_log_autotune_turned_on_is_deleted_when_the_game_ends(tmp_path, monkeypatch):
+    """One row per frame is about 10 MB an hour in the user's home: the log Autotune asked for goes when the game
+    ends, with its summary twin; a log another tool keeps on is left alone."""
+    from clawdeck import autotune
+    sent = []
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
+    s = autotune.Sampler.__new__(autotune.Sampler)
+    s._mango_done, s._mango_pos, s._mango_asked = [], 0, -1e9
+    ours = tmp_path / "mangoapp_2026-11-15_00-10-00.csv"
+    ours.write_text("fps,frametime\n")
+    s._mango, s._mango_own = str(ours), True
+    s.release()
+    assert sent == ["logging=0"] and not ours.exists()
+    (tmp_path / "mangoapp_2026-11-15_00-10-00_summary.csv").write_text("x\n")   # mangoapp writes it after stopping
+    s.release()
+    assert not (tmp_path / "mangoapp_2026-11-15_00-10-00_summary.csv").exists() and s._mango_done == []
+    theirs = tmp_path / "mangoapp_2026-11-15_01-00-00.csv"
+    theirs.write_text("fps,frametime\n")
+    s._mango, s._mango_own = str(theirs), False
+    s.release()
+    assert theirs.exists()

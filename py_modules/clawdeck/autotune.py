@@ -150,6 +150,7 @@ class Sampler:
         self._mango: str | None = None             # the mangoapp log being read
         self._mango_pos = 0
         self._mango_own = False                    # Autotune turned mangoapp's log on (and turns it off)
+        self._mango_done: list[str] = []           # its logs from earlier games: deleted, with their summary twins
         self._mango_asked = -1e9                   # when Autotune last asked mangoapp to log
         self._mango_row_at = 0.0                   # when the last new row came
         self._mango_checked = -1e9
@@ -187,9 +188,27 @@ class Sampler:
         return self._log
 
     def release(self) -> None:
-        """The game (the Steam app) ended: a mangoapp log Autotune turned on goes off."""
+        """The game (the Steam app) ended: a mangoapp log Autotune turned on goes off, and its file goes: one row per
+        frame is about 10 MB an hour, in the user's home, for every game without its own log. A log another tool turned
+        on is left alone. mangoapp writes the _summary.csv twin when logging stops, so the twins of earlier ones go
+        here too."""
         if self._mango_own:
             mangoapp_command("logging=0")
+            if self._mango:
+                self._mango_done.append(self._mango)
+        keep = []
+        for f in self._mango_done:
+            twin = f[:-4] + "_summary.csv"
+            for g in (f, twin):
+                try:
+                    os.remove(g)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    log.debug("autotune: mangoapp log %s stays: %s", g, e)
+            if not os.path.exists(twin) and f == self._mango:   # the twin may come after this: look again next time
+                keep.append(f)
+        self._mango_done = keep[-5:]
         self._mango, self._mango_pos, self._mango_own, self._mango_asked = None, 0, False, -1e9
 
     def frametime(self) -> tuple[float | None, float | None]:
