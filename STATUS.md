@@ -52,6 +52,13 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune reads frames from mangoapp (2026-11-14):** a game without its own MangoHud log (no launch wrapper: xemu's
+Flatpak, a game started another way) gave Autotune no frame rate ("no frame rate after 30 s"). Now it follows
+mangoapp's per-frame log (Steam's overlay, fed every frame of the focused app): a running one is only read; else
+Autotune turns it on through mangoapp's control socket and off at the game's end, and asks again after 20 s without a
+row (Steam's overlay-level change stops it). Check on the EX: Autotune on, a game without the wrapper: the Power line
+shows fps within a minute; `~/mangoapp_*.csv` appears and stops growing after the game ends.
+
 **Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
 Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
