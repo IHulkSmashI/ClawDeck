@@ -186,9 +186,30 @@ It asks one question all the time: would more watts, up to your limit, give fram
     median; frames that alternate short and long (generated frames) are read as their rate.
   - *Slow frames* count against the mean frame time of their own stretch and against the share the game had before
     the step, with a margin for chance; not at all while the pace moves or in a game that dips by itself.
-  - *The reference* at the full limit is the median of the last five looks, not the last one.
+  - *The reference* while a limit is held that can't hold the game back is the median of the last five looks, not the
+    last one; a look at the full limit made on purpose (after a loss, or to check) sets it from that look's frames:
+    at least a second and 30 frames of them (a 20 fps game takes longer), once the draw and the frame rate have
+    stopped climbing.
   - A step down is watched from when the package draws under 2.5 W over the new limit (at most 3 s late); a raise is
     judged when the draw and the frame rate have stopped climbing.
+
+- **After the second review (2026-11-15):**
+  - *The floor after a drop of the reference* (the level that held before a video) stands for 2 minutes; then the lower
+    reference is the game (a heavier place, a target that was never in reach) and the way down goes on. A reference
+    taken while the package did not draw the whole of the limit that is held says nothing once the package does draw
+    it all: after 2 s of that the full limit is looked at (the game after a long video, at a limit that gives it just
+    the video's frame rate, showed no loss).
+  - *The reference follows the pace* only once every frame of the pace came in a look in which the limit could not
+    hold the game back: at the start and the end of a loading screen the draw is low while the pace is still that of
+    frames the limit did hold back.
+  - *Far more frames than usual* (a map, an inventory) are the game only after 30 s, not 5; back from any stretch that
+    was not judged, the pace starts again from the game's own frames.
+  - *Slow frames* count only while the frame rates of five parts of the last 10 s agree (a faster menu inside them
+    made every frame of the game a slow one).
+  - *A log with a row a second* (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
+    frames of the whole time since its row before. *No frames for 30 s* at any time, not only at the start: your limit
+    goes back on the chip until frames come. *A refused write:* the governor rests for 30 s. *The guard's cap under
+    your floor:* the guard wins.
 
 Frames: every frame of every game from mangoapp's log (Steam's overlay; `Sampler` turns its logging on through its
 control socket and deletes the log at the game's end). The launch wrapper's MangoHud log (a row a second) is read only
@@ -199,8 +220,8 @@ on, read from `drive_c/igdext_xell.log`). Presented / rendered is the multiplier
 ClawDeck's frame generation multiplier for the game.
 
 The loop looks twice a second, and ten times a second while a write of its own is watched (1–2.5 s). A row a second
-goes to `autotune.csv`: the frames of that second, the limit, the governor's step, the goal, the frame generation
-multiplier, and in `note` what was decided since the row before (each change of the limit with its watts and the
+goes to `autotune.csv`: every frame since the row before (number, median, 95th percentile, slow share), the limit,
+the governor's step, the goal, the frame generation multiplier, and in `note` what was decided since the row before (each change of the limit with its watts and the
 reason, a pause, a refused write), so a run on a device shows why the limit moved.
 
 What Autotune owns while it governs: PL1; PL2 at PL1 + 2 W, also over a PL2 set by hand (`Power.governed`; yours is back

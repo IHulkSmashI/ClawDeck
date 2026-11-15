@@ -1588,6 +1588,29 @@ def test_autotune_csv_says_why_the_limit_moved(fake_hw, tmp_path, monkeypatch):
     assert s.notes == []
 
 
+def test_a_row_of_autotune_csv_has_every_frame_since_the_row_before(fake_hw, tmp_path, monkeypatch):
+    """Autotune looks twice a second, ten times while it watches a write, and logs once a second: a row had the frames
+    of its one look (58 of about 118 while holding, 10 while watching), so half the frames or more were in no row."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    at.csv_log = str(tmp_path / "autotune.csv")
+    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp))                            # 60 fps from 15 W: steps down from 19
+    whole, given = g.sample, []
+
+    def with_frames():
+        smp = whole()
+        at.sampler.frames_ms = [1000.0 / smp.fps] * round(smp.fps * s.look_s)      # this look's, as mangoapp's log has them
+        given.append(len(at.sampler.frames_ms))
+        return smp
+    at.sampler.sample = with_frames
+    g.run(40)
+    at.session = None
+    rows = [dict(zip(autotune.CSV_FIELDS, r)) for r in csv.reader(open(at.csv_log))][1:]
+    frames = [int(r["frames"]) for r in rows]
+    assert {r["phase"] for r in rows} >= {"hold", "probe"}                         # both look periods were in it
+    assert sum(frames) >= sum(given) - 60 and min(frames[1:]) >= 40               # all of them, a second's worth a row
+    assert all(abs(float(r["fps"]) - 60.0) < 8 for r in rows[1:] if r["phase"] == "hold")
+
+
 def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(fake_hw, tmp_path, monkeypatch):
     log = tmp_path / "autotune.csv"
     old = "time,appid,phase,fps,shown_fps,source,gpu_mhz,gpu_max_mhz,cpu_pct,pkg_w,tdp,cpu_max_pct,gpu_min_mhz,boost,bound,max_fps\n1.0,7,hold,60.0,60.0,presented,,,,,20,100,,1,balanced,60.0\n"
@@ -1741,6 +1764,31 @@ def test_a_log_with_a_row_a_second_gives_the_governor_whole_seconds_of_frames(fa
     assert len(s.gov.recent) >= 0.9 * 60 * 3 and not s.no_frames              # about 60 frames a second arrived
     g.run(60)
     assert s.learned.tdp <= 10 < start and not s.paused
+    at.session = None
+
+
+def test_set_pl2_says_what_the_chip_has_while_autotune_governs(plugin):
+    p = plugin
+    p.run(p.set_tdp(26))
+    p.run(p.game_started("7"))
+    _lower(p)
+    r = p.run(p.set_pl2(True, 45))
+    pl1 = sysfs.read_int(p.power.p.rapl_pl1) // 1_000_000
+    assert r["ok"] and p.power.governed and r["read_w"] == pl1 + 2
+    assert r["summary"] == f"PL2 {pl1 + 2} W (PL1 + 2 W while Autotune governs this game; your 45 W applies when it doesn't)"
+
+
+def test_a_new_limit_in_xemu_goes_on_the_chip_and_autotune_stays_out(fake_hw, monkeypatch):
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
+    at.start("1", None, 8, 30, False, target=60)
+    s = at.session
+    s.own_pace, s.paused = "xemu", True
+    at._give_back(s)
+    assert at.set_ceiling(24) == 24 and chip["tdp"] == 24 and s.paused and s.own_pace == "xemu" and not pw.governed
     at.session = None
 
 

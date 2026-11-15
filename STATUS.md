@@ -11,7 +11,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | 1 | **XeSS XMX + low latency** (upstream 20261104) | done: upstream install (the fork and its XeLL driver mode are retired: upstream shipped low latency in #41); Per-game: XMX on/off, frame generation 2–8x, low latency, latest XeSS libraries, FSR games on XeSS, each with a read-back line | see Needs the maintainer → 0.2 |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
 | 3 | **ClawDeck's own OptiScaler per game** | done 2026-11-04: `optiscaler.py` installs the OptiScaler + OptiPatcher pinned in `assets/versions.json` (`optiscaler`, sha256 checked) into a game's folder, with the game's settings and the Intel presets (XeSS on XMX, FSR 4 on XMX, XeSS frame generation), and takes it out again exactly (manifest + backups). Decky Framegen is compatibility only: a game it patched is detected and left alone with a warning | see Needs the maintainer → 0.2 |
-| 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune acts on the bottleneck (§18); Advanced expander (§19) | see Needs the maintainer → Power |
+| 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune lowers the TDP while the frames hold and gives it back at the first loss (§24); Advanced expander (§19) | see Needs the maintainer → Power |
 
 ## Done (code, tests)
 
@@ -21,7 +21,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Revertible sysfs | `sysfs.py` | every write | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
-| Autotune | `autotune.py` | Power | v3: no target; measure the most the set TDP gives → balance CPU/GPU (keep only +2 %) → lowest TDP within 5 % → hold; rendered fps from XeLL via the shim, not generated frames; battery only unless "Autotune when plugged in" |
+| Autotune | `governor.py`, `autotune.py` | Power | one governor for both modes (a target fps, or the most frames within the keep %): a step down watched on every frame and taken back at the first loss, the full TDP at once when frames are lost; frames from mangoapp's log, rendered frames with XeLL; PL1, PL2 = PL1 + 2 W and an 8 s PL1 window while it governs, no CPU/GPU levers; battery only unless "Autotune when plugged in" |
 | XeSS XMX | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | upstream release; `xmx` / `fg` / `low_latency` / `xess_latest` / `fsr` per game; shim log read per launch |
 | ClawDeck's OptiScaler | `optiscaler.py`, `launchenv.py` (`opti`, `opti_xefg`), `assets/versions.json` (`optiscaler`) | Setup, Per-game | pinned release + OptiPatcher, sha256 checked; patch / unpatch with a manifest and backups; never touches OptiScaler it didn't install (`owner()`) |
 | Decky Framegen compatibility | `framegen.py` (state), `optiscaler.owner()`, `steam.ts` (fgmod in launch options) | Setup, Per-game | detection only: a game Decky Framegen patched (fgmod in its launch options, or its files) shows a warning and "Stop using Decky Framegen here"; ClawDeck doesn't install or offer Decky Framegen |
@@ -74,7 +74,14 @@ Check on the EX, Autotune on:
   second for a second or two after its own change);
 - cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
 - a 30 fps cutscene or video in a 60 fps game, 20 s and a minute: the TDP does not go under what it was before the
-  video, and the game is at its frame rate within a second of the video's end;
+  video, and the game is at its frame rate within a second of the video's end. A video of over 2 minutes: the TDP may
+  go down in it; the game is at its frame rate within about 3 s of its end ("the package draws all of N W now");
+- a map or inventory that renders much faster than the game, for some seconds: the TDP is the same before and after;
+- loading screens: after several of them the TDP is where it was (in the simulator each one lowered what Autotune took
+  for the game's frame rate, and the TDP with it; fixed);
+- a game whose frames mangoapp does not log (only its own MangoHud log): the TDP still goes down;
+- frames stop for half a minute in a game (the status line says so): your limit is on the chip, and Autotune takes the
+  game again when frames come;
 - a game with XeSS frame generation: the status says "rendered, 2x shown" and the TDP follows the rendered frames
   (in the first version every loss was missed with XeLL; fixed, tested with made-up XeLL lines only);
 - known from the simulator, to watch for: a game with very uneven frame rates (hitch runs every 2 s, or 9 % frame-time

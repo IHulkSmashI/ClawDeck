@@ -496,6 +496,8 @@ class Session:
     last_change_at: float | None = None
     last_action: str | None = None
     notes: list = field(default_factory=list)   # decisions since the last row of autotune.csv (its "note" column)
+    row_ms: list = field(default_factory=list)  # frame times since that row (it looks more often than it logs) ...
+    row_before: deque = field(default_factory=lambda: deque(maxlen=PACE_FRAMES))   # ... and the frames before those
     last_delta: str | None = None
     avg_fps: float | None = None
     low_fps: float | None = None
@@ -597,9 +599,14 @@ class Autotune:
         s.phase = "target" if target else "hold"
         s.learned.target, s.learned.target_eff, s.learned.start, s.learned.held = s.user_target, None, None, None
         s.settled = False
-        self._govern_from(s, s.learned.tdp)
+        on_chip = s.learned.tdp
+        self._govern_from(s, on_chip)
+        want, s.learned.tdp = s.learned.tdp, on_chip      # (under the guard's cap it may start lower than the chip is)
         if not s.paused:                                  # paused (by hand, xemu, no frames): it applies when that ends
+            if want != on_chip:
+                self._tdp(s.learned, want)                # a refused write leaves what is on the chip as the limit
             self._tau(s, True)
+        s.gov.limit = s.learned.tdp
 
     def set_ceiling(self, watts: int) -> int | None:
         """The user picked a profile or moved the TDP slider: the new limit. Autotune goes to it at once and works down
@@ -610,6 +617,9 @@ class Autotune:
         s.ceiling_tdp = max(s.floor_tdp, int(watts))
         s.thermal_cap = None                              # the user's new choice replaces the guard's step
         s.learned.ceiling, s.learned.start, s.learned.held, s.settled = s.ceiling_tdp, None, None, False
+        if s.own_pace:                                    # it stays out of this game: your new limit, and no more
+            self._give_back(s)
+            return s.learned.tdp
         s.paused = False
         self.power.governed = True
         self._govern_from(s, s.ceiling_tdp)
@@ -797,9 +807,11 @@ class Autotune:
         s.history.append(smp)
         if len(s.history) > 600:
             del s.history[:-600]
-        if self.csv_log and smp.t - s.logged_at >= 0.95:  # a row a second, also while it looks ten times a second
-            s.logged_at = smp.t
-            self._log(s, smp)
+        if self.csv_log:
+            s.row_ms.extend(self.sampler.frames_ms)
+            if smp.t - s.logged_at >= 0.95:              # a row a second, also while it looks ten times a second
+                s.logged_at = smp.t
+                self._log(s, smp)
         if s.own_pace is None and s.own_checks < len(OWN_PACE_CHECK_S) and smp.t - s.started_at >= OWN_PACE_CHECK_S[s.own_checks]:
             s.own_checks += 1
             emu = own_pace_emulator()
@@ -967,10 +979,19 @@ class Autotune:
                     w.writerow(CSV_FIELDS)
                 l = s.learned
                 r = lambda v, n: None if v is None else round(v, n)
-                w.writerow([f"{smp.t:.1f}", s.appid, s.gov.mode if s.gov and not s.paused else "out", r(smp.fps, 1),
-                            r(smp.shown_fps, 1), smp.source, smp.gpu_mhz, smp.gpu_max_mhz, r(smp.cpu_pct, 1),
+                # the frame columns: every frame since the row before (a look is half a second or a tenth, a row a
+                # second), slow against the pace of the frames before them. A log with a row a second has none
+                frames, shown = (smp.frames, smp.ft_median, smp.ft_p95, smp.slow_pct), smp.shown_fps
+                if s.row_ms:
+                    st = frame_stats(s.row_ms, statistics.median(s.row_before) if s.row_before else None)
+                    frames, shown = (len(s.row_ms), *st), 1000.0 * len(s.row_ms) / sum(s.row_ms)
+                    s.row_before.extend(s.row_ms)
+                    s.row_ms = []
+                fps = shown if smp.source != "rendered" and shown else smp.fps      # rendered: XeLL's own figure
+                w.writerow([f"{smp.t:.1f}", s.appid, s.gov.mode if s.gov and not s.paused else "out", r(fps, 1),
+                            r(shown, 1), smp.source, smp.gpu_mhz, smp.gpu_max_mhz, r(smp.cpu_pct, 1),
                             r(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz, int(l.boost), l.bound, r(l.max_fps, 1),
-                            smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2), r(smp.slow_pct, 1),
+                            frames[0], r(frames[1], 2), r(frames[2], 2), r(frames[3], 1),
                             r(governor.goal(s.gov, s.cfg), 1) if s.gov and s.cfg and not s.paused else None,
                             s.multiplier, s.look_s, " | ".join(s.notes)])
                 s.notes.clear()

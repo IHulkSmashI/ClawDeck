@@ -614,9 +614,11 @@ class Plugin:
             pl1 = st["rapl"]["pl1_w"] or 0                # never below PL1: under Autotune's TDP that is PL1 as read
             ok = tdp is not None and (want is None or got is None or self.power.governed or   # governed: PL1 + 2 W
                                       round(got) in (want, max(tdp, want), max(round(pl1), want)))
-            line = (f"PL2 {round(got)} W" if got is not None else "PL2 set") + (" (yours)" if want is not None else " (PL1 + 2 W)")
-            if want is not None and self.power.governed:
-                line += "; PL1 + 2 W while Autotune governs this game"
+            read = f"PL2 {round(got)} W" if got is not None else "PL2 set"
+            if want is not None and self.power.governed:    # yours is saved; the chip has Autotune's while it governs
+                line = f"{read} (PL1 + 2 W while Autotune governs this game; your {want} W applies when it doesn't)"
+            else:
+                line = read + (" (yours)" if want is not None else " (PL1 + 2 W)")
             return {"ok": ok, "manual": bool(manual), "pl2_w": want, "read_w": got, "summary": line,
                     "error": None if ok else (sysfs.last_error() or "the chip didn't take that PL2")}
 
@@ -1090,7 +1092,7 @@ class Plugin:
     async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
         """Autotune target: 0 / None = nearly the most frames for the watts (as before); a number = the fewest watts
         that hold that many rendered fps. Auto FPS: an out-of-reach target becomes the closest fps it can hold.
-        Applies to the running game at once (from the full TDP), and to every game from its start."""
+        Applies to the running game at once (from the limit in use), and to every game from its start."""
         t = int(fps or 0)
         t = 0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240))
         self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, bool(auto_fps)
