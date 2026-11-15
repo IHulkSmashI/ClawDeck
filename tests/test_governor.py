@@ -17,6 +17,7 @@ class Game:
         self.cfg, self.fps, self.shape, self.t, self.end, self.i, self.writes, self.notes = cfg, fps, shape, 0.0, 0.0, 0, [], []
         self.st, act = gov.start(cfg, 0.0)
         self.limit, self.look, self.draw, self.cap, self.thermal, self.mult = act.limit_w, act.look_s, None, None, False, 1.0
+        self.clipped = None                                          # the chip's "limited by power" flag, if it says
 
     def rate(self):
         try:
@@ -39,7 +40,8 @@ class Game:
             if not frames:
                 self.end = self.t
             draw = self.draw(self.limit, self.t) if callable(self.draw) else self.draw    # watts, or draw(limit, t)
-            obs = gov.Obs(t=self.t, frames=out, draw_w=draw, cap_w=self.cap, thermal=self.thermal, multiplier=self.mult)
+            obs = gov.Obs(t=self.t, frames=out, draw_w=draw, cap_w=self.cap, thermal=self.thermal, multiplier=self.mult,
+                          clipped=self.clipped)
             act = gov.step(self.st, obs, self.cfg)
             if act.limit_w is not None:
                 self.limit = act.limit_w
@@ -616,10 +618,10 @@ def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_f
     g.run(40)
     assert g.st.mode == "hold" and g.limit < 26 and g.st.fail
     g.run(max(0.0, g.st.ref_at + 20 - g.t))
-    lift["x"], t0, ref = 1.07, g.t, g.st.ref
+    lift["x"], t0, ref, failed = 1.07, g.t, g.st.ref, dict(g.st.fail)
     g.run(15)                                                        # well inside CHECK_S of the last look
     assert any("checking what the full" in n for t, n in g.notes if t >= t0)
-    assert g.st.ref > ref * 1.05 and all(at > t0 for at, _ in g.st.fail.values())
+    assert g.st.ref > ref * 1.05 and all(g.st.fail.get(w) != v for w, v in failed.items())
 
 
 def test_a_held_limit_that_gives_more_than_the_reference_has_the_full_limit_looked_at():
@@ -632,3 +634,105 @@ def test_a_held_limit_that_gives_more_than_the_reference_has_the_full_limit_look
     g.st.ref, g.st.ref_at, g.st.ref_here, g.st.quiet_until, t0 = 40.0, g.t, None, g.t + 60, g.t
     g.run(gov.ABOVE_S + 4)
     assert any("checking what the full" in n for t, n in g.notes if t >= t0) and g.st.ref > 57
+
+
+def test_a_frame_rate_that_moved_a_little_has_the_full_limit_looked_at_after_a_minute():
+    """4 % more at the held limit than when the reference was taken: not enough for a look at once (5 %), enough for
+    one CHECK_S after the last (the other look is every 10 minutes)."""
+    lift = {"x": 1.0}
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
+    g.draw = lambda w, t: float(w)
+    g.run(40)
+    g.run(max(0.0, g.st.ref_at + 20 - g.t))
+    lift["x"], t0, last = 1.04, g.t, g.st.ref_at
+    g.run(30)
+    assert not any("checking what the full" in n for t, n in g.notes if t >= t0)          # not yet
+    g.run(25)
+    looks = [t for t, n in g.notes if t >= t0 and "checking what the full" in n]
+    assert looks and gov.CHECK_S <= looks[0] - last <= gov.CHECK_S + 15
+
+
+def test_no_look_at_the_full_limit_while_the_package_is_well_under_the_limit():
+    """A limit the package doesn't use holds nothing back: what it shows is the reference, and a look at the full
+    limit would only cost watts."""
+    g = Game(gov.Cfg(floor=8, ceiling=30))
+    g.draw = 5.0
+    g.run(60)
+    assert g.limit == 8
+    t0 = g.t
+    g.run(gov.CHECK_MAX_S + 60)
+    assert g.since(t0) == []
+
+
+def test_the_chips_flag_makes_a_look_free():
+    """The chip says it is not limited by power: the frame rate at this limit is the reference, as with a package that
+    draws 2 W under the limit."""
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w: 60.0 if w >= 26 else 60.0 - (26 - w))
+    g.run(40)
+    assert g.st.mode == "hold" and g.limit < 26 and g.st.ref == pytest.approx(60.0, abs=0.3)
+    g.clipped, here = False, g.rate()
+    g.st.quiet_until = g.t + 60
+    g.run(8)
+    assert g.st.ref == pytest.approx(here, abs=0.3) and here < 59
+
+
+def test_looks_that_are_free_do_not_add_up_across_looks_that_are_not():
+    """The reference is the median of FREE_LOOKS looks in a row. Four of them in a lighter moment, then looks in which
+    the limit holds the game back, then one more: not five."""
+    cfg = gov.Cfg(floor=8, ceiling=30)
+    g = Game(cfg, fps=lambda w: 60.0 if w >= 26 else 60.0 - (26 - w))
+    g.draw = lambda w, t: float(w)
+    g.run(40)
+    st, ref, t = g.st, g.st.ref, g.t
+    st.quiet_until = t + 120
+
+    def look(fps, draw, n=1):
+        nonlocal t
+        for _ in range(n):
+            t += 0.5
+            k = round(fps * 0.5)
+            gov.step(st, gov.Obs(t=t, frames=[(t - (k - 1 - i) / fps, 1000.0 / fps) for i in range(k)], draw_w=draw), cfg)
+    look(66.0, 10.0, n=5)                                            # a light moment: 60 frames of it, then four looks
+    assert len(st.free_fps) == 4 and st.ref == ref
+    look(g.rate(), float(g.limit), n=3)                              # the limit holds the game back again
+    look(66.0, 10.0, n=3)                                            # ... and two more free looks
+    assert len(st.free_fps) < gov.FREE_LOOKS and st.ref == ref
+
+
+def test_a_stretch_that_stays_is_the_game_and_what_was_known_before_is_dropped():
+    need = {"fps": 60.0}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w, t: need["fps"] if w >= 17 else need["fps"] * 0.8)
+    g.run(60)
+    assert g.st.fail and g.st.usual == pytest.approx(60.0, abs=1)
+    need["fps"] = 18.0                                               # a part of the game at 18 fps, at every limit
+    g.run(gov.ADOPT_S + 8)
+    assert g.st.usual == pytest.approx(18.0, abs=1) and g.st.home is None
+    assert not any(w for w, (retry, n) in g.st.fail.items() if retry < g.t + gov.RETRY_S - 30)   # none from before
+
+
+def test_a_game_whose_frame_rate_wobbles_is_not_taken_for_one_that_loses_frames():
+    """Runs of ten frames at 56 and at 45 fps in turn, at every limit: on average the 50 fps target, and every other
+    look shows ten frames 5 % under the goal. The thresholds follow the wobble (at most fourfold)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=50), fps=lambda w: 56.0, shape=lambda i, w, t: 1.0 if (i // 10) % 2 else 56.0 / 45.0)
+    g.run(180)
+    late = [w for t, w in g.writes if t >= 60]
+    assert g.st.noise > 0.05 and not any(w >= 25 for w in late)      # no "all the watts at once" once the wobble is known
+
+
+def test_a_step_down_is_watched_from_when_it_binds():
+    """PL1 is an average: a cut made while the package ran over the limit binds late (2.3 s measured). The frames of
+    the first seconds are not the step's: judged on them, 18 W "held" and the next step followed, with the loss still
+    to come."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60))
+
+    def in_force(t):                                                 # the watts the chip really gives: a cut 2.6 s late
+        if len(g.writes) >= 2 and g.writes[-1][1] < g.writes[-2][1] and t - g.writes[-1][0] < 2.6:
+            return g.writes[-2][1]
+        return g.limit
+    g.fps = lambda w, t: 60.0 if in_force(t) >= 20 else 50.0
+    g.draw = lambda w, t: float(in_force(t))
+    g.run(120)
+    assert g.limit == 20 and g.st.mode == "hold"
+    for (t1, a), (t2, b) in zip(g.writes, g.writes[1:]):
+        if a < 20:
+            assert b >= 20 and t2 - t1 <= gov.BIND_S + 1.0           # the level under the need was never built upon
