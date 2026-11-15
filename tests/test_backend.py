@@ -1651,6 +1651,85 @@ def test_sampler_follows_a_live_mangoapp_log_without_touching_it(fake_hw, tmp_pa
     assert sent == []                                                   # not Autotune's: it stays on
 
 
+def test_frame_stats_show_the_slow_frames_an_average_hides():
+    """Midnight Club: Los Angeles on RPCS3 at a 15 W limit (Claw 8 EX, 2026-11-14): 29.7 of 30 fps, the median frame on
+    pace, 6 % of the frames more than 10 % slow."""
+    frames = [33.3] * 94 + [38.0] * 6
+    median, p95, slow = autotune.frame_stats(frames)
+    assert (median, p95, round(slow, 1)) == (33.3, 38.0, 6.0)
+    assert round(1000 * len(frames) / sum(frames), 1) == 29.8                  # what the frame rate says of it
+    # every frame slower: against the frames' own median nothing is slow, against the pace before all of them are
+    assert autotune.frame_stats([40.0] * 30)[2] == 0.0
+    assert autotune.frame_stats([40.0] * 30, pace_ms=33.3) == (40.0, 40.0, 100.0)
+    assert autotune.frame_stats([16.7]) == (16.7, 16.7, 0.0) and autotune.frame_stats([]) is None
+
+
+def test_a_sample_from_mangoapps_log_has_the_frame_times_behind_it(fake_hw, tmp_path, monkeypatch):
+    monkeypatch.setattr(autotune, "mangoapp_command", lambda c: True)
+    monkeypatch.setattr(autotune.shadowblip, "gpu_busy_percent", lambda: None)
+    live = tmp_path / "mangoapp_2026-11-14_22-05-00.csv"
+    _mango_rows(live, [33.3] * 5, header=True)
+    smp = autotune.Sampler(fake_hw, str(tmp_path / "mangohud"), home=str(tmp_path))
+    smp.set_prefix(None)
+    assert smp.sample().frames is None                                  # nothing new in the log: no figures
+    _mango_rows(live, [33.3] * 28 + [38.0] * 2)                         # a second at the edge of the limit
+    a = smp.sample()
+    assert (a.frames, a.ft_median, a.ft_p95, round(a.slow_pct, 1)) == (30, 33.3, 38.0, 6.7)
+    assert smp.frames_ms == [33.3] * 28 + [38.0] * 2 and round(a.fps, 2) == 29.75
+    _mango_rows(live, [40.0] * 25)                                      # the limit lowered: every frame slower
+    b = smp.sample()
+    assert (b.frames, b.ft_median, b.slow_pct, round(b.fps, 1)) == (25, 40.0, 100.0, 25.0)   # slow against the pace before
+    _mango_rows(live, [40.0] * 60)
+    assert smp.sample().slow_pct == 100.0                               # ... which was still the old one
+    _mango_rows(live, [40.0] * 25)
+    assert smp.sample().slow_pct == 0.0                                 # 60 frames on, 40 ms is the pace
+    smp.set_prefix(None)                                                # the next game starts without this one's pace
+    _mango_rows(live, [16.7] * 60)
+    assert smp.sample().slow_pct == 0.0
+
+
+def test_a_sample_from_the_games_own_mangohud_log_has_no_frame_times(fake_hw, tmp_path, monkeypatch):
+    """The launch wrapper's MangoHud log has one row a second (an average): no frame behind it to count."""
+    monkeypatch.setattr(autotune.shadowblip, "gpu_busy_percent", lambda: None)
+    logs = tmp_path / "mangohud"
+    logs.mkdir()
+    (logs / "game_2026-11-14.csv").write_text("fps,frametime\n59.8,16.7\n60.1,16.6\n")
+    smp = autotune.Sampler(fake_hw, str(logs), home=str(tmp_path))
+    a = smp.sample()
+    assert round(a.fps, 1) == 60.0 and (a.frames, a.ft_median, a.ft_p95, a.slow_pct) == (None, None, None, None)
+    assert smp.frames_ms == []
+
+
+def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(fake_hw, tmp_path, monkeypatch):
+    log = tmp_path / "autotune.csv"
+    old = "time,appid,phase,fps,shown_fps,source,gpu_mhz,gpu_max_mhz,cpu_pct,pkg_w,tdp,cpu_max_pct,gpu_min_mhz,boost,bound,max_fps\n1.0,7,hold,60.0,60.0,presented,,,,,20,100,,1,balanced,60.0\n"
+    log.write_text(old)
+    pw = power.Power(fake_hw)
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
+    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=str(log))
+    at.session = autotune.Session(appid="1", floor_tdp=8, ceiling_tdp=20, settle=1, learned=autotune.Learned(tdp=20))
+    monkeypatch.setattr(autotune, "own_pace_emulator", lambda proc=None: None)
+    at.sampler.sample = lambda: autotune.Sample(t=5.0, frametime_ms=33.67, fps=29.7, gpu_mhz=None, gpu_max_mhz=None,
+                                                cpu_pct=None, pkg_w=15.0, shown_fps=29.7, frames=30, ft_median=33.3,
+                                                ft_p95=38.04, slow_pct=6.667)
+    at._step()
+    at.sampler.sample = lambda: autotune.Sample(t=6.0, frametime_ms=16.7, fps=60.0, gpu_mhz=None, gpu_max_mhz=None,
+                                                cpu_pct=None, pkg_w=15.0, shown_fps=60.0)      # no frame times
+    at._step()
+    at.session = None
+    assert (tmp_path / "autotune.csv.1").read_text() == old            # the earlier build's rows, whole
+    rows = log.read_text().splitlines()
+    assert rows[0] == ",".join(autotune.CSV_FIELDS) and rows[0].endswith(",max_fps,frames,ft_median,ft_p95,slow_pct")
+    assert rows[1].endswith(",30,33.3,38.04,6.7") and rows[2].endswith(",,,,") and len(rows) == 3
+    # the same columns the next time: the log goes on
+    at2 = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=str(log))
+    at2.session = autotune.Session(appid="1", floor_tdp=8, ceiling_tdp=20, settle=1, learned=autotune.Learned(tdp=20))
+    at2.sampler.sample = at.sampler.sample
+    at2._step()
+    at2.session = None
+    assert len(log.read_text().splitlines()) == 4 and (tmp_path / "autotune.csv.1").read_text() == old
+
+
 def test_sampler_turns_mangoapps_log_on_and_off_and_asks_again_when_it_stops(fake_hw, tmp_path, monkeypatch):
     sent, clock = [], {"t": 1000.0}
     monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
