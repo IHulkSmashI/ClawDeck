@@ -661,18 +661,18 @@ class Autotune:
 
     def thermal_release(self, watts: int) -> bool:
         """The package cooled down: the guard lets autotune use up to `watts` again. Nothing is raised here; the
-        governor looks at what the watts it got back give, and climbs if the game needs them."""
+        governor looks at what the watts it got back give, and climbs if the game needs them. A paused autotune (xemu,
+        no frame rate, a manual change) never climbs: there the TDP itself goes back up with the guard, as for a game
+        without autotune."""
         s = self.session
         if not s or s.thermal_cap is None:
             return False
-        if watts >= s.ceiling_tdp:
-            s.thermal_cap = None
-            self._did(s, "thermal: cooled, the full TDP allowed again", "thermal")
-        else:
-            s.thermal_cap = int(watts)
-            self._did(s, f"thermal: cooled, up to {s.thermal_cap} W allowed", "thermal")
-        if s.paused:                                      # nobody governs: the watts it gave back go on the chip
-            self._tdp(s.learned, self._top(s), force=True)
+        cap, s.thermal_cap = s.thermal_cap, None if watts >= s.ceiling_tdp else int(watts)
+        if s.paused and not self._tdp(s.learned, self._top(s), force=True):
+            s.thermal_cap = cap                           # not applied: the guard tries this step again
+            return False
+        self._did(s, "thermal: cooled, the full TDP allowed again" if s.thermal_cap is None
+                  else f"thermal: cooled, up to {s.thermal_cap} W allowed", "thermal")
         return True
 
     def held_w(self) -> int | None:

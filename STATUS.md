@@ -99,11 +99,25 @@ Autotune turns it on through mangoapp's control socket and off at the game's end
 row (Steam's overlay-level change stops it). Check on the EX: Autotune on, a game without the wrapper: the Power line
 shows fps within a minute; `~/mangoapp_*.csv` appears and stops growing after the game ends.
 
+**A new Autotune target leaves xemu alone (2026-11-15):** a new target, the target switched off or the Auto FPS switch
+ended every pause in the running game, also the one for xemu: Autotune governed the game again on xemu's 60 presented
+fps and took the TDP from a 30 W pick to 8 W within two minutes. Now a game Autotune stays out of stays as it is, and
+the new target counts from the next game. After a manual change a new target still hands control back, as before.
+Check on the EX: Autotune on, an Xbox game from ES-DE until the Power line says "Autotune stays out of xemu", then
+pick another target: the line and the TDP (the pick) stay.
+
 **Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
 Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
 EX: Autotune on, start an Xbox game from ES-DE: within 30 s the Power line says "Autotune stays out of xemu" and the
 TDP is the pick.
+
+**Temperature guard gives the TDP back while Autotune is out (2026-11-15):** a paused Autotune (xemu, no frame rate, a
+manual change, Autotune switched off in the game) never raises the TDP, and the guard's steps back up only moved
+Autotune's cap. With a target, the chip stayed at the guard's step until the game ended while the log said "back at
+your 30 W". Now the guard's steps back up are written for a paused Autotune, 2 W every 30 s up to the pick, as for a
+game without Autotune. Check on the EX: in a game, switch Autotune off, heat the package until the log says "thermal:
+stepped to N W", let it cool: `tdp_w` in `~/homebrew/logs/ClawDeck/thermal.csv` goes back up to the pick in 2 W steps.
 
 **Temperature guard: CPU clock for a hot spot, watts from the draw (2026-11-14):** in xemu two busy threads held the
 package at 95-97 °C at ~20 W under a 30 W limit; the guard stepped the TDP 2 W every 10 s from 30 W, nothing happened
@@ -142,6 +156,14 @@ Sinking Star got Enshrouded's fps), and it looked for a new log only every 30 s.
 started counts, looked for every second until it appears. Check on the EX: autotune on, play one game, then start
 another and restart the plugin: the status line shows the second game's fps, never the first one's.
 
+**A paused Autotune gives its changes back (2026-11-15):** switching Autotune off in a game, or one manual change under
+Advanced, only set a flag: Autotune's own TDP, CPU ceiling, boost and GPU floor stayed on the chip until the game
+ended (a 60 fps target met: 9 W of a 30 W pick, also after the switch). Now the pick goes back at once (TDP, PL2, the
+firmware's window, the levers Autotune moved); the change made by hand is written after that and stays, and what
+Autotune had found is still saved for the game. Check on the EX: Autotune on with a target, a light game until the
+Power line shows fewer watts than the limit, then switch Autotune off: the read-back line shows the limit within a
+second (`constraint_0_power_limit_uw` = the pick, PL2 2 W over it).
+
 **Autotune without a frame rate gives your limit back (2026-11-12):** a game whose frame rate autotune can't read
 (no XeSS/XeLL, no MangoHud log) used to keep autotune's starting point after it gave up, so a target's mid-range start
 (22 W of a 35 W pick) stayed for the whole game: Enshrouded ran at 30-40 fps instead of 60 until autotune was switched
@@ -150,6 +172,14 @@ come later (Order of the Sinking Star shows its first one 54 s after launch) han
 Check on the EX: Custom 35 W, autotune on with a target, start a Vulkan game without XeSS (Enshrouded). After 30 s,
 the status line says it stays out, the log line ends "(35 W, your limit)", and
 `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw` reads 35000000.
+
+**XeSS XMX package 20261115 (2026-11-15):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
+Low latency on the FSR routes lets the GPU's queue decide the wait (upstream: CONTROL Resonant 3x on an Arc B390 from
+52.6 to 48.4 ms); a game's own XeSS-FG 30 % lower latency (Cyberpunk 2077 3x: 45.1 to 31.7 ms). Stock mode is now
+also install.sh's default on Xe2 (Claw 8 AI+), and the session file adds `VK_EXT_descriptor_heap` to
+`VKD3D_DISABLE_EXTENSIONS` (ClawDeck carries the session file's values). Nothing ClawDeck reads changed. Check on the
+EX: Setup → Update XeSS XMX, then CONTROL Resonant with FSR 4.1.2 + XeFG 3x: picture right, "XMX cores used in the
+last launch", the XeLL line on the Game page. On an AI+ if one is at hand: the same, now in stock mode.
 
 **XeSS XMX package 20261113 (2026-11-14):** pinned without waiting (maintainer's word for HHHHanasak1's releases).
 One low-latency path for XeSS frame generation: upstream reports CONTROL Resonant 3x on an Arc B390 (the EX's chip)
@@ -280,6 +310,11 @@ beta 2.
 - **PL2 by hand (2026-11-05):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
   saved per power source; off: PL2 = TDP + 2 W. Check the chip reads it:
   `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw` (µW). Other profiles always use TDP + 2 W.
+- **"Set PL2 yourself" reads the chip back (2026-11-15):** `set_pl2` looked for the PL2 read-back under a key that
+  `power.status()` only has under `rapl`, so it never had one: the toast said "PL2 set (yours)" and a PL2 the chip
+  did not take was reported as done. Now the toast carries RAPL's PL2 as read ("PL2 40 W (yours)"), and a different
+  value fails the call. Check on the EX: Power → Custom → "Set PL2 yourself", 40 W: the toast reads
+  "PL2 40 W (yours)".
 
 - **XeFG even flips (xess-xmx-linux branch xefg-flip-metering, test build fg-meter-test-build, 2026-11-05):** the
   shim spaces XeFG's presents itself, since on Intel XeFG leaves pacing to the Windows driver and nothing does it on

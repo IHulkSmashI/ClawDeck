@@ -211,8 +211,8 @@ frames it didn't cost yet). The CPU and GPU levers stay as your pick set them.
 Start: where the game held last time under the same limit and for the same target (`Learned.start`: the level under
 which 80 % of the holding time lay; `Learned.held` has the seconds per watt), else mid-range between floor and limit.
 A limit picked while the game runs (slider, profile, Use default) goes on the chip as picked and Autotune works down
-from it. A manual change (Advanced) pauses it; xemu (`OWN_PACE`) and a game with no frame rate for 30 s get your limit
-and are left alone.
+from it. A manual change (Advanced) or switching it off in a game pauses it: your limit goes back on the chip and the
+change made by hand stays. xemu (`OWN_PACE`) and a game with no frame rate for 30 s get your limit and are left alone.
 
 ## Open items (need the device)
 - Low latency log lines ("low latency: on", "auto: waited in N of 100 frames") come from upstream's

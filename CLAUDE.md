@@ -16,6 +16,8 @@ Read README.md, CONTRIBUTING.md ("Keeping up with upstream"), STATUS.md and docs
 
 ## Releases (what users download)
 - Never create a tag or release on your own. A release waits until the maintainer has tested the build on a Claw.
+- Every release also updates README.md: the install link and the new features in the feature list and panel tables
+  (maintainer, 2026-11-15).
 - Changes that need hardware testing (power, drivers, anything that writes into game folders) can be merged, but
   list them in STATUS.md under "Needs the maintainer" so they are tested before the next release.
 

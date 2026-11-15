@@ -97,7 +97,7 @@ once with `passwd`.
 - **From Game Mode, no terminal:** Quick Access → Decky → gear → **Developer mode** on → **Developer** → **Install
   plugin from URL**, and enter:
   ```
-  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.19/ClawDeck.zip
+  https://github.com/IHulkSmashI/ClawDeck/releases/download/v0.2.0-beta.20/ClawDeck.zip
   ```
 - **From Desktop Mode:** open **Konsole** and paste (asks for your password once; run it again to update):
   ```
@@ -148,9 +148,9 @@ generation), **Fixes** and **Setup**. **Explain every control** (in Setup) says 
 | Control | What it does |
 |---|---|
 | **Profile** | Battery saver, Battery, Balanced, Performance, Plugged, Max: the most power the game may use. |
-| **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. |
-| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. Counts rendered frames, so frame generation doesn't fool it. Games without their own MangoHud log get their frame rate from Steam's overlay; xemu, which always shows 60 fps, keeps your limit. |
-| **Temperature guard** | Over 95 °C it caps the CPU's top clock when a few busy cores make the heat, and steps the watts down from what the chip draws otherwise; both come back once it's cool. |
+| **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. With Custom, **Set PL2 yourself** sets the short-boost limit, and the toast shows what the chip took. |
+| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. Counts rendered frames, so frame generation doesn't fool it. Games without their own MangoHud log get their frame rate from Steam's overlay; xemu, which always shows 60 fps, keeps your limit, even when you pick a new target. Switch it off (or change anything under Advanced) and your pick goes back on the chip at once. Its log (`autotune.csv`) has frame times and slow frames, so a limit that's just too low shows up even when the fps looks full. |
+| **Temperature guard** | Over 95 °C it caps the CPU's top clock when a few busy cores make the heat, and steps the watts down from what the chip draws otherwise; both come back once it's cool, also while Autotune is switched off. |
 | **Fan** | Automatic (MSI), Quiet, Cooling, Extreme, Full speed, or your own curve; the panel shows the curve the fans follow now. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |
 | **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |

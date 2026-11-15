@@ -1130,6 +1130,42 @@ def test_autotune_thermal_release_lifts_the_cap_and_raises_nothing_by_itself(fak
     at.session = None
 
 
+def test_the_guard_gives_the_tdp_back_when_autotune_is_out_of_the_game(plugin, tmp_path):
+    """A paused autotune never climbs (xemu, no frame rate, a manual change), and the guard's steps back up only moved
+    autotune's cap: with a target, the chip stayed at the guard's step for the rest of the game (26 W of 30) while the
+    guard said "back at your 30 W"."""
+    p = plugin
+    p.settings["autotune_target"] = 60
+    p.run(p.set_tdp(30))                                           # Custom 30 W
+    p.run(p.game_started("7"))
+    s = p.autotune.session
+    s.own_pace, s.paused = "xemu", True                            # as the xemu check leaves the session
+    p.autotune._give_back(s)
+    assert p.chip() == 30
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    check = lambda c: (_w(t, c * 1000), p.run(p._guard_check()))[1]
+    assert check(97) == 28 and check(97) == 26 and p.chip() == 26  # hot: two steps down
+    assert check(70) is None and check(70) is None and check(70) is None
+    assert check(70) == 28 and p.chip() == 28                      # 30 s under 80: +2 W, on the chip
+    assert check(70) is None and check(70) is None and check(70) == 30
+    assert p.chip() == 30 and p.guard.stepped_w is None and s.thermal_cap is None and s.paused
+    assert not p.autotune.thermal_release(30)                      # nothing left to give back
+    p.autotune._step()
+    assert p.chip() == 30
+
+
+def test_a_refused_tdp_keeps_the_guards_cap_for_a_paused_autotune(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=25)
+    at.pause("manual CPU ceiling")
+    assert at.thermal_step(19)
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)
+    assert not at.thermal_release(21) and s.thermal_cap == 19 and s.learned.tdp == 19
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: True)
+    assert at.thermal_release(21) and s.thermal_cap == 21 and s.learned.tdp == 21
+    at.session = None
+
+
 def test_get_autotune_says_why_it_is_not_running(plugin):
     p = plugin
     p.settings["autotune"] = True
@@ -1221,6 +1257,7 @@ def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
     assert pl2() == 22                                             # PL1 + 2 W
     r = p.run(p.set_pl2(True, 30))
     assert r["ok"] and r["pl2_w"] == 30 and pl2() == 30
+    assert r["read_w"] == 30 and r["summary"] == "PL2 30 W (yours)"   # read back from the chip, not "PL2 set"
     st = p.run(p.get_power())
     assert st["pl2_manual"] and st["pl2_set_w"] == 30 and st["pl2_max"] == 45
     p.run(p.set_pl2(True, 99))                                     # clamped to the model's PL2
@@ -1231,8 +1268,24 @@ def test_pl2_by_hand_only_with_custom_and_back_to_pl1_plus_2(plugin):
     assert pl2() == sysfs.read_int(p.power.p.rapl_pl1) // 1_000_000 + 2
     p.run(p.set_tdp(20))
     assert pl2() == 45                                             # back to Custom: yours again
-    p.run(p.set_pl2(False))
-    assert pl2() == 22
+    r = p.run(p.set_pl2(False))
+    assert pl2() == 22 and r["ok"] and r["summary"] == "PL2 22 W (PL1 + 2 W)"
+
+
+def test_set_pl2_reads_the_chip_back_and_says_when_it_did_not_take_it(plugin, monkeypatch):
+    """set_pl2 read status()["pl2_w"], a key that only exists under "rapl": the read-back was always None, so a PL2
+    the chip did not take was reported as done and the line said "PL2 set" without the watts."""
+    p = plugin
+    p.run(p.set_tdp(20))                                           # Custom 20 W
+    r = p.run(p.set_pl2(True, 12))                                 # under PL1: the chip gets PL1
+    assert r["ok"] and r["read_w"] == 20 and r["summary"] == "PL2 20 W (yours)"
+    status = p.power.status
+    monkeypatch.setattr(p.power, "status", lambda: {**status(), "rapl": {**status()["rapl"], "pl2_w": 25.0}})
+    r = p.run(p.set_pl2(True, 30))                                 # a chip that keeps PL2 at 25 W
+    assert not r["ok"] and r["read_w"] == 25 and r["summary"] == "PL2 25 W (yours)" and r["error"]
+    monkeypatch.setattr(p.power, "status", lambda: {**status(), "tdp_backend": "hhd"})
+    r = p.run(p.set_pl2(True, 30))                                 # not RAPL's limit to read: no claim
+    assert r["ok"] and r["read_w"] is None and r["summary"] == "PL2 set (yours)"
 
 
 def test_clawdecks_cabinet_dll_next_to_the_wrapper_and_gone_after_uninstall(tmp_path, monkeypatch):
@@ -1369,6 +1422,47 @@ def test_autotune_without_a_frame_rate_gives_back_the_limit_you_picked(fake_hw, 
     assert st["no_frames"] and st["paused"] and st["tdp"] == 35 and chip["tdp"] == 35
     assert sysfs.read_int(p.cpu_max_perf_pct) == 85 and sysfs.read_int(p.cpu_no_turbo) == 1
     at.session = None
+
+
+def test_pausing_autotune_gives_back_what_autotune_changed_and_keeps_your_change(fake_hw, monkeypatch):
+    """After Autotune was switched off in a game, or after one manual change, its own TDP stayed on the chip until the
+    game ended. Now the pick goes back and the change made by hand stays. The governor never moves the CPU and GPU
+    levers: they stay as the pick set them, whatever an older build saved for the game."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    pw.apply_profile("", {"tdp": 35, "cpu_max_pct": 85, "boost": False}, False)       # the pick: Custom 35 W
+    at.start("1", {"tdp": 17, "ceiling": 35, "max_fps": 60.0, "cpu_max_pct": 90, "boost": True, "gpu_min_mhz": 1300},
+             8, 35, False)                                            # what an older build saved for the game
+    p = fake_hw.paths
+    assert chip["tdp"] < 35 and sysfs.read_int(p.cpu_max_perf_pct) == 85 and sysfs.read_int(p.cpu_no_turbo) == 1
+    at.pause("manual GPU clocks")                                     # main.py: pause(), then the user's write
+    pw.set_gpu_window(900, None)
+    assert at.session.paused and chip["tdp"] == 35 and at.status()["tdp"] == 35 and not pw.governed
+    assert sysfs.read_int(p.gpu_min_freq) == 900                      # yours
+    at.pause("manual CPU ceiling")                                    # a second change by hand: the first one stays
+    pw.set_cpu_max_pct(70)
+    at.pause("autotune switched off")
+    assert sysfs.read_int(p.gpu_min_freq) == 900 and sysfs.read_int(p.cpu_max_perf_pct) == 70 and chip["tdp"] == 35
+    at.session = None
+
+
+def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin):
+    p = plugin
+    p.run(p.set_tdp(26))                                           # Custom 26 W
+    p.run(p.game_started("7"))
+    s = _lower(p)
+    low = p.chip()
+    assert s.ceiling_tdp == 26 and low < 26                        # 60 fps from 15 W: Autotune lowered the TDP
+    pl2 = lambda: sysfs.read_int(p.power.p.rapl_pl2) // 1_000_000
+    assert p.run(p.set_setting("autotune", False)) and s.paused
+    assert p.chip() == 26 and pl2() == 28                          # your limit and PL1 + 2 W, at once
+    for _ in range(10):
+        p.autotune._step()
+    assert p.chip() == 26
+    assert p.run(p.get_power())["autotune_w"] is None
 
 
 def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw, monkeypatch, tmp_path):
