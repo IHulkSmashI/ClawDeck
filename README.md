@@ -20,9 +20,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/game.png" alt="Upscaling and frame generation for one game" width="32%">
-  <img src="docs/img/power.png" alt="Power: profile, TDP, Autotune, fan and battery" width="32%">
-  <img src="docs/img/fixes.png" alt="Fixes: VRR, face buttons, overlay watts, health" width="32%">
+  <img src="docs/img/game.png" alt="The Game tab: upscaling and frame generation for one game" width="32%">
+  <img src="docs/img/power.png" alt="The Power tab: profile, TDP, Autotune, fan and battery" width="32%">
+  <img src="docs/img/fixes.png" alt="The Fixes tab: VRR, face buttons, gyro, overlay watts, health" width="32%">
 </p>
 
 ## One plugin, the whole Claw
@@ -38,10 +38,15 @@
 - 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX),
   **Autotune** with a **target frame rate**: pick 30, 40, 60 fps and it holds it with the fewest watts, settles in about
   a minute, gives the watts back within seconds in a heavy scene, and **Auto FPS** holds the closest it can when your
-  target is out of reach. Plus fan curves and a battery charge limit.
+  target is out of reach. It stays out of emulators whose frame counter lies (xemu), and a temperature guard cools a
+  hot spot by capping the CPU clock instead of cutting watts for everything. Plus fan curves and a battery charge
+  limit.
+- 🕹️ **ES-DE games too:** each game you start from ES-DE gets its own power pick and Autotune, not one limit for NES and
+  PS3 alike.
 - 🎯 **Gyro on the Claw 8 EX (beta):** one button turns on the EX's gyro for Steam Input (Kisenir's method).
-- 🛠️ **The fixes Linux doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real watts in the
-  performance overlay, and a log flood that costs battery.
+- 🛠️ **The fixes Linux doesn't have yet:** the 30–120 Hz VRR range, the two MSI face buttons, real CPU, GPU and
+  battery watts in the performance overlay, and a log flood that costs battery.
+- 🎛️ **Tabs you switch with LB and RB:** Power, Game, Fixes and Setup, always on screen in Quick Access.
 
 **Tested on** the MSI Claw 8 EX AI+ (Panther Lake, Arc B390) on Bazzite, mainly with CONTROL Resonant and Onimusha:
 Way of the Sword, and by users on SteamOS. **Works on Bazzite, SteamOS and CachyOS:** ClawDeck only needs Decky
@@ -136,7 +141,7 @@ games.
 ## What's in the panel
 
 One panel in Quick Access with four tabs, switched with LB and RB: **Power**, **Game** (upscaling and frame
-generation), **Fixes** and **Setup**. **Explain** at the top says what each control does, why you'd use it and what it costs.
+generation), **Fixes** and **Setup**. **Explain every control** (in Setup) says what each control does, why you'd use it and what it costs.
 
 ### Power
 
@@ -144,8 +149,9 @@ generation), **Fixes** and **Setup**. **Explain** at the top says what each cont
 |---|---|
 | **Profile** | Battery saver, Battery, Balanced, Performance, Plugged, Max: the most power the game may use. |
 | **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. |
-| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. Counts rendered frames, so frame generation doesn't fool it. |
-| **Fan** | Automatic (MSI), Quiet, Cooling, Full speed, or your own curve. |
+| **Autotune** | Finds the most frames your TDP gives in the running game, then lowers the TDP while the game stays within 5 % of that. Or pick a **target** (30–120 fps): the fewest watts that hold it, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. Counts rendered frames, so frame generation doesn't fool it. Games without their own MangoHud log get their frame rate from Steam's overlay; xemu, which always shows 60 fps, keeps your limit. |
+| **Temperature guard** | Over 95 °C it caps the CPU's top clock when a few busy cores make the heat, and steps the watts down from what the chip draws otherwise; both come back once it's cool. |
+| **Fan** | Automatic (MSI), Quiet, Cooling, Extreme, Full speed, or your own curve; the panel shows the curve the fans follow now. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |
 | **Advanced** | CPU boost, GPU clocks, GPU efficiency mode, CPU energy mode, Autotune's floor. |
 
@@ -171,14 +177,17 @@ start, and applies each game's fixes from OptiScaler's compatibility list.
 | **VRR fix 30–120 Hz** | The screen can do VRR from 30 Hz but tells the system 48, so games below 48 fps judder. One restart. 30 Hz is below MSI's official floor and some panels flicker there: if yours does, remove the fix. |
 | **Face buttons** (Claw 8 EX) | Maps the two MSI buttons: left = Steam menu, right = Quick Access. |
 | **Gyro (beta)** (Claw 8 EX) | Turns on the EX's gyro for Steam Input: downloads MSI's sensor-hub firmware (checked before it's installed), lets Linux read the gyro, and passes it to Steam as a Steam Deck gyro. Then a cold boot (shut down, power on) and recalibrate gyro in Steam. **Accelerometer too** is a separate toggle, off by default (it makes gyro aim worse). Remove undoes it. Bazzite for now. Method by Kisenir. |
-| **Performance overlay** | Real watts in Steam's performance overlay. |
+| **Performance overlay** | Real watts in Steam's performance overlay: CPU, GPU (with a MangoHud that reads the GPU counter) and the battery. |
+| **ES-DE** (when ES-DE is installed) | Each game you start from ES-DE gets its own power pick and Autotune. |
 | **System log** | Stops a split-lock log flood that costs battery. |
 | **Health check** | One line: all good, or what needs a look. |
 
 ### Setup
 
 The XeSS XMX driver ([xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)), OptiScaler's state, a
-self-test, and **Export log to Desktop** for bug reports.
+self-test, **Export log to Desktop** for bug reports, and a **Diagnostics log** (off by default): one row a second of
+power, temperature, battery, clocks and fans plus the controller's reports, so a bug report shows the seconds before a
+problem. **Explain every control** and the **Full view** are here too.
 
 ---
 
