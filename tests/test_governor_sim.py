@@ -1,0 +1,98 @@
+"""The Autotune governor in the simulator's games (tools/autotune_sim.py) and on a recording (tests/data/autotune/).
+Its rules on hand-made frames are in test_governor.py. Run: python3 -m pytest -q tests"""
+import importlib.util
+import os
+import sys
+
+import pytest
+
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+DATA = os.path.join(os.path.dirname(__file__), "data", "autotune")
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location("autotune_sim", os.path.join(ROOT, "tools", "autotune_sim.py"))
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["autotune_sim"] = m
+    spec.loader.exec_module(m)
+    return m
+
+
+sim = _load()
+
+
+def _score(name, target, seed=1, seconds=None, repeat=1):
+    g = sim.New(target=target)
+    return sim.run(g, sim.Game(sim.SCENARIOS[name] * repeat, seed=seed, goal_fps=target), seconds).score()
+
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_a_light_game_on_its_frame_limit_is_at_the_floor_within_half_a_minute(target):
+    game = sim.Game(sim.SCENARIOS["light-capped"], goal_fps=target)
+    sim.run(sim.New(target=target), game, seconds=30)
+    assert game.limit == 8
+    s = _score("light-capped", target)
+    assert s.over_w <= 0.5 and s.starved_pct == 0 and s.fps == pytest.approx(60, abs=0.2)
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_jump_of_the_need_is_answered_within_a_second_and_a_half(seed):
+    """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W."""
+    s = _score("emulator-need-jumps", 30, seed)
+    assert s.longest_starved_s <= 1.5 and s.starved_pct <= 1
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit(seed):
+    """Enshrouded where 30 W gives 48 fps and 22 W gives 46: a 60 fps target can't be held at any limit."""
+    s = _score("out-of-reach", 60, seed)
+    assert s.over_w <= 2.5 and s.starved_pct <= 1
+
+
+@pytest.mark.parametrize("name, target", [("uncapped", None), ("cap-need-moves", 60), ("cap-need-moves", None)])
+def test_a_gpu_bound_game_is_held_near_its_need_without_long_losses(name, target):
+    for seed in (1, 2, 3):
+        s = _score(name, target, seed)
+        assert s.over_w <= 3 and s.starved_pct <= 1.5 and s.longest_starved_s <= 3
+
+
+def test_a_parked_emulator_is_held_over_its_edge_not_on_it():
+    """Today's target mode holds Midnight Club at 15.4 W with 6 % of the frames slow; the edge rule gives it a watt more
+    and takes the slow frames away."""
+    for seed in (1, 2, 3):
+        s = _score("emulator-parked", 30, seed)
+        assert s.over_w <= 3.5 and s.slow_pct <= 2 and s.starved_pct <= 0.5
+
+
+@pytest.mark.parametrize("name, target", [("uncapped", None), ("out-of-reach", 60), ("emulator-parked", 30), ("light-capped", 60)])
+def test_a_steady_scene_is_left_alone_after_the_first_minutes(name, target):
+    first = sim.Game(sim.SCENARIOS[name] * 4, goal_fps=target)
+    sim.run(sim.New(target=target), first, seconds=300)
+    whole = sim.Game(sim.SCENARIOS[name] * 4, goal_fps=target)
+    sim.run(sim.New(target=target), whole)
+    assert (whole.changes - first.changes) / 15.0 <= 1.0             # changes a minute, minutes 5 to 20
+
+
+def test_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
+    for name, scenario in sim.SCENARIOS.items():
+        for target in (None, 30 if name.startswith("emulator") else 60):
+            game = sim.Game(scenario, floor=10, ceiling=25, goal_fps=target)
+            game.trace = []
+            sim.run(sim.New(target=target), game, seconds=240)
+            assert all(10 <= row[1] <= 25 for row in game.trace), (name, target)
+
+
+# ---- on a recording --------------------------------------------------------------------------------------------------
+def test_replay_the_recorded_loss_is_answered_within_a_second_and_the_edge_before_it_is_seen():
+    """Midnight Club parked, the limit stepped 30, 20, 15, 12 W by a recorder (the governor's own writes are not
+    obeyed in a replay). 30 and 20 W hold the lock: no raise. 15 W is the edge (6 % slow frames): +1 W. 12 W loses the
+    lock (24.9 fps): the full limit within a second of that write; today's target mode takes 2 s."""
+    g = sim.New(target=30)
+    rec = sim.run(g, sim.Recording.load(os.path.join(DATA, "mcla-parked.csv")))
+    at = {w: s for s, w in rec.limits[1:]}
+    raises = [(s, w, before) for (s, w), (_, before) in zip(rec.asked[1:], rec.asked) if w > before]
+    assert not [r for r in raises if r[0] < at[15]]
+    edge = [r for r in raises if at[15] < r[0] < at[12]]
+    assert edge and all(w == before + 1 for _s, w, before in edge)
+    full = [s for s, w, _b in raises if s >= at[12] and w == 30]
+    assert full and full[0] - at[12] <= 1.0
