@@ -16,7 +16,7 @@ export type PowerStatus = {
   custom_tdp?: number | null; autotune_floor?: number | null; autotune_keep?: number; autotune_target?: number; autotune_auto_fps?: boolean; thermal?: Thermal;
 };
 /** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
-export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; line: string | null; stepped_s: number | null };
+export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; clock_pct?: number | null; draw_w?: number | null; line: string | null; stepped_s: number | null };
 export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean; controller: string | null; tdp_owner: string | null; conflict: boolean };
 // what this device can do (hw.capabilities): ClawDeck only offers what works on it
 export type Caps = { device: string; known: boolean; vendor: string | null; beta: boolean; xmx: boolean | null;

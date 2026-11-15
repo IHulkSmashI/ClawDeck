@@ -219,7 +219,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           onChange={(w) => latest("pl2", () => setPl2(true, w), (r) => { toast(r.summary); refresh(); })}
           description={explain(`From your TDP (${tdp} W) to ${st?.pl2_max ?? 45} W, saved for ${slot?.plugged ? "plugged in" : "battery"}.`)} />}
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
-          detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so ClawDeck steps it down 2 W at a time above 95 °C until under 90 °C, then back up 2 W every 30 s once under 80 °C, to your limit.`
+          detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so above 95 °C ClawDeck steps down until under 90 °C: when a few busy cores make the heat under your limit, the CPU's top clock 10 % at a time (a lower TDP would only slow everything); otherwise the TDP, 2 W under what the chip draws. Under 80 °C everything goes back up every 30 s, to your limit.`
             : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`
             : app ? gameName : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
             : "No game running: this limit is on the chip now, and comes back when a game closes"} />

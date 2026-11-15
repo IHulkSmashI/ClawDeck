@@ -56,6 +56,8 @@ class Power:
         self.boost = True                     # TDP boost (short bursts above the TDP); off = PL2 is TDP + 1 W
         self.pl2_w: int | None = None         # PL2 set by hand (Power → Custom → "Set PL2 yourself"); None = PL1 + 2 W
         self._thermald_paused = False         # True while ClawDeck holds a TDP and has stopped thermald (see _set_rapl)
+        self.cpu_cap: int | None = None       # the temperature guard's cap on the CPU's top clock, % (thermal.py)
+        self._cpu_asked: int | None = None    # the CPU's top clock a profile, Autotune or the user asked for, %
 
     # ---- readouts --------------------------------------------------------------------------------------------------
     def status(self) -> dict:
@@ -211,9 +213,26 @@ class Power:
         return None if v is None else v == 0
 
     def set_cpu_max_pct(self, pct: int) -> bool:
+        """The CPU's top clock in % of its maximum. Under the temperature guard's cap the chip gets the lower of the two,
+        and the asked value comes back when the cap goes (cap_cpu_max_pct)."""
         if not self.p.cpu_max_perf_pct:
             return False
-        pct = clamp(int(pct), 10, 100)
+        self._cpu_asked = clamp(int(pct), 10, 100)
+        return self._write_cpu_max()
+
+    def cap_cpu_max_pct(self, cap: int | None) -> bool:
+        """The temperature guard's cap on the CPU's top clock (None: no cap, the asked value back on the chip)."""
+        if not self.p.cpu_max_perf_pct:
+            return False
+        if self._cpu_asked is None:                    # nothing asked yet: what is on the chip now comes back after
+            self._cpu_asked = sysfs.read_int(self.p.cpu_max_perf_pct, 100)
+        self.cpu_cap = None if cap is None else clamp(int(cap), 10, 100)
+        return self._write_cpu_max()
+
+    def _write_cpu_max(self) -> bool:
+        pct = self._cpu_asked if self._cpu_asked is not None else 100
+        if self.cpu_cap is not None:
+            pct = min(pct, self.cpu_cap)
         lo = sysfs.read_int(self.p.cpu_min_perf_pct, 0) if self.p.cpu_min_perf_pct else 0
         return sysfs.write(self.p.cpu_max_perf_pct, max(pct, lo or 0))
 
@@ -381,6 +400,7 @@ class Power:
         keep_thermald: the caller sets a TDP again right away (a new pick, the game's exit back to the user's limit),
         so thermald stays stopped instead of starting for a moment and rewriting PL1; release_thermald() if not."""
         n = sysfs.revert_all()
+        self.cpu_cap, self._cpu_asked = None, None       # the chip's own top clock is back
         if not keep_thermald:
             self.release_thermald()
         orig, self._hhd_orig = self._hhd_orig, None
