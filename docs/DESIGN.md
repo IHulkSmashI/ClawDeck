@@ -220,9 +220,10 @@ on, read from `drive_c/igdext_xell.log`). Presented / rendered is the multiplier
 ClawDeck's frame generation multiplier for the game.
 
 The loop looks twice a second, and ten times a second while a write of its own is watched (1–2.5 s). A row a second
-goes to `autotune.csv`: every frame since the row before (number, median, 95th percentile, slow share), the limit,
-the governor's step, the goal, the frame generation multiplier, and in `note` what was decided since the row before (each change of the limit with its watts and the
-reason, a pause, a refused write), so a run on a device shows why the limit moved.
+goes to `autotune.csv`: every frame since the row before (number, median, 95th percentile, slow share), the limit, the
+governor's step, the goal, the frame generation multiplier, and in `note` what was decided since the row before (each
+change of the limit with its watts and the reason, a pause, a refused write), so a run on a device shows why the limit
+moved.
 
 What Autotune owns while it governs: PL1; PL2 at PL1 + 2 W, also over a PL2 set by hand (`Power.governed`; yours is back
 with your limit); the PL1 window at 8 s from the game's start to its end (RAPL averages PL1 over 56 s on the EX: for
