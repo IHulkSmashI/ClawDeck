@@ -66,6 +66,7 @@ import re
 import socket
 import statistics
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 from . import hw, power, shadowblip, sysfs
@@ -102,6 +103,13 @@ XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer coun
 MANGOAPP_SOCKET = "\0mangohud"
 MANGOAPP_RELOG_S = 20
 MANGOAPP_FRESH_S = 30   # a mangoapp log written this recently is a live one
+# One row per frame also shows what an average hides. Midnight Club: Los Angeles on RPCS3 at a 15 W limit showed 29.7 of
+# its 30 fps with the median frame on pace, and 6.4 % of the frames more than 10 % slow; at 20 W, 1 % (Claw 8 EX,
+# 2026-11-14): a limit that is just too low is a few slow frames, not a lower frame rate. The log gets them.
+SLOW = 1.10             # a frame this much longer than the pace is a slow one
+PACE_FRAMES = 60        # the pace: the median frame time of this many frames before
+CSV_FIELDS = ["time", "appid", "phase", "fps", "shown_fps", "source", "gpu_mhz", "gpu_max_mhz", "cpu_pct", "pkg_w", "tdp",
+              "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps", "frames", "ft_median", "ft_p95", "slow_pct"]
 LEARN_TAU_US = 8_000_000  # PL1 time window while learning: shorter than WINDOW_S, so a window sees sustained power
 SETTLED_WINDOWS = 3     # windows without a change in hold = learned: the firmware's PL1 window comes back
 # target fps (DeckyTDPTuner's governor, see above)
@@ -136,6 +144,10 @@ class Sample:
     gpu_busy: int | None = None     # PowerStation's GpuBusyPercent; None when PowerStation doesn't run
     shown_fps: float | None = None  # presented frames per second (MangoHud), generated frames included
     source: str = "presented"       # "rendered" (XeLL's xellSleep) or "presented" (MangoHud, no frame generation seen)
+    frames: int | None = None       # presented frames behind this sample, when the log has a row for each (mangoapp's)
+    ft_median: float | None = None  # ... their median frame time, ms
+    ft_p95: float | None = None     # ... the 95th percentile
+    slow_pct: float | None = None   # ... and the share of them more than SLOW over the pace before (PACE_FRAMES)
 
 
 class Sampler:
@@ -154,6 +166,8 @@ class Sampler:
         self._mango_asked = -1e9                   # when Autotune last asked mangoapp to log
         self._mango_row_at = 0.0                   # when the last new row came
         self._mango_checked = -1e9
+        self.frames_ms: list[float] = []           # the frame times behind the last frametime(), when mangoapp gave them
+        self._pace: deque = deque(maxlen=PACE_FRAMES)   # the frame times before those
         self.xell_log: str | None = None       # the running game's drive_c/igdext_xell.log (set_prefix)
         self._xell_pos = 0
         self._xell: tuple[float, float] | None = None   # (monotonic time, rendered fps) of the newest stats line
@@ -212,6 +226,7 @@ class Sampler:
         self._mango, self._mango_pos, self._mango_own, self._mango_asked = None, 0, False, -1e9
 
     def frametime(self) -> tuple[float | None, float | None]:
+        self.frames_ms = []
         f = self._newest_log()
         if not f:
             return self._mangoapp_frametime()
@@ -302,6 +317,7 @@ class Sampler:
         if not ft:
             return None, None
         self._mango_row_at = now
+        self.frames_ms = ft
         mean = sum(ft) / len(ft)                   # one row per frame: frames over their time, not a mean of rates
         return mean, 1000.0 / mean
 
@@ -315,6 +331,8 @@ class Sampler:
         except OSError:
             self._mango, self._mango_pos = None, 0
         self._mango_asked, self._mango_checked, self._mango_row_at = -1e9, -1e9, time.monotonic()
+        self.frames_ms = []
+        self._pace.clear()                         # another game's pace
         self.xell_log, self._xell = xell_log, None
         self._since, self._log = (time.time() - 2, None) if xell_log else (0.0, None)
         try:
@@ -392,13 +410,28 @@ class Sampler:
 
     def sample(self) -> Sample:
         ft, shown = self.frametime()
+        stats = frame_stats(self.frames_ms, statistics.median(self._pace) if self._pace else None)
+        self._pace.extend(self.frames_ms)
+        median, p95, slow = stats or (None, None, None)
         rendered = self.rendered_fps()
         fps, src = (rendered, "rendered") if rendered else (shown, "presented")
         return Sample(t=time.monotonic(), frametime_ms=(1000.0 / fps) if fps else ft, fps=fps,
                       gpu_mhz=sysfs.read_int(self.p.gpu_cur_freq) if self.p.gpu_cur_freq else None,
                       gpu_max_mhz=sysfs.read_int(self.p.gpu_max_freq) if self.p.gpu_max_freq else None,
                       cpu_pct=self.cpu_pct(), pkg_w=self.package_power(), gpu_busy=self.gpu_busy(),
-                      shown_fps=shown, source=src)
+                      shown_fps=shown, source=src, frames=len(self.frames_ms) if stats else None,
+                      ft_median=median, ft_p95=p95, slow_pct=slow)
+
+
+def frame_stats(frames_ms: list[float], pace_ms: float | None = None) -> tuple[float, float, float] | None:
+    """(median ms, 95th percentile ms, % of the frames more than SLOW over the pace) of a run of frame times; None for
+    no frames. The pace is the frame time the game held before these frames; without one, their own median."""
+    if not frames_ms:
+        return None
+    srt = sorted(frames_ms)
+    median = statistics.median(srt)
+    line = (pace_ms or median) * SLOW
+    return median, srt[min(len(srt) - 1, int(len(srt) * 0.95))], 100.0 * sum(1 for ms in srt if ms > line) / len(srt)
 
 
 def mangoapp_command(cmd: str) -> bool:
@@ -554,6 +587,7 @@ class Autotune:
         self.power = pw
         self.sampler = Sampler(hardware, log_dir, home)
         self.csv_log = csv_log
+        self._csv_checked = False                  # an autotune.csv with other columns is set aside once (_log)
         self.session: Session | None = None
         self.plugged: bool | None = None
         self.task: asyncio.Task | None = None
@@ -1318,18 +1352,25 @@ class Autotune:
 
     def _log(self, s: Session, smp: Sample) -> None:
         try:
+            if not self._csv_checked:
+                # a log written with other columns (an earlier build's): kept as <name>.1, a new one starts
+                self._csv_checked = True
+                if os.path.exists(self.csv_log):
+                    with open(self.csv_log, encoding="utf-8", errors="replace") as f:
+                        head = f.readline().strip()
+                    if head and head != ",".join(CSV_FIELDS):
+                        os.replace(self.csv_log, self.csv_log + ".1")
             new = not os.path.exists(self.csv_log)
             with open(self.csv_log, "a", encoding="utf-8") as f:
                 w = csv.writer(f)
                 if new:
-                    w.writerow(["time", "appid", "phase", "fps", "shown_fps", "source", "gpu_mhz", "gpu_max_mhz", "cpu_pct",
-                                "pkg_w", "tdp", "cpu_max_pct", "gpu_min_mhz", "boost", "bound", "max_fps"])
+                    w.writerow(CSV_FIELDS)
                 l = s.learned
-                w.writerow([f"{smp.t:.1f}", s.appid, s.phase, None if smp.fps is None else round(smp.fps, 1),
-                            None if smp.shown_fps is None else round(smp.shown_fps, 1), smp.source, smp.gpu_mhz,
-                            smp.gpu_max_mhz, None if smp.cpu_pct is None else round(smp.cpu_pct, 1),
-                            None if smp.pkg_w is None else round(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz,
-                            int(l.boost), l.bound, None if l.max_fps is None else round(l.max_fps, 1)])
+                r = lambda v, n: None if v is None else round(v, n)
+                w.writerow([f"{smp.t:.1f}", s.appid, s.phase, r(smp.fps, 1), r(smp.shown_fps, 1), smp.source, smp.gpu_mhz,
+                            smp.gpu_max_mhz, r(smp.cpu_pct, 1), r(smp.pkg_w, 2), l.tdp, l.cpu_max_pct, l.gpu_min_mhz,
+                            int(l.boost), l.bound, r(l.max_fps, 1), smp.frames, r(smp.ft_median, 2), r(smp.ft_p95, 2),
+                            r(smp.slow_pct, 1)])
         except OSError:
             pass
 
