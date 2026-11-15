@@ -516,6 +516,7 @@ class Session:
     no_frames: bool = False             # gave up: this game's frame rate can't be read
     own_pace: str | None = None         # an emulator whose frame rate isn't the game's (OWN_PACE): autotune stays out
     pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
+    found: Learned | None = None        # what autotune had found when a manual change paused it (saved at game exit)
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
     skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
     settled: bool = False               # reached hold and stayed there SETTLED_WINDOWS: what it found is worth saving
@@ -618,12 +619,12 @@ class Autotune:
             self._start_target(s, {}, int(target), auto_fps)
             self._tdp(s.learned, min(s.learned.tdp, self._top(s)))
             self._tau(s, True)
-            s.paused = False
+            s.paused, s.found = False, None
         elif s.phase == "target":
             s.target = s.user_target = None
             s.learned.target = s.learned.target_eff = None
             self._remeasure(s, "target switched off")
-            s.paused = False
+            s.paused, s.found = False, None
 
     def set_ceiling(self, watts: int) -> int | None:
         """The user picked a profile or moved the TDP slider: the new set TDP. The most it gives has to be measured
@@ -640,7 +641,7 @@ class Autotune:
             s.g_floor = min(s.g_floor, s.ceiling_tdp)
         else:
             self._remeasure(s, "TDP set to %d W" % s.ceiling_tdp)
-        s.paused = False
+        s.paused, s.found = False, None
         return s.learned.tdp
 
     def set_floor(self, watts: int) -> None:
@@ -723,11 +724,16 @@ class Autotune:
 
     def pause(self, reason: str = "manual change") -> None:
         """Never fight the user: a manual power change stops autotune for the rest of this session (values the user
-        set stay; what was found so far is still saved at game exit)."""
+        set stay; what was found so far is still saved at game exit). What autotune itself changed goes back to the
+        pick: its lowered TDP stayed on the chip for the rest of the game otherwise (9 W of a 30 W pick with a 60 fps
+        target met). The caller writes the user's own change after this, so that one stays."""
         s = self.session
         if s:
             if not s.paused:
                 log.info("autotune paused: %s", reason)
+                s.found = Learned(**s.learned.__dict__)
+                self._give_back(s)
+                self._tau(s, False)
             s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
 
     def running(self) -> bool:
@@ -747,7 +753,7 @@ class Autotune:
         if s:
             if revert:
                 self.power.revert_all()
-            return {"learned": s.learned.__dict__, "samples": len(s.history), "settled": s.settled,
+            return {"learned": (s.found or s.learned).__dict__, "samples": len(s.history), "settled": s.settled,
                     "summary": summary(s)}
         return None
 
