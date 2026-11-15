@@ -34,7 +34,8 @@ py_modules/clawdeck/
    battery.py   plugged detection only (profiles differ on battery / charger)
    profiles.py  per-game JSON: base profile, what autotune found, launch settings
    thermal.py   temperature guard while thermald is paused: >95 °C → TDP −2 W / 10 s until <90 °C (§21)
-   autotune.py  1 Hz sampler (MangoHud CSV, RAPL, /proc/stat, PowerStation GPU busy), 10 s window, CPU/GPU balance
+   autotune.py  the frames (mangoapp's per-frame log, XeLL), RAPL, the session of a game, the loop, the writes
+   governor.py  the deciding: step(state, obs, cfg), no clock and no I/O (tests, tools/autotune_sim.py)
    xess.py      xess-xmx-linux: install (asset sha256 checked), state, per-game low latency from the shim's log,
                 OptiScaler-present detection (read-only)
    optiscaler.py ClawDeck's OptiScaler: pinned install (sha256), patch / unpatch a game with manifest + backups
@@ -115,9 +116,9 @@ it ran, saved per game, battery and plugged in apart), else the last pick on tha
 Autotune the slider stays that limit; the line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58
 fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
 - **Game start, a pick in a game, Use default, unplugging, resume:** `revert_all(keep_thermald=True)` (back to boot
-  values, thermald stays stopped because a TDP follows at once), then the pick, then a fresh Autotune session at that
-  limit. A pick in a game drops what was learned at the old limit, so nothing pulls the new limit down until
-  Autotune has measured it.
+  values, thermald stays stopped because a TDP follows at once), then the pick, then a fresh Autotune session under that
+  limit: at the level the game held last time under it, else mid-range. After a pick in the game the session starts at
+  the pick itself, and what was learned at the old limit is dropped.
 - **Game exit:** what Autotune learned is saved, everything is reverted, then the pick for the power source the Claw
   is on now goes back on the chip. With no pick on that power source the chip keeps the firmware's limits and thermald
   starts again. Unplugging with no game switches to the other power source's pick the same way.
@@ -125,7 +126,7 @@ fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
 - **Emulator frontends (ES-DE):** Steam sees only the frontend, so each game it starts is kept under its own key,
   `<frontend appid>#<system>/<ROM file name>` (`running_key`; `running_appid` stays Steam's, which the panel compares).
   At game-start what the last one learned is saved and the new one starts like a game launch; a game without its own
-  pick starts at the frontend's pick, never with another game's learning. At game-end the frontend's own pick and
+  pick starts under the frontend's pick, never with another game's learning. At game-end the frontend's own pick and
   session come back.
 
 ## Temperature guard (§21)
@@ -133,40 +134,61 @@ While thermald is stopped, `thermal.Guard` takes over its temperature job for Cl
 every 10 s, only while `power.thermald_paused()`; it reads the package temperature (`x86_pkg_temp` thermal zone,
 coretemp's "Package id 0" as the fallback; `hw.find_pkg_temp`). Above 95 °C it trips and steps the TDP −2 W per
 check until the package is under 90 °C, never below the floor (autotune's, else the user's, else the model's). With
-autotune running the step is `Autotune.thermal_step`: it becomes a cap autotune works under (a re-measure goes to
-the cap, a lever on trial is undone). The step stays until the user picks a profile or moves the slider (both reset
+autotune running the step is `Autotune.thermal_step`: it becomes a cap the governor works under. A cap on the CPU
+clock (`thermal_clock`) makes it forget which levels failed (the same watts give other frames), and watts the guard
+gives back are not raised to, only looked at for what they give. The step stays until the user picks a profile or moves the slider (both reset
 the guard) or the power is reverted. The status line reads "thermal: stepped to N W". The SoC's TCC limit and the EC
 fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
 
-## Autotune controller (v3, HARDWARE-FINDINGS §22)
-No target fps. Every decision uses a 10 s window of **rendered** fps that restarts after every change, one change per
-window. Rendered, not presented: with XeSS frame generation the screen shows 2–4 frames per rendered one and
-MangoHud counts them all; XeLL's `xellSleep` runs once per rendered frame and the xess-xmx-linux shim logs it every
-100 frames (`xellSleep stats: 100 calls in W ms (P ms/frame)`, `IGDEXT_XELL_LOG=1`, exported by the launch wrapper
-while autotune is on, read from `drive_c/igdext_xell.log`). Rendered = 1000 / P; presented / rendered = the
-frame-generation multiplier. No XeLL line = no XeSS frame generation, and MangoHud's rate is the rendered one.
-1. **measure**: at the set TDP (profile or slider), the median of three windows = the most it gives (`max_fps`);
-2. **balance**: one lever toward the bottleneck (GPU-bound: CPU ceiling −10 % to hand the GPU the shared budget,
-   then GPU floor +100 MHz; CPU-bound: CPU boost on, CPU ceiling 100 %, drop a GPU floor). Kept only with ≥2 % more
-   fps (and then it may take another step); otherwise undone and balancing ends;
-3. **lower**: TDP −1 W while fps ≥ (100 − keep) % of `max_fps` (keep = 5 % by default, 2–15 in Advanced); the first
-   miss is measured again, the second goes back up 1 W. Every new TDP gets one balance pass (the bottleneck moves as
-   watts drop);
-4. **hold**: below the line twice → +1 W; a sustained ±15 % shift, a frame-generation multiplier change or 5 min →
-   measure again.
-GPU efficiency mode (§22.3): xe's `power_profile` (`base` / `power_saving`). Saver and Battery set power_saving, the
-other profiles base. In autotune it is the first GPU-bound lever (off before any CPU trade or GPU floor, and before
-+1 W when short in hold), and at the TDP floor on the line it is tried on for one window and kept only if the game
-stays on the line. The file reads "[base] power_saving" and takes one word, so `sysfs.write(original=)` records the
-active word for the revert.
-PL1 window (§22.2): RAPL averages PL1 over tau (56 s on the EX), so for most of a minute after a change the package
-can still boost and a 10 s window would judge the boost. While learning (any phase but hold, or fewer than 3 quiet
-windows in hold) autotune sets tau to 8 s; once settled the firmware's tau comes back so play keeps its bursts.
-Paused → firmware's tau; every write revertible.
-The floor is the model minimum (8 W) or the user's. Saved per game and power source: TDP, CPU ceiling, GPU floor,
-boost, `max_fps` and the ceiling it was measured at (a different set TDP is measured again). Frames per watt is
-shown, never chased: it keeps improving down to the minimum TDP. A manual change (Advanced) pauses it; picking a
-profile or moving the slider measures again and hands control back. ~70 µs of CPU per step.
+## Autotune governor (HARDWARE-FINDINGS §24)
+`governor.py` is one function, `step(state, obs, cfg)`: the frames since the last look, the package power, the guard's
+cap in; a limit to write (or none), when to look again and a line for the panel out. No clock, no I/O: the tests run it
+on frames written by hand, and `tools/autotune_sim.py` on games built from recordings. `autotune.py` is the rest: the
+frames (`Sampler`), the session, the loop, the writes, the status and the log.
+
+It asks one question all the time: would more watts, up to your limit, give frames it has to deliver?
+- **The goal** is your target less 5 %; with a target the full limit can't reach (and Auto FPS on), what the full limit
+  gives less 5 %; with no target, what the full limit gives less the keep margin (5 % by default, at least 2 fps). What
+  the full limit gives (the reference) is the pace whenever the limit can't be what holds the game back: at the full
+  limit, or with the package 2 W or more under the limit.
+- **No: try fewer.** A step down (2 W, or straight to just over what the package draws when that is far under the
+  limit) is watched for 2.5 s on every frame. A clear loss (the median of 10 frames 3 % under the goal), a small one
+  on all the frames of the watch, or more slow frames than before (frames more than 10 % over the pace: the edge of an
+  emulator's limit shows there first) takes it back at once. The level failed: it is not tried again for 2 minutes,
+  twice that after each further failure, and the next step goes halfway to it. Two measured points (the level that
+  failed and the one above it) also rule out the levels a straight line puts under the goal.
+- **Yes: all of them at once.** A clear loss while holding a lowered limit writes the full limit; a second later the
+  frames say which it was. They came back: the limit was too low, it joins the failed levels, and the way down starts
+  again. They didn't: the scene got heavier at every limit, the reference is what the full limit gives now, and the
+  limit before comes back. A small loss that stays goes one level up instead.
+- **What is known grows old.** The reference is checked at the full limit one second after steps down that began there,
+  when the frame rate at the held limit moved 3 % since it was taken (not more often than once a minute), and every
+  10 minutes. Failed levels are forgotten when the pace at one limit moved 15 % for 5 s (another scene), when the guard
+  changed the CPU clock, and when the frame-generation multiplier changed.
+- **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a menu, a pause). A
+  step being watched is taken back; a lowered limit goes to the full one while frames still come.
+
+Frames: every frame of every game from mangoapp's log (Steam's overlay; `Sampler` turns its logging on through its
+control socket and deletes the log at the game's end). The launch wrapper's MangoHud log (a row a second) is read only
+while mangoapp gives nothing, and that second's frames are taken at their average. Rendered, not presented: with XeSS
+frame generation the screen shows 2–4 frames per rendered one; XeLL's `xellSleep` runs once per rendered frame and the
+xess-xmx-linux shim logs it every 100 frames (`IGDEXT_XELL_LOG=1`, exported by the launch wrapper while autotune is
+on, read from `drive_c/igdext_xell.log`). Presented / rendered is the multiplier the governor gets; without XeLL,
+ClawDeck's frame generation multiplier for the game.
+
+The loop looks twice a second, and ten times a second while a write of its own is watched (1–2.5 s). A row a second
+goes to `autotune.csv`.
+
+What Autotune owns while it governs: PL1; PL2 at PL1 + 2 W, also over a PL2 set by hand (`Power.governed`; yours is back
+with your limit); the PL1 window at 8 s from the game's start to its end (RAPL averages PL1 over 56 s on the EX: for
+most of a minute after a change the package can run up to PL2, and a step down watched for 2.5 s would be judged on
+frames it didn't cost yet). The CPU and GPU levers stay as your pick set them.
+
+Start: where the game held last time under the same limit and for the same target (`Learned.start`: the level under
+which 80 % of the holding time lay; `Learned.held` has the seconds per watt), else mid-range between floor and limit.
+A limit picked while the game runs (slider, profile, Use default) goes on the chip as picked and Autotune works down
+from it. A manual change (Advanced) pauses it; xemu (`OWN_PACE`) and a game with no frame rate for 30 s get your limit
+and are left alone.
 
 ## Open items (need the device)
 - Low latency log lines ("low latency: on", "auto: waited in N of 100 frames") come from upstream's

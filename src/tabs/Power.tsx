@@ -172,13 +172,15 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const running = !!at?.running && !at.paused;
   const thermalLine = at?.thermal?.line ?? null;     // "thermal: stepped to 15 W" once the temperature guard acted
-  const phase = { measure: "measuring the most", balance: "balancing CPU/GPU", lower: "lowering", hold: "holding",
-    target: at?.target ? `holding ${at.target} fps` : "target" }[at?.phase ?? "measure"];
+  // what the governor is doing right now (a write of its own is watched for a second or two), else what it holds
+  const step = { probe: "trying fewer watts", back: "took the step back", recover: "full limit after a loss",
+    check: "checking what your limit gives", hold: "" }[at?.step ?? "hold"];
+  const phase = step || (at?.phase === "target" && at?.target ? `holding ${at.target} fps` : "holding");
   // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
   const fpsText = at?.avg_fps != null
     ? `${Math.round(at.avg_fps)} fps` + (at.phase === "target" && at.target ? ` (target ${at.target}${at.unreachable && at.user_target && at.target < at.user_target ? `, Auto FPS: ${at.user_target} out of reach` : at.unreachable ? ", out of reach" : ""})`
         : at.max_fps ? ` (${at.pct_of_max} % of ${Math.round(at.max_fps)})` : "") +
-      ((at.source === "rendered" || at.source === "frame-gen pick") && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "measuring…";
+      ((at.source === "rendered" || at.source === "frame-gen pick") && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "reading frames…";
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (!appid ? "Autotune on: starts with the next game"
       : at?.why && at.why !== "not started" ? `Autotune: ${at.why}` : "Autotune on: starting…")
@@ -191,7 +193,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const savesW = running && at?.tdp != null && limitW != null && limitW > at.tdp ? limitW - at.tdp : 0;
   const usingLine = running && at?.tdp != null
     ? `Autotune: using ${at.tdp} W of your ${limitW} W` + (savesW ? ` · saves ${savesW} W` : "") +
-      ` · ${at.avg_fps != null ? `${Math.round(at.avg_fps)} fps` : "measuring…"}` : null;
+      ` · ${at.avg_fps != null ? `${Math.round(at.avg_fps)} fps` : "reading frames…"}` : null;
   const bound = at?.bound === "gpu" ? "GPU-bound" : at?.bound === "cpu" ? "CPU-bound" : "Balanced";
   const atDetail = running
     ? `${bound} · ${phase}${at?.last_action ? ` · ${at.last_action}${at.last_change_s != null ? ` (${ago(at.last_change_s)})` : ""}` : ""}` : undefined;
@@ -220,7 +222,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`From your TDP (${tdp} W) to ${st?.pl2_max ?? 45} W, saved for ${slot?.plugged ? "plugged in" : "battery"}.`)} />}
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so above 95 °C ClawDeck steps down until under 90 °C: when a few busy cores make the heat under your limit, the CPU's top clock 10 % at a time (a lower TDP would only slow everything); otherwise the TDP, 2 W under what the chip draws. Under 80 °C everything goes back up every 30 s, to your limit.`
-            : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is set at once and measured again.`
+            : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is on the chip at once; Autotune works down from it.`
             : app ? gameName : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
             : "No game running: this limit is on the chip now, and comes back when a game closes"} />
         <Problem error={err} what="Power limit" />
@@ -238,19 +240,19 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       <PanelSectionRow>
         <Group title="Autotune" />
         <ToggleField label="Autotune (beta, every game)" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(`Finds the most frames the TDP above gives, shares that power between CPU and graphics where the game needs it, then lowers the TDP (3 W steps on a plateau, then 1 W) while the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60 (${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
-            quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "it spends a few seconds at the full TDP whenever it measures again (new area, every few minutes).")} />
+          description={explain(`Holds nearly the most frames the TDP above gives with the fewest watts (the game gives up at most ${Math.max(2, Math.round(((st?.autotune_keep ?? 5) / 100) * 60))} fps of 60: ${st?.autotune_keep ?? 5} %, or 2 fps, whichever is more). It tries a lower TDP for a moment, watches every frame, and takes the step back at the first loss; when a heavier scene loses frames, the full TDP is back within a second. On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
+            quick ? undefined : "nearly the same frames for less power: longer play time. With a frame limit (Steam's), it holds the limit with the least power.", quick ? undefined : "a step that fails is about half a second of slightly slower frames; it tries less often the longer a scene stays the same.")} />
         {autotune && (
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
             selectedOption={st?.autotune_target ?? 0}
             onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
-            description={explain("A frame rate to hold with the fewest watts: watts come back within seconds when a heavy scene drops below it, and go down slowly while it holds. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+            description={explain("A frame rate to hold with the fewest watts: the full TDP is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
               quick ? undefined : "No target: nearly the most frames the TDP above gives, for less power.", undefined)} />
         )}
         {autotune && !!st?.autotune_target && (
           <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
             onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
-            description={explain(`If the TDP above can't reach ${st?.autotune_target} fps for a minute, Autotune holds the closest frame rate it can (95 % of what the full TDP gives) instead of running flat out, and goes back toward ${st?.autotune_target} when the game gets lighter.`,
+            description={explain(`If the TDP above can't reach ${st?.autotune_target} fps, Autotune holds what the full TDP gives (within 5 %) with the fewest watts instead of running flat out, and holds ${st?.autotune_target} again when the game gets lighter.`,
               undefined, "off: an out-of-reach target keeps the full TDP and says so.")} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />

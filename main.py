@@ -1,7 +1,7 @@
 """ClawDeck - Decky Loader backend. Thin: every call maps to one module in py_modules/clawdeck.
 
 Runs as root (plugin.json flag root) because sysfs, InputPlumber's config, /etc/firmware and the Steam library
-need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (1 Hz, one asyncio
+need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (twice a second, one asyncio
 task) or thermald is paused while ClawDeck holds a TDP (the temperature guard: one file read every 10 s, §21).
 Power-source changes and resume arrive as events from Steam (frontend listeners).
 
@@ -796,7 +796,7 @@ class Plugin:
                                 auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
                                 fg=self._game_fg(frontend.steam_appid(appid)), at_limit=picked)
             result["autotune"] = "started"
-            quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
+            quiet.background(True)                       # autotune's loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
         return result
 

@@ -54,6 +54,26 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**Autotune runs on a new governor (2026-11-15):** `governor.py` replaces both old controllers (measure / balance / lower
+/ hold, and the target-fps governor). It watches every frame (mangoapp's log is now the first frame source for every
+game), tries a lower TDP for 2.5 s and takes it back at the first loss, and writes the full limit at once when a heavier
+scene loses frames. It owns PL1, PL2 (PL1 + 2 W, also over a PL2 set by hand) and an 8 s PL1 window while it governs;
+it no longer touches the CPU/GPU levers. A game with no history starts mid-range under your limit. Tested on frames
+written by hand and in `tools/autotune_sim.py` only (games built from Claw 8 EX recordings); not yet on a device.
+Check on the EX, Autotune on:
+- a light game on a frame limit (60 fps at about 9 W): the TDP is at the floor within half a minute, 60 fps throughout;
+- a heavy game without a target: "using N W of your M W" settles within a few watts and stops moving (after the first
+  minutes: under one change a minute); frames stay within the keep % of what the full TDP gives;
+- a target the game can't reach at the full TDP: it does not sit at the full TDP ("Auto FPS: 60 out of reach");
+- walk from a light place into a heavy one: the full TDP is back within about a second;
+- **the Steam menu over a game:** open Quick Access for half a minute and close it. mangoapp follows the focused
+  window; what Autotune reads meanwhile is not known. The TDP must not end up lower than before, or must be back within
+  a second of closing the menu;
+- an emulator from ES-DE: `autotune.csv` rows end in four figures; in xemu "Autotune stays out of xemu";
+- `tools/soak.py` over two hours with a game: the backend under 0.5 % CPU (it looks twice a second now, ten times a
+  second for a second or two after its own change);
+- cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
+
 **Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
 its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
 percentile frame time and the share of slow frames (more than 10 % over the pace of the 60 frames before): a limit
@@ -382,15 +402,15 @@ beta 2.
 
 - **Power (§17–§19), on the Claw:** move the TDP slider: the profile turns Custom and "RAPL reads N W" follows; pick
   Max 35 W and check whether PL1 above the chip's `max_power_uw` (25 W) takes effect (busy loop or
-  `tools/selftest.py`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound and the GPU
-  floor should climb before the watts; in a CPU-heavy one (Dragon's Dogma 2 town), CPU boost / ceiling first. Open
+  `tools/selftest.py`). With Autotune on in a GPU-heavy game, the status line should say GPU-bound, in a CPU-heavy one (Dragon's Dogma 2
+  town) CPU-bound; Autotune changes the TDP only, the CPU and GPU levers stay as the profile set them. Open
   Advanced, change CPU boost, the CPU ceiling, both GPU clocks and the energy mode: each toast reads back, and
   Autotune shows "paused".
 - **Autotune v3 (§22):** in a game with XeSS frame generation (Cyberpunk 2077, Wuthering Waves), the status line must
   say "rendered, 2x shown" (or 3x) and the fps must be the rendered rate; check `drive_c/igdext_xell.log` in the
   game's prefix has `xellSleep stats` lines and stays small over 10 minutes (the shim also routes XeLL's own debug
-  messages there). In a game without frame generation: max at the set TDP, then lowering 1 W at a time, holding
-  within 5 %. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
+  messages there). In a game without frame generation: steps down from where it starts, each taken back within a
+  second when frames are lost, holding within 5 % of what the set TDP gives. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
 - **Temperature guard (§21), on the Claw:** check the sensor: `cat /sys/class/thermal/thermal_zone*/type` should list
   `x86_pkg_temp` (the health check names the one ClawDeck uses). Then set Max 35 W, start a heavy game, cover the fan
   vents or block the airflow briefly, and watch the Power panel: past 95 °C the read-back line should say "thermal:
@@ -399,13 +419,12 @@ beta 2.
   always wins first, note the temperature it settles at.
 - **GPU efficiency mode (§22.3), on the Claw:** Setup → Run self-test: "GPU efficiency mode base / power_saving"
   and its revert must PASS. Pick Battery: `cat /sys/class/drm/card0/device/tile0/gt0/freq0/power_profile` reads
-  `base [power_saving]`; pick Balanced: `[base] power_saving`. The Advanced toggle follows and reads back. In a light
-  game at the TDP floor with Autotune on, the status should say "trying GPU efficiency mode", then "kept" or
-  "undone"; watch for a stutter at scene changes with it on.
+  `base [power_saving]`; pick Balanced: `[base] power_saving`. The Advanced toggle follows and reads back; Autotune leaves the
+  mode as the profile set it.
 - **PL1 window (§22.2), on the Claw:** with Autotune on, start a game and read
-  `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_time_window_us` while it measures: 8000000 (or the
-  firmware's nearest step). Once the status says "holding" for ~30 s it must read 55970000 again, and after closing
-  the game too. If the firmware refuses it, the log says so once and autotune carries on with 56 s.
+  `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_0_time_window_us`: 8000000 (or the firmware's nearest step)
+  for as long as Autotune governs the game. Paused (a manual change), in xemu, and after closing the game it must
+  read 55970000 again. If the firmware refuses it, the log says so once and autotune carries on with 56 s.
 - **XeSS install / update (§20), on the Claw:** tap Install XeSS XMX (or Update): when it finishes the Setup line
   must say "driver loads" straight away, without a log-out (the toast still asks for one so games pick it up). Tap
   Update again: the toast says "XeSS XMX 20261018: up to date", no red row, nothing downloaded (the log says so).

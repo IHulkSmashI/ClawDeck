@@ -416,3 +416,45 @@ sideload build.
     `shadowblip.log`; selftest "thermald paused" check → assert against the state at start.
 18. VRR floor (maintainer report: Steam UI laggy in Game Mode with VRR on, no game running): offer EDID variants
     30/40/48 Hz floor, **48 Hz default**, same apply/revert path; confirm on the Claw.
+
+## 24. What the frames say about the power limit (Claw 8 EX, 2026-11-14/15) — the ground of `governor.py`
+
+Measured with the limit (PL1) written by a recorder at 50 Hz next to mangoapp's per-frame log, Autotune off; the
+recordings behind the first two tables are in `tests/data/autotune/`.
+
+**Frames against watts.** Enshrouded standing at one spot (no frame limit reached, GPU 100 % busy at every level):
+
+| PL1 (W) | 30 | 27 | 24 | 21 | 18 | 15 | 12 | 10 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| fps, on the charger | 55.7 | 55.7 | 52.9 | 48.7 | 43.5 | 38.7 | 30.6 | 23.2 | 16.4 |
+| fps, on battery | 55.8 | 56.5 | 53.0 | 49.3 | 43.9 | 38.8 | 30.3 | 23.3 | 17.0 |
+
+27 and 30 W give the same (the GPU is at its top clock at both, no throttle reason); from 24 W down the GPU's
+`throttle/reason_pl1` is set. On battery the same within 2 %.
+
+Midnight Club: Los Angeles on RPCS3 (30 fps lock), parked. It draws the whole limit at every limit, with the CPU's
+"limited by PL1" flag set throughout, so neither the package power nor the flag shows spare watts:
+
+| PL1 (W) | 30 | 20 | 15 | 12 | 10 | 8 |
+|---|---|---|---|---|---|---|
+| fps | 30.0 | 30.0 | 29.7 | 24.9 | 20.8 | 17.4 |
+| frames more than 10 % slow | 0 % | 1.0 % | 6.4 % | 100 % | 100 % | 100 % |
+
+At 15 W the median frame is still on pace: the edge of the limit is a few slow frames, not a lower frame rate. Driving,
+the same game went from holding its lock at 14 W to 23.5 fps at the full 30 W within 20 s.
+
+**How fast.** After a write of PL1 (window 8 s) the frames are slower from the 3rd or 4th frame; "the median of the
+last 15 frames is 5 % over the pace" is true 0.35 s after 15 → 12 W and 0.33 s after 30 → 14 W. After 8 → 30 W the
+frames are back on pace in 0.25 s. The package itself is within 5 % of a new limit after 0.4–0.6 s (all-core load,
+battery and charger alike). 46 steps down of 2 W during play, each taken back at the first loss, cost about 0.6 s of
+at most 10 % slower frames each; frames slower than 30 fps came no more often around them than away from them.
+
+**What does not help.** With PL2 at 45 W and the firmware's 56 s window, a load drew 37 W under a 30 W PL1 for 8 s,
+and a cut made in that state took 2.3 s to bind; PL2 at 32 W against 45 W made no difference to the frame rate in a
+steady scene. A limit the package doesn't reach changes nothing (a PS2 game drew 10.4 W under 27 W and 9.9 W under
+12 W). xemu shows 60 fps while its own counter reads 16–18 at a 16 W limit: no frame rate from outside says what a
+limit costs there.
+
+**So:** only the frames' answer to a change of the limit tells a limit that is too low from a heavy scene, that
+answer comes within a third of a second, and what a game needs moves within seconds. `governor.py` is built on those
+three (DESIGN.md → Autotune governor).

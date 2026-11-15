@@ -6,7 +6,8 @@ How it works inside: [docs/DESIGN.md](docs/DESIGN.md). What is done and what is 
 ## Engineering rules
 
 - **Battery first.** No timers unless autotune is on for a running game, a benchmark is recording, or the user turned
-  on Setup → Diagnostics log; then one asyncio task at 1 Hz. Budget: under 0.5 % CPU and under 30 MB RSS over a 2-hour run, flat RSS over a 4-hour soak
+  on Setup → Diagnostics log; then one asyncio task (the diagnostics log at 1 Hz; Autotune twice a second, and ten times a second for a second or
+  two after a change of its own). Budget: under 0.5 % CPU and under 30 MB RSS over a 2-hour run, flat RSS over a 4-hour soak
   (`tools/soak.py`), measured before every release.
 - **Fail safe.** Every sysfs write goes through `clawdeck.sysfs.write`, so it is recorded and revertible. A failed
   write reverts. Everything a game and Autotune changed reverts when the game closes, and the limit the user picked for
