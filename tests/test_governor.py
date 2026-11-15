@@ -429,6 +429,7 @@ def test_a_short_video_keeps_the_level_that_held_before_it():
     assert all(w >= held for t, w in g.writes if t >= 150)           # nothing under it for REACH_FOR_S
     g.run(60)
     assert g.limit <= held + 2 and g.st.ref > 57                     # the game is back, at its frame rate
+    assert g.st.drop_floor is None and g.st.ref_high is None         # ... and the floor is gone with the video
 
 
 def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
@@ -533,3 +534,101 @@ def test_the_guards_cap_under_the_floor_wins():
     g.cap = None
     g.run(30)
     assert g.limit >= 15
+
+
+# ---- rules that no test noticed when they were broken (second review's mutation run) --------------------------------
+def _needs(need):
+    """60 fps from `need()` watts up, in proportion below."""
+    return lambda w, t: 60.0 if w >= need() else 60.0 * w / need()
+
+
+def _cliff(need, low=48.0):
+    """60 fps from `need()` watts up, `low` under it."""
+    return lambda w, t: 60.0 if w >= need() else low
+
+
+def test_no_write_goes_over_the_guards_cap_when_a_step_is_undone():
+    """A step down is being watched when the guard caps the limit just over it: the limit to go back to is over the
+    cap now."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=_cliff(lambda: 20))
+    for _ in range(600):
+        g.run(0.1)
+        if g.st.mode == "probe" and g.st.prev == 20:
+            break
+    assert g.st.mode == "probe" and g.limit < 20
+    g.cap = 19
+    t0 = g.t
+    g.run(10)
+    assert g.since(t0) and max(g.since(t0)) <= g.cap
+
+
+def test_a_clear_loss_in_a_step_is_undone_within_a_few_frames_not_at_the_end_of_the_watch():
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=_cliff(lambda: 17))
+    g.run(60)
+    down = [(t, w) for t, w in g.writes if w < 17]
+    assert down
+    t, w = down[-1]
+    back = min(at for at, x in g.writes if at > t and x > w)
+    assert back - t <= 0.4                                           # SETTLE_S and five frames; the watch is 2.5 s
+
+
+def test_frames_that_stay_lost_after_a_step_was_undone_get_the_full_limit():
+    """The scene got heavier while the step was watched: back at the limit before, frames are still lost."""
+    need = {"w": 20}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=_cliff(lambda: need["w"], low=52.0))
+    for _ in range(600):
+        g.run(0.1)
+        if g.st.mode == "probe" and g.st.prev == 20:
+            break
+    assert g.st.mode == "probe"
+    need["w"], t0 = 26, g.t
+    g.run(3)
+    assert g.since(t0 + 0.05)[:2] == [20, 30]                        # undone, and a second later all of it
+
+
+def test_a_small_loss_that_stays_goes_back_to_the_level_that_held_before():
+    need = {"w": 14}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w, t: 60.0 if w >= need["w"] else 60.0 - 0.8 * (need["w"] - w))
+    g.run(90)
+    held, safe = g.limit, g.st.safe
+    assert g.st.mode == "hold" and safe is not None and safe > held + 1
+    need["w"], t0 = held + 5, g.t                                    # 4 fps less here: under the goal, not by much
+    g.run(8)
+    assert g.since(t0)[0] == safe
+
+
+def test_the_full_limit_is_looked_at_again_soon_after_steps_down_from_it():
+    """The reference is from before the steps: a scene that got heavier during them would be held against it."""
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w: 56.0 if w >= 24 else 56.0 - (24 - w))
+    g.draw = lambda w, t: float(w)
+    g.run(60)
+    looks = [t for t, n in g.notes if "checking what the full" in n]
+    ends = [t for t, n in g.notes if n.startswith("holding at") or "back to" in n]
+    assert looks and ends and min(t for t in looks if t > ends[0]) - ends[0] <= 4.0
+
+
+def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_full_limit_looked_at():
+    """A lighter scene: this limit gives 6 % more than it did. The full limit gives more too, and the levels that
+    failed in the heavier scene say nothing here."""
+    lift = {"x": 1.0}
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
+    g.draw = lambda w, t: float(w)
+    g.run(40)
+    assert g.st.mode == "hold" and g.limit < 26 and g.st.fail
+    g.run(max(0.0, g.st.ref_at + 20 - g.t))
+    lift["x"], t0, ref = 1.07, g.t, g.st.ref
+    g.run(15)                                                        # well inside CHECK_S of the last look
+    assert any("checking what the full" in n for t, n in g.notes if t >= t0)
+    assert g.st.ref > ref * 1.05 and all(at > t0 for at, _ in g.st.fail.values())
+
+
+def test_a_held_limit_that_gives_more_than_the_reference_has_the_full_limit_looked_at():
+    """The reference is from a moment that was not the game (a video at half the frame rate): this limit shows more
+    frames than the full limit is believed to give."""
+    g = Game(gov.Cfg(floor=8, ceiling=30), fps=_needs(lambda: 16))
+    g.draw = lambda w, t: float(w)
+    g.run(60)
+    assert g.st.mode == "hold"
+    g.st.ref, g.st.ref_at, g.st.ref_here, g.st.quiet_until, t0 = 40.0, g.t, None, g.t + 60, g.t
+    g.run(gov.ABOVE_S + 4)
+    assert any("checking what the full" in n for t, n in g.notes if t >= t0) and g.st.ref > 57

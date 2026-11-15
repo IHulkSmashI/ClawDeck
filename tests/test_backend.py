@@ -1571,9 +1571,9 @@ def test_a_sample_from_the_games_own_mangohud_log_has_no_frame_times(fake_hw, tm
 def test_autotune_csv_says_why_the_limit_moved(fake_hw, tmp_path, monkeypatch):
     """A row of the log has the goal and, in "note", what was decided since the row before: each change of the limit
     with its watts and reason, and a pause. Without it a run on a device shows that the limit moved and not why."""
-    at, s = _tuner(fake_hw, monkeypatch, ceiling=20, target=60)
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
     at.csv_log = str(tmp_path / "autotune.csv")
-    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp))          # 60 fps from 15 W
+    g = _Game(at, lambda *_: 60.0)                               # 60 fps at any limit: down to the floor
     g.run(120)
     at.pause("manual CPU boost")
     g.run(3)
@@ -1584,6 +1584,7 @@ def test_autotune_csv_says_why_the_limit_moved(fake_hw, tmp_path, monkeypatch):
     assert moved and all(n.split(" W: ")[0].lstrip("+-").isdigit() for n in moved)       # "-2 W: <why>"
     assert any(r["goal"] == "57.0" for r in rows)                                       # 60 fps less 5 %
     assert notes[-1].startswith("paused: manual CPU boost") and rows[-1]["goal"] == ""
+    assert any(n.startswith("holding at") for n in notes)                               # a decision without a write
     assert len(notes) < len(rows) / 2                                                    # a note once, not every row
     assert s.notes == []
 
@@ -1663,10 +1664,22 @@ def test_a_look_without_a_new_mangoapp_row_has_no_frames_not_the_other_logs_aver
     assert smp.frametime() == (pytest.approx(16.7), pytest.approx(59.9, abs=0.1))
     clock["t"] += 0.5
     assert smp.frametime() == (None, None) and smp.frames_ms == []       # a stall: no frames, not 30 fps
-    clock["t"] += autotune.MANGOAPP_RELOG_S + 1                           # mangoapp gone for good: the other log,
-    with open(own, "a") as f:                                             # from here on only
-        f.write("60.0,16.7\n")
+    with open(own, "a") as f:                                             # the own log goes on meanwhile (a slow second)
+        f.write("30.0,33.3\n")
+    _mango_rows(live, [16.7] * 30)
+    clock["t"] += 0.5
+    assert smp.frametime()[1] == pytest.approx(59.9, abs=0.1)
+    with open(own, "a") as f:
+        f.write("30.0,33.3\n")
+    clock["t"] += 0.5
     smp._log_checked = -1e9
+    assert smp.frametime() == (None, None)                                # the next stall: still not the other log's rows
+    clock["t"] += autotune.MANGOAPP_RELOG_S + 1                           # mangoapp gone for good: the other log,
+    smp._log_checked = -1e9                                               # from here on only (not the two slow
+    assert smp.frametime() == (None, None)                                # seconds it wrote meanwhile)
+    with open(own, "a") as f:
+        f.write("60.0,16.7\n")
+    clock["t"] += 1.0
     assert smp.frametime() == (16.7, 60.0)
 
 
@@ -1790,6 +1803,56 @@ def test_a_new_limit_in_xemu_goes_on_the_chip_and_autotune_stays_out(fake_hw, mo
     at._give_back(s)
     assert at.set_ceiling(24) == 24 and chip["tdp"] == 24 and s.paused and s.own_pace == "xemu" and not pw.governed
     at.session = None
+
+
+def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypatch):
+    """The wiring between the plugin and governor.step: the guard's cap and its clock cap are in every observation, a
+    keep % set in the panel is in the configuration, the guard's step ends a watch, no write goes over the cap, a
+    change of the frame-generation multiplier starts the governor's memory over, and stop() ends "governed"."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    chip = {}
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    seen, real = [], autotune.governor.step
+    monkeypatch.setattr(autotune.governor, "step", lambda st, obs, cfg: seen.append((obs, cfg)) or real(st, obs, cfg))
+    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp))                       # 60 fps from 15 W
+    g.run(6)
+    assert s.gov.mode == "probe"                                              # a step down is being watched
+    assert at.thermal_step(17) and s.gov.mode == "hold" and chip["tdp"] <= 17  # the guard's step ends the watch
+    g.run(1)
+    assert seen[-1][0].cap_w == 17 and seen[-1][0].thermal is False
+    assert not at._tdp(s.learned, 25) or chip["tdp"] <= 17                    # nothing over the cap
+    assert chip["tdp"] <= 17
+    at.thermal_clock(80)
+    g.run(1)
+    assert seen[-1][0].thermal is True
+    at.set_keep(12)
+    g.run(1)
+    assert seen[-1][1].keep_pct == 12
+    s.gov.fail[11] = [1e12, 1]
+    s.fg = 2                                                                  # frame generation switched on in the game
+    g.run(1)
+    assert seen[-1][0].multiplier == 2.0 and s.gov.fail == {}
+    assert at.power.governed
+    at.stop(revert=False)
+    assert not at.power.governed
+
+
+def test_a_manual_cpu_ceiling_pauses_autotune_and_the_guard_gets_the_limit_it_holds(plugin, tmp_path):
+    p = plugin
+    p.run(p.set_tdp(30))
+    p.run(p.game_started("7"))
+    s = _lower(p)
+    held = p.chip()
+    assert held < 30
+    # Autotune looks at the full limit for a second: the guard must judge the limit it holds, not that second's 30 W
+    s.gov.mode, s.gov.prev = "check", held
+    p.autotune._tdp(s.learned, 30)
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    _w(t, 97000)
+    assert p.run(p._guard_check()) == held - 2                                # 2 W under what it holds (not 28 W)
+    r = p.run(p.set_cpu_max_pct(80))
+    assert r["ok"] and s.paused
 
 
 def test_frames_that_stop_for_good_give_the_limit_you_picked_back(fake_hw, monkeypatch):

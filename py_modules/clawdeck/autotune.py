@@ -114,6 +114,7 @@ class Sampler:
         self._mango_checked = -1e9
         self.frames_ms: list[float] = []           # the frame times behind the last frametime(), when mangoapp gave them
         self._mango_frames_at = -1e9               # when mangoapp last gave frames (its log is the source while it does)
+        self._own_from: str | None = None          # the game's own log, read since mangoapp stopped (from its end then)
         self._pace: deque = deque(maxlen=PACE_FRAMES)   # the frame times before those
         self.xell_log: str | None = None       # the running game's drive_c/igdext_xell.log (set_prefix)
         self._xell_pos = 0
@@ -177,7 +178,7 @@ class Sampler:
         now = time.monotonic()
         ft, fps = self._mangoapp_frametime()        # every frame of the focused app, for every game
         if ft is not None:
-            self._mango_frames_at = now
+            self._mango_frames_at, self._own_from = now, None
             return ft, fps
         if now - self._mango_frames_at < MANGOAPP_RELOG_S:
             return None, None                       # between two rows of mangoapp's log: no frames in this look
@@ -185,9 +186,10 @@ class Sampler:
         if not f:
             return None, None
         try:
-            if f not in self._log_pos and self._mango_frames_at > -1e9:
-                self._log_pos[f] = os.path.getsize(f)   # mangoapp gave this game's frames until now: only what this
-                                                        # log writes from here on (not the session's average so far)
+            if self._own_from != f and self._mango_frames_at > -1e9:
+                # mangoapp gave this game's frames until now: only what this log writes from here on. (Its rows since
+                # the game began came back as one average otherwise: minutes of them, as "this look's frames")
+                self._own_from, self._log_pos[f] = f, os.path.getsize(f)
             with open(f, "rb") as fh:
                 start = self._log_pos.get(f, 0)
                 fh.seek(start)
@@ -286,7 +288,7 @@ class Sampler:
             self._mango, self._mango_pos = None, 0
         self._mango_asked, self._mango_checked, self._mango_row_at = -1e9, -1e9, time.monotonic()
         self.frames_ms = []
-        self._mango_frames_at = -1e9
+        self._mango_frames_at, self._own_from = -1e9, None
         self._pace.clear()                         # another game's pace
         self.xell_log, self._xell = xell_log, None
         self._since, self._log = (time.time() - 2, None) if xell_log else (0.0, None)
