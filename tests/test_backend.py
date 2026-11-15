@@ -1340,6 +1340,42 @@ def test_autotune_thermal_release_lifts_the_cap_and_measures_again(fake_hw, monk
     at.session = None
 
 
+def test_the_guard_gives_the_tdp_back_when_autotune_is_out_of_the_game(plugin, tmp_path):
+    """A paused autotune never climbs (xemu, no frame rate, a manual change), and the guard's steps back up only moved
+    autotune's cap: with a target, the chip stayed at the guard's step for the rest of the game (26 W of 30) while the
+    guard said "back at your 30 W"."""
+    p = plugin
+    p.settings["autotune_target"] = 60
+    p.run(p.set_tdp(30))                                           # Custom 30 W
+    p.run(p.game_started("7"))
+    s = p.autotune.session
+    s.own_pace, s.paused = "xemu", True                            # as the xemu check leaves the session
+    p.autotune._give_back(s)
+    assert p.chip() == 30
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    check = lambda c: (_w(t, c * 1000), p.run(p._guard_check()))[1]
+    assert check(97) == 28 and check(97) == 26 and p.chip() == 26  # hot: two steps down
+    assert check(70) is None and check(70) is None and check(70) is None
+    assert check(70) == 28 and p.chip() == 28                      # 30 s under 80: +2 W, on the chip
+    assert check(70) is None and check(70) is None and check(70) == 30
+    assert p.chip() == 30 and p.guard.stepped_w is None and s.thermal_cap is None and s.paused
+    assert not p.autotune.thermal_release(30)                      # nothing left to give back
+    p.autotune._step()
+    assert p.chip() == 30
+
+
+def test_a_refused_tdp_keeps_the_guards_cap_for_a_paused_autotune(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=25)
+    at.pause("manual CPU ceiling")
+    assert at.thermal_step(19)
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)
+    assert not at.thermal_release(21) and s.thermal_cap == 19 and s.learned.tdp == 19
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: True)
+    assert at.thermal_release(21) and s.thermal_cap == 21 and s.learned.tdp == 21
+    at.session = None
+
+
 def test_get_autotune_says_why_it_is_not_running(plugin):
     p = plugin
     p.settings["autotune"] = True
