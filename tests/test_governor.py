@@ -228,10 +228,11 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
 
 def test_frame_time_spread_widens_what_counts_as_a_loss():
     """9 % frame-time spread moves the rate of 10 frames by 3-4 % all the time: every such wobble was a clear loss."""
-    wobble = [1.0 + 0.09 * x for x in (1.3, -0.7, 0.2, -1.5, 0.9, 1.6, -0.3, -1.1, 0.5, -0.9, 1.1, -0.2, 0.7, -1.4, 0.1)]
+    wobble = [1.0 + 0.04 * x for x in (1.0, -1.0, 0.3, -0.6, 1.2, -0.2, -1.1, 0.8, 0.1, -0.5, 0.9, -1.2, 0.4)]
     g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
-             shape=lambda i, w, t: wobble[i % len(wobble)]).run(300)
-    assert g.st.noise > 0.05 and g.limit <= 22 and g.since(100).count(30) <= 2, g.writes[-10:]
+             shape=lambda i, w, t: wobble[(i // 10) % len(wobble)]).run(300)      # each run of 10 frames 0-5 % off
+    assert g.st.noise > 0.015 and g.limit <= 24 and g.since(100).count(30) <= 2, g.writes[-10:]
+    assert gov._spread([16.7] * 60) == 0 and gov._spread([11.7, 21.7] * 30) == pytest.approx(0, abs=1e-9)
 
 
 def test_uneven_frame_pacing_is_read_as_its_rate():

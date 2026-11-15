@@ -34,8 +34,8 @@ N = 10                  # a clear loss: the last N frames are CLEAR under the go
 CLEAR = 0.03
 SUSTAINED = 0.01        # ... a sustained one: the pace (PACE_FRAMES) is this far under it. A step down has to hold the
                         # goal itself over its whole watch, so a level that was accepted isn't lost to noise afterwards
-NOISE = 2.5             # ... and both at least this many times what the game's own frame-time spread does to such a
-                        # window (a game with 9 % spread moves a 10-frame rate by 3-4 % all the time)
+NOISE = 2.5             # ... and both at least this many times what the game's own rate does by itself over such a
+                        # window (frame times with 9 % spread move a 10-frame rate by about 3 % all the time)
 HITCH = 2.5             # a frame this many times the median is one of the game's own long frames: left out of a rate
 PATIENT_S = 1.0         # a game that dips by itself (DIPS short losses in DIPS_S that the limit can't have caused, each
 DIPS, DIPS_S = 2, 300.0 # over within DIP_MAX_S): a loss counts only when it is still there after PATIENT_S
@@ -135,7 +135,8 @@ class State:
     draw_was: float | None = None   # the package draw at the last look, and when a watched write was made
     wrote_at: float = -1e9
     off_since: float | None = None  # since when the frames are far from it
-    noise: float = 0.0              # the game's own frame-time spread (relative), from the pace window
+    noise: float = 0.0              # how much the game's rate of N frames wobbles by itself (relative), from the pace
+    noises: deque = field(default_factory=lambda: deque(maxlen=21))
     dips: deque = field(default_factory=lambda: deque(maxlen=8))   # when it lost frames at a limit that can't be the cause
     loss_since: float | None = None # a loss seen in a game that dips by itself: since when
     small_since: float | None = None
@@ -197,11 +198,14 @@ def _fps(ms) -> float | None:
 
 
 def _spread(ms) -> float:
-    """The frame-time spread of a run, relative: half the distance between its 16th and 84th percentile over its median."""
-    srt = sorted(ms)
-    if len(srt) < 2 * N:
+    """How much the frame rate of N frames wobbles in a run, relative: the rates of its consecutive blocks of N frames,
+    their range over 2.5 (about one standard deviation for a handful of blocks) and over their median. Frames that
+    alternate short and long (generated frames) have no wobble by this; frame times with 9 % spread have about 3 %."""
+    ms = list(ms)
+    rates = [_fps(ms[i:i + N]) for i in range(0, len(ms) - N + 1, N)]
+    if len(rates) < 3:
         return 0.0
-    return (srt[len(srt) * 84 // 100] - srt[len(srt) * 16 // 100]) / (2.0 * srt[len(srt) // 2])
+    return (max(rates) - min(rates)) / 2.5 / statistics.median(rates)
 
 
 def _slow(ms, pace_ms: float) -> float:
@@ -352,11 +356,14 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     rising = obs.draw_w is not None and st.draw_was is not None and obs.draw_w > st.draw_was + RISE_W
     st.draw_was = obs.draw_w if obs.draw_w is not None else st.draw_was
     if st.mode == "hold":
-        st.noise = _spread(st.pace)                  # of the last second or so: not across a change of the frame rate
+        # the median of the last looks' figures: a change of the frame rate (a loss!) is in a few of them, not in most
+        st.noises.append(_spread(st.pace))
+        st.noise = statistics.median(st.noises)
     want = goal(st, cfg)
-    # what the spread does to a rate of N frames, and of PACE_FRAMES (at most four times the plain thresholds)
-    clear = min(4 * CLEAR, max(CLEAR, NOISE * 1.25 * st.noise / N ** 0.5))
-    small = min(4 * SUSTAINED, max(SUSTAINED, NOISE * 1.25 * st.noise / PACE_FRAMES ** 0.5))
+    # NOISE times what the game's own wobble does to a rate of N frames, and of PACE_FRAMES (at most four times the
+    # plain thresholds)
+    clear = min(4 * CLEAR, max(CLEAR, NOISE * st.noise))
+    small = min(4 * SUSTAINED, max(SUSTAINED, NOISE * st.noise / (PACE_FRAMES / N) ** 0.5))
     dippy = sum(1 for d in st.dips if t - d <= DIPS_S) >= DIPS
     # two measured limits say where the need lies only when the upper one is not on a frame limit: with a target that
     # the full limit can't reach
@@ -454,7 +461,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if rising and t - st.wrote_at < BIND_S:          # the watts are still arriving: judged on the frames after that
         st.since, st.watch = t - BACK_S / 2, st.watch[-N:]
         return act
-    now = _fps(st.watch)
+    third = len(st.watch) // 3
+    if third >= N and t - st.wrote_at < 2 * BIND_S and _fps(st.watch[-third:]) > _fps(st.watch[:third]) * (1 + CLEAR):
+        return act                                   # the frame rate is still climbing: not judged yet
+    now = _fps(st.watch[len(st.watch) // 2:]) if len(st.watch) >= 4 * N else _fps(st.watch)
 
     # recover / check: at the full limit, on purpose. What it gives is the reference from here on
     prior = st.ref if st.ref is not None else cfg.target   # with a target that was held, the full limit gave that
