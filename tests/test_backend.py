@@ -1509,6 +1509,40 @@ def test_autotune_without_a_frame_rate_gives_back_the_limit_you_picked(fake_hw, 
     at.session = None
 
 
+def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw, monkeypatch, tmp_path):
+    """xemu presents 60 fps whatever the emulated game does (16-18 game fps at 16 W, 2026-11-14) and slows the game
+    under its own draw: no frame rate can steer a lower limit there. Found a few seconds in (an ES-DE game starts the
+    emulator after its game-start event), the pick goes back and stays, also when 60 fps keep coming."""
+    pw = power.Power(fake_hw)
+    chip = {}
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    proc = tmp_path / "proc"
+    for pid, name in (("1", "systemd"), ("4242", "es-de")):
+        _w(str(proc / pid / "comm"), name)
+    monkeypatch.setattr(autotune, "PROC", str(proc))
+    pw.apply_profile("", {"tdp": 30}, False)                          # the pick: Custom 30 W
+    at.start("3119184808#xbox/Project Gotham Racing 2", {"tdp": 16, "ceiling": 30, "max_fps": 60.0}, 8, 30, False)
+    assert chip["tdp"] == 16                                          # a saved result from before
+    at.sampler.sample = lambda: autotune.Sample(t=time.monotonic(), frametime_ms=16.7, fps=60.0, gpu_mhz=1000,
+                                                gpu_max_mhz=2400, cpu_pct=30, pkg_w=19.0, gpu_busy=40,
+                                                source="presented", shown_fps=None)
+    for _ in range(3):
+        at._step()
+    assert at.status()["own_pace"] is None                            # not started yet at 3 s
+    _w(str(proc / "4300" / "comm"), "xemu")                           # ES-DE starts it
+    for _ in range(7):
+        at._step()
+    st = at.status()
+    assert st["own_pace"] == "xemu" and st["paused"] and not st["no_frames"] and chip["tdp"] == 30
+    for _ in range(60):                                               # 60 fps keep coming: nothing changes
+        at._step()
+    assert chip["tdp"] == 30 and at.session.paused
+    assert autotune.own_pace_emulator(str(tmp_path / "missing")) is None
+    at.session = None
+
+
 def test_game_list_tags_say_what_clawdecks_optiscaler_runs(plugin):
     p = plugin
     assert p._game_tags({"opti": "fsr4_xmx", "opti_fg": "dlssg", "fg": 3}) == [

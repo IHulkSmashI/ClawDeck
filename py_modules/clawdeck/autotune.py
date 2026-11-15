@@ -331,6 +331,32 @@ class Learned:
 
 
 NO_FPS_S = 30          # seconds without any frame rate before autotune gives up on a game
+# Emulators whose frame rate is not the game's: xemu presents 60 frames a second whatever the emulated game does
+# (Project Gotham Racing 2 at a 16 W limit: 16-18 game fps, 60 shown; 2026-11-14), and under its own draw (~20 W on a
+# Claw 8 EX) the game slows down. No frame rate can show Autotune what a lower limit costs there, so it stays out of
+# these and your limit stays on the chip. Looked for (process name) a few seconds into a game: a frontend starts the
+# emulator after the game-start event.
+OWN_PACE = {"xemu": "it shows 60 fps whatever the game's speed"}
+OWN_PACE_CHECK_S = (3, 10, 30)
+PROC = "/proc"
+
+
+def own_pace_emulator(proc: str | None = None) -> str | None:
+    """The first OWN_PACE emulator running now (its process name), or None. One walk over /proc/*/comm."""
+    proc = proc or PROC
+    try:
+        pids = [d for d in os.listdir(proc) if d.isdigit()]
+    except OSError:
+        return None
+    for d in pids:
+        try:
+            with open(os.path.join(proc, d, "comm"), encoding="utf-8", errors="replace") as f:
+                name = f.read().strip()
+        except OSError:
+            continue
+        if name in OWN_PACE:
+            return name
+    return None
 
 
 @dataclass
@@ -362,6 +388,7 @@ class Session:
     thermal_cap: int | None = None      # the temperature guard stepped the TDP down to this (thermal.py): stay under it
     no_fps_s: int = 0                   # seconds in a row without a frame rate before the first one
     no_frames: bool = False             # gave up: this game's frame rate can't be read
+    own_pace: str | None = None         # an emulator whose frame rate isn't the game's (OWN_PACE): autotune stays out
     pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
     quiet: int = 0                      # windows in a row without a change (SETTLED_WINDOWS in hold = learned)
     skips: int = 0                      # windows in a row skipped as not gameplay (loading, menus, pause)
@@ -624,6 +651,15 @@ class Autotune:
             del s.history[:-600]
         if self.csv_log:
             self._log(s, smp)
+        if s.own_pace is None and len(s.history) in OWN_PACE_CHECK_S:
+            emu = own_pace_emulator()
+            if emu:
+                # your limit back on the chip and nothing more changed, whatever frames come later
+                s.own_pace, s.paused, s.no_frames = emu, True, False
+                self._give_back(s)
+                self._tau(s, False)
+                log.info("autotune: %s runs, %s: it stays out of this game (%d W, your limit)",
+                         emu, OWN_PACE[emu], s.learned.tdp)
         if smp.fps and s.no_frames:
             # frames after all: a game slower than NO_FPS_S to its first frame (Order of the Sinking Star takes 54 s).
             # Giving up put your pick back; autotune takes over from there
@@ -1149,6 +1185,7 @@ class Autotune:
                 "low_fps": r(s.low_fps), "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
                 "multiplier": s.multiplier, "window_s": s.settle, "thermal_cap": s.thermal_cap, "no_frames": s.no_frames,
+                "own_pace": s.own_pace, "own_pace_why": OWN_PACE.get(s.own_pace or ""),
                 "learning": s.short_tau or s.phase != "hold" or s.quiet < SETTLED_WINDOWS,
                 "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,

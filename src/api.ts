@@ -22,7 +22,7 @@ export type Stack = { hhd: boolean; inputplumber: boolean; powerstation: boolean
 export type Caps = { device: string; known: boolean; vendor: string | null; beta: boolean; xmx: boolean | null;
   fan: "msi" | "oxp" | null; charge_limit: boolean; face_buttons: boolean; hdr_brightness: boolean };
 export type Hardware = { product: string; known: boolean; kernel: string; cpu_model: string; gpu_driver: string | null; model: { name: string; soc: string; gpu: string; xmx: boolean }; caps?: Caps; stack: Stack; other_plugins?: { injector: string[]; power: string[] } };
-export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; title?: string | null; learned?: any; paused?: boolean; no_frames?: boolean; game_fg?: number; last?: any;
+export type AutotuneStatus = { running: boolean; enabled: boolean; appid?: string; title?: string | null; learned?: any; paused?: boolean; no_frames?: boolean; own_pace?: string | null; own_pace_why?: string | null; game_fg?: number; last?: any;
   phase?: "measure" | "balance" | "lower" | "hold" | "target"; target?: number | null; user_target?: number | null; auto_fps?: boolean;
   unreachable?: boolean; best_fps?: number | null; floor_learned?: number | null; fg?: number; tdp?: number; ceiling_tdp?: number; floor_tdp?: number; keep_pct?: number; keep_fps?: number; saves_w?: number | null;
   max_fps?: number | null; avg_fps?: number | null; low_fps?: number | null; pct_of_max?: number | null; fps_per_w?: number | null;
