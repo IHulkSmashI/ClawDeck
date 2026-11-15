@@ -241,6 +241,11 @@ beta 2.
 - **PL2 by hand (2026-11-05):** Power → Custom → "Set PL2 yourself" on: a PL2 slider (TDP to 45 W),
   saved per power source; off: PL2 = TDP + 2 W. Check the chip reads it:
   `cat /sys/class/powercap/intel-rapl-mmio:0/constraint_1_power_limit_uw` (µW). Other profiles always use TDP + 2 W.
+- **"Set PL2 yourself" reads the chip back (2026-11-15):** `set_pl2` looked for the PL2 read-back under a key that
+  `power.status()` only has under `rapl`, so it never had one: the toast said "PL2 set (yours)" and a PL2 the chip
+  did not take was reported as done. Now the toast carries RAPL's PL2 as read ("PL2 40 W (yours)"), and a different
+  value fails the call. Check on the EX: Power → Custom → "Set PL2 yourself", 40 W: the toast reads
+  "PL2 40 W (yours)".
 
 - **XeFG even flips (xess-xmx-linux branch xefg-flip-metering, test build fg-meter-test-build, 2026-11-05):** the
   shim spaces XeFG's presents itself, since on Intel XeFG leaves pacing to the Windows driver and nothing does it on
