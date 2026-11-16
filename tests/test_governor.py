@@ -1128,6 +1128,23 @@ def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws
     assert place["fps"](g.limit) >= 45 * 0.95
 
 
+def test_the_full_limit_is_not_asked_where_the_package_does_not_draw_the_limit():
+    """A video at 30 fps that draws 6 W, target 40: at the 8 W floor the package is 2 W under the limit, give or take
+    0.1 W. Nothing is asked of the full limit there. It was, and its answer (30 fps at every limit) stood for the
+    game after the video: 28.8 fps at 8 W for 63 s with 40 in reach (fuzz seed 251). The game draws all of the limit:
+    the full limit at once."""
+    place = {"fps": lambda w: 30.0, "draw": lambda w, t: 6.0 + 0.1 * (int(t * 2) % 2)}
+    g = Game(gov.Cfg(floor=8, ceiling=25, target=40, start_w=17), fps=lambda w: place["fps"](w))
+    g.draw = lambda w, t: place["draw"](w, t)
+    g.run(80)
+    assert g.limit == 8 and 25 not in g.since(0), g.notes
+    place.update(fps=lambda w: min(68.0, 28.76 + 3.34 * (w - 8)), draw=lambda w, t: float(w))
+    t0 = g.t
+    g.run(30)
+    first = [(t, w) for t, w in g.writes if t >= t0][0]
+    assert first[1] == 25 and first[0] - t0 <= 3 and place["fps"](g.limit) >= 38, (g.since(t0), [n for n in g.notes if n[0] >= t0])
+
+
 @pytest.mark.parametrize("target, reach", [(30, False), (22, True)])
 def test_after_a_menu_the_full_limit_is_asked_once_when_the_target_is_out_of_reach(target, reach):
     """A place where the full limit gives 23.5 fps, held some watts under it. A menu for 5 s (72 fps, the package at
