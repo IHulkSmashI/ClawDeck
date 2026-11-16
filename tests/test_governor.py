@@ -772,6 +772,31 @@ def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_has_drawn_
 
 
 
+
+def _lighter_place(thermal=False):
+    """A game that needs 14 W for its 40 fps, the package at the limit all the time,
+    held at 14 W with 13 W tried and failed; then a place that gives twice the frames with 24 W. -> the game, the time
+    of the change."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 40.0 * min(1.0, w / 14))
+    g.draw = lambda limit, t: float(limit)
+    while not (g.st.mode == "hold" and g.limit == 14 and 13 in g.st.fail and g.t - g.st.changed_at >= 3) and g.t < 60:
+        g.run(0.5)
+    assert g.limit == 14 and g.t - g.st.ref_at < gov.CHECK_S - 30, (g.t, g.limit, g.st.ref_at)    # no look for 30 s but this one
+    g.fps, g.thermal = (lambda w: 80.0 * min(1.0, w / 24)), thermal
+    return g, g.t
+
+
+def test_far_more_frames_get_no_look_under_the_guards_clock_cap():
+    """Under the guard's clock cap the full limit does not give what it gives without: no look for far more frames
+    while the cap stands, and the look when it is gone."""
+    g, t0 = _lighter_place(thermal=True)
+    g.run(20)
+    assert g.since(t0) == [], [n for n in g.notes if n[0] >= t0][:4]
+    g.thermal = False
+    g.run(8)
+    assert 30 in g.since(t0 + 20), [n for n in g.notes if n[0] >= t0][:4]
+
+
 def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
     """After REACH_FOR_S the lower reference is the game and the limit goes down. When the game is back, the low limit
     may give just what the video gave (30 fps at 8 W): no loss shows. But the package now draws all of the limit, which
