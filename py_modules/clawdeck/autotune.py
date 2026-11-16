@@ -865,8 +865,7 @@ class Autotune:
         # multiplier for the game; a change of it is another game as far as the frames go
         mult = self._multiplier(s, smp)
         if s.multiplier is not None and abs(mult - s.multiplier) >= 0.5:
-            s.gov.fail.clear()
-            s.gov.ref, s.gov.ref_at, s.gov.misses, s.gov.met = None, -1e9, 0, False
+            governor.forget(s.gov)
             s.gov.last.clear()
             s.gov.pace.clear()
         s.multiplier = mult
