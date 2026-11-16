@@ -448,6 +448,9 @@ class Plugin:
                     w = self._pick(self._game_key(), plugged)["tdp"]
                     if w is not None:
                         self.power.set_tdp(w, plugged)
+        if key in ("autotune", "autotune_plugged") and self.running_appid is None and self.settings.get("autotune_max"):
+            async with self._power_lock:
+                self._apply_idle_pick(bool(self.battery.plugged()))
         if key == "diag_log":
             self._ensure_diag()          # off: the loop sees the setting and ends within a second
         return True
@@ -804,10 +807,8 @@ class Plugin:
         prof = pk["prof"]
         self._guard_reset()
         self._pl2_for(pk, plugged)
-        governs, overrides = self._autotune_governs(prof, plugged), pk["overrides"]
-        if governs and self.settings.get("autotune_max"):
-            overrides = {**overrides, "tdp": self.power.clamp_tdp(int(self.settings["autotune_max"]), plugged)}
-        result = self.power.apply_profile(pk["apply"], overrides, plugged)
+        governs = self._autotune_governs(prof, plugged)
+        result = self.power.apply_profile(pk["apply"], self._limit_overrides(pk, plugged), plugged)
         result["limit_w"] = result["applied"].get("tdp")
         if governs:
             # that limit is the set TDP autotune measures at and works under; its floor is the model minimum or the
@@ -831,6 +832,14 @@ class Plugin:
         the limit."""
         return bool(self.settings.get("autotune") and prof.get("autotune", True)
                     and (not plugged or self.settings.get("autotune_plugged")))
+
+    def _limit_overrides(self, pk: dict, plugged: bool) -> dict:
+        """What goes on the chip with a pick. Where Autotune sets the limit and has a maximum of its own, that is the
+        limit in place of the TDP setting: in a game from its start (so PL2 and the temperature guard follow it, also
+        where Autotune then stays out), and in the menus."""
+        if self._autotune_governs(pk["prof"], plugged) and self.settings.get("autotune_max"):
+            return {**pk["overrides"], "tdp": self.power.clamp_tdp(int(self.settings["autotune_max"]), plugged)}
+        return pk["overrides"]
 
     def _held_or_release(self, result: dict) -> None:
         """A TDP is held: the temperature guard watches it. None could be set: thermald back in charge."""
@@ -858,7 +867,7 @@ class Plugin:
         pk = self._pick(None, plugged)
         self._guard_reset()
         self._pl2_for(pk, plugged)
-        r = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
+        r = self.power.apply_profile(pk["apply"], self._limit_overrides(pk, plugged), plugged)
         self._holding_pick = True
         self._held_or_release(r)
         return {**r, "limit_w": r["applied"].get("tdp"), "pick": {"profile": pk["profile"], "tdp": pk["tdp"]}}
@@ -1135,7 +1144,9 @@ class Plugin:
             self.settings["autotune_max"] = w
             self._save_settings()
             plugged = bool(self.battery.plugged())
-            if self.running_appid and self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
+            if self.running_appid is None:
+                self._apply_idle_pick(plugged)
+            elif self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
                 self.running_plugged = plugged
                 self._restart_game_power(self._game_key(), plugged, picked=True)
             words = f"Autotune uses up to {self.power.clamp_tdp(w, plugged)} W" if w else "Autotune uses up to the TDP setting"

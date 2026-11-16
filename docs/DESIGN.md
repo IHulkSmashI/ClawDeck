@@ -118,17 +118,17 @@ while the panel is open in a game).
 
 **Two modes.** Autotune off: the TDP setting is the limit. Autotune on: a target frame rate under **Autotune's own
 maximum** (`autotune_max`, one value for both power sources, clamped to each one's range where it is used; none set:
-the TDP setting, so nothing changes for who never moves it). `_start_game_power` puts the maximum on the chip as the
-limit where Autotune governs (`_autotune_governs`: switched on, not off for the game, and plugged in only with
-"Autotune when plugged in"), so PL2 and the temperature guard follow it as they follow the TDP setting, also where
-Autotune then stays out (xemu, no frame rate). `set_autotune_max` in a running game starts the game over under it,
+the TDP setting, so nothing changes for who never moves it). Where Autotune governs (`_autotune_governs`: switched
+on, not off for the game, and plugged in only with "Autotune when plugged in") the maximum goes on the chip as the
+limit in place of the TDP setting (`_limit_overrides`): in a game from its start, so PL2 and the temperature guard
+follow it as they follow the TDP setting, also where Autotune then stays out (xemu, no frame rate); and in the
+menus, where no Autotune session runs (no game's frame rate), so nothing is lowered under it there. `set_autotune_max` in a running game starts the game over under it,
 like a new pick. `get_power` returns `autotune_max` (the watts that apply here) and `autotune_governs`; the panel
 shows the maximum's slider only while Autotune is on, and greys the TDP slider out while Autotune governs, with the
 note "Autotune is on, so set an FPS target and a wattage limit in the Autotune section." Where Autotune does not
 govern (on the charger without the option, a game with Autotune off, a game it was switched on in: it starts at the
-next launch) the TDP setting is on the chip and its slider moves. Switched off in a running game, the TDP setting
-goes back on the chip. In the menus no Autotune runs and the TDP setting holds. The maximum is never saved as a TDP
-setting, and Autotune never changes it. Precedent: an own maximum of the automatic TDP in three of four projects
+next launch) the TDP setting is on the chip and its slider moves. Switched off, in a game or in the menus, the TDP
+setting goes back on the chip. The maximum is never saved as a TDP setting, and Autotune never changes it. Precedent: an own maximum of the automatic TDP in three of four projects
 read; its default from the manual TDP is Handheld Companion's rule; none greys the manual TDP out (the user's design).
 
 **A TDP setting and what Autotune learned are two records, and only the user writes a TDP setting.** A game's slot (per
@@ -216,8 +216,10 @@ The rules:
      under your target and the package draws all of the limit: a fall. Where the package draws 2 W less, the limit
      holds nothing back, and the band comes from those frames.
    - the goal is what the full limit gives (your target is out of reach), the limit is 2 W or more under the full
-     one, and the full limit was last measured 10 minutes ago: a scene that got lighter under a step, or another
-     place with the same frame rate at this limit, shows in no frame at the held limit (0.2 changes a minute).
+     one, and the full limit was last measured 10 minutes ago, or before a menu (a stretch with the package 2 W
+     under the limit, after which the band from before it is back): a scene that got lighter under a step, or
+     another place with the same frame rate at this limit, shows in no frame at the held limit (0.2 changes a
+     minute, and one look for each visit to a menu or a map).
    Under the guard's clock cap only a fall starts one, and nothing known is dropped (a pause, watts back). None
    starts because a step held or failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and
    each found the frames it had, and the auto-TDP governors of other projects have none.

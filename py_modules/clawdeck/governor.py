@@ -4,8 +4,8 @@ One question, asked all the time: would more watts, up to your limit, give frame
   no  -> try fewer: a step down, watched for DWELL_S on every frame and taken back at the first loss;
   yes -> all of them at once (the full limit), then down again between the watts that failed and the watts that hold.
 The full limit is written when the frames ask for it: a loss; more frames than the held limit was known to give (another
-place); slow frames that a watt more did not end. By the clock only every CHECK_MAX_S, and only while the goal is what
-the full limit gives (a target out of reach). Never because a step held or failed: the governors of other projects
+place); slow frames that a watt more did not end. By the clock every CHECK_MAX_S and once after a menu, both only
+while the goal is what the full limit gives (a target out of reach). Never because a step held or failed: the governors of other projects
 have no such looks, and on the Claw they cost changes and gave nothing.
 
 Why this shape (Claw 8 EX, 2026-11-14/15, docs/HARDWARE-FINDINGS):
@@ -807,7 +807,11 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             # (once: the band left is not kept, or a video's band was there for a heavier place of the game that has
             # the video's frame rate. And a band that was a video's, taken with the package under the limit, is one
             # still: for a place that has its frame rate and draws the limit, nothing is known, as below)
+            menu = st.free_w == st.limit
             (st.lo, st.hi, st.ratio, st.ref, _, st.band_at, st.free_w), st.was = st.was, None
+            if menu and out_of_reach(st, cfg):
+                st.full_at = -1e9                    # (the place after a menu may be another one with this pace: where
+                                                     # the goal is what the full limit gives, that is asked once)
             need = _need(st, cfg)
 
     # the band was taken while the package drew 2 W under this limit (a video, a light place), and now the package
@@ -922,13 +926,14 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
                 st.lost, st.lost_slow = pace, 0.0
                 watch("check", top, f"checking what the full {top} W gives", "rise")
                 return act
-        # the goal hangs on what the full limit gave (your target is out of reach), and that is CHECK_MAX_S old: a
-        # scene that got lighter under a step, or another place that has this pace at this limit (after a menu: back
-        # in the band, and no look), shows in no frame here
+        # the goal hangs on what the full limit gave (your target is out of reach), and that is CHECK_MAX_S old or
+        # from before a menu: a scene that got lighter under a step, or another place that has this pace at this
+        # limit, shows in no frame here
         if (settled and binds and st.limit < top - 1 and need < cfg.target * (1 - TOL)
                 and t - st.full_at >= CHECK_MAX_S):
             st.lost, st.lost_slow = here, 0.0
-            watch("check", top, f"{CHECK_MAX_S / 60:.0f} min since the full {top} W was measured: checking what it gives", "rise")
+            watch("check", top, f"the full {top} W was measured before a menu: checking what it gives" if st.full_at < 0
+                  else f"{CHECK_MAX_S / 60:.0f} min since the full {top} W was measured: checking what it gives", "rise")
             return act
 
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed

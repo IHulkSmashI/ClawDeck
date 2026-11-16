@@ -1086,7 +1086,7 @@ def test_autotunes_own_maximum_is_the_limit_where_autotune_governs_and_the_tdp_s
     assert st["autotune_max"] == 26 and st["autotune_governs"]         # none set: the TDP setting
     r = p.run(p.set_autotune_max(20))
     assert r["ok"] and r["max_w"] == 20 and p.settings["autotune_max"] == 20
-    assert p.chip() == 26                                              # no game: nothing of Autotune's on the chip
+    assert p.chip() == 20                                              # the menus too: the TDP setting does nothing
     p.run(p.game_started("7"))
     s, st = p.autotune.session, p.run(p.get_power())
     assert s.ceiling_tdp == 20 and p.chip() <= 20 and st["limit_w"] == 20 and st["autotune_max"] == 20
@@ -1100,6 +1100,7 @@ def test_autotunes_own_maximum_is_the_limit_where_autotune_governs_and_the_tdp_s
     assert p.run(p.set_setting("autotune", False)) and p.chip() == 26  # Autotune off: the TDP setting
     assert not p.run(p.get_power())["autotune_governs"]
     p.run(p.game_stopped("7"))
+    assert p.chip() == 26 and p.run(p.set_setting("autotune", True)) and p.chip() == 24   # the menus follow the switch
     p.settings.update(autotune=True, autotune_plugged=False)           # on the charger Autotune stays off (Advanced)
     p.ac["plugged"] = True
     p.run(p.game_started("8"))

@@ -932,11 +932,13 @@ def test_a_loading_screen_does_not_lower_the_reference():
     assert st.ref == pytest.approx(ref, rel=0.005)
 
 
-def test_a_visit_to_a_fast_map_costs_nothing_that_was_known_and_a_long_stay_is_the_game():
+def test_a_visit_to_a_fast_map_costs_one_look_and_nothing_that_was_known_and_a_long_stay_is_the_game():
     """A map at 144 fps in a 40 fps game: over 2.5 times the usual rate is not judged. After 5 s it was taken for the
     game (all that was known dropped, the full limit for 20 s on the way back); its frames in the pace read as a game
     that gives more than the reference. More frames harm nothing: 30 s before it is the game, and the pace starts
-    again from the game's frames when it is over. Back in the game the limit that held is held again: no write."""
+    again from the game's frames when it is over. Back in the game the limit that held is held again, after one look
+    at the full limit: the target is out of reach, and the place after a map may be another one with this frame rate
+    (fuzz seed 298: 400 s at 24 fps with the target's 30 at the full limit)."""
     in_map = lambda t: 200 <= t < 208 or t >= 400
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w, t: 144.0 if in_map(t) else (40.0 if w >= 14 else 40.0 * w / 14))
     g.draw = lambda w, t: 9.0 if in_map(t) else min(float(w), 14.0)
@@ -944,7 +946,7 @@ def test_a_visit_to_a_fast_map_costs_nothing_that_was_known_and_a_long_stay_is_t
     held, ref, fail = g.limit, g.st.ref, dict(g.st.fail)
     assert held <= 15
     g.run(30)                                                        # 8 s in the map and back
-    assert g.since(200) == [] and g.st.ref == pytest.approx(ref, rel=0.02) and set(fail) <= set(g.st.fail)
+    assert g.since(200) in ([], [30, held]) and g.st.ref == pytest.approx(ref, rel=0.02) and set(fail) <= set(g.st.fail)
     g.run(170 + gov.SCENE_S + 10)                               # ... and a stay of over half a minute
     assert g.st.usual > 100
 
@@ -1104,8 +1106,8 @@ def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws
     """Held at 20 W. A video (30 fps, the package at 8 W), a loading screen, a light place for 20 s (75 fps at 10 W),
     then a heavy one: 30 fps at 20 W with the package at the limit, 45 at the full 30 W. The frame rate is the one the
     video had at this limit, and the video's band was set aside 20 s before: but that band was taken with the package
-    under the limit. Nothing is known for the heavy place, and the full limit is written at once (the band came back
-    as if the limit had been judged there: 480 s at 29 fps with 45 at the full limit, fuzz seed 60)."""
+    under the limit. Nothing is known for the heavy place: a fall, and the full limit is written at once (the band
+    came back as if the limit had been judged there: 480 s at 29 fps with 45 at the full limit, fuzz seed 60)."""
     place = {"fps": lambda w: 60.0 * min(1.0, w / 20), "draw": lambda w: float(w)}
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: place["fps"](w))
     g.draw = lambda w, t: place["draw"](w)
@@ -1121,33 +1123,36 @@ def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws
     place.update(fps=lambda w: min(45.0, 30.0 * w / held), draw=lambda w: float(w))
     t0 = g.t
     g.run(60)
-    first = [t for t, w in g.writes if t >= t0][:1]
-    assert first and first[0] - t0 <= 6 and g.since(t0)[0] == 30, (g.since(t0), [n for n in g.notes if n[0] >= t0])
+    said = [n for t, n in g.notes if t >= t0]
+    assert g.since(t0)[0] == 30 and "under" in said[0] and g.notes[len(g.notes) - len(said)][0] - t0 <= 2, said   # a fall
     assert place["fps"](g.limit) >= 45 * 0.95
 
 
-def test_a_menu_does_not_put_off_the_next_look_by_the_clock():
-    """Target 30. A place where the full limit gives 23.5 fps, held some watts under it. A menu for 5 s two minutes in,
-    then another place: the same frame rate at the held limit, and 30 fps at the full one. No frame says so, and the
-    band the limit had before the menu is back with no look (a visit to a map costs nothing that was known). What the
-    full limit gives is asked ten minutes after it was measured, not ten minutes after the menu (the menu's frames,
-    with the package under the limit, counted as that measurement: 400 s at 24 fps, fuzz seed 298)."""
+@pytest.mark.parametrize("target, reach", [(30, False), (22, True)])
+def test_after_a_menu_the_full_limit_is_asked_once_when_the_target_is_out_of_reach(target, reach):
+    """A place where the full limit gives 23.5 fps, held some watts under it. A menu for 5 s (72 fps, the package at
+    9 W: no measurement of the full limit), then another place: the same frame rate at the held limit, and more at
+    the full one. No frame says so (the band the limit had before the menu is back). With target 30, out of reach
+    in the first place, the full limit is asked once after the menu and the target is held (it was not asked: 400 s
+    at 24 fps, fuzz seed 298). With target 22, which the held limit gives, nothing is asked."""
     first = lambda w: 23.5 * min(1.0, w / 18)
     place = {"fps": first, "draw": lambda w: float(w)}
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=30), fps=lambda w: place["fps"](w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=lambda w: place["fps"](w))
     g.draw = lambda w, t: place["draw"](w)
     g.run(120)
     held, pace, measured = g.limit, first(g.limit), g.st.full_at
-    assert held <= 19 and measured < 30
+    assert held <= 19
     place.update(fps=lambda w: 72.0, draw=lambda w: 9.0)
     g.run(5)
+    assert g.st.full_at == measured
     place.update(fps=lambda w: min(30.0, pace * w / held), draw=lambda w: float(w))
     t0 = g.t
     g.run(60)
-    assert 30 not in g.since(t0) and g.st.full_at == measured, [n for n in g.notes if n[0] >= t0]
-    g.run(measured + gov.CHECK_MAX_S + 30 - g.t)
-    assert [n for t, n in g.notes if t >= t0 and "min since the full" in n] and place["fps"](g.limit) >= 28.5, [
-        n for n in g.notes if n[0] >= t0]
+    asked = [t for t, n in g.notes if t >= t0 and "before a menu" in n]
+    if reach:
+        assert not asked and 30 not in g.since(t0), [n for n in g.notes if n[0] >= t0]
+    else:
+        assert len(asked) == 1 and asked[0] - t0 <= 10 and place["fps"](g.limit) >= 28.5, [n for n in g.notes if n[0] >= t0]
 
 
 def test_after_a_pause_the_pace_is_of_the_frames_after_it():
@@ -2354,7 +2359,7 @@ def test_in_a_game_that_dips_a_second_try_that_loses_is_taken_back_at_once(targe
 def test_a_band_that_comes_back_is_not_taken_for_one_of_a_place_that_left_the_chip_free(visit):
     """60 fps from 14 W with the package drawing all of the limit; a place with 50 fps at every limit that draws 6 W
     (one look: the scene), then the game again. The game's band is its own: the package drawing all of the limit again
-    says nothing against it, and no look follows."""
+    says nothing against it, and it is no fall. One look follows, the one after a menu with a target out of reach."""
     place = {"other": False}
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
     g.draw = lambda w, t: 6.0 if place["other"] else float(w)
@@ -2362,6 +2367,7 @@ def test_a_band_that_comes_back_is_not_taken_for_one_of_a_place_that_left_the_ch
     place["other"] = True
     g.run(visit)
     assert g.limit == 14 and g.st.free_w == 14
-    place["other"] = False
+    place["other"], t0 = False, g.t
     g.run(30)
-    assert g.since(100 + visit) == [], (g.since(100 + visit), [n for n in g.notes if n[0] >= 100])
+    said = [n for t, n in g.notes if t >= t0]
+    assert g.since(t0) == [30, 14] and "before a menu" in said[0] and "back to 14 W" in said[1], (g.since(t0), said)
