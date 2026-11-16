@@ -604,7 +604,11 @@ class Plugin:
                 self.settings[f"pl2_w_{slot}"] = max(self.hw.model["tdp"]["min"], min(int(watts), hi))
             self._save_settings()
             sysfs.clear_error()
-            r = self._apply_pick_now(plugged)
+            if self.power.governed:                       # the chip keeps Autotune's PL2: the session goes on as it is
+                self._pl2_for(self._pick(self._game_key(), plugged), plugged)
+                r = {"applied": {"tdp": self.power.read_tdp()}}
+            else:
+                r = self._apply_pick_now(plugged)
             st = self.power.status()
             # RAPL's PL2 as the chip has it now (status() keeps it under "rapl"; the top-level key read here before
             # never existed, so the check below always passed and the line said "PL2 set")
@@ -751,8 +755,10 @@ class Plugin:
         src = self._profile_source(appid, plugged) if appid else appid
         own = self.profiles.own(src, plugged) if src else {}
         prof = self.profiles.get(src or "", plugged)
-        if src != appid:          # a frontend's game without a slot yet starts at the frontend's pick,
+        if src != appid:          # a frontend's game without a pick yet starts at the frontend's pick,
             prof = {k: v for k, v in prof.items() if k != "learned"}       # never with another game's learning
+            if self.profiles.own(appid, plugged).get("learned"):
+                prof["learned"] = self.profiles.own(appid, plugged)["learned"]
         if own.get("base"):
             base, src = own["base"], "game"
         elif self.settings.get(f"last_profile_{slot}"):
@@ -778,8 +784,8 @@ class Plugin:
         return str(appid)
 
     def _profile_source(self, key: str, plugged: bool) -> str:
-        """Whose slot a game starts from: its own; a frontend's game without one, the frontend's own pick."""
-        if "#" not in key or self.profiles.own(key, plugged):
+        """Whose pick a game starts from: its own; a frontend's game without one, the frontend's."""
+        if "#" not in key or self.profiles.own(key, plugged).get("base"):
             return key
         return frontend.steam_appid(key)
 

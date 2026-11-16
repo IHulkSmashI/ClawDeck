@@ -35,6 +35,7 @@ import asyncio
 import csv
 import glob
 import logging
+import math
 import os
 import re
 import socket
@@ -406,7 +407,7 @@ def mangoapp_command(cmd: str) -> bool:
 def summary(s: Session) -> str:
     """One line for the toast at game exit: what autotune found, or that it didn't get far enough to save it."""
     l = s.learned
-    if not s.settled or not l.max_fps:
+    if not s.settled or not (l.fps or l.max_fps):
         return "Autotune was still learning; nothing new saved. It goes on next time."
     fps = l.fps or l.max_fps
     use = l.start if l.start is not None else l.tdp
@@ -526,7 +527,6 @@ class Session:
     row_at: float | None = None         # when a log with a row a second last gave frames (its next row covers the time since)
     no_frames: bool = False             # gave up: this game's frame rate can't be read
     own_pace: str | None = None         # an emulator whose frame rate isn't the game's (OWN_PACE): autotune stays out
-    pick: Learned | None = None         # the levers as the user's pick left them, before autotune's first change
     settled: bool = False               # it held a limit for a minute: what it found is worth saving
     short_tau: bool = False             # the PL1 time window is GOVERN_TAU_US right now
     tau_refused: bool = False           # the firmware refused it once: don't retry every step
@@ -577,8 +577,7 @@ class Autotune:
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
         same = known.get("ceiling") == ceiling_tdp and (known.get("target") or None) == (int(target) if target else None)
-        l = Learned(tdp=ceiling_tdp, cpu_max_pct=known.get("cpu_max_pct", 100), gpu_min_mhz=known.get("gpu_min_mhz"),
-                    boost=known.get("boost", True), ceiling=ceiling_tdp, target=int(target) if target else None)
+        l = Learned(tdp=ceiling_tdp, ceiling=ceiling_tdp, target=int(target) if target else None)
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
                     keep_pct=float(keep_pct or KEEP_PCT), phase="target" if target else "hold",
                     user_target=int(target) if target else None, auto_fps=bool(auto_fps), fg=int(fg or 0))
@@ -586,13 +585,19 @@ class Autotune:
         self.session = s
         self.sampler.set_prefix(xell_log)
         self.power.governed = True
-        s.pick = self._on_chip(l, ceiling_tdp)
+        self._levers(l)
         # a result saved by an earlier build has no start level: the limit it ended with is the next best thing
         before = (known.get("start") or known.get("tdp")) if same else None
-        self._govern_from(s, ceiling_tdp if at_limit else before)
-        l.start = None if at_limit else before
-        self._apply(l)
-        self._tau(s, True)
+        if isinstance(before, bool) or not isinstance(before, (int, float)) or not math.isfinite(before):
+            before = None                                 # a record edited by hand
+        emu = own_pace_emulator()                         # already running (a resume, a new power source)
+        self._govern_from(s, ceiling_tdp if at_limit or emu else None if before is None else int(before))
+        l.start = None if at_limit or before is None else int(before)
+        if emu:
+            self._stay_out(s, emu)
+        else:
+            self._apply(l)
+            self._tau(s, True)
         if self.task is None or self.task.done():
             self.task = asyncio.get_event_loop().create_task(self._loop())
 
@@ -625,25 +630,6 @@ class Autotune:
             self._tau(s, True)
         s.gov.limit = s.learned.tdp
 
-    def set_ceiling(self, watts: int) -> int | None:
-        """The user picked a profile or moved the TDP slider: the new limit. Autotune goes to it at once and works down
-        from there again (and takes control back after a manual change). Returns the watts applied."""
-        s = self.session
-        if not s:
-            return None
-        s.ceiling_tdp = max(s.floor_tdp, int(watts))
-        s.thermal_cap = None                              # the user's new choice replaces the guard's step
-        s.learned.ceiling, s.learned.start, s.learned.held, s.settled = s.ceiling_tdp, None, None, False
-        if s.own_pace:                                    # it stays out of this game: your new limit, and no more
-            self._give_back(s)
-            return s.learned.tdp
-        s.paused = False
-        self.power.governed = True
-        self._govern_from(s, s.ceiling_tdp)
-        self._tdp(s.learned, s.learned.tdp, force=True)
-        self._did(s, f"your limit is {s.ceiling_tdp} W: from there down", f"{s.ceiling_tdp} W")
-        return s.learned.tdp
-
     def set_floor(self, watts: int) -> None:
         """The lowest TDP autotune may use (the model minimum unless the user sets one)."""
         s = self.session
@@ -667,12 +653,13 @@ class Autotune:
         s = self.session
         if not s:
             return False
-        s.thermal_cap = int(watts)
         l = s.learned
-        if not self._tdp(l, min(l.tdp, s.thermal_cap), force=True):
+        if not self._tdp(l, min(l.tdp, int(watts)), force=True):
             return False
+        s.thermal_cap = int(watts)
         if s.gov:
-            s.gov.limit, s.gov.mode = l.tdp, "hold"
+            s.gov.limit = l.tdp
+            governor.drop(s.gov)
         self._did(s, f"thermal: stepped to {l.tdp} W", "thermal")
         return True
 
@@ -730,7 +717,6 @@ class Autotune:
                 self._give_back(s)                        # not a limit of Autotune's for the rest of the session
                 self._tau(s, False)
             s.paused, s.no_frames = True, False           # yours, also after it gave up: frames later don't undo it
-            self.power.governed = False
 
     def running(self) -> bool:
         return self.session is not None
@@ -764,21 +750,28 @@ class Autotune:
             s.learned.start, s.settled = level, True
             s.learned.held = {str(w): round(sec) for w, sec in sorted(s.gov.held_s.items()) if sec >= 1}
 
-    def _on_chip(self, l: Learned, tdp: int) -> Learned:
-        """The levers as the chip has them now: the user's pick, before autotune changes anything. A lever that can't
-        be read keeps autotune's value, so giving back leaves it alone."""
+    def _levers(self, l: Learned) -> None:
+        """The other levers as the chip has them, for the log: Autotune sets the limit only."""
         p = self.hw.paths
         cpu = sysfs.read_int(p.cpu_max_perf_pct) if p.cpu_max_perf_pct else None
         turbo = self.power.turbo()
-        return Learned(tdp=tdp, cpu_max_pct=l.cpu_max_pct if cpu is None else cpu,
-                       gpu_min_mhz=sysfs.read_int(p.gpu_min_freq) if p.gpu_min_freq else None,
-                       boost=l.boost if turbo is None else turbo, gpu_profile=self._gpu_active())
+        l.cpu_max_pct = l.cpu_max_pct if cpu is None else cpu
+        l.gpu_min_mhz = sysfs.read_int(p.gpu_min_freq) if p.gpu_min_freq else None
+        l.boost = l.boost if turbo is None else turbo
 
     def _give_back(self, s: Session) -> None:
         """Autotune stays out of this game: your limit goes back on the chip (under the temperature guard's step, if
         any), with the PL2 you set by hand, if you did."""
         self.power.governed = False
         self._tdp(s.learned, s.ceiling_tdp, force=True)
+
+    def _stay_out(self, s: Session, emu: str) -> None:
+        """An OWN_PACE emulator runs: your limit on the chip and nothing more changed, whatever frames come later."""
+        s.own_pace, s.paused, s.no_frames = emu, True, False
+        self._give_back(s)
+        self._tau(s, False)
+        log.info("autotune: %s runs, %s: it stays out of this game (%d W, your limit)", emu, OWN_PACE[emu], s.learned.tdp)
+        self._note(s, f"out: {emu} runs, {s.learned.tdp} W (your limit)")
 
     def _apply(self, l: Learned) -> None:
         self.power.set_tdp(l.tdp, self.plugged)
@@ -833,24 +826,18 @@ class Autotune:
             s.own_checks += 1
             emu = own_pace_emulator()
             if emu:
-                # your limit back on the chip and nothing more changed, whatever frames come later
-                s.own_pace, s.paused, s.no_frames = emu, True, False
-                self._give_back(s)
-                self._tau(s, False)
-                log.info("autotune: %s runs, %s: it stays out of this game (%d W, your limit)",
-                         emu, OWN_PACE[emu], s.learned.tdp)
-                self._note(s, f"out: {emu} runs, {s.learned.tdp} W (your limit)")
+                self._stay_out(s, emu)
         if smp.fps and s.no_frames:
             # frames after all: a game slower than NO_FPS_S to its first frame (Order of the Sinking Star takes 54 s).
             # Giving up put your pick back; autotune takes over from there
             s.no_frames, s.paused, s.no_fps_s = False, False, 0.0
             self.power.governed = True
+            held = s.gov.held_s if s.gov else {}
             self._govern_from(s, s.learned.tdp)
+            s.gov.held_s = held                               # what this session held before the frames stopped
             self._tdp(s.learned, s.learned.tdp, force=True)   # with PL2 as Autotune keeps it, from this look on
             log.info("autotune: frame rate from %s after all: it takes over from %d W", s.appid, s.learned.tdp)
             self._note(s, f"frames after all: it takes over from {s.learned.tdp} W")
-        if s.paused:
-            self._tau(s, False)                          # the user has the controls: the firmware's window again
         if smp.fps:
             s.no_fps_s = 0.0
         elif not s.paused:
@@ -874,7 +861,7 @@ class Autotune:
         mult = self._multiplier(s, smp)
         if s.multiplier is not None and abs(mult - s.multiplier) >= 0.5:
             s.gov.fail.clear()
-            s.gov.ref, s.gov.ref_at, s.gov.misses = None, -1e9, 0
+            s.gov.ref, s.gov.ref_at, s.gov.misses, s.gov.met = None, -1e9, 0, False
             s.gov.last.clear()
             s.gov.pace.clear()
         s.multiplier = mult
@@ -893,7 +880,8 @@ class Autotune:
                 s.refused = False
             elif l.tdp != act.limit_w:                   # refused: it goes on from what is on the chip, and waits
                 # (the governor is not asked meanwhile: a raise it wants was tried again at every look, review 2026-11-15)
-                s.gov.mode, s.gov.quiet_until, s.look_s = "hold", smp.t + REFUSED_S, governor.LOOK_S
+                governor.drop(s.gov)
+                s.gov.quiet_until, s.look_s = smp.t + REFUSED_S, governor.LOOK_S
                 s.refused_until = smp.t + REFUSED_S
                 if not s.refused:
                     log.warning("autotune: TDP %d W was not applied; trying again in %d s", act.limit_w, REFUSED_S)
@@ -975,9 +963,6 @@ class Autotune:
             return False
         l.tdp = watts
         return True
-
-    def _gpu_active(self) -> str | None:
-        return self.power.gpu_power_profile()[0] if self.hw.paths.gpu_power_profile else None
 
     def _log(self, s: Session, smp: Sample) -> None:
         try:

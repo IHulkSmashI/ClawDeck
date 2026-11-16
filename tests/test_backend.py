@@ -351,14 +351,8 @@ def test_autotune_counts_rendered_frames_not_generated_ones(fake_hw, tmp_path):
     assert s.source == "presented" and s.fps is None                 # (no new MangoHud row this second)
 
 
-def test_a_new_limit_is_on_the_chip_at_once_and_hands_control_back(fake_hw, monkeypatch):
-    at, s = _tuner(fake_hw, monkeypatch, tdp=15)
-    assert s.learned.tdp == 15
-    at.pause("manual GPU clocks")
-    assert at.set_ceiling(12) == 12 and s.learned.tdp == 12 and not s.paused
-    at.set_ceiling(3)
-    assert s.ceiling_tdp == 8                                   # never below the model's minimum
-    at.set_ceiling(20)
+def test_a_new_floor_is_in_effect_at_once(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, tdp=20)
     at.set_floor(10)
     assert s.floor_tdp == 10 and s.learned.tdp >= 10 and s.cfg.floor == 10
     at.session = None
@@ -533,7 +527,6 @@ def test_autotune_stays_under_the_thermal_step_until_the_user_sets_a_tdp(fake_hw
     for _ in range(60):
         at._step()
         assert s.learned.tdp <= 23                         # never back above the step, whatever it is doing
-    assert at.set_ceiling(25) == 25 and s.thermal_cap is None   # the user's choice replaces the step
     at.session = None
 
 
@@ -1822,7 +1815,6 @@ def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeyp
     at.pause("manual CPU ceiling")
     at.set_target(30)
     assert s.paused and s.learned.tdp == 20
-    assert at.set_ceiling(18) == 18 and not s.paused and s.cfg.target == 30   # a new limit hands control back
     at.session = None
 
 
@@ -1890,20 +1882,6 @@ def test_set_pl2_says_what_the_chip_has_while_autotune_governs(plugin):
     pl1 = sysfs.read_int(p.power.p.rapl_pl1) // 1_000_000
     assert r["ok"] and p.power.governed and r["read_w"] == pl1 + 2
     assert r["summary"] == f"PL2 {pl1 + 2} W (PL1 + 2 W while Autotune governs this game; your 45 W applies when it doesn't)"
-
-
-def test_a_new_limit_in_xemu_goes_on_the_chip_and_autotune_stays_out(fake_hw, monkeypatch):
-    pw = power.Power(fake_hw)
-    chip = {}
-    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
-    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
-    at = autotune.Autotune(fake_hw, pw, log_dir="/nonexistent", csv_log=None)
-    at.start("1", None, 8, 30, False, target=60)
-    s = at.session
-    s.own_pace, s.paused = "xemu", True
-    at._give_back(s)
-    assert at.set_ceiling(24) == 24 and chip["tdp"] == 24 and s.paused and s.own_pace == "xemu" and not pw.governed
-    at.session = None
 
 
 def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypatch):

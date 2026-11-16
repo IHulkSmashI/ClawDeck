@@ -170,7 +170,7 @@ def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit():
 
 def test_autotune_wired_does_what_the_governor_alone_does():
     """The session, the loop's pace and the frames' way through the Sampler change nothing that matters: the same
-    scenes, about the same watts and losses as clawdeck.governor on its own (which also gets the chip's flags)."""
+    scenes, about the same watts and losses as clawdeck.governor on its own."""
     for name, scenario in sim.SCENARIOS.items():
         target = 30 if name.startswith("emulator") else 60
         wired = sim.run(sim.Wired(target=target), sim.Game(scenario, goal_fps=target)).score()
