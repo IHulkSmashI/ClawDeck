@@ -530,6 +530,61 @@ def test_the_look_for_far_more_frames_waits_until_the_chip_is_down_at_the_limit(
     assert game(g.limit) >= 114, (low, g.limit, [n for n in g.notes if n[0] >= t0])
 
 
+
+@pytest.mark.parametrize("target", [None, 90])
+@pytest.mark.parametrize("draw_known", [False, True])
+def test_steps_down_stop_when_the_frames_jump_far_above_what_they_were_before_the_step(target, draw_known):
+    """The game comes back from a long video in the middle of the way down: every further step "held" against the
+    video's 30 fps, down to the floor, with the game 20 % under what the full limit gives for 10 to 17 s (cloud fuzz
+    seeds 2, 122, 194, 2026-11-16). Far more frames than before the step are not the scene the step was for: no further
+    step, and one look at the full limit."""
+    for need_w in (22, 27):
+        game = lambda w: 90.0 * min(1.0, w / need_w)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=game)
+        if draw_known:
+            g.draw = lambda w, t: float(w)
+        g.run(60)
+        g.fps = lambda w: 30.0
+        for _ in range(4000):                                        # ... until a step down is being watched
+            if g.st.mode == "probe" and g.limit <= need_w - 4:
+                break
+            g.run(0.1)
+        assert g.st.mode == "probe", (need_w, g.notes[-3:])
+        g.fps, t0 = game, g.t
+        g.run(gov.DWELL_S + 4)
+        assert game(g.limit) >= 85 and min(g.since(t0)) >= need_w - 8, (need_w, g.since(t0), [n for n in g.notes if n[0] >= t0])
+
+
+
+def _seconds_under(g, t0, t1, fps, line):
+    """Seconds between t0 and t1 at a limit that gives less than `line` fps."""
+    at, w, total = t0, [x for a, x in g.writes if a < t0][-1], 0.0
+    for a, x in [(a, x) for a, x in g.writes if t0 <= a < t1] + [(t1, None)]:
+        total += (a - at) if fps(w) < line else 0.0
+        at, w = a, x if x is not None else w
+    return total
+
+
+@pytest.mark.parametrize("target", [None, 90])
+@pytest.mark.parametrize("before_w, after_w", [(14, 14), (30, 20), (30, 26), (22, 16)])   # 30: held one watt under the full limit
+def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(target, before_w, after_w):
+    """After a video the game is back at the level that held before it, with all its frames there. The look of the
+    wait finds as many at the full limit and takes no reference; when the frames had stayed ADOPT_FAST_S, the video's
+    30 fps was still what the full limit was believed to give, and the steps down were judged against it: 10 to 17 s
+    at 20 % under (cloud fuzz seeds 2, 122, 193, 194, 2026-11-16). Also from one watt under the full limit."""
+    before, after = (lambda w: 60.0 * min(1.0, w / before_w)), (lambda w: 60.0 * min(1.0, w / after_w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=before).run(150)
+    held = g.limit
+    assert before_w - 1 <= held <= before_w + 2, held
+    g.fps = lambda w: 30.0
+    g.run(40)
+    assert g.limit in (held, 30), g.notes[-3:]
+    g.fps, t0 = after, g.t
+    g.run(120)
+    lost = _seconds_under(g, t0, g.t, after, 57.0)
+    assert lost <= 3.0 and g.st.ref == pytest.approx(60, abs=1.5), (held, lost, [n for n in g.notes if n[0] >= t0][:12])
+
+
 def test_a_menu_with_far_too_many_frames_to_judge_gets_one_look_and_the_game_its_limit_back():
     """A menu at 3 times the game's rate at any limit (the draw not known): one look at the full limit, which gives as
     many: back, and nothing of the game forgotten."""

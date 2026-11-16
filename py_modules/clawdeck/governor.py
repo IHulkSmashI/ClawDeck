@@ -267,6 +267,17 @@ def _goal_at(ref: float | None, cfg: Cfg) -> float:
     return ref - max(ref * cfg.keep_pct / 100.0, KEEP_FPS)
 
 
+def _may_look(st: State, obs: Obs, cfg: Cfg, top: int, fps: float) -> bool:
+    """Far more frames than before, at a lowered limit: may a look at the full limit say whether the limit holds them
+    back? Not when they reach the target, not when the package draws 2 W less than the limit (it holds nothing back)
+    or more than it (as it may by PL2's 2 W for seconds after a video: those frames are not the limit's, and a look
+    found as many at the full limit; in force, the draw of half a second is within 0.3 W of the limit: pl1step
+    recordings, 2026-11-14/15), not under the guard's clock cap, and once in ADOPT_FAST_S."""
+    return (st.limit < top and not (cfg.target and fps >= cfg.target * REACHED) and not obs.thermal
+            and (obs.draw_w is None or st.limit - 2 < obs.draw_w <= st.limit + BOUND_W)
+            and st.t - st.visit_look_at >= ADOPT_FAST_S)
+
+
 def out_of_reach(st: State, cfg: Cfg) -> bool:
     """Target mode with Auto FPS: the full limit gives less than the target, so what it gives is held instead."""
     return bool(cfg.target) and _from_ref(st, cfg)
@@ -391,14 +402,9 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         elif st.limit < top and not silent and cur is not None and usual and cur < usual * OFF_LO:
             write(top, f"{cur:.0f} fps at {st.limit} W: the full {top} W")
             hold()
-        elif (many and st.limit < top and (obs.draw_w is None or st.limit - 2 < obs.draw_w <= st.limit + BOUND_W)
-              and not obs.thermal and not (cfg.target and cur >= cfg.target * REACHED) and st.off_since is not None
-              and t - st.off_since >= ABOVE_S and t - st.changed_at >= DWELL_S
-              and t - st.visit_look_at >= ADOPT_FAST_S):
-            # far too many at a limit that holds the chip: as for far more frames that are judged (_hold), one look.
-            # (Not while the package draws more than the limit, as it may by PL2's 2 W for seconds after a video:
-            # those frames are not the limit's, and a look found as many at the full limit. In force, the draw of half
-            # a second is within 0.3 W of the limit: pl1step recordings, 2026-11-14/15)
+        elif (many and st.mode == "hold" and _may_look(st, obs, cfg, top, cur) and st.off_since is not None
+              and t - st.off_since >= ABOVE_S and t - st.changed_at >= DWELL_S):
+            # far too many at a limit that holds the chip: as for far more frames that are judged (_hold), one look
             st.lost, st.visit_look_at = cur, t
             watch("check", top, f"far more frames at {st.limit} W than before: checking what the full {top} W gives")
         st.quiet_until += dt
@@ -525,6 +531,17 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.dips.append(t)
             act.note = f"{st.limit} W holds again: the game's own dip"
             hold(HOLD_S)
+        elif seen >= DWELL_S and st.before and got is not None and got > st.before * (1 + SHIFT):
+            # far more frames than before the step: not the scene the step was for (the game back from a video in the
+            # middle of the way down took every further step, down to the floor; cloud fuzz, 2026-11-16). No further
+            # step, and the look at the full limit that such frames get
+            st.loss_since, st.chain = None, 0
+            if _may_look(st, obs, cfg, top, got):
+                st.lost, st.visit_look_at = got, t
+                watch("check", top, f"far more frames at {st.limit} W than before the step: checking what the full {top} W gives")
+            else:
+                act.note = f"holding at {st.limit} W"
+                hold(AFTER_LOSS_S)
         elif seen >= DWELL_S:
             st.good = st.limit if st.limit < top else st.good
             st.safe, st.misses, st.loss_since, st.chain = st.prev, 0, None, st.chain + 1
@@ -783,10 +800,7 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         # at a limit that holds the chip (and under the target, with one): whatever this is, more watts may give
         # more (the game back from a long video at the limit the video needed, a lighter place that wants more). One
         # look at the full limit
-        if (not (cfg.target and here >= cfg.target * REACHED) and st.limit < top and not free and not obs.thermal
-                and not (obs.draw_w is not None and obs.draw_w > st.limit + BOUND_W)
-                and t - st.changed_at >= DWELL_S and t - st.visit_since >= ABOVE_S
-                and t - st.visit_look_at >= ADOPT_FAST_S):
+        if _may_look(st, obs, cfg, top, here) and t - st.changed_at >= DWELL_S and t - st.visit_since >= ABOVE_S:
             st.lost, st.visit_look_at = cur, t
             watch("check", top, f"more frames at {st.limit} W than before: checking what the full {top} W gives")
         return act
@@ -823,8 +837,9 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
 
     # the reference grows old while the limit holds the chip: look at the full limit for a moment
     binds = obs.draw_w is None or obs.draw_w > st.limit - 2
-    # (not from a watt under it: what one watt more gives is not worth a look)
-    if _from_ref(st, cfg) and st.limit < top - 1 and binds and not obs.thermal and len(st.pace) == PACE_FRAMES:
+    # (from a watt under it only when the frames here say the reference is wrong: what one watt more gives is not worth
+    # a look, but a reference from a video that the game is then stepped down against is; cloud fuzz, 2026-11-16)
+    if _from_ref(st, cfg) and st.limit < top and binds and not obs.thermal and len(st.pace) == PACE_FRAMES:
         if st.ref_here is None and t - st.changed_at >= DWELL_S:
             st.ref_here = here                       # what this limit gives while the reference is fresh
         moved = st.ref_here is not None and abs(here - st.ref_here) >= CHECK_MOVED * st.ref_here
@@ -835,7 +850,8 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         rose = soon and st.ref_here is not None and here > st.ref_here * (1 + max(ABOVE, 2 * small))
         every = REACH_S if t - st.ref_drop_at < REACH_FOR_S else CHECK_MAX_S
         woke = st.ref_free and st.bound_since is not None and t - st.bound_since >= BOUND_S and t - st.changed_at >= DWELL_S
-        if above or rose or woke or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S):
+        far = st.limit < top - 1
+        if above or (far and (rose or woke or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S))):
             st.lost = cur
             watch("check", top, f"the package draws all of {st.limit} W now: checking what the full {top} W gives" if woke
                   else f"checking what the full {top} W gives")

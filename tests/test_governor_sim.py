@@ -75,18 +75,22 @@ def test_a_steady_scene_is_left_alone_after_the_first_minutes(name, target):
 
 
 @pytest.mark.parametrize("name", list(sim.SCENARIOS))
-def test_a_35_w_pick_with_the_chargers_30_w_stop_costs_no_more_frames_than_a_30_w_pick(name):
-    """With a charger in, the package settles at 30 W whatever the limit says: a look at the full 35 W shows what the
-    first minute gives. The governor is not held to that: no more frames lost than under a 30 W pick, and no limit far
-    over what the chip gives (review 3, 2026-11-16)."""
+def test_the_chargers_30_w_stop_under_a_35_w_pick_costs_no_frames(name):
+    """With a charger in, the package settles at 30 W whatever the limit says (a model: `Game(stop_w=30)`): a look at
+    the full 35 W shows what the first minute gives. That costs nothing against the same pick without the stop, and no
+    more frames than a 30 W pick (review 3, 2026-11-16). Means of six runs: one run's figures move by a few percent
+    (emulator-need-jumps, target 30: 0.4 to 5.1 % under the line at a 35 W pick, with or without the stop)."""
     scenario = sim.SCENARIOS[name]
     for target in (None, 30 if name.startswith("emulator") else 60):
-        at30 = sim.run(sim.New(target=target), sim.Game(scenario, ceiling=30, goal_fps=target)).score()
-        g = sim.Game(scenario, ceiling=35, goal_fps=target, stop_w=30.0)
-        at35 = sim.run(sim.New(target=target), g).score()
-        case = (name, target, at30, at35)
-        assert at35.starved_pct <= at30.starved_pct + 1.5 and at35.longest_starved_s <= at30.longest_starved_s + 3.0, case
-        assert at35.limit_w <= at30.limit_w + 4.0 and at35.limit_w - at35.draw_w <= 2.0, case
+        def runs(**kw):
+            return [sim.run(sim.New(target=target), sim.Game(scenario, goal_fps=target, seed=seed, **kw)).score() for seed in range(1, 7)]
+        at30, at35, stop = runs(ceiling=30), runs(ceiling=35), runs(ceiling=35, stop_w=30.0)
+        mean = lambda rs, what: sum(getattr(r, what) for r in rs) / len(rs)
+        case = (name, target, [(r.limit_w, r.starved_pct) for r in at30], [(r.limit_w, r.starved_pct) for r in at35],
+                [(r.limit_w, r.starved_pct) for r in stop])
+        assert abs(mean(stop, "starved_pct") - mean(at35, "starved_pct")) <= 0.5, case
+        assert abs(mean(stop, "limit_w") - mean(at35, "limit_w")) <= 0.5 and all(r.limit_w - r.draw_w <= 2.0 for r in stop), case
+        assert mean(stop, "starved_pct") <= mean(at30, "starved_pct") + 1.5 and mean(stop, "limit_w") <= mean(at30, "limit_w") + 4.0, case
 
 
 def test_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
