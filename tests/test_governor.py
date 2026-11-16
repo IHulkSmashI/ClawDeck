@@ -223,10 +223,13 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
     g.fps = lambda w, t: HOLDS_FROM_14(w) * (0.75 if t0 <= t < t0 + 0.8 else 1.0)     # one dip of the game's own
     g.run(10)
     assert g.since(t0)[:2] == [30, held] and held not in g.st.fail and g.limit == held    # full limit, then once more
+    g.run(20)                                            # (held for HOME_S again: only RETRY_S stands against a second try)
     g.fps = lambda w: 60.0 if w >= 20 else 45.0                                           # now the need really rose
     t1 = g.t
-    g.run(10)
-    assert held in g.st.fail and g.limit >= 20, g.since(t1)
+    g.run(3)
+    assert g.since(t1) == [30] and held in g.st.fail, g.since(t1)                         # no second try so soon
+    g.run(7)
+    assert g.limit >= 20, g.since(t1)
 
 
 def test_frame_time_spread_widens_what_counts_as_a_loss():
@@ -585,7 +588,9 @@ def test_frames_that_stay_lost_after_a_step_was_undone_get_the_full_limit():
     assert g.st.mode == "probe"
     need["w"], t0 = 26, g.t
     g.run(3)
-    assert g.since(t0 + 0.05)[:2] == [20, 30]                        # undone, and a second later all of it
+    assert g.since(t0 + 0.05)[:2] == [20, 30]                        # undone, and all of it ...
+    undone, full = [t for t, w in g.writes if t >= t0 + 0.05][:2]
+    assert full - undone <= gov.BACK_S / 2 + 0.25                    # ... on the first ten frames after half a second
 
 
 def test_a_small_loss_that_stays_goes_back_to_the_level_that_held_before():
@@ -729,10 +734,161 @@ def test_a_step_down_is_watched_from_when_it_binds():
         if len(g.writes) >= 2 and g.writes[-1][1] < g.writes[-2][1] and t - g.writes[-1][0] < 2.6:
             return g.writes[-2][1]
         return g.limit
-    g.fps = lambda w, t: 60.0 if in_force(t) >= 20 else 50.0
+    g.fps = lambda w, t: 60.0 if in_force(t) >= 26 else 50.0
     g.draw = lambda w, t: float(in_force(t))
     g.run(120)
-    assert g.limit == 20 and g.st.mode == "hold"
-    for (t1, a), (t2, b) in zip(g.writes, g.writes[1:]):
-        if a < 20:
-            assert b >= 20 and t2 - t1 <= gov.BIND_S + 1.0           # the level under the need was never built upon
+    assert g.limit == 26 and g.st.mode == "hold"
+    low = [(t1, a, t2, b) for (t1, a), (t2, b) in zip(g.writes, g.writes[1:]) if a < 26]
+    assert [a for _, a, _, _ in low] == [25]                         # 30 -> 25 W: halfway to the 19 W that failed
+    for t1, a, t2, b in low:
+        assert b >= 26 and t2 - t1 <= gov.BIND_S + 1.0               # the level under the need was never built upon
+
+
+def test_a_second_try_that_holds_counts_as_one_of_the_games_own_dips():
+    """Two dips two minutes apart, each answered with the full limit and the level once more, which holds: the game
+    dips by itself. The third dip, 15 s later, is waited out without a write."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=HOLDS_FROM_14).run(60)
+    held, t0 = g.limit, g.t
+    dips = [t0, t0 + 130, t0 + 145]
+    g.fps = lambda w, t: HOLDS_FROM_14(w) * (0.75 if any(a <= t < a + 0.8 for a in dips) else 1.0)
+    g.run(140)
+    assert g.since(t0 + 125) == [30, held] and len(g.st.dips) == 2
+    t2 = g.t
+    g.run(20)
+    assert g.since(t2) == [] and g.limit == held
+
+
+def _loss_answered_after(dips_ago):
+    """A level that holds, the game's own dips this long ago, then a need that rises for good: seconds until the full
+    limit is written."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=HOLDS_FROM_14).run(40)
+    t0 = g.t
+    g.st.dips.extend(t0 - ago for ago in dips_ago)
+    g.fps = lambda w: 60.0 if w >= 20 else 45.0
+    g.run(4)
+    assert g.since(t0)[0] == 30
+    return [t for t, w in g.writes if t >= t0][0] - t0
+
+
+def test_a_game_that_dips_gets_a_second_of_patience_and_the_dips_are_forgotten_after_five_minutes():
+    assert _loss_answered_after(()) <= 0.6                           # ten frames and the next look
+    assert 1.0 <= _loss_answered_after((20, 10)) <= 1.6              # PATIENT_S
+    assert _loss_answered_after((310, 301)) <= 0.6                   # DIPS_S
+    assert _loss_answered_after((310, 10)) <= 0.6                    # one dip in five minutes is not "dips by itself"
+
+
+def test_a_long_loss_at_the_full_limit_is_a_heavier_scene_not_a_dip():
+    """A dip is over within DIP_MAX_S. Ten seconds of fewer frames at the full limit are a place in the game: counted
+    as dips, two of them made the governor wait a second before every answer from then on."""
+    slow = [(20.0, 30.0), (50.0, 60.0)]
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30, auto_fps=False),
+             fps=lambda w, t: (60.0 if w >= 30 else 50.0) * (0.8 if any(a <= t < b for a, b in slow) else 1.0))
+    g.run(70)
+    assert len(g.st.dips) == 0
+    slow += [(80.0, 80.6), (95.0, 95.6)]                             # two short ones are
+    g.run(40)
+    assert len(g.st.dips) == 2
+
+
+def test_the_thresholds_follow_the_games_wobble_up_to_four_times_and_no_further():
+    """A game whose rate of ten frames wobbles by 20 %: 2.5 times that would be "no loss under 50 %". A loss of 16 %
+    of the goal is still a clear one (the full limit at once), one of 5 % that stays is still answered (the level
+    before)."""
+    def after(fps):
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=HOLDS_FROM_14).run(40)
+        t0, held = g.t, g.limit
+        g.st.noises.extend([0.2] * g.st.noises.maxlen)               # as learned from a wild game
+        g.st.edge_at = t0                                            # (the slow-frames rule has just had its turn)
+        g.fps = lambda w: 60.0 if w >= 20 else fps
+        g.run(3)
+        return held, [(round(t - t0, 2), w) for t, w in g.writes if t >= t0]
+    held, writes = after(48.0)                                       # 16 % under the 57 fps goal
+    assert writes[0][1] == 30 and writes[0][0] <= 0.6, writes
+    held, writes = after(54.0)                                       # 5 % under it
+    assert writes and held < writes[0][1] < 30 and writes[0][0] <= 2.5, writes
+
+
+def _raise_then(kind):
+    """A level that holds, then the need rises. After the raise to the full limit the frames come back as `kind`
+    says. The governor's first verdict on the raise, and the state after it."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=HOLDS_FROM_14).run(30)
+    held, t0 = g.limit, g.t
+
+    def since_raise(t):
+        up = [at for at, w in g.writes if at >= t0 and w == 30]
+        return t - up[-1] if up and g.limit == 30 else None
+
+    def fps(w, t):
+        s = since_raise(t)
+        if s is None:
+            return 45.0
+        return {"late": 60.0 if s >= 1.5 else 45.0,                  # the frames are back when all the watts are there
+                "climb": min(60.0, 45.0 + 7.5 * s),                  # they climb for 2 s
+                "tail": 60.0 if s >= 0.5 else 58.4}[kind]            # back at once, the first half second 2.7 % short
+    g.fps = fps
+    if kind == "late":                                               # the package gets the watts over 1.5 s
+        g.draw = lambda w, t: float(w) if since_raise(t) is None else min(30.0, held + 10.0 * since_raise(t))
+    for _ in range(100):
+        g.run(0.1)
+        if g.st.mode == "hold" and g.t > t0 + 1:
+            break
+    return g, held, [n for t, n in g.notes if t >= t0][-1]
+
+
+def test_a_raise_is_judged_when_the_watts_have_arrived():
+    """PL1 is an average: the package took 1.5 s to draw the full limit, and the frames came back with it. Judged a
+    second after the write, the full limit "gave 45 fps": the scene, not the limit, and back down."""
+    g, held, verdict = _raise_then("late")
+    assert verdict == f"{held} W was too low (45 fps, 60 at 30 W)" and g.limit == 30
+    assert g.st.ref == pytest.approx(60.0, abs=0.2) and held in g.st.fail
+
+
+def test_a_raise_is_judged_when_the_frame_rate_has_stopped_climbing():
+    """No draw reading, and the frames climb for 2 s after the raise: a verdict after one second took 51 fps for what
+    the full limit gives."""
+    g, held, verdict = _raise_then("climb")
+    assert verdict == f"{held} W was too low (45 fps, 60 at 30 W)"
+    assert g.st.ref == pytest.approx(60.0, abs=0.2) and not gov.out_of_reach(g.st, g.cfg)
+
+
+def test_what_the_full_limit_gives_is_read_from_the_later_half_of_a_long_watch():
+    """The first frames after a raise are still on their way up. Over the whole watch the full limit gave 59.3 fps: a
+    60 fps target "out of reach"."""
+    g, held, verdict = _raise_then("tail")
+    assert g.st.ref == pytest.approx(60.0, abs=0.2) and not gov.out_of_reach(g.st, g.cfg)
+
+
+def test_frames_that_collapse_before_a_step_binds_get_the_full_limit_at_once():
+    """The package runs a watt over its limit, so a cut binds 2.6 s late, and the governor waits for it. A heavier
+    scene that begins in that wait is not the step's doing, but it needs the watts now, not when the wait is over."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=22))
+    heavy = {"at": None}
+
+    def in_force(t):
+        if len(g.writes) >= 2 and g.writes[-1][1] < g.writes[-2][1] and t - g.writes[-1][0] < 2.6:
+            return g.writes[-2][1]
+        return g.limit
+    g.fps = lambda w, t: (60.0 if w >= 30 else 40.0) if heavy["at"] is not None and t >= heavy["at"] else HOLDS_FROM_14(in_force(t))
+    g.draw = lambda w, t: in_force(t) + 1.0
+    for _ in range(600):
+        g.run(0.1)
+        if g.st.mode == "probe" and g.st.prev < 22 and g.t - g.st.wrote_at < 0.3:
+            break
+    assert g.st.mode == "probe" and g.st.prev < 30
+    heavy["at"] = g.t + 0.3
+    g.run(3)
+    assert g.since(heavy["at"])[0] == 30
+    assert [t for t, w in g.writes if t >= heavy["at"]][0] - heavy["at"] <= 0.6      # ten frames and a look, not BIND_S
+
+
+def test_the_early_look_at_the_full_limit_also_follows_steps_that_end_by_holding_and_more_than_six_of_them():
+    """Steps down from the full limit that end at the floor without a failure (three of them, and eleven with a pause
+    after the sixth): the reference is from before them all, and is looked at a second after the last."""
+    for ceiling in (14, 30):
+        g = Game(gov.Cfg(floor=8, ceiling=ceiling, start_w=ceiling), fps=lambda w: 56.0)
+        g.draw = lambda w, t: float(w)
+        g.run(60)
+        ends = [t for t, n in g.notes if n == "holding at 8 W"]
+        looks = [t for t, n in g.notes if "checking what the full" in n]
+        assert ends and looks and 0 < min(t for t in looks if t > ends[0]) - ends[0] <= 2.0, (ceiling, g.notes)
+        assert len(looks) == 1                                       # ... once

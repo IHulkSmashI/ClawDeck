@@ -210,6 +210,8 @@ It asks one question all the time: would more watts, up to your limit, give fram
     frames of the whole time since its row before. *No frames for 30 s* at any time, not only at the start: your limit
     goes back on the chip until frames come. *A refused write:* the governor rests for 30 s. *The guard's cap under
     your floor:* the guard wins.
+  - *The look at the full limit a second after steps down from it* also comes when the steps took more than six in a
+    row (the pause after the sixth dropped it: 30 W to the floor in eleven steps ended without that look).
 
 Frames: every frame of every game from mangoapp's log (Steam's overlay; `Sampler` turns its logging on through its
 control socket and deletes the log at the game's end). The launch wrapper's MangoHud log (a row a second) is read only

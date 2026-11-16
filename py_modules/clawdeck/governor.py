@@ -475,7 +475,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
                 st.chain = 0
                 act.note = f"holding at {st.limit} W"
                 hold(AFTER_LOSS_S)
-            elif nxt is not None and _steady(st, t) and t - st.ref_drop_at >= CONFIRM_S:
+            elif nxt is not None and _steady(st, t):
                 was, st.before = st.limit, _fps(st.watch)
                 watch("probe", nxt, f"{was} W holds; trying {nxt} W")
             else:
@@ -534,7 +534,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.misses = 0
         if st.home is not None and st.home < st.prev and t - st.home_at <= HOME_FOR_S:
             st.good, st.home = st.home, None
-    st.ref, st.ref_at, st.ref_free = now, t, st.slack
+    st.ref, st.ref_at, st.ref_free, st.verify = now, t, st.slack, False
     want = goal(st, cfg)
     was = st.lost or now
     st.ref_here = None
@@ -747,7 +747,9 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
             ms = [x for _, x in st.recent]
             share = _slow(ms, 1000.0 / _fps(ms))
             st.base_slow = share if st.limit >= top or st.base_slow is None else min(st.base_slow, share)
-            st.verify, st.before, st.chain = st.limit >= top, here, 0
+            # (the look at the full limit that follows steps down from it is still owed when they took more than
+            # CHAIN steps: the pause between two runs of steps is not their end)
+            st.verify, st.before, st.chain = st.verify or st.limit >= top, here, 0
             was = st.limit
             watch("probe", nxt, f"{cur:.0f} fps holds at {was} W; trying {nxt} W")
     return act

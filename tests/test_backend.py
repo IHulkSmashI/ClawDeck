@@ -1741,6 +1741,14 @@ def test_the_frame_generation_multiplier_is_a_whole_number_that_changes_rarely(f
     for i in range(3):                                   # the game slows down between two lines: 90 shown, the line says 60
         look(5.0 + i * 0.5, 90.0, (4.0, 60.0))
     assert seen[-3:] == [2.0, 2.0, 2.0]                  # 90 / 2 = 45 rendered: the governor sees the loss
+    for i in range(4):                                   # one line that fits its shown frames badly (170 over 60 is 3x):
+        look(6.5 + i * 0.5, 170.0, (5.5 + (i // 3) * 1.5, 60.0))
+    assert seen[-1] == 2.0 and round(s.mult_hist[-1]) == 3   # the median of the last five, not the last
+    before = list(s.mult_hist)
+    at.sampler._xell, at.sampler.frames_ms = (7.2, 60.0), [1000.0 / 300.0] * 4   # a line 4 shown frames after the last:
+    assert at._multiplier(s, autotune.Sample(t=8.5, frametime_ms=16.7, fps=60.0, gpu_mhz=None, gpu_max_mhz=None, cpu_pct=None,
+                                             pkg_w=20.0, shown_fps=300.0, source="rendered")) == 2.0
+    assert list(s.mult_hist) == before                   # too few frames for a quotient (300 over 60 would be 5x)
     at.sampler._xell = None
     s.fg = 3                                             # no XeLL: ClawDeck's own multiplier for the game
     assert at._multiplier(s, autotune.Sample(t=9.0, frametime_ms=16.7, fps=60.0, gpu_mhz=None, gpu_max_mhz=None, cpu_pct=None,
