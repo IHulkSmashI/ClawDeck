@@ -144,8 +144,8 @@ class State:
     usual: float | None = None      # the game's frame rate as last judged (what "a loading screen or a menu" is far from)
     met: bool = False               # the game was seen at your target (so the full limit gives that much)
     visit_since: float | None = None  # since when it shows far more frames than the game gave (a menu, a map) ...
-    visit_base: float = 0.0           # ... what the game gave, and whether the full limit was looked at since
-    visit_looked: bool = False
+    visit_base: float = 0.0           # ... what the game gave, and when a look at the full limit was last made from one
+    visit_look_at: float = -1e9
     free_fps: deque = field(default_factory=lambda: deque(maxlen=2 * FREE_LOOKS))   # the pace at the last free looks
     free_run: int = 0               # frames in a row that came in looks where the limit couldn't hold the game back
     draw_was: float | None = None   # the package draw at the last look, and when a watched write was made
@@ -257,11 +257,14 @@ def _edge(ms, base: float) -> int:
 
 def goal(st: State, cfg: Cfg) -> float | None:
     """The frame rate that has to be delivered now, or None while nothing is known yet (no target, no reference)."""
+    return None if st.ref is None and not cfg.target else _goal_at(st.ref, cfg)
+
+
+def _goal_at(ref: float | None, cfg: Cfg) -> float:
+    """... were `ref` what the full limit gives."""
     if cfg.target:
-        return (st.ref if _from_ref(st, cfg) else cfg.target) * (1 - TOL)
-    if st.ref is None:
-        return None
-    return st.ref - max(st.ref * cfg.keep_pct / 100.0, KEEP_FPS)
+        return (ref if cfg.auto_fps and ref is not None and ref < cfg.target * REACHED else cfg.target) * (1 - TOL)
+    return ref - max(ref * cfg.keep_pct / 100.0, KEEP_FPS)
 
 
 def out_of_reach(st: State, cfg: Cfg) -> bool:
@@ -365,7 +368,21 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         # Nothing is learned from it and the timers wait. A write being watched is dropped (back to the limit before
         # it); a lowered limit goes up while too few frames still come (in a loading screen that costs watts for a
         # moment; in a starved scene it is the cure)
-        if st.mode in ("probe", "recover", "check"):
+        many = not silent and cur is not None and bool(usual) and cur > usual * OFF_HI
+        if st.mode in ("recover", "check") and many:
+            # far too many frames to judge as the game's, at the full limit. What they do say: whether the limit before
+            # held them back. More here than there: it stays up, and what they are shows from here (the game back from
+            # a video went back to the video's 8 W after every look; cloud fuzz, 2026-11-16). As many: back
+            seen = t - st.since
+            if seen >= BACK_S and (len(st.watch) >= 3 * N or seen >= 3 * BACK_S):
+                now = _fps(st.watch[len(st.watch) // 2:]) if len(st.watch) >= N else cur
+                if (st.lost or 0.0) < _goal_at(now, cfg):
+                    act.note = f"{top} W gives {now:.0f} fps, {st.prev} W gave {st.lost or 0.0:.0f}: staying up"
+                else:
+                    write(st.prev, f"{top} W gives {now:.0f} fps, {st.prev} W {st.lost:.0f}: back to {st.prev} W")
+                drop(st)
+                hold()
+        elif st.mode in ("probe", "recover", "check"):
             write(st.prev, f"too few frames to judge on: back to {st.prev} W")
             st.retest, st.tried = False, None
             hold()
@@ -374,6 +391,16 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         elif st.limit < top and not silent and cur is not None and usual and cur < usual * OFF_LO:
             write(top, f"{cur:.0f} fps at {st.limit} W: the full {top} W")
             hold()
+        elif (many and st.limit < top and (obs.draw_w is None or st.limit - 2 < obs.draw_w <= st.limit + BOUND_W)
+              and not obs.thermal and not (cfg.target and cur >= cfg.target * REACHED) and st.off_since is not None
+              and t - st.off_since >= ABOVE_S and t - st.changed_at >= DWELL_S
+              and t - st.visit_look_at >= ADOPT_FAST_S):
+            # far too many at a limit that holds the chip: as for far more frames that are judged (_hold), one look.
+            # (Not while the package draws more than the limit, as it may by PL2's 2 W for seconds after a video:
+            # those frames are not the limit's, and a look found as many at the full limit. In force, the draw of half
+            # a second is within 0.3 W of the limit: pl1step recordings, 2026-11-14/15)
+            st.lost, st.visit_look_at = cur, t
+            watch("check", top, f"far more frames at {st.limit} W than before: checking what the full {top} W gives")
         st.quiet_until += dt
         st.ref_at += dt
         st.ref_drop_at += dt
@@ -412,7 +439,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         if not (base > 0 and here > base * (1 + SHIFT)):
             st.visit_since = None
         elif st.visit_since is None:
-            st.visit_since, st.visit_base, st.visit_looked = t, base, False
+            st.visit_since, st.visit_base = t, base
     visit = st.mode == "hold" and st.visit_since is not None and t - st.visit_since < ADOPT_FAST_S
     if visit:
         st.free_fps.clear()
@@ -546,6 +573,15 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         return act                                   # the frame rate is still climbing: not judged yet
     now = _fps(st.watch[len(st.watch) // 2:]) if len(st.watch) >= 4 * N else _fps(st.watch)
 
+    if st.mode == "check" and st.visit_look_at == st.wrote_at and (st.lost or now) >= _goal_at(now, cfg):
+        # the look of a visit (far more frames than the game gave) finds as many at the full limit: not the limit's.
+        # Back, with no reference from them, and what is known of the game is kept. (More at the full limit: the limit
+        # held them back, whatever they are; that is judged as every look, below.)
+        write(st.prev, f"{top} W gives {now:.0f} fps, {st.prev} W {st.lost or now:.0f}: back to {st.prev} W")
+        st.verify = False
+        hold(AFTER_LOSS_S)
+        return act
+
     # recover / check: at the full limit, on purpose. What it gives is the reference from here on
     prior = st.ref if st.ref is not None else cfg.target if st.met else None   # a target that was held: it gave that
     moved = st.ref is not None and abs(now - st.ref) >= SHIFT * st.ref
@@ -561,7 +597,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if st.ref is not None and now > st.ref * (1 + SHIFT) and st.visit_since is None:
         # the full limit gives far more than it did: as at a held limit, a menu's or a map's until it has stayed.
         # No step down from it, and what is known of the game is kept
-        st.visit_since, st.visit_base, st.visit_looked = t, st.ref, True
+        st.visit_since, st.visit_base, st.visit_look_at = t, st.ref, t
     elif st.ref is not None and now > st.ref * (1 + 2 * CHECK_MOVED) and st.visit_since is None:
         # the full limit gives clearly more than it did: a lighter scene. What failed in the heavier one says nothing
         # here, and the level that held before it is the first to try
@@ -744,11 +780,14 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
             hold(AFTER_LOSS_S)
         return act
     if visit:
-        # still under the target, at a limit that holds the chip: whatever this is, more watts may give more (the
-        # game back from a long video, at the limit the video needed). One look at the full limit
-        if (cfg.target and here < cfg.target * REACHED and st.limit < top and not free and not st.visit_looked
-                and not obs.thermal and t - st.changed_at >= DWELL_S and t - st.visit_since >= ABOVE_S):
-            st.lost, st.visit_looked = cur, True
+        # at a limit that holds the chip (and under the target, with one): whatever this is, more watts may give
+        # more (the game back from a long video at the limit the video needed, a lighter place that wants more). One
+        # look at the full limit
+        if (not (cfg.target and here >= cfg.target * REACHED) and st.limit < top and not free and not obs.thermal
+                and not (obs.draw_w is not None and obs.draw_w > st.limit + BOUND_W)
+                and t - st.changed_at >= DWELL_S and t - st.visit_since >= ABOVE_S
+                and t - st.visit_look_at >= ADOPT_FAST_S):
+            st.lost, st.visit_look_at = cur, t
             watch("check", top, f"more frames at {st.limit} W than before: checking what the full {top} W gives")
         return act
 

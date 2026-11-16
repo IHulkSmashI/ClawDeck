@@ -283,9 +283,10 @@ def test_another_scene_forgets_the_levels_that_failed():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w)).run(60)
     assert g.st.fail
     g.fps = lambda w: min(80.0, 5.0 * w)                    # 60 % more frames at the same limit, for good
-    n = len(g.writes)
+    n, held = len(g.writes), g.limit
     g.run(gov.ADOPT_FAST_S - 2)
-    assert g.writes[n:] == [] and g.st.fail                 # as long as a menu may be: nothing moves, nothing forgotten
+    # as long as a menu may be: one look at the full limit (the draw is not known), no step down, nothing forgotten
+    assert [w for _, w in g.writes[n:]] in ([], [30, held]) and g.limit == held and g.st.fail, g.writes[n:]
     g.run(6)
     assert not [w for w in g.st.fail if g.st.fail[w][1] > 1] and g.st.ref == pytest.approx(80, abs=2)
 
@@ -448,6 +449,127 @@ def test_the_game_back_under_its_target_at_the_limit_a_long_video_needed_gets_th
         t0 = g.t
         g.run(gov.ABOVE_S + 6)
         assert g.limit >= need_w and g.st.ref == pytest.approx(60, abs=1), (need_w, low, g.since(t0))
+
+
+
+@pytest.mark.parametrize("target", [None, 90, 120])
+@pytest.mark.parametrize("draw_known", [False, True])
+def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_after_a_look(target, draw_known):
+    """Far more frames than before are a menu's for ADOPT_FAST_S, but not when the limit holds them back: the game back
+    from a 30 fps video at the limit the video needed (46 of 120 fps for 31 s, cloud fuzz seed 51, 2026-11-16), or a
+    lighter place that wants more watts. One look at the full limit after ABOVE_S says it, with or without a target
+    (a target these frames reach needs no look)."""
+    for need_w in (16, 20, 26):
+        game = lambda w: 120.0 * min(1.0, w / need_w)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=game)
+        if draw_known:
+            g.draw = lambda w, t: float(w)
+        g.run(90)
+        g.fps = lambda w: 30.0                                        # the video, for longer than the floor stands
+        g.run(gov.REACH_FOR_S + 240)
+        low = g.limit
+        assert low < need_w - 2, (need_w, low)
+        g.fps = game
+        t0 = g.t
+        g.run(gov.ABOVE_S + 8)
+        assert game(g.limit) >= 114, (need_w, low, g.limit, g.notes[-4:])
+    # a lighter place after a heavier one, both the game
+    heavy, light = (lambda w: 40.0 * min(1.0, w / 14)), (lambda w: 80.0 * min(1.0, w / 24))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=20), fps=heavy)
+    if draw_known:
+        g.draw = lambda w, t: float(w)
+    g.run(150)
+    held = g.limit
+    assert 14 <= held <= 16
+    g.fps = light                                                     # 47 to 53 fps here: far more than 40
+    g.run(gov.ABOVE_S + 8)
+    assert light(g.limit) >= 76, (held, g.limit, g.notes[-4:])
+
+
+
+
+@pytest.mark.parametrize("target", [None, 120, 240])
+@pytest.mark.parametrize("draw_known", [False, True])
+def test_far_too_many_frames_to_judge_at_a_limit_that_holds_them_back_get_a_look_too(target, draw_known):
+    """After a short video the level that held before it is on the chip, and a heavier, faster place gives over 2.5
+    times the video's frames there: not judged for ADOPT_FAST_S, and 21 % under the need all that time (cloud fuzz seed
+    117, 2026-11-16). One look at the full limit after ABOVE_S, as for far more frames that are judged."""
+    for need_w in (22, 26):
+        after = lambda w: 200.0 * min(1.0, w / need_w)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=20), fps=lambda w: 60.0 * min(1.0, w / 12))
+        if draw_known:
+            g.draw = lambda w, t: float(w)
+        g.run(150)
+        held = g.limit
+        assert 12 <= held <= 14
+        g.fps = lambda w: 30.0
+        g.run(40)
+        assert g.limit == held or g.limit == 30, g.notes[-3:]
+        g.fps = after                                               # 109 to 127 fps at 12 to 14 W
+        g.run(gov.ABOVE_S + 8)
+        assert after(g.limit) >= 190, (need_w, held, g.limit, g.notes[-4:])
+
+
+
+@pytest.mark.parametrize("burst_s", [3.0, 6.0, 9.0])
+def test_the_look_for_far_more_frames_waits_until_the_chip_is_down_at_the_limit(burst_s):
+    """After a video the chip's averaging window lets the package draw over the limit for some seconds, and the game
+    gives its full rate meanwhile. A look in that time found as many frames at the full limit and went back, and the
+    game ran 12 % under at the limit for 23 s afterwards (cloud fuzz seed 233, 2026-11-16)."""
+    game = lambda w: 120.0 * min(1.0, w / 12)
+    g = Game(gov.Cfg(floor=8, ceiling=17, target=None, start_w=17), fps=lambda w, t: game(w))
+    g.draw = lambda w, t: min(float(w), 12.0)
+    g.run(60)
+    g.fps, g.draw = (lambda w, t: 30.0), (lambda w, t: 6.0)
+    g.run(gov.REACH_FOR_S + 240)
+    low, t0 = g.limit, g.t
+    assert low <= 9, low
+    drawn = lambda w, t: min(12.0, w + 4.0) if t < t0 + burst_s else min(float(w), 12.0)
+    g.fps, g.draw = (lambda w, t: game(drawn(w, t))), drawn
+    g.run(burst_s + gov.ABOVE_S + 8)
+    assert game(g.limit) >= 114, (low, g.limit, [n for n in g.notes if n[0] >= t0])
+
+
+def test_a_menu_with_far_too_many_frames_to_judge_gets_one_look_and_the_game_its_limit_back():
+    """A menu at 3 times the game's rate at any limit (the draw not known): one look at the full limit, which gives as
+    many: back, and nothing of the game forgotten."""
+    for seconds in (4, 10, 20, 28):
+        game = lambda w: min(40.0, 40.0 * w / 14)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=game).run(150)
+        held, n, fail = g.limit, len(g.writes), dict(g.st.fail)
+        g.fps = lambda w: 120.0
+        g.run(seconds)
+        assert [w for _, w in g.writes[n:]] in ([], [30, held]), (seconds, g.writes[n:])
+        g.fps = game
+        g.run(30)
+        assert g.limit == held and g.st.ref == pytest.approx(40, abs=1) and set(fail) <= set(g.st.fail), (seconds, g.writes[n:])
+
+
+def test_a_frame_rate_that_swings_across_far_more_gets_one_such_look_in_half_a_minute():
+    """A rate that goes over and under "far more than the game gave" every few seconds starts the wait again each time;
+    the look at the full limit that belongs to the wait does not come more often than every ADOPT_FAST_S."""
+    for period in (7.0, 12.0, 20.0):
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=lambda w: min(40.0, 40.0 * w / 14)).run(150)
+        t0 = g.t
+        g.fps = lambda w, t: min(40.0, 40.0 * w / 14) * (1.3 if (t - t0) % period < period - 1 else 1.0)
+        g.run(180)
+        looks = [at for at, note in g.notes if at >= t0 and note.startswith("more frames at")]
+        assert all(b - a >= gov.ADOPT_FAST_S for a, b in zip(looks, looks[1:])), (period, looks)
+
+
+def test_a_menu_that_the_limit_holds_back_gets_the_full_limit_and_the_game_its_limit_back():
+    """A map or a menu that is not frame-limited, at a limit that holds it back: the look finds more at the full limit,
+    and the limit stays up while it lasts. The game back: its limit again, and what the full limit gives it."""
+    for seconds in (10, 20, 28):
+        game, menu = (lambda w: 40.0 * min(1.0, w / 14)), (lambda w: 150.0 * min(1.0, w / 25))
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=game).run(150)
+        held = g.limit
+        g.fps = menu
+        g.run(seconds)
+        assert g.limit == 30, (seconds, g.notes[-3:])
+        g.fps = game
+        g.run(90)
+        assert abs(g.limit - held) <= 1 and g.st.ref == pytest.approx(40, abs=1), (seconds, held, g.limit, g.notes[-5:])
 
 
 def test_without_a_target_two_fps_are_given_up_at_low_frame_rates():
