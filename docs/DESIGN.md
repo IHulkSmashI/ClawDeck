@@ -117,7 +117,7 @@ Autotune the slider stays that limit; the line under it reads "Autotune: using 2
 fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
 
 **A pick and what Autotune learned are two records, and only the user writes a pick.** A game's slot (per power source)
-has `base` and `tdp` (the pick) and `learned` (Autotune's record: `start`, `held`, the limit and target it was found
+has `base` and `tdp` (the pick) and `learned` (Autotune's record: `start`, the limit and target it was found
 under). `base` and `tdp` are written in three places, each a user action: `set_tdp` (the slider), `apply_profile` and
 `reset_power_slot` (Use default). Autotune writes `learned` only (`_save_learned`). `_pick` reads the limit from
 `base`/`tdp` and never from `learned`; `learned.start` is only where a session begins under that limit, and it is
@@ -258,10 +258,11 @@ most of a minute after a change the package can run up to PL2, and a step down w
 frames it didn't cost yet). The CPU and GPU levers stay as your pick set them.
 
 Start: where the game held last time under the same limit and for the same target (`Learned.start`: the level under
-which 80 % of the holding time lay; `Learned.held` has the seconds per watt), else mid-range between floor and limit.
-A limit picked while the game runs (slider, profile, Use default) goes on the chip as picked and Autotune works down
-from it. A manual change (Advanced) or switching it off in a game pauses it: your limit goes back on the chip and the
-change made by hand stays. xemu (`OWN_PACE`) and a game with no frame rate for 30 s get your limit and are left alone.
+which 80 % of the holding time lay; the session counts the seconds per watt, `State.held_s`), else mid-range between
+floor and limit. A limit picked while the game runs (slider, profile, Use default) goes on the chip as picked and
+Autotune works down from it. A manual change (Advanced) or switching it off in a game pauses it: your limit goes back on
+the chip and the change made by hand stays. xemu (`OWN_PACE`, looked for every 3 s for the whole game) and a game with
+no frame rate for 30 s get your limit and are left alone.
 
 ## Open items (need the device)
 - Low latency log lines ("low latency: on", "auto: waited in N of 100 frames") come from upstream's

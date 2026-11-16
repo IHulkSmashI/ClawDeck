@@ -307,6 +307,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         if st.mode == "hold":
             st.slack = st.bound_since is None and obs.draw_w is not None and st.limit < top
         st.mode, st.prev, st.since, st.wrote_at, st.watch = mode, st.limit, t, t, []
+        st.edge_look = None                          # (a look for slow frames that was cut short left its share)
         st.free_fps.clear()
         st.free_run, st.bound_since = 0, None
         write(watts, note)
@@ -818,13 +819,17 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         rates = [_fps(mine[i:i + k]) for i in range(0, len(mine) - k + 1, k)]
         still = max(rates) - min(rates) <= 2 * CHECK_MOVED * statistics.median(rates)
         slow = _edge(mine, st.base_slow) if still and not dippy and st.base_slow is not None else 0
-        if (slow and st.edge_w == st.limit - 1 and slow / len(mine) > st.edge_share - EDGE and t - st.slow_at >= CHECK_S
-                and not obs.thermal):
+        nothing = slow and st.edge_w == st.limit - 1 and slow / len(mine) > st.edge_share - EDGE
+        if nothing and obs.thermal:
+            # the guard is at work: no look at the full limit, and no further watt for what the last one left
+            st.edge_at, slow = t, 0
+        elif nothing and t - st.slow_at >= CHECK_S:
             # the watt that the last such step gave changed nothing: the limit's, or the game's own in this place?
             # Their share at the full limit says it (a watt more every ten seconds went all the way up to your limit
             # on slow frames that every limit had; review, 2026-11-16)
-            st.lost, st.edge_w, st.edge_look = cur, None, slow / len(mine)
+            st.lost, st.edge_w = cur, None
             watch("check", top, f"slow frames at {st.limit - 1} and {st.limit} W too: checking what the full {top} W gives")
+            st.edge_look = slow / len(mine)
             return act
         if slow:
             failed(st.limit)
@@ -850,7 +855,10 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         every = REACH_S if t - st.ref_drop_at < REACH_FOR_S else CHECK_MAX_S
         woke = st.ref_free and st.bound_since is not None and t - st.bound_since >= BOUND_S and t - st.changed_at >= DWELL_S
         far = st.limit < top - 1
-        if above or (far and (rose or woke or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S))):
+        # (not while the last N frames are far more than the game gave and the pace has not followed yet: a menu that
+        # opened since the last look. Its wait begins with the pace; a look now made its frames the reference)
+        coming = st.visit_since is None and cur > max(st.ref, st.shift_fps or 0.0) * (1 + SHIFT)
+        if not coming and (above or (far and (rose or woke or t - st.ref_at >= every or (moved and t - st.ref_at >= CHECK_S)))):
             st.lost = cur
             watch("check", top, f"the package draws all of {st.limit} W now: checking what the full {top} W gives" if woke
                   else f"checking what the full {top} W gives")

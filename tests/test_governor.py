@@ -1411,16 +1411,21 @@ def test_a_guard_cap_during_a_second_try_leaves_no_second_try_behind():
     assert not g.st.retest, "a second try survived the guard's cap"
 
 
-def test_autotune_thermal_step_during_a_second_try_leaves_no_second_try_behind():
-    """autotune.thermal_step sets gov.mode = "hold" itself (and the refused-write path does the same): retest/tried stay."""
+def test_a_raised_floor_during_a_second_try_leaves_no_second_try_behind():
     g, held = _into_retest()
-    g.st.mode = "hold"                                  # what Autotune.thermal_step and a refused write do
-    dips = len(g.st.dips)
-    g.fps = HOLDS_FROM_14
-    g.draw = None
-    g.run(60)
-    print("dips", dips, "->", len(g.st.dips), [n for t, n in g.notes if "own dip" in n])
-    assert len(g.st.dips) == dips, "an ordinary step that held was booked as one of the game's own dips"
+    g.cfg = gov.Cfg(floor=held + 1, ceiling=30, target=60, start_w=16)   # the floor: over the level being tried
+    g.run(0.2)
+    assert g.limit == held + 1 and g.st.mode == "hold" and not g.st.retest
+
+
+def test_autotune_thermal_step_during_a_second_try_leaves_no_second_try_behind():
+    """Autotune.thermal_step and a refused write end the watch with governor.drop: the second try goes with it."""
+    g, held = _into_retest()
+    gov.drop(g.st)                                      # what Autotune.thermal_step and a refused write do
+    g.fps = lambda w: 60.0 if w >= 10 else 45.0          # the next step down holds
+    n = len(g.notes)
+    g.run(150)
+    assert not any("own dip" in x for _, x in g.notes[n:]), "an ordinary step that held was booked as a dip of the game's own"
 
 
 def test_what_the_stale_second_try_does_next():
@@ -1442,11 +1447,8 @@ def test_a_raise_cut_short_by_autotune_leaves_no_tried_level_behind():
     while not (g.st.mode == "recover" and g.st.tried is not None):
         g.run(0.1)
         assert g.t < 60
-    tried = g.st.tried
-    g.st.mode = "hold"                                  # Autotune.thermal_step / refused write
-    g.run(20)
-    print("tried left behind:", g.st.tried, "fail", g.st.fail)
-    assert g.st.tried is None, f"tried={tried} W survived the forced hold"
+    gov.drop(g.st)                                      # Autotune.thermal_step / refused write
+    assert g.st.mode == "hold" and g.st.tried is None
 
 
 def test_a_target_out_of_reach_from_the_first_look_pins_the_start_level_for_two_minutes():
@@ -1501,6 +1503,75 @@ def test_slow_frames_of_the_games_own_at_every_limit_do_not_walk_the_limit_up():
     print("held", held, "base_slow", round(g.st.base_slow, 3), "writes in the rough place:", ups[:12], [x for x in g.notes[-6:]])
     looks = [w for _, w in ups if w == 30]                   # one look at the full limit says whose they are
     assert len(looks) <= 1 and max([w for _, w in ups if w != 30] + [held]) <= held + 1, ups
+
+
+@pytest.mark.parametrize("every", [17, 8])
+@pytest.mark.parametrize("target", [30, None])
+@pytest.mark.parametrize("draws_the_limit", [True, False])
+def test_under_the_guards_clock_cap_the_games_own_slow_frames_get_one_watt_and_no_look(every, target, draws_the_limit):
+    """The look that says whose the slow frames are is off while the guard caps the CPU's clock. The watt more was
+    not: a watt every 10 s, up to the full limit, in the minutes in which the chip is hot. When the cap goes, the look."""
+    rough = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target), fps=lambda w: 30.0 if w >= 14 else 2.1 * w,
+             shape=lambda i, w, t: 1.15 if rough["on"] and i % every == 0 else 1.0)
+    g.draw = (lambda w, t: float(w)) if draws_the_limit else None
+    g.run(120)
+    held, t0 = g.limit, g.t
+    rough["on"], g.thermal = True, True
+    g.run(600)
+    assert max(g.since(t0) + [held]) <= held + 1, g.writes
+    t1, g.thermal = g.t, False
+    g.run(120)
+    ups = g.since(t1)
+    assert ups.count(30) == 1 and max([w for w in ups if w != 30] + [held]) <= held + 1, ups
+
+
+@pytest.mark.parametrize("cut", ["the guard's cap", "no frames", "Autotune ends the watch"])
+def test_a_look_for_slow_frames_that_is_cut_short_says_nothing_in_the_next_look(cut):
+    """Slow frames under 23 W, the limit's: a watt more, then the look for whose they are. The look is cut short and
+    the slow frames end. The next look at the full limit was judged with the share of slow frames the cut one had
+    left: "30 W has none of the slow frames", a limit that holds booked as failed, and the full limit kept."""
+    rough = {"on": True}
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=16),
+             shape=lambda i, w, t: 1.3 if rough["on"] and w < 23 and i % 12 == 0 and t > 20 else 1.0)
+    g.st.base_slow = 0.0
+    while not (g.st.mode == "check" and g.st.edge_look is not None):
+        g.run(0.1)
+        assert g.t < 200
+    held = g.st.prev
+    if cut == "the guard's cap":
+        g.cap = held
+        g.run(1.0)
+        g.cap = None                                    # the watts are back: what they give is looked at
+    elif cut == "no frames":
+        g.run(2.0, frames=False)
+    else:
+        gov.drop(g.st)                                  # the guard's step, a refused write
+        g.st.limit = g.limit = held                     # ... and what is on the chip
+    assert g.st.mode == "hold" and g.limit == held
+    rough["on"], g.st.ref_at, t0, n = False, -1e9, g.t, len(g.notes)     # (the next look at the full limit is due)
+    g.run(30)
+    assert [w for w in g.since(t0) if w == 30] and not [x for _, x in g.notes[n:] if "slow frames" in x], g.notes[n:]
+    assert held not in g.st.fail or g.st.fail[held][0] < t0
+
+
+@pytest.mark.parametrize("ratio", [1.3, 2.0, 4.0])
+@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("draws_the_limit", [True, False])
+def test_a_menu_that_opens_between_two_looks_is_never_the_reference(ratio, target, draws_the_limit):
+    """A menu over a game on a 30 fps lock, opened at any moment of the governor's half second. The look for "more
+    frames here than the full limit is believed to give" (5 %) fired on a pace that was part menu, before the menu's
+    wait (15 %) had begun, and what the full limit gave in the menu became the reference: the game's own frames were
+    then a loss, or the held limit was booked as failed and the full limit kept (47 s at 30 W for a need of 14 W)."""
+    for k in range(0, 30, 2):
+        opens = 120.0 + k / 60.0
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=target), fps=lambda w: 30.0 if w >= 14 else 2.08 * w,
+                 shape=lambda i, w, at: 1.0 / ratio if opens <= at < opens + 20.0 else 1.0)
+        g.draw = (lambda w, t: float(w)) if draws_the_limit else None
+        g.run(119.5)
+        while g.t < opens + 20.0:
+            g.run(0.5)
+            assert g.st.ref < 33, (k, g.st.ref, g.notes[-3:])
 
 
 def test_a_lighter_scene_that_frees_the_limit_gets_no_look_at_the_full_limit():

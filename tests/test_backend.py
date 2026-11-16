@@ -1554,6 +1554,38 @@ def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw,
     at.session = None
 
 
+@pytest.mark.parametrize("after_s", [35, 100, 400])
+@pytest.mark.parametrize("frames_before", [60.0, None])
+def test_xemu_started_at_any_time_in_a_session_gets_the_limit_you_picked(fake_hw, monkeypatch, tmp_path, after_s,
+                                                                         frames_before):
+    """xemu was looked for 3, 10 and 30 s into a session only. Started later (by a launcher that shows no frame for
+    40 s, or from a frontend whose games share its session), it was governed on its 60 shown frames, down to 8 W."""
+    pw = power.Power(fake_hw)
+    chip, notes = {}, []
+    monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
+    at = autotune.Autotune(fake_hw, pw, "/nonexistent")
+    monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
+    monkeypatch.setattr(at, "_note", lambda s, text: notes.append(text))
+    proc = tmp_path / "proc"
+    for pid, name in (("1", "systemd"), ("4242", "es-de")):
+        _w(str(proc / pid / "comm"), name)
+    monkeypatch.setattr(autotune, "PROC", str(proc))
+    pw.apply_profile("", {"tdp": 30}, False)                          # the pick: Custom 30 W
+    at.start("3119184808#xbox/Project Gotham Racing 2", None, 8, 30, False)
+    frames = {"fps": frames_before}
+    g = _Game(at, lambda *_: frames["fps"], gpu_mhz=1000, cpu_pct=30, pkg_w=19.0, gpu_busy=40).run(after_s)
+    assert at.status()["own_pace"] is None and (chip["tdp"] < 30 if frames_before else at.session.no_frames)
+    _w(str(proc / "4300" / "comm"), "xemu")                           # now the emulator starts and shows its 60 fps
+    frames["fps"], n = 60.0, len(notes)
+    g.run(autotune.OWN_PACE_CHECK_S + 1)
+    st = at.status()
+    assert st["own_pace"] == "xemu" and st["paused"] and chip["tdp"] == 30 and not pw.governed
+    assert not [x for x in notes[n:] if "takes over" in x]            # its frames are never taken for a game's
+    g.run(120)
+    assert chip["tdp"] == 30 and not pw.governed
+    at.session = None
+
+
 def _mango_rows(path, frames_ms, header=False):
     with open(path, "a") as f:
         if header:
@@ -1822,12 +1854,27 @@ def test_a_new_target_leaves_xemu_alone_and_hands_control_back_after_a_change_by
         assert s.paused is not back and at.power.governed is back and s.user_target == 30, (why, on)
         assert s.learned.tdp == 20                                         # from the limit in use
         at.session = None
-    at, s = _tuner(fake_hw, monkeypatch, tdp=14)
+
+
+@pytest.mark.parametrize("why, off_and_on", [("manual CPU ceiling", False), ("autotune switched off", True)])
+@pytest.mark.parametrize("frames_again", [False, True])
+def test_a_new_target_after_a_give_up_for_no_frames_governs_only_when_frames_came(fake_hw, monkeypatch, why, off_and_on,
+                                                                                  frames_again):
+    """The change by hand comes after the give-up and takes "no frames" off the session (frames later must not undo
+    it): a new target then handed control back to a game without a frame rate."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=20)
     at.enabled = True
-    at.pause("manual CPU ceiling")
-    s.no_frames = True                                                     # no frame rate: nothing to govern by
+    g = _Game(at, lambda *_: None).run(autotune.NO_FPS_S + 5)
+    assert s.paused and s.no_frames and not at.power.governed
+    at.enabled = not off_and_on
+    at.pause(why)
+    at.enabled = True
+    if frames_again:
+        g.fps = lambda *_: 60.0
+        g.run(2)
+        assert s.paused and not at.power.governed                          # yours stays yours
     at.set_target(30)
-    assert s.paused and not at.power.governed
+    assert s.paused is not frames_again and at.power.governed is frames_again
     at.session = None
 
 
@@ -1861,6 +1908,16 @@ def test_a_refused_write_is_tried_again_later_not_ten_times_a_second(fake_hw, mo
     assert len(tries) <= 2                                                   # once, and not again within REFUSED_S
     g.run(autotune.REFUSED_S + 5)
     assert 2 <= len(tries) <= 4                                              # ... and again after it
+    at.session = None
+
+
+def test_a_refused_write_ends_the_watch_it_came_in(fake_hw, monkeypatch):
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    g = _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(6)                # 60 fps from 15 W
+    assert s.gov.mode == "probe" and s.gov.before                             # a step down is being watched
+    monkeypatch.setattr(at.power, "set_tdp", lambda w, plugged=None: False)
+    g.run(8)                                                                  # it holds; the next step is refused
+    assert s.refused and s.gov.mode == "hold" and s.gov.before is None
     at.session = None
 
 
@@ -1938,6 +1995,7 @@ def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypa
     g.run(6)
     assert s.gov.mode == "probe"                                              # a step down is being watched
     assert at.thermal_step(17) and s.gov.mode == "hold" and chip["tdp"] <= 17  # the guard's step ends the watch
+    assert s.gov.before is None                                               # ... with nothing of it left behind
     g.run(1)
     assert seen[-1][0].cap_w == 17 and seen[-1][0].thermal is False
     assert not at._tdp(s.learned, 25) or chip["tdp"] <= 17                    # nothing over the cap
@@ -1948,10 +2006,10 @@ def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypa
     at.set_keep(12)
     g.run(1)
     assert seen[-1][1].keep_pct == 12
-    s.gov.fail[11] = [1e12, 1]
+    s.gov.fail[11], s.gov.met = [1e12, 1], True
     s.fg = 2                                                                  # frame generation switched on in the game
     g.run(1)
-    assert seen[-1][0].multiplier == 2.0 and s.gov.fail == {}
+    assert seen[-1][0].multiplier == 2.0 and s.gov.fail == {} and not s.gov.met
     assert at.power.governed
     at.stop(revert=False)
     assert not at.power.governed
@@ -2321,6 +2379,7 @@ def test_a_frontend_games_limit_does_not_change_because_autotune_saved_learning(
     slot = p.run(p.power_slot(esde))
     print("second session ceiling", s.ceiling_tdp, "pick shown", slot["pick"])
     assert s.ceiling_tdp == 30, f"the ceiling moved to {s.ceiling_tdp} W because Autotune saved learning"
+    assert s.cfg.start_w == 20 and s.learned.tdp == 20             # ... and it starts where the game held last time
 
 
 def test_the_toast_says_nothing_was_saved_when_it_was(plugin):

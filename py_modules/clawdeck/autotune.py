@@ -453,10 +453,11 @@ NO_FPS_S = 30          # seconds without any frame rate before autotune gives up
 # Emulators whose frame rate is not the game's: xemu presents 60 frames a second whatever the emulated game does
 # (Project Gotham Racing 2 at a 16 W limit: 16-18 game fps, 60 shown; 2026-11-14), and under its own draw (~20 W on a
 # Claw 8 EX) the game slows down. No frame rate can show Autotune what a lower limit costs there, so it stays out of
-# these and your limit stays on the chip. Looked for (process name, else the file it runs) a few seconds into a game:
-# a frontend starts the emulator after the game-start event.
+# these and your limit stays on the chip. Looked for (process name, else the file it runs) every few seconds for the
+# whole game: a frontend starts the emulator after the game-start event, a launcher or a frontend without its event
+# script minutes later. One walk over /proc takes 11 ms on the Claw (450 processes).
 OWN_PACE = {"xemu": "it shows 60 fps whatever the game's speed"}
-OWN_PACE_CHECK_S = (3, 10, 30)
+OWN_PACE_CHECK_S = 3
 PROC = "/proc"
 
 
@@ -508,7 +509,7 @@ class Session:
     started_at: float = 0.0
     stepped_at: float | None = None
     logged_at: float = -1e9
-    own_checks: int = 0             # OWN_PACE_CHECK_S entries done
+    own_checked_at: float = 0.0     # when the OWN_PACE emulators were last looked for
     multiplier: float | None = None     # presented / rendered when frame generation is on
     last_change_at: float | None = None
     last_action: str | None = None
@@ -580,7 +581,7 @@ class Autotune:
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
                     keep_pct=float(keep_pct or KEEP_PCT), phase="target" if target else "hold",
                     user_target=int(target) if target else None, auto_fps=bool(auto_fps), fg=int(fg or 0))
-        s.started_at = time.monotonic()
+        s.started_at = s.own_checked_at = time.monotonic()
         self.session = s
         self.sampler.set_prefix(xell_log)
         self.power.governed = True
@@ -618,7 +619,7 @@ class Autotune:
         s = self.session
         if not s:
             return
-        back = s.paused and self.enabled and not s.own_pace and not s.no_frames
+        back = s.paused and self.enabled and not s.own_pace and s.no_fps_s < NO_FPS_S
         if back:
             s.paused, self.power.governed = False, True
         s.user_target, s.auto_fps = (int(target) if target else None), bool(auto_fps)
@@ -825,8 +826,9 @@ class Autotune:
             if smp.t - s.logged_at >= 0.95:              # a row a second, also while it looks ten times a second
                 s.logged_at = smp.t
                 self._log(s, smp)
-        if s.own_pace is None and s.own_checks < len(OWN_PACE_CHECK_S) and smp.t - s.started_at >= OWN_PACE_CHECK_S[s.own_checks]:
-            s.own_checks += 1
+        # (also before the first frames after a give-up are taken as the game's: a launcher's emulator, started late)
+        if s.own_pace is None and (smp.t - s.own_checked_at >= OWN_PACE_CHECK_S or (smp.fps and s.no_frames)):
+            s.own_checked_at = smp.t
             emu = own_pace_emulator()
             if emu:
                 self._stay_out(s, emu)
