@@ -174,7 +174,8 @@ It asks one question all the time: would more watts, up to your limit, give fram
   limit before comes back. A small loss that stays goes one level up instead.
 - **What is known grows old.** The reference is checked at the full limit one second after steps down that began there,
   when the frame rate at the held limit moved 3 % since it was taken (not more often than once a minute), and every
-  10 minutes. Failed levels are forgotten when the pace at one limit moved 15 % for 5 s (another scene), when the guard
+  10 minutes; not from one watt under the full limit, unless the frames there are more than the reference says the
+  full limit gives (a reference from a video, with the game back). Failed levels are forgotten when the pace at one limit moved 15 % for 5 s (another scene), when the guard
   changed the CPU clock, and when the frame-generation multiplier changed.
 - **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a menu, a pause). A
   step being watched is taken back; a lowered limit goes to the full one while frames still come.
@@ -219,10 +220,14 @@ It asks one question all the time: would more watts, up to your limit, give fram
     hold the game back: at the start and the end of a loading screen the draw is low while the pace is still that of
     frames the limit did hold back.
   - *Far more frames than the game gave* (15 %: a menu or a map over it) move nothing for 30 s: no step down, no
-    reference from them, what failed is kept (a menu's 60 fps over a 30 fps game took the limit to the floor). Under
-    the target at a limit that holds the chip there is one look at the full limit after 5 s (the game back from a
-    long video); a look that finds far more starts the same wait. Back from any stretch that was not judged, the
-    pace starts again from the game's own frames.
+    reference from them, what failed is kept (a menu's 60 fps over a 30 fps game took the limit to the floor). They
+    may also be the game back from a video, at the limit the video needed: at a limit that holds the chip (the
+    package within 2 W under it and not over it), and under the target when there is one, the full limit is looked at
+    once after 5 s, at most every 30 s. As many frames there: back, nothing learned from them. More there: the limit
+    held them back, whatever they are, and it stays up. The same look for frames too many to judge (over 250 %), and
+    in place of a further step down when the frames jump 15 % above what they were before the step. A look that
+    finds far more starts the same wait. Back from any stretch that was not judged, the pace starts again from the
+    game's own frames.
   - *Slow frames* count only while the frame rates of five parts of the last 10 s agree (a faster menu inside them
     made every frame of the game a slow one).
   - *A log with a row a second* (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
