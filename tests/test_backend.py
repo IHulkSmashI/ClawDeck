@@ -384,11 +384,14 @@ def test_autotune_starts_where_the_game_held_under_the_same_limit_and_target_els
     at.start("1", {**saved, "start": 16}, 8, 26, False)         # another limit: nothing known, mid-range
     assert at.session.learned.tdp == 17 and at.session.learned.ceiling == 26
     at.start("1", {**saved, "start": 16}, 8, 20, False, target=60)   # another goal: the same
-    assert at.session.learned.tdp == 14 and at.session.phase == "target"
+    assert at.session.learned.tdp == 14 and at.session.user_target == 60
     at.start("1", {**saved, "start": 16}, 8, 20, False, at_limit=True)   # picked in the game just now: as picked
     assert at.session.learned.tdp == 20
     at.start("1", None, 8, 30, False)
-    assert at.session.learned.tdp == 19 and at.session.phase == "hold"
+    assert at.session.learned.tdp == 19
+    assert (at.session.user_target, at.session.auto_fps) == (120, True)   # no target set: the screen's highest refresh rate
+    at.start("1", None, 8, 30, False, auto_fps=False)
+    assert at.session.auto_fps is True                          # ... which Auto FPS turns into the most frames the limit gives
     at.session = None
 
 
@@ -1998,7 +2001,7 @@ def test_set_pl2_says_what_the_chip_has_while_autotune_governs(plugin):
 
 def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypatch):
     """The wiring between the plugin and governor.step: the guard's cap and its clock cap are in every observation, a
-    keep % set in the panel is in the configuration, the guard's step ends a watch, no write goes over the cap, a
+    target set in the panel is in the configuration, the guard's step ends a watch, no write goes over the cap, a
     change of the frame-generation multiplier starts the governor's memory over, and stop() ends "governed"."""
     at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
     chip = {}
@@ -2017,9 +2020,9 @@ def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypa
     at.thermal_clock(80)
     g.run(1)
     assert seen[-1][0].thermal is True
-    at.set_keep(12)
+    at.set_target(45, False)
     g.run(1)
-    assert seen[-1][1].keep_pct == 12
+    assert (seen[-1][1].target, seen[-1][1].auto_fps) == (45.0, False)
     s.gov.fail[11], s.gov.lo, s.gov.hi, s.gov.ratio = [1e12, 1, None, False, 0.0], 55.0, 56.0, 0.97
     s.fg = 2                                                                  # frame generation switched on in the game
     g.run(1)
@@ -2297,8 +2300,8 @@ def test_autotune_target_setting_is_saved_clamped_and_reaches_the_running_sessio
     r = p.run(p.set_autotune_target(60, True))
     assert r["ok"] and r["target"] == 60 and p.settings["autotune_target"] == 60 and got[-1] == (60, True)
     assert p.run(p.set_autotune_target(5, False))["target"] == 20 and got[-1] == (20, False)   # 20 fps minimum
-    r = p.run(p.set_autotune_target(0, True))
-    assert r["target"] == 0 and got[-1] == (None, True) and "most frames" in r["summary"]
+    r = p.run(p.set_autotune_target(0, False))                  # no target: the screen's highest refresh rate, Auto FPS on
+    assert r["target"] == 120 and r["auto_fps"] is True and p.settings["autotune_target"] == 120 and got[-1] == (120, True)
     started = {}
     monkeypatch.setattr(p.autotune, "start", lambda *a, **k: started.update(k))
     p.settings.update(autotune=True, autotune_target=45, autotune_auto_fps=False, autotune_plugged=True)

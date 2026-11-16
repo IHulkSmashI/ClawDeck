@@ -57,10 +57,10 @@ class Game:
 
 
 def test_a_game_with_no_history_starts_mid_range_and_one_with_history_where_it_held():
-    st, act = gov.start(gov.Cfg(floor=8, ceiling=30), 0.0)
+    st, act = gov.start(gov.Cfg(floor=8, ceiling=30, target=120), 0.0)
     assert act.limit_w == 19 and st.mode == "hold"
-    assert gov.start(gov.Cfg(floor=8, ceiling=30, start_w=14), 0.0)[1].limit_w == 14
-    assert gov.start(gov.Cfg(floor=8, ceiling=20, start_w=27), 0.0)[1].limit_w == 20      # never over your limit
+    assert gov.start(gov.Cfg(floor=8, ceiling=30, target=120, start_w=14), 0.0)[1].limit_w == 14
+    assert gov.start(gov.Cfg(floor=8, ceiling=20, target=120, start_w=27), 0.0)[1].limit_w == 20      # never over your limit
     # where to start next time: the level under which 80 % of the holding time lies; too little time says nothing
     assert gov.start_level({14: 300.0, 16: 100.0, 30: 50.0}, 8, 30) == 16
     assert gov.start_level({14: 20.0}, 8, 30) is None
@@ -151,7 +151,7 @@ def test_a_video_changes_nothing_for_the_game_that_comes_back():
         assert g.limit == held and g.st.ref == pytest.approx(60, abs=1) and not gov.out_of_reach(g.st, g.cfg), seconds
 
 
-@pytest.mark.parametrize("target", [None, 60, 120])
+@pytest.mark.parametrize("target", [60, 120])
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_after_a_video_longer_than_what_failed_counts_the_game_gets_the_full_limit_within_seconds(target, draw_known):
     """What failed in the game counts in a video for RETRY_MAX_S; after that the limit goes down to what the video
@@ -180,7 +180,7 @@ def test_after_a_video_longer_than_what_failed_counts_the_game_gets_the_full_lim
 def test_a_fast_menu_does_not_pin_the_full_limit():
     """8 s of a 240 fps menu set the reference to 240; the game's 60 fps were then "a loading screen" for good, at the
     full limit. Frames that far from the usual rate are not judged, and when they stay they are the game."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=HOLDS_FROM_14).run(60)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=HOLDS_FROM_14).run(60)
     g.fps = lambda w: 240.0
     g.run(8)
     g.fps = HOLDS_FROM_14
@@ -251,7 +251,7 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
 
 def test_frame_time_spread_widens_what_counts_as_a_loss():
     """9 % frame-time spread moves the rate of 10 frames by 3-4 % all the time: every such wobble was a clear loss."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
              shape=lambda i, w, t: 1.06 if (i // 30) % 2 else 0.94).run(300)      # half a second 6 % slow, half 6 % fast
     assert g.st.noise > 0.03 and g.limit <= 24 and g.since(100).count(30) <= 1, g.writes[-10:]
     assert gov._spread([16.7] * 60) == 0 and gov._spread([11.7, 21.7] * 30) == pytest.approx(0, abs=1e-9)
@@ -278,7 +278,7 @@ def test_the_edge_rule_counts_slow_frames_of_their_own_time():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=20), fps=lambda w: 60.0, shape=own).run(60)
     assert g.limit == 8 and not any("slow frames" in n for _, n in g.notes)
     faster = lambda w, t: (40.0 if int(t / 30) % 2 else 46.0) if w >= 12 else 30.0
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=faster).run(300)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=faster).run(300)
     assert not any("slow frames" in n for _, n in g.notes)
     some = ([33.3] * 14 + [40.0]) * 5 + [33.3] * 10
     assert gov._edge(some, 0.0) == 5 and gov._edge(some, 0.06) == 0
@@ -300,7 +300,7 @@ def test_a_small_loss_that_stays_gets_the_full_limit_and_ends_just_over_the_need
 
 
 def test_another_scene_forgets_the_levels_that_failed():
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w)).run(60)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w)).run(60)
     assert g.st.fail
     g.fps = lambda w: min(80.0, 5.0 * w)                    # 60 % more frames at the same limit, for good
     n, held = len(g.writes), g.limit
@@ -313,8 +313,8 @@ def test_another_scene_forgets_the_levels_that_failed():
 
 def test_more_frames_at_a_held_limit_has_the_full_limit_looked_at():
     """No target: the limit is held against what the full limit gave. When the held limit gives clearly more than
-    then, the full limit gives more too, and the held one may cost more than the keep margin."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w)).run(60)
+    then, the full limit gives more too, and the held one may cost more than the margin."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w)).run(60)
     assert g.limit in (19, 20)
     g.fps = lambda w: 2.9 * w                               # a lighter place, where every watt buys frames
     t0 = g.t
@@ -331,7 +331,7 @@ def test_a_scene_that_is_not_steady_gets_no_step_down():
 
 
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
     g.thermal = True
     g.run(60)
     assert g.limit in (19, 20)                              # it steps down under the cap (it used to go only up)
@@ -421,7 +421,7 @@ def test_a_menu_over_the_game_takes_no_step_down_whatever_it_shows():
 @pytest.mark.parametrize("target, game, menus", [
     (60, lambda w: 45.0 if w >= 16 else 45.0 * w / 16, (55.0, 60.0, 80.0)),      # the target out of reach
     (60, lambda w: min(60.0, 60.0 * w / 14), (75.0, 90.0, 120.0)),               # in reach, the menu not frame-limited
-    (None, lambda w: min(50.0, 2.5 * w), (60.0, 70.0, 100.0)),                   # most frames
+    (120, lambda w: min(50.0, 2.5 * w), (60.0, 70.0, 100.0)),                    # no target set
     (30, lambda w: min(30.0, 30.0 * w / 12), (40.0, 60.0))])
 def test_a_menu_takes_no_step_down_in_any_mode(target, game, menus):
     for menu_fps in menus:
@@ -443,12 +443,12 @@ def test_a_menu_takes_no_step_down_in_any_mode(target, game, menus):
                 assert abs(g.limit - held) <= 1, case
 
 
-@pytest.mark.parametrize("target", [None, 90, 120])
+@pytest.mark.parametrize("target", [90, 120])
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_after_a_look(target, draw_known):
     """Far more frames than before are a menu's for half a minute, but not when the limit holds them back: the game back
     from a 30 fps video at the limit the video needed (46 of 120 fps for 31 s, cloud fuzz seed 51, 2026-11-16), or a
-    lighter place that wants more watts. One look at the full limit says it, with or without a target
+    lighter place that wants more watts. One look at the full limit says it, whatever the target
     (a target these frames reach needs no look)."""
     for need_w in (16, 20, 26):
         game = lambda w: 120.0 * min(1.0, w / need_w)
@@ -478,7 +478,7 @@ def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_afte
 
 
 
-@pytest.mark.parametrize("target", [None, 120, 240])
+@pytest.mark.parametrize("target", [120, 240])
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_far_too_many_frames_to_judge_at_a_limit_that_holds_them_back_get_a_look_too(target, draw_known):
     """After a short video the level that held before it is on the chip, and a heavier, faster place gives over 2.5
@@ -507,7 +507,7 @@ def test_the_look_for_far_more_frames_waits_until_the_chip_is_down_at_the_limit(
     gives its full rate meanwhile. A look in that time found as many frames at the full limit and went back, and the
     game ran 12 % under at the limit for 23 s afterwards (cloud fuzz seed 233, 2026-11-16)."""
     game = lambda w: 120.0 * min(1.0, w / 12)
-    g = Game(gov.Cfg(floor=8, ceiling=17, target=None, start_w=17), fps=lambda w, t: game(w))
+    g = Game(gov.Cfg(floor=8, ceiling=17, target=120, start_w=17), fps=lambda w, t: game(w))
     g.draw = lambda w, t: min(float(w), 12.0)
     g.run(60)
     g.fps, g.draw = (lambda w, t: 30.0), (lambda w, t: 6.0)
@@ -521,7 +521,7 @@ def test_the_look_for_far_more_frames_waits_until_the_chip_is_down_at_the_limit(
 
 
 
-@pytest.mark.parametrize("target", [None, 90])
+@pytest.mark.parametrize("target", [120, 90])
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_steps_down_stop_when_the_frames_jump_far_above_what_they_were_before_the_step(target, draw_known):
     """The game comes back from a long video in the middle of the way down: every further step "held" against the
@@ -557,7 +557,7 @@ def _seconds_under(g, t0, t1, fps, line):
     return total
 
 
-@pytest.mark.parametrize("target", [None, 90])
+@pytest.mark.parametrize("target", [120, 90])
 @pytest.mark.parametrize("before_w, after_w", [(14, 14), (30, 20), (30, 26), (22, 16)])   # 30: held one watt under the full limit
 def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(target, before_w, after_w):
     """After a video the game is back at the level that held before it, with all its frames there. The look of the
@@ -578,7 +578,7 @@ def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(targ
 
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("fps_before", [46.0, 30.0])
 def test_far_more_frames_that_stayed_at_the_full_limit_are_the_reference_before_any_step_down(target, fps_before):
     """A lighter place after a heavy one, at the full limit: far more frames, so nothing moves for half a minute. When
@@ -600,7 +600,7 @@ def test_a_menu_with_far_too_many_frames_to_judge_gets_one_look_and_the_game_its
     many: back, and nothing of the game forgotten."""
     for seconds in (4, 10, 20, 28):
         game = lambda w: min(40.0, 40.0 * w / 14)
-        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=game).run(150)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=20), fps=game).run(150)
         held, n, fail = g.limit, len(g.writes), dict(g.st.fail)
         g.fps = lambda w: 120.0
         g.run(seconds)
@@ -614,7 +614,7 @@ def test_a_frame_rate_that_swings_across_far_more_gets_one_such_look_in_half_a_m
     """A rate that goes over and under "far more than the game gave" every few seconds starts the wait again each time;
     the look at the full limit that belongs to the wait does not come more often than twice a minute."""
     for period in (7.0, 12.0, 20.0):
-        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=lambda w: min(40.0, 40.0 * w / 14)).run(150)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=20), fps=lambda w: min(40.0, 40.0 * w / 14)).run(150)
         t0 = g.t
         g.fps = lambda w, t: min(40.0, 40.0 * w / 14) * (1.3 if (t - t0) % period < period - 1 else 1.0)
         g.run(180)
@@ -627,7 +627,7 @@ def test_a_menu_that_the_limit_holds_back_gets_the_full_limit_and_the_game_its_l
     and the limit stays up while it lasts. The game back: its limit again, and what the full limit gives it."""
     for seconds in (10, 20, 28):
         game, menu = (lambda w: 40.0 * min(1.0, w / 14)), (lambda w: 150.0 * min(1.0, w / 25))
-        g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=game).run(150)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=20), fps=game).run(150)
         held = g.limit
         g.fps = menu
         g.run(seconds)
@@ -674,12 +674,6 @@ def test_a_limit_that_held_for_twenty_seconds_is_the_one_a_game_gets_back_after_
     assert g.since(t0) == [30, 14], [n for n in g.notes if n[0] >= t0]
 
 
-def test_without_a_target_two_fps_are_given_up_at_low_frame_rates():
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: 24.0 * (w / 30) ** 0.5).run(120)
-    assert gov.goal(g.st, g.cfg) == pytest.approx(g.st.ref - 2.0, abs=0.05)       # 2 fps is more than 5 % here
-    assert 24.0 * (g.limit / 30) ** 0.5 >= g.st.ref - 2.1 and g.limit < 30
-
-
 def test_generated_frames_are_judged_as_the_rendered_ones():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=20), fps=lambda w: 30.0 if w >= 14 else 30.0 * w / 14)
     g.mult = 2.0                                             # 60 frames shown for 30 rendered
@@ -695,7 +689,7 @@ def test_a_raised_floor_is_obeyed_at_once():
 
 
 def test_one_dip_at_the_full_limit_does_not_move_the_reference():
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=30), fps=lambda w: 60.0)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0)
     g.st.quiet_until = 1e9                                   # no steps down in this test
     g.run(10)
     assert g.st.ref == pytest.approx(60, abs=0.5)
@@ -749,7 +743,7 @@ def _video_game(video_from, video_to):
 
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_a_video_takes_no_step_down_from_a_game_that_needs_the_full_limit(target):
     """At the full limit, a video: half the frames from one look to the next, and the package far under the limit.
     The levels that failed in the game count in the video: no step down, and the game is back with all its watts."""
@@ -780,7 +774,7 @@ def test_a_short_video_keeps_the_level_that_held_before_it():
 
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_draws_the_whole_limit(target):
     """After a video the game is in a heavier place: at the limit that held before, more frames than the video's and
     fewer than the game's. The package draws all of the limit, which it did not in the video: that is the sign for the
@@ -808,7 +802,7 @@ def _lighter_place(thermal=False):
     """A game that needs 14 W for its 40 fps, the package at the limit all the time,
     held at 14 W with 13 W tried and failed; then a place that gives twice the frames with 24 W. -> the game, the time
     of the change."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 40.0 * min(1.0, w / 14))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 40.0 * min(1.0, w / 14))
     g.draw = lambda limit, t: float(limit)
     while not (g.st.mode == "hold" and g.limit == 14 and 13 in g.st.fail and g.t - g.st.changed_at >= 3) and g.t < 60:
         g.run(0.5)
@@ -829,7 +823,7 @@ def test_far_more_frames_get_no_look_under_the_guards_clock_cap():
 
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_a_menu_over_a_game_that_needs_the_full_limit_changes_nothing(target):
     """A game that gets 30 fps from the full limit; a menu over it at 60 fps for 20 s. No step down from the menu's
     frames (no step in a scene that has not stayed SCENE_S), and none in the seconds after it."""
@@ -848,7 +842,7 @@ def test_a_menu_at_a_limit_that_holds_the_chip_gets_one_look_and_the_game_its_li
     """A menu at 60 fps over a 30 fps game, the package at the limit: one look at the full limit. As many frames
     there: back. The game back: the band this limit had before the menu is known again, without a look, and the limit
     is not booked as failed."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 30.0 * min(1.0, w / 20))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 30.0 * min(1.0, w / 20))
     g.draw = lambda limit, t: float(limit)
     g.run(90)
     held, t0, game = g.limit, g.t, g.fps
@@ -863,7 +857,7 @@ def test_a_menu_at_a_limit_that_holds_the_chip_gets_one_look_and_the_game_its_li
 
 def test_one_watt_under_the_full_limit_gets_no_look_while_the_frames_say_nothing():
     """What one watt more gives is not worth a look: at one watt under the full limit there is none in twelve minutes."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30)).run(120)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30)).run(120)
     t0 = g.t
     assert g.limit == 29, g.notes[-3:]
     g.run(720)
@@ -875,7 +869,7 @@ def test_the_full_limit_is_not_written_by_the_clock():
     writes are the next tries of the levels under 14 W (the full limit was looked at every ten minutes, and after
     every run of steps: on the Claw those looks were 9 of the 30 changes in three minutes of Enshrouded, and each
     found the frames it had)."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=HOLDS_FROM_14).run(100)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=HOLDS_FROM_14).run(100)
     t0 = g.t
     assert g.limit == 14
     g.run(1200)
@@ -887,7 +881,7 @@ def test_the_full_limit_is_not_written_by_the_clock():
 def test_a_step_that_held_while_the_frames_were_not_steady_is_followed_by_ten_quiet_seconds(at):
     """One half second of 4 % fewer frames while the first step down is watched: the step holds, and the next one waits
     10 s from there (2.5 s of watch and 10 s)."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=HOLDS_FROM_14)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=HOLDS_FROM_14)
     while not g.writes:
         g.run(0.1)
     t1 = g.writes[0][0]
@@ -900,7 +894,7 @@ def test_a_step_that_held_while_the_frames_were_not_steady_is_followed_by_ten_qu
 def test_no_step_down_while_a_half_second_of_the_last_three_was_slower(every, steps):
     """A game that makes 4 % fewer frames for half a second every 2.5 s is never steady for 3 s: no step down. With
     such a half second every 4 s there are 3 steady seconds between two of them: the way down goes on."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=20),
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=20),
              fps=lambda w, t: HOLDS_FROM_14(w) * (0.96 if int(t / 0.5) % int(every / 0.5) == 0 else 1.0)).run(120)
     assert bool([w for t, w in g.writes if w < 20]) == steps, g.writes[:8]
 
@@ -911,7 +905,7 @@ def test_a_loading_screen_does_not_lower_the_reference():
     as the loading screen began and ended took that pace as the reference (55.8 -> 53.8 -> 51.6 fps over three
     loading screens, and the limit followed it down). Here as the plugin hands frames on: stamped at the look's time,
     so three looks without frames are not yet "no frames"."""
-    cfg = gov.Cfg(floor=8, ceiling=30)
+    cfg = gov.Cfg(floor=8, ceiling=30, target=120)
     g = Game(cfg, fps=lambda w: 56.0 if w >= 24 else 56.0 - (24 - w))        # a frame less for each watt under 24
     g.draw = lambda w, t: float(w)
     g.run(90)
@@ -939,7 +933,7 @@ def test_a_visit_to_a_fast_map_costs_nothing_that_was_known_and_a_long_stay_is_t
     that gives more than the reference. More frames harm nothing: 30 s before it is the game, and the pace starts
     again from the game's frames when it is over. Back in the game the limit that held is held again: no write."""
     in_map = lambda t: 200 <= t < 208 or t >= 400
-    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: 144.0 if in_map(t) else (40.0 if w >= 14 else 40.0 * w / 14))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w, t: 144.0 if in_map(t) else (40.0 if w >= 14 else 40.0 * w / 14))
     g.draw = lambda w, t: 9.0 if in_map(t) else min(float(w), 14.0)
     g.run(200)
     held, ref, fail = g.limit, g.st.ref, dict(g.st.fail)
@@ -964,7 +958,7 @@ def test_a_faster_menu_does_not_read_as_slow_frames_at_the_limit():
 def test_a_slow_game_gets_the_frames_a_look_at_the_full_limit_needs():
     """A look at the full limit was judged after a second: 20 frames of a 20 fps game, some from before the watts had
     arrived, and the reference came out too low (22.5 for 24.5). It waits for 3 N frames, at most 3 s."""
-    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w: 20.0 if w >= 20 else 20.0 * w / 20)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w: 20.0 if w >= 20 else 20.0 * w / 20)
     g.draw = lambda w, t: float(w)
     g.run(60)
     looks = [(t, n) for t, n in g.notes if "the full 30 W" in n or "measuring what" in n]
@@ -1046,7 +1040,7 @@ def test_frames_that_stay_lost_after_a_step_was_undone_get_the_full_limit():
     assert full - undone <= gov.BACK_S / 2 + 0.25                    # ... on the first ten frames after half a second
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("fall, answered", [(0.02, False), (0.035, False), (0.08, True)])
 def test_a_fall_that_stays_inside_the_kept_margin_is_no_loss(target, fall, answered):
     """56 fps at the full limit and at the limit that is held. The game's own frame rate then falls at every limit (the
@@ -1065,10 +1059,10 @@ def test_a_fall_that_stays_inside_the_kept_margin_is_no_loss(target, fall, answe
 
 
 def test_a_game_that_goes_between_two_frame_rates_gets_the_full_limit_once():
-    """56 fps, then 60 for 20 s, and so on for five minutes (no target, the package at the limit). The first time at
+    """56 fps, then 60 for 20 s, and so on for five minutes (no target set, the package at the limit). The first time at
     60 fps the full limit says that it gives no more; after that 60 fps at this limit is no news (four looks in half
     a minute of Enshrouded: the band of the faster place was dropped at each return to the slower one)."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w, t: (60.0 if t >= 150 and (t // 20) % 2 else 56.0) * min(1.0, w / 20))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w, t: (60.0 if t >= 150 and (t // 20) % 2 else 56.0) * min(1.0, w / 20))
     g.draw = lambda w, t: float(w)
     g.run(150)
     held = g.limit
@@ -1086,7 +1080,7 @@ def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_
     def fps(w):
         light["on"] = light["on"] or w < 30
         return (55.0 if light["on"] else 50.0) * 0.98 ** (30 - w)
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=fps)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=fps)
     g.draw = lambda w, t: float(w)
     g.run(120)
     assert g.limit == 28 and [w for _, w in g.writes][:3] == [28, 30, 28], (g.limit, g.writes, g.notes[:6])
@@ -1095,7 +1089,7 @@ def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_
 def test_steps_down_end_without_a_look_at_the_full_limit():
     """Steps down from the full limit to the level that holds: each is judged against the frames before it, and the
     full limit is not written to see what they cost."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 56.0 if w >= 24 else 56.0 - (24 - w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 56.0 if w >= 24 else 56.0 - (24 - w))
     g.draw = lambda w, t: float(w)
     g.run(60)
     steps = [t for t, n in g.notes if "trying" in n]
@@ -1107,7 +1101,7 @@ def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_f
     failed in the heavier scene say nothing here. (6 % more: the full limit is looked at as well, and what failed
     still counts. A game whose own frame rate moves that much for seconds is one scene.)"""
     lift = {"x": 1.0}
-    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
     g.draw = lambda w, t: float(w)
     g.run(40)
     assert g.st.mode == "hold" and g.limit < 26 and g.st.fail
@@ -1126,7 +1120,7 @@ def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_f
 def test_no_look_at_the_full_limit_while_the_package_is_well_under_the_limit():
     """A limit the package doesn't use holds nothing back: what it shows is the reference, and a look at the full
     limit would only cost watts."""
-    g = Game(gov.Cfg(floor=8, ceiling=30))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120))
     g.draw = 5.0
     g.run(60)
     assert g.limit == 8 and 30 not in g.since(0)
@@ -1138,7 +1132,7 @@ def test_no_look_at_the_full_limit_while_the_package_is_well_under_the_limit():
 def test_looks_that_are_free_do_not_add_up_across_looks_that_are_not():
     """The reference is the median of FREE_LOOKS looks in a row. Four of them in a lighter moment, then looks in which
     the limit holds the game back, then one more: not five."""
-    cfg = gov.Cfg(floor=8, ceiling=30)
+    cfg = gov.Cfg(floor=8, ceiling=30, target=120)
     g = Game(cfg, fps=lambda w: 60.0 if w >= 26 else 60.0 - (26 - w))
     g.draw = lambda w, t: float(w)
     g.run(40)
@@ -1231,7 +1225,7 @@ def test_a_game_that_dips_gets_a_second_of_patience_and_the_dips_are_forgotten_a
     assert _loss_answered_after((310, 10)) <= 0.6                    # one dip in five minutes is not "dips by itself"
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("begins", [1.7, 2.0, 2.3])
 def test_in_a_game_that_dips_a_step_does_not_hold_while_a_loss_is_waited_out(begins, target):
     """A game that dips, and a loss of 9 % that begins in the last second of a step's watch and stays. The watch does
@@ -1358,7 +1352,7 @@ def test_steps_down_to_the_floor_get_no_look_at_the_full_limit():
     """Steps down that end at the floor without a failure (three of them, and eleven): no write but the steps, and
     after every CHAIN of them the rules of holding run once."""
     for ceiling, runs in ((14, 1), (30, 4)):
-        g = Game(gov.Cfg(floor=8, ceiling=ceiling, start_w=ceiling), fps=lambda w: 56.0)
+        g = Game(gov.Cfg(floor=8, ceiling=ceiling, target=120, start_w=ceiling), fps=lambda w: 56.0)
         g.draw = lambda w, t: float(w)
         g.run(90)
         ends = [t for t, n in g.notes if n.startswith("holding at")]
@@ -1371,7 +1365,7 @@ def test_after_a_pause_or_a_loading_screen_the_full_limit_is_looked_at_once_and_
     """5 s or more without frames may be a loading screen, and the place after it another one that has the same frame
     rate at this limit: one look at the full limit. In the same place (a pause menu) the limit that held is held again
     and what failed is still known. A stall of 3 s is no loading screen."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=HOLDS_FROM_14).run(90)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=HOLDS_FROM_14).run(90)
     assert g.limit == 14
     fail = set(g.st.fail)
     g.run(pause, frames=False)
@@ -1543,7 +1537,7 @@ def test_slow_frames_of_the_games_own_at_every_limit_do_not_walk_the_limit_up():
 
 
 @pytest.mark.parametrize("every", [17, 8])
-@pytest.mark.parametrize("target", [30, None])
+@pytest.mark.parametrize("target", [30, 120])
 @pytest.mark.parametrize("draws_the_limit", [True, False])
 def test_under_the_guards_clock_cap_the_games_own_slow_frames_get_no_look_until_the_cap_goes(every, target, draws_the_limit):
     """Slow frames get no watt and no look while the guard caps the CPU's clock: nothing walks the limit up in the
@@ -1570,7 +1564,7 @@ def test_a_look_for_slow_frames_that_is_cut_short_says_nothing_in_the_next_look(
     frames the cut one had left: "30 W has none of the slow frames", a limit that holds booked as failed, and the full
     limit kept."""
     rough = {"on": True}
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=16),
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16),
              shape=lambda i, w, t: 1.3 if rough["on"] and w < 23 and i % 12 == 0 and t > 20 else 1.0)
     g.st.base_slow = 0.0
     while not (g.st.mode == "check" and g.st.why == "slow"):
@@ -1596,7 +1590,7 @@ def test_a_look_for_slow_frames_that_is_cut_short_says_nothing_in_the_next_look(
 
 
 @pytest.mark.parametrize("ratio", [1.3, 2.0, 4.0])
-@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("target", [60, 120])
 @pytest.mark.parametrize("draws_the_limit", [True, False])
 def test_a_menu_that_opens_at_any_moment_of_a_look_never_costs_the_game_its_limit(ratio, target, draws_the_limit):
     """A menu over a game on a 30 fps lock, opened at any moment of the governor's half second, for 20 s. A look that
@@ -1624,7 +1618,7 @@ def test_a_lighter_scene_that_frees_the_limit_gets_no_look_at_the_full_limit():
     the reference within a few looks): no look at the full limit. Without `binds` in the rule, the "moved 3 %, a
     minute since the last look" clause fires in the looks before the free reference is taken."""
     lift = {"x": 1.0, "free": False}
-    g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
     g.draw = lambda w, t: float(w) - (3.0 if lift["free"] else 0.0)
     g.run(100)
     assert g.st.mode == "hold" and g.limit < 26
@@ -1662,7 +1656,7 @@ def test_a_dip_soon_after_a_write_is_not_one_of_the_games_own(age, booked, held)
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16),
                  fps=lambda w, t: (60.0 if w >= 14 else 4.0 * w) * (0.8 if low(t) else 1.0))
     else:
-        g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w, t: (60.0 if w >= 30 else 40.0) * (0.8 if low(t) else 1.0))
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w, t: (60.0 if w >= 30 else 40.0) * (0.8 if low(t) else 1.0))
     g.run(1)
     while not ((g.limit < 30) == held and g.st.mode == "hold" and age - 0.6 <= g.t - g.st.changed_at <= age
                and g.st.quiet_until > g.t + 3):
@@ -1679,7 +1673,7 @@ def test_in_a_game_that_dips_and_stutters_a_step_that_holds_gets_no_look():
     """One frame in ten is half as long again (an emulator that stutters): the rate is 5 % under what the typical
     frame says. A step in a game that dips is judged on its typical frame against the typical frame before it; against
     the rate before it, every step that held looked like 5 % gained, and got a look at the full limit."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 60.0, shape=lambda i, w, t: 1.5 if i % 10 == 0 else 1.0)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0, shape=lambda i, w, t: 1.5 if i % 10 == 0 else 1.0)
     g.st.dips.extend([0.0, 0.0])
     g.run(12)
     assert [w for _, w in g.writes[:3]] == [28, 26, 24], g.writes
@@ -1690,7 +1684,7 @@ def test_long_frames_in_a_sessions_first_moments_are_not_the_start_levels_rate(l
     """No target, a start level that is enough, and the session's first frames are long ones. What the start level
     gives is asked of its last 20 frames; on the pace, which had the long ones in it, the full limit seemed to give
     a fifth more: the start level was booked as failed and the limit stayed up."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=16), fps=lambda w: 60.0 if w >= 12 else 5.0 * w,
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=lambda w: 60.0 if w >= 12 else 5.0 * w,
              shape=lambda i, w, t: factor if t < long_s else 1.0)
     g.run(20)
     assert 16 not in g.st.fail and g.limit <= 14, (g.writes, g.notes[:3])
@@ -1722,7 +1716,7 @@ def test_a_need_that_fell_behind_a_video_at_the_same_frame_rate_is_found_by_the_
     """60 fps from 30 W before a video, from 20 W after it, and nothing in the frames says so (a video or a menu
     changes nothing for the game that comes back). The level that failed is tried again when its time is up, at most
     AFTER_LOSS_MAX_S later, and the way down goes on from there."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30))
     g.draw = lambda w, t: float(w)
     g.run(150)
     g.fps = lambda w: 30.0
@@ -1736,7 +1730,7 @@ def test_a_need_that_fell_behind_a_video_at_the_same_frame_rate_is_found_by_the_
 @pytest.mark.parametrize("lag", [0.3, 0.6])
 @pytest.mark.parametrize("heavy", [27, 29, 30])
 @pytest.mark.parametrize("loading", [0, 3])
-@pytest.mark.parametrize("target, cap", [(30, 40.0), (30, 30.0), (None, 30.0)])
+@pytest.mark.parametrize("target, cap", [(30, 40.0), (30, 30.0), (120, 30.0)])
 def test_a_step_that_starves_the_game_is_a_failed_step_and_is_not_tried_again_every_few_seconds(lag, heavy, loading,
                                                                                                target, cap):
     """A game on a frame limit gives the same frames at the full limit in a place that needs 8 W and in one that needs
@@ -1868,8 +1862,8 @@ def test_the_next_try_of_a_level_that_failed_for_slow_frames_is_watched_ten_seco
 
 def test_a_look_for_slow_frames_ends_after_ten_seconds_in_a_game_of_few_frames():
     """A share of slow frames needs 240 frames. At 20 fps those take 12 s: the look ends after 10."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=16), fps=lambda w: 20.0,
-             shape=lambda i, w, t: 1.3 if w < 23 and i % 12 == 0 and t > 20 else 1.0)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=lambda w: 20.0,
+             shape=lambda i, w, t: 1.3 if w < 27 and i % 12 == 0 and t > 40 else 1.0)
     g.st.base_slow = 0.0
     while not (g.st.mode == "check" and g.st.why == "slow"):
         g.run(0.1)
@@ -1900,7 +1894,7 @@ def test_a_look_is_judged_when_the_package_draw_has_stopped_rising(a_look, judge
 
 
 # ---- what a look found is that place's ------------------------------------------------------------------------------
-@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("target", [60, 120])
 @pytest.mark.parametrize("other, seconds, lost, need", [(30.0, 12, 30.0, 28), (53.0, 12, 54.0, 20), (56.0, 20, 55.0, 20),
                                                         (45.0, 40, 48.0, 24)])
 def test_a_loss_at_the_frame_rate_of_an_earlier_video_or_heavier_place_gets_the_full_limit(other, seconds, lost, need, target):
@@ -1928,7 +1922,7 @@ def test_a_loss_at_the_frame_rate_of_an_earlier_video_or_heavier_place_gets_the_
     assert first is not None and first - t0 <= 3.0 and g.limit >= need, (first, t0, g.limit, g.since(t0)[:6])
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_a_heavier_place_at_the_frame_rate_of_an_earlier_video_is_a_loss(target):
     """A 30 fps video over a game held at the 12 W it needs: one look, the scene. The game again. Later a place that
     needs 24 W gives the video's 30 fps at 12 W and 60 at the full limit: a fall, not the video's band again (120 s of
@@ -1951,7 +1945,7 @@ def test_a_heavier_place_at_the_frame_rate_of_an_earlier_video_is_a_loss(target)
     assert lost <= 12, lost
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_the_game_after_an_intro_video_that_drew_little_is_not_held_at_the_videos_limit(target):
     """A 30 fps intro video that draws 6 W, then the game: 60 fps from 22 W, 30 under it, and the package draws all
     of the limit. The band of the lowered limit was taken while the package drew far less than it: nothing is known
@@ -2005,7 +1999,7 @@ def test_in_a_lighter_scene_a_level_that_failed_is_tried_again_as_a_first_failur
     """14 W fails in a scene where the full limit gives 60 fps. From 150 s on the full limit gives 80 (a third more:
     another scene): 14 W is tried again there without its wait, and when it fails there too that is a first failure
     (the next try after 2 minutes, not 8)."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None), fps=lambda w, t: (60.0 if t < 150 else 80.0) * min(1.0, w / 15))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w, t: (60.0 if t < 150 else 80.0) * min(1.0, w / 15))
     g.draw = lambda w, t: float(w)
     g.run(150)
     assert g.st.fail[14][1] == 2 and g.st.fail[14][0] > 300, g.st.fail[14]       # failed twice: the next try at 379 s
@@ -2015,7 +2009,7 @@ def test_in_a_lighter_scene_a_level_that_failed_is_tried_again_as_a_first_failur
     assert g.st.fail[14][1] == 1 and g.st.fail[14][2] == pytest.approx(80.0, rel=0.02), g.st.fail[14]
 
 
-@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("target", [60, 120])
 def test_the_level_that_held_in_another_place_is_not_taken_in_a_menu(target):
     """A light place held at 14 W for minutes, then a heavy place (45 fps from 26 W) held near 26 W. A menu at 60 fps
     over it for 20 s: no step from the menu's frames, and not the light place's level either."""
@@ -2034,7 +2028,7 @@ def test_the_level_that_held_in_another_place_is_not_taken_in_a_menu(target):
     assert all(w >= 25 for w in g.since(t0)), g.since(t0)
 
 
-@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("target", [60, 120])
 @pytest.mark.parametrize("menu_s", [20, 28])
 def test_a_menu_at_nearly_the_games_frame_rate_takes_no_step_down_when_the_package_draws_less(menu_s, target):
     """A title screen and a menu at 60 fps, a game at 52 fps from 20 W: by its frame rate the menu is no other scene
@@ -2063,7 +2057,7 @@ def test_bursts_of_the_games_own_slow_frames_are_not_the_limits():
     assert g.limit <= 17 and len(late) <= 18 and not [n for a, n in g.notes if a >= 120 and "none of the slow frames" in n], (g.limit, late)
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("drop", [0.035, 0.045, 0.06, 0.12])
 def test_a_fall_that_stays_at_the_full_limit_is_no_dip_of_the_games_own(drop, target):
     """At the full limit a place gets heavier for good. A dip of the game's own is over within 2 s: a frame rate that
@@ -2110,7 +2104,7 @@ def test_the_share_of_slow_frames_before_a_look_is_counted_as_every_other_share(
     assert looks
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("rise, looked", [(0.025, False), (0.035, True), (0.045, True), (0.06, True)])
 def test_a_few_percent_more_frames_at_a_held_limit_get_a_look_at_the_full_limit(target, rise, looked):
     """A place where 17 W of 25 holds the frames (45 of 47 fps), then one where 17 W gives a little more than it did
@@ -2125,7 +2119,7 @@ def test_a_few_percent_more_frames_at_a_held_limit_get_a_look_at_the_full_limit(
     assert (up and up[0] <= 3.0) if looked else not up, (held, up, [n for n in g.notes if n[0] >= t0])
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_a_failed_step_is_not_gone_back_from_when_the_full_limit_gives_far_more_than_the_limit_before(target):
     """A place that gives 45 fps from 12 W up (25 at 11 W), then one with the same 45 fps at 12 W and 60 at the full
     limit. The step to 11 W loses 20 fps and gets the full limit: 60 fps there is another scene than the 45 before the
@@ -2141,7 +2135,7 @@ def test_a_failed_step_is_not_gone_back_from_when_the_full_limit_gives_far_more_
     assert fps(g.limit) >= 57.0, (g.limit, [n for n in g.notes if n[0] >= 180])
 
 
-@pytest.mark.parametrize("target", [None, 90])
+@pytest.mark.parametrize("target", [120, 90])
 @pytest.mark.parametrize("draw, waits", [(6.0, True), ("the limit", False), (None, False)])
 def test_a_far_slower_pace_that_leaves_the_chip_free_is_stepped_in_after_the_wait_of_a_new_scene(target, draw, waits):
     """A 100 fps game, then 30 fps at every limit. Where the package draws 6 W of the limit (a video) the full limit
@@ -2166,7 +2160,7 @@ def test_a_band_that_comes_back_after_a_visit_elsewhere_is_known_again_for_half_
     again. Back within SCENE_S the game's band is known again and nothing is written. After that long the same pace
     may be another place's: the full limit is asked once."""
     place = {"other": False}
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
     g.draw = lambda w, t: float(w)
     g.run(400)
     place["other"] = True
@@ -2189,7 +2183,7 @@ def test_a_second_try_that_failed_does_not_make_the_next_step_a_second_try():
     assert g.limit >= 18 and list(g.st.dips) == [], (g.limit, list(g.st.dips), [n for n in g.notes if n[0] >= 120])
 
 
-@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("target", [120, 60])
 def test_in_a_game_that_dips_a_second_try_that_loses_is_taken_back_at_once(target):
     """A game that dips by itself, held at 14 W for minutes; the need rises to 18 W. The fall is waited out a second
     (it may be a dip), the full limit shows it was not, and 14 W is tried once more: that loss was waited out once
@@ -2212,7 +2206,7 @@ def test_a_band_that_comes_back_is_not_taken_for_one_of_a_place_that_left_the_ch
     (one look: the scene), then the game again. The game's band is its own: the package drawing all of the limit again
     says nothing against it, and no look follows."""
     place = {"other": False}
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
     g.draw = lambda w, t: 6.0 if place["other"] else float(w)
     g.run(100)
     place["other"] = True

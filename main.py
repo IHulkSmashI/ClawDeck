@@ -536,9 +536,8 @@ class Plugin:
         st["limit_w"] = s.ceiling_tdp if s is not None else None
         st["autotune_w"] = s.learned.tdp if s is not None and not s.paused else None
         st["autotune_floor"] = self.settings.get("autotune_floor")
-        st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
-        st["autotune_target"] = int(self.settings.get("autotune_target") or 0)
-        st["autotune_auto_fps"] = self.settings.get("autotune_auto_fps", True) is not False
+        st["autotune_target"], st["autotune_auto_fps"] = self.autotune.target_of(
+            int(self.settings.get("autotune_target") or 0), self.settings.get("autotune_auto_fps", True) is not False)
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -804,7 +803,6 @@ class Plugin:
             ceiling = result["applied"].get("tdp") or hi
             floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
             self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
-                                keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, frontend.steam_appid(appid)), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
                                 auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
@@ -1096,17 +1094,16 @@ class Plugin:
         return int(fg) if fg >= 2 and launch.get("opti_fg") != "off" else 0
 
     async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
-        """Autotune target: 0 / None = nearly the most frames for the watts (as before); a number = the fewest watts
-        that hold that many rendered fps. Auto FPS: an out-of-reach target becomes the closest fps it can hold.
+        """Autotune target: the fewest watts that hold that many rendered fps. Auto FPS: an out-of-reach target
+        becomes the closest fps it can hold. 0 / None: the screen's highest refresh rate with Auto FPS.
         Applies to the running game at once (from the limit in use), and to every game from its start."""
         t = int(fps or 0)
-        t = 0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240))
-        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, bool(auto_fps)
+        t, auto_fps = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)), auto_fps)
+        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, auto_fps
         self._save_settings()
-        self.autotune.set_target(t or None, bool(auto_fps))
-        words = (f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
-                 if t else "Autotune: nearly the most frames for the watts")
-        return {"ok": True, "target": t, "auto_fps": bool(auto_fps), "summary": words, "error": None}
+        self.autotune.set_target(t, auto_fps)
+        words = f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
+        return {"ok": True, "target": t, "auto_fps": auto_fps, "summary": words, "error": None}
 
     async def get_autotune(self) -> dict:
         st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid,
@@ -1134,15 +1131,6 @@ class Plugin:
         if not shutil.which("mangohud"):
             return "MangoHud isn't installed, and Autotune reads frame times through it"
         return "waiting for the game's first frame times (start a level, not a menu)"
-
-    async def set_autotune_keep(self, pct: float) -> dict:
-        """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,
-        larger = more battery."""
-        pct = max(2.0, min(float(pct), 15.0))
-        self.settings["autotune_keep"] = pct
-        self._save_settings()
-        self.autotune.set_keep(pct)
-        return {"ok": True, "keep_pct": pct, "summary": f"Autotune keeps within {pct:g} % of the most the TDP gives", "error": None}
 
     # ---- per-game launch environment (XeSS XMX, XeLL) --------------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:

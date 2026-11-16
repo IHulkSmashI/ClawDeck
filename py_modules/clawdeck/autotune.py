@@ -1,7 +1,7 @@
 """Autotune: for the running game, the fewest watts that still give the frames it has to deliver.
 
-With a target fps (Power -> Autotune target) that is your target; without one, nearly the most frames your limit gives
-(within KEEP_PCT or KEEP_FPS). The limit you picked (profile or slider) is the most it uses.
+That is your target fps (Power -> Autotune target), or what the full limit gives when the target is out of reach
+(Auto FPS). The limit you picked (profile or slider) is the most it uses.
 
 The deciding is in governor.py: one question asked all the time (would more watts give frames that are owed?), a step
 down that is watched on every frame and taken back at the first loss, the full limit at once when frames are lost. It
@@ -50,9 +50,6 @@ log = logging.getLogger("clawdeck.autotune")
 
 LOG_RESCAN_S = 30       # look for a new MangoHud log file this often (a new file appears only when a game starts)
 BUSY_EVERY_S = 10       # PowerStation's GPU load is read at most this often (one D-Bus call)
-KEEP_PCT = 5            # no target: the frames stay within this % of what your limit gives (user setting, 2-15)
-KEEP_FPS = governor.KEEP_FPS   # ... or within this many fps, whichever is more (maintainer, 2026-11-04: "lose 1-2 fps,
-                        # save 5-10 W: save the watts")
 XELL_FRESH_S = 15       # a rendered-frame figure older than this no longer counts
 # Frames: every game has Steam's overlay, mangoapp, which gamescope feeds every frame of the focused app (also a game
 # without ClawDeck's launch wrapper on its shortcut: a Flatpak emulator, a game started some other way). mangoapp writes one
@@ -499,8 +496,7 @@ class Session:
     floor_tdp: int
     ceiling_tdp: int
     learned: Learned
-    keep_pct: float = KEEP_PCT
-    phase: str = "hold"             # "target" with a target fps, else "hold" (what the panel words hang on)
+    phase: str = "target"           # (the log's and the panel's word)
     paused: bool = False
     gov: governor.State | None = None   # the governor's memory (governor.py)
     cfg: governor.Cfg | None = None
@@ -537,18 +533,18 @@ class Session:
     mult_ms: float = 0.0
     refused: bool = False               # the last TDP write was not applied ...
     refused_until: float = -1e9         # ... and until then no other is tried (the governor rests)
-    user_target: int | None = None
+    user_target: int = 0
     auto_fps: bool = True
 
     @property
-    def target(self) -> float | None:
-        if not self.user_target or self.gov is None or self.cfg is None:
-            return float(self.user_target) if self.user_target else None
+    def target(self) -> float:
+        if self.gov is None or self.cfg is None:
+            return float(self.user_target)
         return self.gov.ref if governor.out_of_reach(self.gov, self.cfg) else float(self.user_target)
 
     @property
     def unreachable(self) -> bool:
-        return bool(self.user_target and self.gov is not None and self.gov.ref is not None
+        return bool(self.gov is not None and self.gov.ref is not None
                     and self.gov.ref < self.user_target * governor.REACHED)
 
 
@@ -566,18 +562,25 @@ class Autotune:
         self.enabled = False
 
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
+    def target_of(self, target: int | None, auto_fps: bool = True) -> tuple[int, bool]:
+        """The target and Auto FPS in force. No target set: the screen's highest refresh rate with Auto FPS, so the
+        most frames the limit gives are held."""
+        if target:
+            return int(target), bool(auto_fps)
+        return max(self.hw.model.get("panel_hz") or [60]), True
+
     def start(self, appid: str, learned: dict | None, floor_tdp: int, ceiling_tdp: int, plugged: bool | None = None,
-              keep_pct: float | None = None, xell_log: str | None = None, target: int | None = None,
+              xell_log: str | None = None, target: int | None = None,
               auto_fps: bool = True, fg: int = 0, at_limit: bool = False) -> None:
         """Start for a game: where it held last time under the same limit and for the same target, else mid-range.
         at_limit: the limit was picked just now, in the game, and goes on the chip as picked."""
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
-        same = known.get("ceiling") == ceiling_tdp and (known.get("target") or None) == (int(target) if target else None)
-        l = Learned(tdp=ceiling_tdp, ceiling=ceiling_tdp, target=int(target) if target else None)
+        target, auto_fps = self.target_of(target, auto_fps)
+        same = known.get("ceiling") == ceiling_tdp and self.target_of(known.get("target"))[0] == target
+        l = Learned(tdp=ceiling_tdp, ceiling=ceiling_tdp, target=target)
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
-                    keep_pct=float(keep_pct or KEEP_PCT), phase="target" if target else "hold",
-                    user_target=int(target) if target else None, auto_fps=bool(auto_fps), fg=int(fg or 0))
+                    user_target=target, auto_fps=auto_fps, fg=int(fg or 0))
         s.started_at = s.own_checked_at = time.monotonic()
         self.session = s
         self.sampler.set_prefix(xell_log)
@@ -600,8 +603,8 @@ class Autotune:
 
     def _govern_from(self, s: Session, start_w: int | None) -> None:
         """A fresh governor for this session, from `start_w` (None: mid-range); the caller writes its limit."""
-        s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target) if s.user_target else None,
-                             keep_pct=s.keep_pct, auto_fps=s.auto_fps, start_w=start_w)
+        s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target),
+                             auto_fps=s.auto_fps, start_w=start_w)
         s.gov, act = governor.start(s.cfg, time.monotonic())
         s.learned.tdp = min(act.limit_w, self._top(s))
         s.gov.limit = s.learned.tdp
@@ -618,8 +621,7 @@ class Autotune:
         back = s.paused and self.enabled and not s.own_pace and s.no_fps_s < NO_FPS_S
         if back:
             s.paused, self.power.governed = False, True
-        s.user_target, s.auto_fps = (int(target) if target else None), bool(auto_fps)
-        s.phase = "target" if target else "hold"
+        s.user_target, s.auto_fps = self.target_of(target, auto_fps)
         s.learned.target, s.learned.target_eff, s.learned.start = s.user_target, None, None
         s.settled = False
         on_chip = s.learned.tdp
@@ -643,12 +645,6 @@ class Autotune:
         if s.learned.tdp < s.floor_tdp and self._tdp(s.learned, s.floor_tdp) and s.gov:
             s.gov.limit = s.learned.tdp
             governor.drop(s.gov)
-
-    def set_keep(self, pct: float) -> None:
-        if self.session:
-            self.session.keep_pct = max(1.0, min(float(pct), 25.0))
-            if self.session.cfg:
-                self.session.cfg.keep_pct = self.session.keep_pct
 
     def thermal_step(self, watts: int) -> bool:
         """The temperature guard (thermal.py) brings the TDP down: from now on autotune works under `watts`."""
@@ -1010,17 +1006,16 @@ class Autotune:
         return {"running": True, "enabled": self.enabled, "appid": s.appid, "paused": s.paused, "phase": s.phase,
                 "step": s.gov.mode if governing else None,
                 "learned": l.__dict__, "bound": l.bound, "tdp": l.tdp, "ceiling_tdp": s.ceiling_tdp,
-                "floor_tdp": s.floor_tdp, "plugged": self.plugged, "keep_pct": s.keep_pct, "keep_fps": KEEP_FPS,
+                "floor_tdp": s.floor_tdp, "plugged": self.plugged,
                 "saves_w": (s.ceiling_tdp - l.tdp) if (governing and s.ceiling_tdp > l.tdp) else None,
                 "max_fps": r(l.max_fps), "avg_fps": r(s.avg_fps), "low_fps": r(s.low_fps),
-                "pct_of_max": None if not (l.max_fps and s.avg_fps) else round(100 * s.avg_fps / l.max_fps),
                 "fps_per_w": None if s.fps_per_w is None else round(s.fps_per_w, 2), "source": s.source,
                 "multiplier": s.multiplier, "window_s": governor.DWELL_S, "thermal_cap": s.thermal_cap,
                 "no_frames": s.no_frames, "own_pace": s.own_pace, "own_pace_why": OWN_PACE.get(s.own_pace or ""),
                 "learning": governing and not s.settled,
                 "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,
-                "target": None if s.target is None else round(s.target), "user_target": s.user_target,
+                "target": round(s.target), "user_target": s.user_target,
                 "auto_fps": s.auto_fps, "unreachable": s.unreachable, "best_fps": r(l.max_fps) if s.unreachable else None,
                 "floor_learned": None, "fg": s.fg,
                 "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),

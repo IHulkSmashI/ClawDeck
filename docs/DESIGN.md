@@ -172,14 +172,15 @@ What it knows:
   for 30 s, when it is the faster one or had stood for 30 s (the game comes back to it after a menu); the band of a
   short visit to a slower place is not (another place, where the last watts count for more, has that pace too). Up
   to the highest pace at which the full limit gave no more at this limit, more frames are no news. A band
-  taken while the package drew 2 W or more under the limit is dropped when the package draws all of that limit.
+  taken while the package drew 2 W or more under the limit (also by a step watched at such a draw) is dropped when
+  the package draws all of that limit.
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
-- **The goal** is your target less 5 %. With no target, or when the band's lower edge is under that (the full limit
-  gave less than your target at the band's look; Auto FPS on), it is what the full limit gives less 5 % (no target:
-  less the keep margin, 5 % by default and at least 2 fps): for a step down what it gives now, and while a limit is
-  held what it gave when the band was taken (the band's lower edge over the ratio). A pace that falls from the band
-  and stays over that goal is no loss.
+- **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your
+  target at the band's look; Auto FPS on), it is what the full limit gives less 5 %: for a step down what it gives
+  now, and while a limit is held what it gave when the band was taken (the band's lower edge over the ratio). A pace
+  that falls from the band and stays over that goal is no loss. There is always a target: none set is the screen's
+  highest refresh rate with Auto FPS, so the most frames the limit gives, less 5 %.
 - **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
   Frame rates are frames over their time, without frames over 2.5 times the median.
 
@@ -193,7 +194,9 @@ The rules:
      when they all lie in one burst, within a third of the frames: those are the game's) at the third level in 2
      minutes: the first two get one watt more and no look (the edge of an emulator's limit is a watt wide). The look
      then lasts 240 frames, at most 10 s;
-   - nothing is known at this limit and there is no target (with a target, a pace under it is a fall).
+   - nothing is known at this limit (the start, after a loading screen, watts back from the guard), the pace is
+     under your target and the package draws all of the limit: a fall. Where the package draws 2 W less, the limit
+     holds nothing back, and the band comes from those frames.
    Under the guard's clock cap only a fall starts one. None starts by the clock, and none because a step held or
    failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and each found the frames it had,
    and the auto-TDP governors of other projects have none.
