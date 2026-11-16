@@ -854,6 +854,37 @@ def test_one_watt_under_the_full_limit_gets_no_look_while_the_frames_say_nothing
     assert 30 not in g.since(t0), [n for n in g.notes if n[0] >= t0][:4]
 
 
+def test_the_full_limit_is_looked_at_ten_minutes_after_the_last_look():
+    """A game that holds at 14 W and shows nothing: one look at the full limit, 10 minutes after the last one."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=HOLDS_FROM_14).run(100)
+    last, t0 = [t for t, w in g.writes if w == 30][-1], g.t
+    g.run(700)
+    looks = [t - last for t, w in g.writes if t >= t0 and w == 30]
+    assert len(looks) == 1 and 600 <= looks[0] <= 660, (looks, g.notes[-6:])
+
+
+@pytest.mark.parametrize("at", [1.0, 1.5, 2.0])
+def test_a_step_that_held_while_the_frames_were_not_steady_is_followed_by_ten_quiet_seconds(at):
+    """One half second of 4 % fewer frames while the first step down is watched: the step holds, and the next one waits
+    10 s from there (2.5 s of watch and 10 s)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=HOLDS_FROM_14)
+    while not g.writes:
+        g.run(0.1)
+    t1 = g.writes[0][0]
+    g.fps = lambda w, t: HOLDS_FROM_14(w) * (0.96 if t1 + at <= t < t1 + at + 0.5 else 1.0)
+    g.run(20)
+    assert g.writes[1][1] < g.writes[0][1] and 12.0 <= g.writes[1][0] - t1 <= 14.0, g.writes[:3]
+
+
+@pytest.mark.parametrize("every, steps", [(2.5, False), (4.0, True)])
+def test_no_step_down_while_a_half_second_of_the_last_three_was_slower(every, steps):
+    """A game that makes 4 % fewer frames for half a second every 2.5 s is never steady for 3 s: no step down. With
+    such a half second every 4 s there are 3 steady seconds between two of them: the way down goes on."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=20),
+             fps=lambda w, t: HOLDS_FROM_14(w) * (0.96 if int(t / 0.5) % int(every / 0.5) == 0 else 1.0)).run(120)
+    assert bool([w for t, w in g.writes if w < 20]) == steps, g.writes[:8]
+
+
 def test_a_loading_screen_does_not_lower_the_reference():
     """No frames and a package far under the limit for some seconds. The pace is still that of the frames before
     (rendered with the limit holding the game back) while the look's draw says the limit holds nothing back: the looks
@@ -1181,6 +1212,8 @@ def test_the_thresholds_follow_the_games_wobble_up_to_four_times_and_no_further(
     assert writes[0][1] == 30 and writes[0][0] <= 0.6, writes
     held, writes = after(54.0)                                       # 5 % under it
     assert writes and writes[0][1] == 30 and writes[0][0] <= gov.DWELL_S + 1.5, writes
+    held, writes = after(55.6)                                       # 2.5 % under it: inside this game's wobble
+    assert not [w for t, w in writes if t <= 3.0], writes
 
 
 def _raise_then(kind):
