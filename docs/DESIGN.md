@@ -203,8 +203,8 @@ It asks one question all the time: would more watts, up to your limit, give fram
     them at a held limit: one watt more, at most every 10 s. A watt that changed nothing: one look at the full limit
     says whose they are. None there: the limit's, it stays up and comes down by steps judged against the share
     there. As many there: the game's own in this place, the limit stays. The share is taken at every such look.
-  - *The reference* while a limit is held that can't hold the game back is the median of the last five looks, not the
-    last one; a look at the full limit made on purpose (after a loss, or to check) sets it from that look's frames:
+  - *The reference* while a limit is held that can't hold the game back is the median of the last five to ten looks, not
+    the last one; a look at the full limit made on purpose (after a loss, or to check) sets it from that look's frames:
     at least a second and 30 frames of them (a 20 fps game takes longer), once the draw and the frame rate have
     stopped climbing.
   - A step down is watched from when the package draws under 2.5 W over the new limit (at most 3 s late); a raise is
