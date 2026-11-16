@@ -1465,46 +1465,6 @@ def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin)
     assert p.run(p.get_power())["autotune_w"] is None
 
 
-def _proc(root, pid, comm, exe=None, cmdline=(), environ=()):
-    """A process in a made-up /proc: its name, the file it runs (a link), its arguments and its environment."""
-    _w(str(root / pid / "comm"), comm)
-    if exe:
-        os.symlink(exe, str(root / pid / "exe"))
-    for name, parts in (("cmdline", cmdline), ("environ", environ)):
-        with open(str(root / pid / name), "wb") as f:
-            f.write(b"".join(p.encode() + b"\0" for p in parts))
-
-
-def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
-    """An AppImage's program runs as "AppRun": in xemu's own AppImage, AppRun is a link to usr/bin/xemu, and a program
-    started through a link has the link's name. The check went by the process name alone, so Autotune governed the
-    game on xemu's 60 shown frames: a 60 fps target, the limit down to 8 W (Project Gotham Racing 2, 2026-11-15; the
-    Flatpak's process is "xemu"). Found by the file it runs; for other AppImage layouts, by what it was started as or
-    by the AppImage it came from."""
-    def running(*procs):
-        root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
-        _proc(root, "1", "systemd", exe="/usr/lib/systemd/systemd")
-        for i, kw in enumerate(procs):
-            _proc(root, str(4000 + i), **kw)
-        return autotune.own_pace_emulator(str(root))
-    # xemu's AppImage as measured: AppRun is a link to the program, so the file it runs says it
-    assert running(dict(comm="AppRun", exe="/tmp/.mount_xemu-vUq3Zx/usr/bin/xemu",
-                        cmdline=["/tmp/.mount_xemu-vUq3Zx/AppRun", "-dvd_path", "/roms/xbox/PGR2.iso"])) == "xemu"
-    # (not seen, possible) AppRun is the program itself: only the AppImage's name says it
-    assert running(dict(comm="AppRun", exe="/tmp/.mount_xemuNiA1b2c/AppRun", cmdline=["/tmp/.mount_xemuNiA1b2c/AppRun"],
-                        environ=["HOME=/home/deck", "APPIMAGE=/home/deck/Applications/xemu-v0.8.53-x86_64.AppImage"])) == "xemu"
-    # started through a launcher that names it
-    assert running(dict(comm="AppRun", exe="/tmp/.mount_abc/AppRun", cmdline=["/home/deck/Emulation/tools/xemu.AppImage", "-full-screen"])) == "xemu"
-    # another program's AppImage, and programs that only carry the letters
-    assert running(dict(comm="AppRun", exe="/tmp/.mount_Cemu-2xYz12/usr/bin/Cemu", cmdline=["/tmp/.mount_Cemu-2xYz12/AppRun"],
-                        environ=["APPIMAGE=/home/deck/Applications/Cemu-2.6-x86_64.AppImage"])) is None
-    assert running(dict(comm="AppRun", exe="/tmp/.mount_xemulaAbCdEf/AppRun", environ=["APPIMAGE=/home/deck/Applications/xemulator.AppImage"])) is None
-    assert running(dict(comm="bash", exe="/usr/bin/bash", cmdline=["bash", "/home/deck/Emulation/tools/launchers/xemu-emu.sh"])) is None
-    # a process renamed by its program, still the file xemu
-    assert running(dict(comm="MainThread", exe="/app/bin/xemu")) == "xemu"
-    assert running(dict(comm="xemu")) == "xemu"                        # as before: the name (no exe to read, as a user)
-
-
 def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw, monkeypatch, tmp_path):
     """xemu presents 60 fps whatever the emulated game does (16-18 game fps at 16 W, 2026-11-14) and slows the game
     under its own draw: no frame rate can steer a lower limit there. Found a few seconds in (an ES-DE game starts the

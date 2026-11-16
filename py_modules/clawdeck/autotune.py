@@ -453,47 +453,15 @@ NO_FPS_S = 30          # seconds without any frame rate before autotune gives up
 # Emulators whose frame rate is not the game's: xemu presents 60 frames a second whatever the emulated game does
 # (Project Gotham Racing 2 at a 16 W limit: 16-18 game fps, 60 shown; 2026-11-14), and under its own draw (~20 W on a
 # Claw 8 EX) the game slows down. No frame rate can show Autotune what a lower limit costs there, so it stays out of
-# these and your limit stays on the chip. Looked for (process name, the file it runs, an AppImage's name) a few seconds
-# into a game: a frontend starts the emulator after the game-start event.
+# these and your limit stays on the chip. Looked for (process name) a few seconds into a game: a frontend starts the
+# emulator after the game-start event.
 OWN_PACE = {"xemu": "it shows 60 fps whatever the game's speed"}
 OWN_PACE_CHECK_S = (3, 10, 30)
 PROC = "/proc"
 
 
-APP_RUN = "AppRun"      # the name an AppImage's program runs under, whatever the program is
-
-
-def _own_pace_name(base: str, name: str) -> str | None:
-    """The OWN_PACE emulator the process under `base` (/proc/<pid>) is, or None: by its name; else by the file it
-    runs; else, for an AppImage's program, by what it was started as and by the AppImage it came from (APPIMAGE in its
-    environment). xemu from an AppImage runs as "AppRun": by the name alone Autotune governed it on its 60 shown
-    frames, down to 8 W (Project Gotham Racing 2, 2026-11-15)."""
-    if name in OWN_PACE:
-        return name
-    try:
-        exe = os.readlink(os.path.join(base, "exe"))
-    except OSError:
-        exe = ""
-    if os.path.basename(exe) in OWN_PACE:
-        return os.path.basename(exe)
-    if name != APP_RUN:
-        return None
-    texts = [exe]
-    for f, key in (("cmdline", b""), ("environ", b"APPIMAGE=")):
-        try:
-            with open(os.path.join(base, f), "rb") as fh:
-                parts = fh.read(65536).split(b"\0")
-        except OSError:
-            continue
-        texts += [p.decode("utf-8", errors="replace") for p in parts if p and p.startswith(key)]
-    for emu in OWN_PACE:                            # as a word of a path: xemu.AppImage, xemu-v0.8.5-x86_64.AppImage, usr/bin/xemu
-        if any(re.search(rf"(?:^|[^a-z0-9]){re.escape(emu)}(?:[^a-z0-9]|$)", t.lower()) for t in texts):
-            return emu
-    return None
-
-
 def own_pace_emulator(proc: str | None = None) -> str | None:
-    """The first OWN_PACE emulator running now, or None. One walk over /proc (see _own_pace_name)."""
+    """The first OWN_PACE emulator running now (its process name), or None. One walk over /proc/*/comm."""
     proc = proc or PROC
     try:
         pids = [d for d in os.listdir(proc) if d.isdigit()]
@@ -505,9 +473,8 @@ def own_pace_emulator(proc: str | None = None) -> str | None:
                 name = f.read().strip()
         except OSError:
             continue
-        emu = _own_pace_name(os.path.join(proc, d), name)
-        if emu:
-            return emu
+        if name in OWN_PACE:
+            return name
     return None
 
 

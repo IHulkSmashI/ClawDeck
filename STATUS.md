@@ -113,13 +113,6 @@ the new target counts from the next game. After a manual change a new target sti
 Check on the EX: Autotune on, an Xbox game from ES-DE until the Power line says "Autotune stays out of xemu", then
 pick another target: the line and the TDP (the pick) stay.
 
-**Autotune stays out of xemu from an AppImage too (2026-11-15):** xemu's own AppImage starts the program through
-`AppRun`, a link to `usr/bin/xemu`, and the process is then called "AppRun". The check for xemu went by the process
-name, so Autotune governed the game on xemu's 60 shown frames (Project Gotham Racing 2 with a 60 fps target: the TDP
-went down to 8 W). Now the check also reads the file a process runs (`/proc/<pid>/exe`), and for a process called
-AppRun its arguments and the AppImage's name. The Flatpak (EmuDeck's) was not affected. Check on the EX: Autotune on,
-an Xbox game started from xemu's AppImage: within 30 s the Power line says "Autotune stays out of xemu".
-
 **Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
 Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
