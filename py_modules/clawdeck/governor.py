@@ -797,9 +797,8 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
     if visit:
         # at a limit that holds the chip (and under the target, with one): whatever this is, more watts may give
         # more (the game back from a long video at the limit the video needed, a lighter place that wants more). One
-        # look at the full limit: after ABOVE_S, or BOUND_S after the package began to draw all of a limit that it did
-        # not draw all of when the reference was taken
-        woke = st.ref_free and st.bound_since is not None and t - st.bound_since >= BOUND_S
+        # look at the full limit: after ABOVE_S, or BOUND_S after the package began to draw all of the limit
+        woke = st.bound_since is not None and t - st.bound_since >= BOUND_S
         if _may_look(st, obs, cfg, top, here) and t - st.changed_at >= DWELL_S and (woke or t - st.visit_since >= ABOVE_S):
             st.lost, st.visit_look_at = cur, t
             watch("check", top, f"more frames at {st.limit} W than before: checking what the full {top} W gives")
