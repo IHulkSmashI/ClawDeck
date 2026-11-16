@@ -453,15 +453,29 @@ NO_FPS_S = 30          # seconds without any frame rate before autotune gives up
 # Emulators whose frame rate is not the game's: xemu presents 60 frames a second whatever the emulated game does
 # (Project Gotham Racing 2 at a 16 W limit: 16-18 game fps, 60 shown; 2026-11-14), and under its own draw (~20 W on a
 # Claw 8 EX) the game slows down. No frame rate can show Autotune what a lower limit costs there, so it stays out of
-# these and your limit stays on the chip. Looked for (process name) a few seconds into a game: a frontend starts the
-# emulator after the game-start event.
+# these and your limit stays on the chip. Looked for (process name, else the file it runs) a few seconds into a game:
+# a frontend starts the emulator after the game-start event.
 OWN_PACE = {"xemu": "it shows 60 fps whatever the game's speed"}
 OWN_PACE_CHECK_S = (3, 10, 30)
 PROC = "/proc"
 
 
+def _own_pace_name(base: str, name: str) -> str | None:
+    """The OWN_PACE emulator the process under `base` (/proc/<pid>) is, or None: by its name, else by the file it
+    runs. xemu from its AppImage runs as "AppRun" (a link to usr/bin/xemu; a program started through a link has the
+    link's name): by the name alone Autotune governed it on its 60 shown frames, down to 8 W (Project Gotham Racing 2,
+    2026-11-15)."""
+    if name in OWN_PACE:
+        return name
+    try:
+        exe = os.path.basename(os.readlink(os.path.join(base, "exe")))
+    except OSError:
+        return None
+    return exe if exe in OWN_PACE else None
+
+
 def own_pace_emulator(proc: str | None = None) -> str | None:
-    """The first OWN_PACE emulator running now (its process name), or None. One walk over /proc/*/comm."""
+    """The first OWN_PACE emulator running now, or None. One walk over /proc (see _own_pace_name)."""
     proc = proc or PROC
     try:
         pids = [d for d in os.listdir(proc) if d.isdigit()]
@@ -473,8 +487,9 @@ def own_pace_emulator(proc: str | None = None) -> str | None:
                 name = f.read().strip()
         except OSError:
             continue
-        if name in OWN_PACE:
-            return name
+        emu = _own_pace_name(os.path.join(proc, d), name)
+        if emu:
+            return emu
     return None
 
 

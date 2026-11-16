@@ -1465,6 +1465,24 @@ def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin)
     assert p.run(p.get_power())["autotune_w"] is None
 
 
+def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
+    """In xemu's own AppImage, AppRun is a link to usr/bin/xemu, and a program started through a link has the link's
+    name: the process is "AppRun". The check went by the process name alone, so Autotune governed the game on xemu's
+    60 shown frames: a 60 fps target, the limit down to 8 W (Project Gotham Racing 2, 2026-11-15; the Flatpak's process
+    is "xemu"). Found by the file it runs."""
+    def running(comm, exe=None):
+        root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
+        for pid, c, e in (("1", "systemd", "/usr/lib/systemd/systemd"), ("4000", comm, exe)):
+            _w(str(root / pid / "comm"), c)
+            if e:
+                os.symlink(e, str(root / pid / "exe"))
+        return autotune.own_pace_emulator(str(root))
+    assert running("AppRun", "/tmp/.mount_xemu-pekbPgK/usr/bin/xemu") == "xemu"      # as measured on the EX
+    assert running("AppRun", "/tmp/.mount_Cemu-2xYz12/usr/bin/Cemu") is None         # another program's AppImage
+    assert running("bash", "/usr/bin/bash") is None
+    assert running("xemu") == "xemu"                                                # as before: the name (no exe to read)
+
+
 def test_autotune_stays_out_of_xemu_and_gives_back_the_limit_you_picked(fake_hw, monkeypatch, tmp_path):
     """xemu presents 60 fps whatever the emulated game does (16-18 game fps at 16 W, 2026-11-14) and slows the game
     under its own draw: no frame rate can steer a lower limit there. Found a few seconds in (an ES-DE game starts the
