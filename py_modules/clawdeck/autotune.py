@@ -667,20 +667,20 @@ class Autotune:
 
     def thermal_clock(self, pct: int | None) -> None:
         """The temperature guard capped the CPU's top clock (a hot spot) or took the cap off: the same watts give other
-        frames now, so what failed or held before says nothing, and what the full limit gives is looked at again."""
+        frames now, so what failed or held before says nothing."""
         s = self.session
         if not s:
             return
         s.clock_pct = pct
         if s.gov:
             s.gov.fail.clear()
-            s.gov.misses, s.gov.ref_at, s.gov.home = 0, -1e9, None
+            s.gov.misses, s.gov.home = 0, None
         self._did(s, "thermal: CPU clock " + ("uncapped" if pct is None else f"capped at {pct} %"), "thermal")
 
     def thermal_release(self, watts: int) -> bool:
         """The package cooled down: the guard lets autotune use up to `watts` again. Nothing is raised here; the
-        governor looks at what the watts it got back give, and climbs if the game needs them. A paused autotune (xemu,
-        no frame rate, a manual change) never climbs: there the TDP itself goes back up with the guard, as for a game
+        governor forgets what it measured under the cap, and climbs if the game needs the watts. A paused autotune
+        (xemu, no frame rate, a manual change) never climbs: there the TDP itself goes back up with the guard, as for a game
         without autotune."""
         s = self.session
         if not s or s.thermal_cap is None:

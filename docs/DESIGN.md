@@ -147,8 +147,8 @@ coretemp's "Package id 0" as the fallback; `hw.find_pkg_temp`). Above 95 °C it 
 check until the package is under 90 °C, never below the floor (autotune's, else the user's, else the model's). With
 autotune running the step is `Autotune.thermal_step`: it becomes a cap the governor works under. A cap on the CPU
 clock (`thermal_clock`) makes it forget which levels failed (the same watts give other frames), and watts the guard
-gives back are not raised to, only looked at for what they give. The step stays until the user picks a profile or
-moves the slider (both reset the guard) or the power is reverted. The status line reads "thermal: stepped to N W".
+gives back are not raised to: the governor climbs when the frames ask for them. The step stays until the user picks a
+profile or moves the slider (both reset the guard) or the power is reverted. The status line reads "thermal: stepped to N W".
 The SoC's TCC limit and the EC fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
 
 ## Autotune governor (HARDWARE-FINDINGS §24)
@@ -168,15 +168,18 @@ What it knows:
 - **The band** is the pace at the held limit when the limit was last known to cost no more than the margin: by a look
   at the full limit, by the step that came here and held, or all the time while the limit can't hold the game back.
   Lowest and highest, at most 15 % apart. A band belongs to one reference: a pace further away, or a look at which
-  the full limit gives another frame rate than at the look before, starts a new band, and the one before is kept
-  once (the game comes back to it after a menu; when its look is over 30 s old the full limit is looked at). A band
+  the full limit gives another frame rate than at the look before, starts a new band. The one before is kept once,
+  for 30 s, when it is the faster one or had stood for 30 s (the game comes back to it after a menu); the band of a
+  short visit to a slower place is not (another place, where the last watts count for more, has that pace too). Up
+  to the highest pace at which the full limit gave no more at this limit, more frames are no news. A band
   taken while the package drew 2 W or more under the limit is dropped when the package draws all of that limit.
-  **The ratio** is what this limit gave over what the full limit gave when both were last measured. Between looks
+  **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. With no target, or when the band's lower edge is under that (the full limit
-  gave less than your target at the band's look; Auto FPS on), it is the band's lower edge while a limit is held,
-  and for a step down what the full limit gives less 5 % (no target: less the keep margin, 5 % by default and at
-  least 2 fps).
+  gave less than your target at the band's look; Auto FPS on), it is what the full limit gives less 5 % (no target:
+  less the keep margin, 5 % by default and at least 2 fps): for a step down what it gives now, and while a limit is
+  held what it gave when the band was taken (the band's lower edge over the ratio). A pace that falls from the band
+  and stays over that goal is no loss.
 - **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
   Frame rates are frames over their time, without frames over 2.5 times the median.
 
@@ -187,20 +190,19 @@ The rules:
    - the pace is 3 % over the band at a limit the package draws all of, and under your target (the game back from a
      video, a lighter place);
    - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; not
-     when they all lie in one burst, within a third of the frames: those are the game's; the look then lasts 240
-     frames, at most 10 s);
-   - nothing is known at this limit, steps down that did not start at the full limit have ended, or the last look
-     is 10 minutes old.
-   Under the guard's clock cap only a fall starts one, and for age alone none starts from one watt under the full
-   limit.
+     when they all lie in one burst, within a third of the frames: those are the game's) at the third level in 2
+     minutes: the first two get one watt more and no look (the edge of an emulator's limit is a watt wide). The look
+     then lasts 240 frames, at most 10 s;
+   - nothing is known at this limit and there is no target (with a target, a pace under it is a fall).
+   Under the guard's clock cap only a fall starts one. None starts by the clock, and none because a step held or
+   failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and each found the frames it had,
+   and the auto-TDP governors of other projects have none.
    One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, and the
    ratio is this look's. The band takes that pace in when the full limit gives what it gave at the look before; when
    it gives another frame rate this is another place, and its band is this look's alone (what a look found in a
-   slower place says nothing of a loss in the place after it). So a game whose own frame rate moves for seconds
-   costs a look each time, and no frames. Else the limit failed and the full limit stays; steps down follow. Two
-   exceptions: a level that had held for 20 s (or a game that dips by itself) is tried once more, watched, before it is
-   given up; and slow frames at a limit that held its frame rate get one watt more instead of the full limit, twice in
-   2 minutes (the edge of an emulator's limit is a watt wide).
+   slower place says nothing of a loss in the place after it). Else the limit failed and the full limit stays; steps
+   down follow. One exception: a level that had held for 20 s (or a game that dips by itself) is tried once more,
+   watched, before it is given up.
 2. **A step down** starts 5 s after the last write, from a pace that is in the band, that the last ten frames agree
    with and that stood still for 3 s. It goes to the level that held for 20 s in this scene; else halfway to the
    highest level under it that failed; else 2 W down, or straight to just over what the package draws. It is watched
@@ -210,9 +212,9 @@ The rules:
    each further failure (up to 10 minutes), and steps wait 5 s, twice that after each failure in a row (up to 5
    minutes). A step that loses 15 % gets the full limit at once: when that gives what the limit before gave, the
    level failed; when it gives fewer frames, or so many more that the limit before is under their goal, the scene
-   changed under the step and nothing is booked. A step that held but moved the
-   frame rate gets a look at once. After three steps in a row the rules of holding run, then the look. A step from
-   the full limit needs none: the frames before it were the full limit's.
+   changed under the step and nothing is booked. A step that held with 3 % more frames than before it gets a look at
+   once: a lower limit gives no more frames, so the scene changed under the step and its frames say nothing of its
+   cost. After three steps in a row the rules of holding run.
 3. **A scene has to stay.** The pace 15 % away for 5 s is another scene (frames over your target are not), and so is
    a package draw that falls 2 W under a limit it filled before (a menu at nearly the game's frame rate); no step
    down is tried in it for 30 s (a menu, a map, a video), except back to the level that held in the scene the game
@@ -227,10 +229,10 @@ The rules:
    being watched is taken back (a step down that leaves so few frames is judged as a step: it failed); a lowered
    limit goes to the full one while frames still come. When such frames stay for 5 s they are the game, and nothing
    known before applies; where the package then draws 2 W under the limit (a video), no step down is tried for
-   30 s, as in a new scene. After 5 s of them, and back in the band a limit had before a menu, a map or a video, the
-   scene may be another one with the same frame rate at this limit: the full limit is looked at once.
+   30 s, as in a new scene. After 5 s of them the scene may be another one with the same frame rate at this limit:
+   nothing is known at the limit any more.
 6. **The guard:** its cap is obeyed at once and a write being watched is dropped unjudged; under your floor the cap
-   wins. Watts given back are looked at like a limit never looked at.
+   wins. With watts given back, nothing that was measured under the cap is known any more.
 
 Also: a log with a row a second (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
 frames of the whole time since its row before. No frames for 30 s: your limit is applied again until frames
