@@ -1135,6 +1135,24 @@ def test_a_game_that_dips_gets_a_second_of_patience_and_the_dips_are_forgotten_a
     assert _loss_answered_after((310, 10)) <= 0.6                    # one dip in five minutes is not "dips by itself"
 
 
+@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("begins", [1.7, 2.0, 2.3])
+def test_in_a_game_that_dips_a_step_does_not_hold_while_a_loss_is_waited_out(begins, target):
+    """A game that dips, and a loss of 9 % that begins in the last second of a step's watch and stays. The watch does
+    not end as "holds" on the typical frame while the newest frames are under the goal: the step fails when the loss
+    has stayed a second, and the note names the frame rate that is under. Taken as held, the level was left by the
+    rules of holding: three writes and a second try, the loss a second longer."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=lambda w: 60.0)
+    g.st.dips.extend([0.0, 0.0])
+    while not g.writes:
+        g.run(0.1)
+    t1, tried = g.writes[0]
+    g.fps = lambda w, t: 60.0 * (0.91 if w < 30 and t >= t1 + begins else 1.0)
+    g.run(8)
+    assert g.writes[1:] == [(pytest.approx(t1 + begins + gov.PATIENT_S, abs=0.4), 30)] and tried in g.st.fail, g.writes
+    assert next(n for _, n in g.notes if "back to 30 W" in n).startswith(f"{tried} W: 54.6 fps, under 57.0"), g.notes
+
+
 def test_a_long_loss_at_the_full_limit_is_a_heavier_scene_not_a_dip():
     """A dip is over within DIP_MAX_S. Ten seconds of fewer frames at the full limit are a place in the game: counted
     as dips, two of them made the governor wait a second before every answer from then on."""

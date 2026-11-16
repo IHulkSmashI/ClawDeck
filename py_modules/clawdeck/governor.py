@@ -540,7 +540,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             watch("recover", top, f"{cur:.1f} fps at {tried} W, under {want:.1f}: the full {top} W", "fall")
             st.tried = tried
         elif lost or edge:
-            why = f"{got or cur:.1f} fps, under {want:.1f}" if lost else f"{slow} slow frames"
+            why = f"{got if got is not None and got < want else cur:.1f} fps, under {want:.1f}" if lost else f"{slow} slow frames"
             tried, before = st.limit, st.prev
             st.retest = False                        # (a loss that was waited out is waited for no more at the limit before)
             failed(tried, scene, edge and not lost)
