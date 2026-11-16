@@ -13,7 +13,7 @@ export type PowerStatus = {
   limit_w?: number | null; autotune_w?: number | null;   // in a game with Autotune: your limit, and what it uses now
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
-  custom_tdp?: number | null; autotune_floor?: number | null; autotune_target?: number; autotune_auto_fps?: boolean; thermal?: Thermal;
+  custom_tdp?: number | null; autotune_floor?: number | null; autotune_target?: number; autotune_auto_fps?: boolean; autotune_max?: number | null; autotune_governs?: boolean; thermal?: Thermal;
 };
 /** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
 export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; clock_pct?: number | null; draw_w?: number | null; line: string | null; stepped_s: number | null };
@@ -69,6 +69,7 @@ export const setGpuWindow = callable<[min: number | null, max: number | null], W
 export const setEpp = callable<[value: string], WriteResult>("set_epp");
 export const setGpuPowerProfile = callable<[saving: boolean], WriteResult>("set_gpu_power_profile");
 export const setAutotuneFloor = callable<[watts: number | null], WriteResult & { floor_w: number }>("set_autotune_floor");
+export const setAutotuneMax = callable<[watts: number | null], { ok: boolean; max_w: number | null; summary: string; error: string | null }>("set_autotune_max");
 export const setAutotuneTarget = callable<[fps: number, autoFps: boolean], { ok: boolean; target: number; auto_fps: boolean; summary: string; error: string | null }>("set_autotune_target");
 export const listProfiles = callable<[], Record<string, { tdp?: number; cpu_max_pct?: number; note?: string }>>("list_profiles");
 export const gameStarted = callable<[appid: string], any>("game_started");

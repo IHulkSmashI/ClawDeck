@@ -1079,6 +1079,58 @@ def test_status_shows_your_limit_and_what_autotune_uses(plugin):
     assert slot["pick"] == {"profile": "max", "tdp": 35, "from": "last"} and slot["running"]
 
 
+def test_autotunes_own_maximum_is_the_limit_where_autotune_governs_and_the_tdp_setting_where_not(plugin):
+    """Two modes. Autotune off: the TDP setting is the limit. Autotune on: a target under Autotune's own maximum; no
+    maximum set, that is the TDP setting (nothing changes for who never moves it). The maximum is never saved as the
+    TDP setting, a change in a running game starts the game over under it, and where Autotune does not set the limit
+    (switched off, off on the charger) the TDP setting is on the chip and its slider is not greyed out."""
+    p = plugin
+    assert p.run(p.set_tdp(26))["ok"] and p.chip() == 26               # the TDP setting, in the menus
+    st = p.run(p.get_power())
+    assert st["autotune_max"] == 26 and st["autotune_governs"]         # none set: the TDP setting
+    r = p.run(p.set_autotune_max(20))
+    assert r["ok"] and r["max_w"] == 20 and p.settings["autotune_max"] == 20
+    assert p.chip() == 26                                              # no game: nothing of Autotune's on the chip
+    p.run(p.game_started("7"))
+    s, st = p.autotune.session, p.run(p.get_power())
+    assert s.ceiling_tdp == 20 and p.chip() <= 20 and st["limit_w"] == 20 and st["autotune_max"] == 20
+    assert st["autotune_governs"]
+    r = p.run(p.set_autotune_max(24))                                  # moved in the game
+    s = p.autotune.session
+    assert r["ok"] and s.ceiling_tdp == 24 and p.chip() == 24 and not s.paused
+    assert p.settings["custom_tdp"] == 26 and p.profiles.own("7", False).get("tdp") != 24
+    assert p.run(p.set_autotune_max(99))["max_w"] == 35 and p.autotune.session.ceiling_tdp == 35   # the model's range
+    p.run(p.set_autotune_max(24))
+    assert p.run(p.set_setting("autotune", False)) and p.chip() == 26  # Autotune off: the TDP setting
+    assert not p.run(p.get_power())["autotune_governs"]
+    p.run(p.game_stopped("7"))
+    p.settings.update(autotune=True, autotune_plugged=False)           # on the charger Autotune stays off (Advanced)
+    p.ac["plugged"] = True
+    p.run(p.game_started("8"))
+    st = p.run(p.get_power())
+    assert p.autotune.session is None and not st["autotune_governs"]
+    assert p.chip() == p.run(p.power_slot("8"))["pick"]["tdp"] != 24
+    p.run(p.game_stopped("8"))
+    p.ac["plugged"] = False
+    assert p.run(p.set_autotune_max(None))["max_w"] is None and p.settings["autotune_max"] is None
+    assert p.run(p.get_power())["autotune_max"] == 26
+    p.run(p.game_started("7"))
+    assert p.autotune.session.ceiling_tdp == 26                        # the TDP setting again
+    p.run(p.game_stopped("7"))
+
+
+def test_a_game_with_autotune_off_for_it_keeps_the_tdp_setting_and_a_movable_slider(plugin):
+    p = plugin
+    p.run(p.set_tdp(26))
+    p.run(p.set_autotune_max(20))
+    p.profiles.set("9", False, {"autotune": False})
+    p.run(p.game_started("9"))
+    assert p.autotune.session is None and p.chip() == 26 and not p.run(p.get_power())["autotune_governs"]
+    p.run(p.set_autotune_max(18))                                      # not this game's limit: nothing starts over
+    assert p.autotune.session is None and p.chip() == 26
+    p.run(p.game_stopped("9"))
+
+
 def test_a_pick_in_a_game_is_the_new_limit_at_once_and_comes_back_at_the_next_start(plugin):
     p = plugin
     p.run(p.game_started("7"))

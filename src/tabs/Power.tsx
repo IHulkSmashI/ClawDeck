@@ -3,7 +3,7 @@ import { notify } from "../components/notify";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setPl2, setAutotuneFloor, setAutotuneTarget, setCpuMaxPct, setCpuTurbo,
+  applyProfile, gameStarted, uiLog, powerSlot, resetPowerSlot, PowerSlot, getAutotune, getPower, getSetting, listProfiles, setPl2, setAutotuneFloor, setAutotuneMax, setAutotuneTarget, setCpuMaxPct, setCpuTurbo,
   setEpp, setGpuPowerProfile, setGpuWindow, setSetting, setTdp, AutotuneStatus, LimitResult, PowerStatus, WriteResult,
 } from "../api";
 import { Advanced } from "../components/Advanced";
@@ -170,6 +170,12 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
   const running = !!at?.running && !at.paused;
+  // Autotune sets the limit here (on, and for this power source and game): the TDP slider is greyed out, and the
+  // limit is Autotune's own maximum (none set: the TDP setting)
+  const governs = !!st?.autotune_governs;
+  const [atMaxV, setAtMaxV] = useState<number | null>(null);
+  useEffect(() => setAtMaxV(null), [st?.autotune_max]);
+  const atMax = atMaxV ?? st?.autotune_max ?? tdp;
   const thermalLine = at?.thermal?.line ?? null;     // "thermal: stepped to 15 W" once the temperature guard acted
   const step = { probe: "trying fewer watts", back: "took the step back", recover: "full limit after a loss",
     check: "checking what your limit gives", hold: "" }[at?.step ?? "hold"];
@@ -206,10 +212,11 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           selectedOption={profile} onChange={(o) => { markPick("power"); pick(o.data); }} rgOptions={profileOptions}
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
             quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} /></Anchor>
-        <Anchor id="tdp"><SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend} onChange={(w) => { markPick("tdp"); slide(w); }}
-          description={explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile; Autotune never goes above it.`,
-            quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
-            quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
+        <Anchor id="tdp"><SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend || governs} onChange={(w) => { markPick("tdp"); slide(w); }}
+          description={governs ? explain("Autotune is on, so set an FPS target and a wattage limit in the Autotune section.")
+            : explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile.`,
+              quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
+              quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
         {custom && <ToggleField label="Set PL2 yourself" checked={!!st?.pl2_manual}
           description={explain(st?.pl2_manual ? "PL2, the short-burst limit, is the slider below instead of your TDP + 2 W." : `PL2, the short-burst limit, follows your TDP: ${tdp + 2} W (TDP + 2 W, as Handheld Daemon and PowerControl do).`,
             "a higher PL2 gives the CPU and graphics short bursts above the TDP: snappier loading, more heat, and frame times can get less even.")}
@@ -219,7 +226,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`From your TDP (${tdp} W) to ${st?.pl2_max ?? 45} W, saved for ${slot?.plugged ? "plugged in" : "battery"}.`)} />}
         <Status ok={err ? false : usingLine ? true : null} label={(usingLine ?? reads(st)) + (thermalLine ? ` · ${thermalLine}` : "")}
           detail={thermalLine ? `Package ${at?.thermal?.temp_c ?? "?"} °C. thermald is paused while ClawDeck holds the TDP, so above 95 °C ClawDeck steps down until under 90 °C: when a few busy cores make the heat under your limit, the CPU's top clock 10 % at a time (a lower TDP would only slow everything); otherwise the TDP, 2 W under what the chip draws. Under 80 °C everything goes back up every 30 s, to your limit.`
-            : usingLine ? `The slider is your limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is on the chip at once; Autotune works down from it.`
+            : usingLine ? `Autotune's max TDP is the limit; Autotune runs the chip under it${atDetail ? ` (${atDetail})` : ""}. A new pick is on the chip at once; Autotune works down from it.`
             : app ? gameName : slot?.pick?.from === "default" ? "No game running: the chip keeps its own limits until you pick one; games start at this profile"
             : "No game running: this limit is on the chip now, and comes back when a game closes"} />
         <Problem error={err} what="Power limit" />
@@ -237,20 +244,26 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
       <PanelSectionRow>
         <Group title="Autotune" />
         <ToggleField label="Autotune (beta, every game)" checked={autotune} onChange={async (v) => { setAutotune(v); await setSetting("autotune", v); refresh(); }}
-          description={explain(`Holds your target frame rate with the fewest watts (within 5 %; a game whose frame rate wobbles by itself can lose more for some seconds). It tries a lower TDP for a moment, watches every frame, and takes the step back at the first loss; when a heavier scene loses frames, the full TDP is back within a second. On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
+          description={explain(`Holds your target frame rate with the fewest watts (within 5 %; a game whose frame rate wobbles by itself can lose more for some seconds). It tries a lower TDP for a moment, watches every frame, and takes the step back at the first loss; when a heavier scene loses frames, its max TDP is back within a second. On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "the frames you asked for with less power: longer play time.", quick ? undefined : "a step that fails is about half a second of slightly slower frames; it tries less often the longer a scene stays the same.")} />
         {autotune && (
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
             selectedOption={st?.autotune_target}
             onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
-            description={explain("A frame rate to hold with the fewest watts: the full TDP is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
-              quick ? undefined : `${TARGETS[TARGETS.length - 1].data} fps with Auto FPS: nearly the most frames the TDP above gives.`, undefined)} />
+            description={explain("A frame rate to hold with the fewest watts: the max TDP below is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+              quick ? undefined : `${TARGETS[TARGETS.length - 1].data} fps with Auto FPS: nearly the most frames the max TDP below gives.`, undefined)} />
+        )}
+        {autotune && (
+          <SliderField label="Autotune max TDP (W)" value={atMax} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend}
+            onChange={(w) => { setAtMaxV(w); latest("atmax", () => setAutotuneMax(w), (r) => { toast(r.summary); refresh(); }); }}
+            description={explain(`The most watts Autotune may use to hold ${st?.autotune_target} fps, ${lo}–${hi} W. Not moved yet: your TDP setting.`,
+              undefined, quick ? undefined : "each watt more buys fps with play time and heat.")} />
         )}
         {autotune && (
           <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
             onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
-            description={explain(`If the TDP above can't reach ${st?.autotune_target} fps, Autotune holds what the full TDP gives (within 5 %) with the fewest watts instead of running flat out, and holds ${st?.autotune_target} again when the game gets lighter.`,
-              undefined, "off: an out-of-reach target keeps the full TDP and says so.")} />
+            description={explain(`If the max TDP above can't reach ${st?.autotune_target} fps, Autotune holds what that maximum gives (within 5 %) with the fewest watts instead of running flat out, and holds ${st?.autotune_target} again when the game gets lighter.`,
+              undefined, "off: an out-of-reach target keeps the max TDP and says so.")} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
         {autotune && !!at?.game_fg && (

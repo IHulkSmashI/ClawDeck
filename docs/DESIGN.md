@@ -64,8 +64,8 @@ tools/
 ```
 
 ## The four panels
-- **Power**: profile dropdown (six, short label, what/why/cost under it), the TDP slider (model range, = Custom,
-  autotune's ceiling), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
+- **Power**: profile dropdown (six, short label, what/why/cost under it), the TDP slider (model range, = Custom;
+  greyed out where Autotune sets the limit), one read-back line after every change ("RAPL reads 17 W / 24 W": PL1 / PL2 from the backend
   that enforces them), Autotune with the set TDP, the TDP it uses, rendered fps against the most the set TDP gives,
   frames per watt, the bottleneck, its phase and the last action.
   Profile and slider writes are debounced in the UI (300 ms, only the newest toasts) and serialised in the backend
@@ -112,9 +112,24 @@ thermald (Bazzite, polling mode) re-applies the platform's DPTF table to that RA
 ## Your limit and Autotune (main.py `_pick`)
 The limit is what the user picked for the power source the Claw is on: the running game's own pick (a pick made while
 it ran, saved per game, battery and plugged in apart), else the last pick on that power source, else the default.
-`power_slot` returns it as `pick`, and the profile list and the slider show it, in a game and in the menus. With
-Autotune the slider stays that limit; the line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58
-fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
+`power_slot` returns it as `pick`, and the profile list and the slider show it, in a game and in the menus. The
+line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58 fps" from `get_autotune` (polled every 3 s
+while the panel is open in a game).
+
+**Two modes.** Autotune off: the TDP setting is the limit. Autotune on: a target frame rate under **Autotune's own
+maximum** (`autotune_max`, one value for both power sources, clamped to each one's range where it is used; none set:
+the TDP setting, so nothing changes for who never moves it). `_start_game_power` puts the maximum on the chip as the
+limit where Autotune governs (`_autotune_governs`: switched on, not off for the game, and plugged in only with
+"Autotune when plugged in"), so PL2 and the temperature guard follow it as they follow the TDP setting, also where
+Autotune then stays out (xemu, no frame rate). `set_autotune_max` in a running game starts the game over under it,
+like a new pick. `get_power` returns `autotune_max` (the watts that apply here) and `autotune_governs`; the panel
+shows the maximum's slider only while Autotune is on, and greys the TDP slider out while Autotune governs, with the
+note "Autotune is on, so set an FPS target and a wattage limit in the Autotune section." Where Autotune does not
+govern (on the charger without the option, a game with Autotune off, a game it was switched on in: it starts at the
+next launch) the TDP setting is on the chip and its slider moves. Switched off in a running game, the TDP setting
+goes back on the chip. In the menus no Autotune runs and the TDP setting holds. The maximum is never saved as a TDP
+setting, and Autotune never changes it. Precedent: an own maximum of the automatic TDP in three of four projects
+read; its default from the manual TDP is Handheld Companion's rule; none greys the manual TDP out (the user's design).
 
 **A TDP setting and what Autotune learned are two records, and only the user writes a TDP setting.** A game's slot (per
 power source) has `base` and `tdp` (the setting) and `learned` (Autotune's record: `start`, the limit and target it was
