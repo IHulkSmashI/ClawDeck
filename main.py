@@ -785,7 +785,7 @@ class Plugin:
 
     def _profile_source(self, key: str, plugged: bool) -> str:
         """Whose pick a game starts from: its own; a frontend's game without one, the frontend's."""
-        if "#" not in key or self.profiles.own(key, plugged).get("base"):
+        if "#" not in key or any(v is not None for k, v in self.profiles.own(key, plugged).items() if k != "learned"):
             return key
         return frontend.steam_appid(key)
 

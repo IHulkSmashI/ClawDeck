@@ -212,9 +212,10 @@ The rules:
    loss counts only when it is still there a second later, and a step is judged at the end of its watch on its
    typical frame.
 5. **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a pause). A write
-   being watched is taken back; a lowered limit goes to the full one while frames still come. When such frames stay
-   for 5 s they are the game, and nothing known before applies. Back from them the pace starts again from the game's
-   own frames.
+   being watched is taken back (a step down that leaves so few frames is judged as a step: it failed); a lowered
+   limit goes to the full one while frames still come. When such frames stay for 5 s they are the game, and nothing
+   known before applies. After 5 s of them, and back in the band a limit had before a menu, a map or a video, the
+   scene may be another one with the same frame rate at this limit: the full limit is looked at once.
 6. **The guard:** its cap is obeyed at once and a write being watched is dropped unjudged; under your floor the cap
    wins. Watts given back are looked at like a limit never looked at.
 

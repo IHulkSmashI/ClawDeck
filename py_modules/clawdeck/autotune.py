@@ -646,6 +646,7 @@ class Autotune:
             s.cfg.floor = s.floor_tdp
         if s.learned.tdp < s.floor_tdp and self._tdp(s.learned, s.floor_tdp) and s.gov:
             s.gov.limit = s.learned.tdp
+            governor.drop(s.gov)
 
     def set_keep(self, pct: float) -> None:
         if self.session:
