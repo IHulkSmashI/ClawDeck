@@ -449,9 +449,10 @@ frames are back on pace in 0.25 s. The package itself is within 5 % of a new lim
 battery and charger alike). 46 steps down of 2 W during play, each taken back at the first loss, cost about 0.6 s of
 at most 10 % slower frames each; frames slower than 30 fps came no more often around them than away from them.
 
-**What does not help.** With PL2 at 45 W and the firmware's 56 s window, a load drew 37 W under a 30 W PL1 for 8 s,
-and a cut made in that state took 2.3 s to bind; PL2 at 32 W against 45 W made no difference to the frame rate in a
-steady scene. A limit the package doesn't reach changes nothing (a PS2 game drew 10.4 W under 27 W and 9.9 W under
+**What does not help.** With PL2 at 45 W and a window of 8 s, a load drew 37 W under a 30 W PL1 for 8 s, and a cut
+made in that state took 2.3 s to bind; PL2 at 32 W against 45 W made no difference to the frame rate in a steady
+scene. With a charger in, the package settles at 30 W whatever PL1 says (a 35 W pick: 37 W for 29-85 s, then 30 W; on
+battery it holds the 35 W; 2026-11-16), so over 30 W a look at the full limit shows what the first minute gives. A limit the package doesn't reach changes nothing (a PS2 game drew 10.4 W under 27 W and 9.9 W under
 12 W). xemu shows 60 fps while its own counter reads 16–18 at a 16 W limit: no frame rate from outside says what a
 limit costs there.
 

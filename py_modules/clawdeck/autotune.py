@@ -613,10 +613,15 @@ class Autotune:
         s.last_action = act.note
 
     def set_target(self, target: int | None, auto_fps: bool = True) -> None:
-        """The target was changed while a game runs: the governor starts over from the limit in use, for the new goal."""
+        """The target was changed while a game runs: the governor starts over from the limit in use, for the new goal.
+        After a change by hand it hands control back, as a new pick does (not in a game Autotune stays out of, not
+        without frames, not while it is switched off)."""
         s = self.session
         if not s:
             return
+        back = s.paused and self.enabled and not s.own_pace and not s.no_frames
+        if back:
+            s.paused, self.power.governed = False, True
         s.user_target, s.auto_fps = (int(target) if target else None), bool(auto_fps)
         s.phase = "target" if target else "hold"
         s.learned.target, s.learned.target_eff, s.learned.start, s.learned.held = s.user_target, None, None, None
@@ -624,9 +629,9 @@ class Autotune:
         on_chip = s.learned.tdp
         self._govern_from(s, on_chip)
         want, s.learned.tdp = s.learned.tdp, on_chip      # (under the guard's cap it may start lower than the chip is)
-        if not s.paused:                                  # paused (by hand, xemu, no frames): it applies when that ends
-            if want != on_chip:
-                self._tdp(s.learned, want)                # a refused write leaves what is on the chip as the limit
+        if not s.paused:                                  # paused (xemu, no frames, switched off): it applies when that ends
+            if want != on_chip or back:
+                self._tdp(s.learned, want, force=True)    # a refused write leaves what is on the chip as the limit
             self._tau(s, True)
         s.gov.limit = s.learned.tdp
 

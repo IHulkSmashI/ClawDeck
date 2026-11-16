@@ -1799,7 +1799,7 @@ def test_the_frame_generation_multiplier_is_a_whole_number_that_changes_rarely(f
     at.session = None
 
 
-def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeypatch, tmp_path):
+def test_a_new_target_leaves_xemu_alone_and_hands_control_back_after_a_change_by_hand(fake_hw, monkeypatch, tmp_path):
     t = _with_tau(fake_hw, tmp_path)
     at, s = _tuner(fake_hw, monkeypatch, tdp=14)
     s.own_pace, s.paused = "xemu", True
@@ -1811,10 +1811,22 @@ def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeyp
     _Game(at, lambda *_: 60.0).run(30)
     assert s.learned.tdp == 20 and not at.power.governed                  # your limit, for as long as xemu runs
     at.session = None
+    for why, on, back in (("manual CPU ceiling", True, True), ("manual GPU clocks", True, True),
+                          ("autotune switched off", False, False), ("autotune switched off", True, True)):
+        at, s = _tuner(fake_hw, monkeypatch, tdp=14)
+        at.pause(why)
+        assert s.paused and s.learned.tdp == 20 and not at.power.governed
+        at.enabled = on                                                    # the Autotune switch (off, or on again)
+        at.set_target(30)
+        assert s.paused is not back and at.power.governed is back and s.user_target == 30, (why, on)
+        assert s.learned.tdp == 20                                         # from the limit in use
+        at.session = None
     at, s = _tuner(fake_hw, monkeypatch, tdp=14)
+    at.enabled = True
     at.pause("manual CPU ceiling")
+    s.no_frames = True                                                     # no frame rate: nothing to govern by
     at.set_target(30)
-    assert s.paused and s.learned.tdp == 20
+    assert s.paused and not at.power.governed
     at.session = None
 
 
@@ -1871,6 +1883,33 @@ def test_a_log_with_a_row_a_second_gives_the_governor_whole_seconds_of_frames(fa
     g.run(60)
     assert s.learned.tdp <= 10 < start and not s.paused
     at.session = None
+
+
+
+def test_a_pl2_change_while_autotune_governs_keeps_the_session_and_what_it_learned(plugin):
+    p = plugin
+    p.run(p.set_tdp(26))
+    p.run(p.game_started("7"))
+    s = _lower(p)
+    was = (s.learned.tdp, p.chip(), dict(s.gov.held_s))
+    assert s.learned.tdp < 26
+    for args in ((True, 45), (True, 30), (False, None), (True, 45)):   # a restart at the full limit dropped it all
+        r = p.run(p.set_pl2(*args))
+        assert r["ok"] and p.autotune.session is s and not s.paused and p.power.governed, args
+        assert (s.learned.tdp, p.chip(), dict(s.gov.held_s)) == was, args
+
+
+@pytest.mark.parametrize("pct, turbo_off, gpu_min", [(100, 0, 300), (70, 1, 800), (55, 0, 1300)])
+def test_the_levers_in_the_log_are_what_the_chip_has_not_what_an_old_record_said(fake_hw, monkeypatch, pct, turbo_off, gpu_min):
+    sysfs.write(fake_hw.paths.cpu_max_perf_pct, pct, persist=True)
+    sysfs.write(fake_hw.paths.cpu_no_turbo, turbo_off, persist=True)
+    sysfs.write(fake_hw.paths.gpu_min_freq, gpu_min, persist=True)
+    for old in ({"cpu_max_pct": 85, "gpu_min_mhz": 1000, "boost": False}, {"cpu_max_pct": 100, "gpu_min_mhz": None, "boost": True}):
+        at, s = _tuner(fake_hw, monkeypatch, tdp=14, **old)
+        l = s.learned
+        assert (l.cpu_max_pct, l.gpu_min_mhz, l.boost) == (pct, gpu_min, not turbo_off), old
+        assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == pct and sysfs.read_int(fake_hw.paths.gpu_min_freq) == gpu_min
+        at.session = None
 
 
 def test_set_pl2_says_what_the_chip_has_while_autotune_governs(plugin):

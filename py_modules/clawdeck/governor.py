@@ -766,7 +766,8 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
         rates = [_fps(mine[i:i + k]) for i in range(0, len(mine) - k + 1, k)]
         still = max(rates) - min(rates) <= 2 * CHECK_MOVED * statistics.median(rates)
         slow = _edge(mine, st.base_slow) if still and not dippy and st.base_slow is not None else 0
-        if slow and st.edge_w == st.limit - 1 and slow / len(mine) > st.edge_share - EDGE and t - st.slow_at >= CHECK_S:
+        if (slow and st.edge_w == st.limit - 1 and slow / len(mine) > st.edge_share - EDGE and t - st.slow_at >= CHECK_S
+                and not obs.thermal):
             # the watt that the last such step gave changed nothing: the limit's, or the game's own in this place?
             # Their share at the full limit says it (a watt more every ten seconds went all the way up to your limit
             # on slow frames that every limit had; review, 2026-11-16)

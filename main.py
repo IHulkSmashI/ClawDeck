@@ -1130,7 +1130,7 @@ class Plugin:
         if self.profiles.get(self._game_key(), plugged).get("autotune") is False:
             return "off for this game"
         if getattr(self, "_autotune_late", False):
-            return "turned on during this game: restart the game and it starts (it reads frame times from the launch)"
+            return "turned on during this game: restart the game and it starts"
         if not shutil.which("mangohud"):
             return "MangoHud isn't installed, and Autotune reads frame times through it"
         return "waiting for the game's first frame times (start a level, not a menu)"
