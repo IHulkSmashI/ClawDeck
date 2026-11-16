@@ -386,7 +386,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     # that of frames the limit did hold back, and taking it lowered the reference with every loading screen (review,
     # 2026-11-15). So only once every frame of the pace came in a look that was free, and none in a look without frames
     free = st.limit >= top or obs.clipped is False or (obs.draw_w is not None and obs.draw_w <= st.limit - 2)
-    st.free_run = st.free_run + len(obs.frames) if free and t - st.changed_at >= BACK_S else 0
+    st.free_run = st.free_run + len(obs.frames) if free else 0
     if st.mode == "hold" and free and obs.frames and st.free_run >= PACE_FRAMES and len(st.pace) == PACE_FRAMES:
         st.free_fps.append(here)
         if len(st.free_fps) >= FREE_LOOKS:

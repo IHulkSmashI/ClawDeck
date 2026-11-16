@@ -1652,6 +1652,28 @@ def test_a_row_of_autotune_csv_has_every_frame_since_the_row_before(fake_hw, tmp
     assert all(abs(float(r["fps"]) - 60.0) < 8 for r in rows[1:] if r["phase"] == "hold")
 
 
+def test_a_rows_slow_frames_are_slow_against_the_pace_before_the_row(fake_hw, tmp_path, monkeypatch):
+    """A second in which every frame takes 25 ms after seconds of 16.7 ms: all of its frames are slow (against the
+    row's own median none would be, and a frame rate that fell would show no slow frames at all)."""
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    at.csv_log = str(tmp_path / "autotune.csv")
+    g = _Game(at, lambda *_: 60.0)
+    whole, ms = g.sample, [1000.0 / 60]
+
+    def with_frames():
+        smp = whole()
+        at.sampler.frames_ms = [ms[0]] * round(s.look_s * 1000.0 / ms[0])
+        return smp
+    at.sampler.sample = with_frames
+    g.run(3)
+    ms[0] = 25.0
+    g.run(1.5)
+    at.session = None
+    rows = [dict(zip(autotune.CSV_FIELDS, r)) for r in csv.reader(open(at.csv_log))][1:]
+    assert {r["slow_pct"] for r in rows if r["ft_p95"] == "16.67"} == {"0.0"}
+    assert [r["slow_pct"] for r in rows if r["ft_median"] == "25.0"][0] == "100.0"
+
+
 def test_autotune_csv_gets_the_frame_time_columns_and_an_older_log_is_set_aside(fake_hw, tmp_path, monkeypatch):
     log = tmp_path / "autotune.csv"
     old = "time,appid,phase,fps,shown_fps,source,gpu_mhz,gpu_max_mhz,cpu_pct,pkg_w,tdp,cpu_max_pct,gpu_min_mhz,boost,bound,max_fps\n1.0,7,hold,60.0,60.0,presented,,,,,20,100,,1,balanced,60.0\n"
@@ -1756,12 +1778,15 @@ def test_the_frame_generation_multiplier_is_a_whole_number_that_changes_rarely(f
     at.session = None
 
 
-def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeypatch):
+def test_a_new_target_does_not_take_xemu_or_a_manual_pause_back(fake_hw, monkeypatch, tmp_path):
+    t = _with_tau(fake_hw, tmp_path)
     at, s = _tuner(fake_hw, monkeypatch, tdp=14)
     s.own_pace, s.paused = "xemu", True
     at._give_back(s)
+    at._tau(s, False)
     at.set_target(60)
     assert s.paused and s.learned.tdp == 20 and s.user_target == 60       # the target is kept for when it governs
+    assert sysfs.read_int(t) == TAU_FW and not s.short_tau                # ... and the chip's window stays the firmware's
     _Game(at, lambda *_: 60.0).run(30)
     assert s.learned.tdp == 20 and not at.power.governed                  # your limit, for as long as xemu runs
     at.session = None

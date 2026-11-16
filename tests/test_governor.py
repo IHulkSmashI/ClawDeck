@@ -18,6 +18,7 @@ class Game:
         self.st, act = gov.start(cfg, 0.0)
         self.limit, self.look, self.draw, self.cap, self.thermal, self.mult = act.limit_w, act.look_s, None, None, False, 1.0
         self.clipped = None                                          # the chip's "limited by power" flag, if it says
+        self.thin = None
 
     def rate(self):
         try:
@@ -36,7 +37,8 @@ class Game:
                     break
                 self.end += ms / 1000.0
                 self.i += 1
-                out.append((self.end, ms / self.mult))           # shown frames: `mult` of them per rendered one
+                if not self.thin or self.i % self.thin == 0:     # thin: a log that has one frame in `thin` only
+                    out.append((self.end, ms / self.mult))       # shown frames: `mult` of them per rendered one
             if not frames:
                 self.end = self.t
             draw = self.draw(self.limit, self.t) if callable(self.draw) else self.draw    # watts, or draw(limit, t)
@@ -116,8 +118,9 @@ def test_the_guards_cap_is_obeyed_at_once_and_nothing_is_raised_when_it_goes():
     assert g.limit <= 22
     g.cap = None                                         # the guard gives the watts back
     n = len(g.writes)
-    g.run(20)
-    assert 30 in [w for _, w in g.writes[n:]]            # what the full limit gives now is looked at ...
+    g.run(3)
+    assert 30 in [w for _, w in g.writes[n:]]            # what the full limit gives now is looked at, at once ...
+    g.run(17)
     assert g.st.ref == pytest.approx(50, abs=0.5) and g.limit >= 24   # ... and it gives 10 fps more: it stays up
 
 
@@ -892,3 +895,67 @@ def test_the_early_look_at_the_full_limit_also_follows_steps_that_end_by_holding
         looks = [t for t, n in g.notes if "checking what the full" in n]
         assert ends and looks and 0 < min(t for t in looks if t > ends[0]) - ends[0] <= 2.0, (ceiling, g.notes)
         assert len(looks) == 1                                       # ... once
+
+
+def test_a_long_pause_does_not_make_what_is_known_old():
+    """The reference is looked at again when it is ten minutes old. Twelve minutes in a pause menu without frames are
+    not twelve minutes of the game: back in it, the limit that held is kept and the full limit is not looked at."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=HOLDS_FROM_14).run(90)
+    assert g.limit == 14
+    g.run(700, frames=False)
+    back = g.t
+    g.run(8)
+    assert 30 not in g.since(back) and g.limit >= 13
+
+
+def test_a_look_at_the_full_limit_with_too_few_frames_to_judge_on_ends_there():
+    """A frame log that loses most of its rows: a frame every 1.3 s, each as long as the game's. No judgement of what
+    the full limit gives is possible; after 3 s the look ends at the full limit (and does not go on ten times a second
+    for as long as the log stays thin)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0).run(3)
+    g.fps = lambda w: 60.0 if w >= 30 else 45.0
+    while not g.writes:
+        g.run(0.1)
+    assert g.limit == 30 and g.look == gov.WATCH_S
+    g.thin = 80
+    g.run(4)
+    assert g.limit == 30 and g.st.mode == "hold" and g.look == gov.LOOK_S
+
+
+def test_a_scene_that_draws_the_whole_limit_is_looked_at_again_also_after_a_look_at_the_full_limit():
+    """The reference came from a look at the full limit that began while the package drew 1 W less than its limit. The
+    next scene gives the same 50 fps at 16 W, draws all 16 W and would give 70 fps at 30 W: no loss shows, the draw
+    does. The full limit is looked at within seconds, not at the next check a minute or ten later."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=lambda w: 50.0 if w >= 16 else 50.0 * w / 16)
+    g.draw = lambda w, t: min(float(w), 16.0) - 1.0
+    g.run(60)
+    assert g.limit == 16
+    g.cap = 29                                           # the guard's cap comes and goes: the reference is looked at
+    g.run(0.5)
+    g.cap = None
+    n = len(g.writes)
+    while len(g.writes) < n + 2:
+        g.run(0.1)
+    assert [w for _, w in g.writes[n:]] == [30, 16]
+    g.fps = lambda w: 50.0 + 20.0 * (w - 16) / 14 if w >= 16 else 50.0 * w / 16
+    g.draw = lambda w, t: float(w)
+    at = g.t
+    g.run(5)
+    assert 30 in g.since(at) and any("draws all of" in n for t, n in g.notes if t >= at)
+    g.run(20)
+    assert g.limit >= 28 and g.st.ref > 66
+
+
+def test_back_from_a_menu_the_game_is_judged_on_frames_of_the_game_alone():
+    """A 20 fps game (target 60, out of reach) held at 14 W; 4 s of a 60 fps menu. The first look after the menu has
+    frames of both: with them in the pace the game "gave more than the full limit does", and the full limit was looked
+    at. For every moment in a look at which the menu can end: no write."""
+    for frame in range(18, 30):
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 20.0 if w >= 14 else 20.0 * w / 14)
+        menu = 60.0 + frame / 60.0
+        g.shape = lambda i, w, at: 1 / 3 if menu <= at < menu + 4.0 else 1.0
+        g.run(60)
+        held = g.limit
+        g.run(30)
+        assert g.since(60) == [] and g.limit == held, frame
+
