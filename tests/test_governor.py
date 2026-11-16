@@ -797,6 +797,29 @@ def test_far_more_frames_get_no_look_under_the_guards_clock_cap():
     assert 30 in g.since(t0 + 20), [n for n in g.notes if n[0] >= t0][:4]
 
 
+
+@pytest.mark.parametrize("draw_known", [False, True])
+def test_after_a_drop_of_the_reference_the_full_limit_is_looked_at_every_reach_s(draw_known):
+    """A heavy stretch (24 fps at the full limit, of a target of 30) and the limit that holds it; then a place that
+    reaches the target with a few watts more and gives 2 % more at the held limit: no loss, and less than any other look asks for.
+    For REACH_FOR_S after the drop the full limit is looked at every REACH_S, and that look finds it (the simulator's
+    emulator-need-jumps at a 35 W pick: 19 s at 28 of 30 fps until that look, 2026-11-16)."""
+    light, heavy = (lambda w: 30.0 * min(1.0, w / 14)), (lambda w: 24.0 * min(1.0, w / 24))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=30), fps=light)
+    if draw_known:
+        g.draw = lambda limit, t: float(limit)
+    g.run(60)
+    assert g.limit <= 16
+    g.fps = heavy
+    g.run(60)
+    held = g.limit
+    assert 22 <= held <= 28 and g.st.ref == pytest.approx(24, abs=0.5), (held, g.st.ref, g.notes[-4:])
+    back = lambda w: 30.0 * min(1.0, w / (held * 30.0 / (heavy(held) * 1.02)))    # 2 % more at the held limit
+    g.fps, t0 = back, g.t
+    g.run(gov.REACH_S + 5)
+    assert 30 in g.since(t0) and g.st.ref == pytest.approx(back(30), abs=0.5) and back(30) > 24 * 1.05, (g.limit, g.st.ref, [n for n in g.notes if n[0] >= t0][:5])
+
+
 def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
     """After REACH_FOR_S the lower reference is the game and the limit goes down. When the game is back, the low limit
     may give just what the video gave (30 fps at 8 W): no loss shows. But the package now draws all of the limit, which
