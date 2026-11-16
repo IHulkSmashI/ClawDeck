@@ -543,6 +543,8 @@ def test_steps_down_stop_when_the_frames_jump_far_above_what_they_were_before_th
         g.fps, t0 = game, g.t
         g.run(gov.DWELL_S + 4)
         assert game(g.limit) >= 85 and min(g.since(t0)) >= need_w - 8, (need_w, g.since(t0), [n for n in g.notes if n[0] >= t0])
+        # (the step is taken back before its watch has ended)
+        assert [t for t, w in g.writes if t >= t0 and w == 30][0] - t0 <= 1.5, [x for x in g.writes if x[0] >= t0]
 
 
 
@@ -2115,3 +2117,37 @@ def test_a_second_try_that_failed_does_not_make_the_next_step_a_second_try():
     need["w"] = 18.0
     g.run(60)
     assert g.limit >= 18 and list(g.st.dips) == [], (g.limit, list(g.st.dips), [n for n in g.notes if n[0] >= 120])
+
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_in_a_game_that_dips_a_second_try_that_loses_is_taken_back_at_once(target):
+    """A game that dips by itself, held at 14 W for minutes; the need rises to 18 W. The fall is waited out a second
+    (it may be a dip), the full limit shows it was not, and 14 W is tried once more: that loss was waited out once
+    already and is the limit's."""
+    need = {"w": 14.0}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=16), fps=lambda w: 60.0 if w >= need["w"] else 60.0 * w / need["w"])
+    g.draw = lambda w, t: float(w)
+    g.run(120)
+    g.st.dips.extend([g.t - 20, g.t - 10])
+    need["w"] = 18.0
+    g.run(30)
+    again = [t for t, n in g.notes if t >= 120 and n.endswith("14 W once more")]
+    back = [t for t, w in g.writes if again and t > again[0] and w == 30]
+    assert len(again) == 1 and back and back[0] - again[0] <= 0.6, (again, back, [n for n in g.notes if n[0] >= 120])
+
+
+@pytest.mark.parametrize("visit", [10, 20])
+def test_a_band_that_comes_back_is_not_taken_for_one_of_a_place_that_left_the_chip_free(visit):
+    """60 fps from 14 W with the package drawing all of the limit; a place with 50 fps at every limit that draws 6 W
+    (one look: the scene), then the game again. The game's band is its own: the package drawing all of the limit again
+    says nothing against it, and no look follows."""
+    place = {"other": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=16), fps=lambda w: 50.0 if place["other"] else 60.0 * min(1.0, w / 14))
+    g.draw = lambda w, t: 6.0 if place["other"] else float(w)
+    g.run(100)
+    place["other"] = True
+    g.run(visit)
+    assert g.limit == 14 and g.st.free_w == 14
+    place["other"] = False
+    g.run(30)
+    assert g.since(100 + visit) == [], (g.since(100 + visit), [n for n in g.notes if n[0] >= 100])
