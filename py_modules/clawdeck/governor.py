@@ -870,12 +870,13 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     if st.misses and (_lighter(st.miss_ref, ref) or (
             st.home is not None and _same(st.home_ref, ref) and not _same(st.miss_ref, ref))):
         st.misses, st.quiet_until = 0, min(st.quiet_until, st.changed_at + HOLD_S)
-    if st.limit < top and t - st.changed_at >= HOME_S and st.lo is not None and (
-            st.home is None or not _same(st.home_ref, ref) or st.limit <= st.home):
-        st.home, st.home_ref = st.limit, ref
 
     # more frames than the band has: the full limit may give more of them too
     over = settled and st.hi is not None and here > st.hi * (1 + max(ABOVE, 2 * small))
+    # (the first frames of another scene are not the scene the limit held in)
+    if st.limit < top and settled and not over and t - st.changed_at >= HOME_S and st.lo is not None and (
+            st.home is None or not _same(st.home_ref, ref) or st.limit <= st.home):
+        st.home, st.home_ref = st.limit, ref
 
     # the look without a loss, from a limit under the full one and not under the guard's clock cap: for slow frames
     # (the median holds, a few frames don't: slow against the pace of their own time, and only while that pace stands

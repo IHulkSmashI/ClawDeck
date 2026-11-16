@@ -637,8 +637,9 @@ def test_a_menu_that_the_limit_holds_back_gets_the_full_limit_and_the_game_its_l
         assert abs(g.limit - held) <= 1 and g.st.ref == pytest.approx(40, abs=1), (seconds, held, g.limit, g.notes[-5:])
 
 
+@pytest.mark.parametrize("after", [150, 160, 200])
 @pytest.mark.parametrize("seconds", [10, 30])
-def test_back_from_a_menu_that_got_the_full_limit_the_game_has_its_limit_within_seconds_and_no_look(seconds):
+def test_back_from_a_menu_that_got_the_full_limit_the_game_has_its_limit_within_seconds_and_no_look(seconds, after):
     """A menu over a 30 fps game with a target of 60, held back by the game's limit (42 fps there, 60 at the full
     limit): the menu gets the full limit. The game back: the scene its limit held in is no new one, so that limit comes
     back without the 30 s a new scene waits, and the step down from the full limit is its own look (the frames before
@@ -647,7 +648,7 @@ def test_back_from_a_menu_that_got_the_full_limit_the_game_has_its_limit_within_
     game = lambda w: 30.0 if w >= 14 else 30.0 * w / 14
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w, t: min(60.0, 3.0 * w) if menu["on"] else game(w))
     g.draw = lambda w, t: float(w)
-    g.run(150)
+    g.run(after)                                         # (16, 26 and 66 s after the limit's last change)
     held, t0, menu["on"] = g.limit, g.t, True
     assert held == 14
     g.run(seconds)
@@ -657,6 +658,20 @@ def test_back_from_a_menu_that_got_the_full_limit_the_game_has_its_limit_within_
     assert g.since(t0) == [30, held], [n for n in g.notes if n[0] >= t0]
     g.run(110)
     assert g.since(t0) == [30, held], [n for n in g.notes if n[0] >= t0]
+
+
+def test_a_limit_that_held_for_twenty_seconds_is_the_one_a_game_gets_back_after_a_menu():
+    menu = {"on": False}
+    game = lambda w: 30.0 if w >= 14 else 30.0 * w / 14
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w, t: min(60.0, 3.0 * w) if menu["on"] else game(w))
+    g.draw = lambda w, t: float(w)
+    g.run(50)
+    t0, menu["on"] = g.t, True
+    assert g.limit == 14 and 25 < t0 - g.writes[-1][0] < 30
+    g.run(10)
+    menu["on"] = False
+    g.run(10)
+    assert g.since(t0) == [30, 14], [n for n in g.notes if n[0] >= t0]
 
 
 def test_without_a_target_two_fps_are_given_up_at_low_frame_rates():
