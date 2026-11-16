@@ -442,16 +442,14 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     # the game came back at 19 fps; review, 2026-11-16)
     if st.mode == "hold":
         base = st.visit_base if st.visit_since is not None else max(st.ref or 0.0, st.shift_fps or 0.0)
-        if not (base > 0 and here > base * (1 + SHIFT)):
-            st.visit_since = None
-        elif st.visit_since is None:
-            st.visit_since, st.visit_base = t, base
+        if (base > 0 and here > base * (1 + SHIFT)) != (st.visit_since is not None):
+            st.visit_since, st.visit_base = (t, base) if st.visit_since is None else (None, st.visit_base)
+            st.free_fps.clear()                      # the menu's frames and the game's: not in one median
     visit = st.mode == "hold" and st.visit_since is not None and t - st.visit_since < ADOPT_FAST_S
-    if visit:
-        st.free_fps.clear()
-    elif st.mode == "hold" and free and obs.frames and st.free_run >= PACE_FRAMES and len(st.pace) == PACE_FRAMES:
+    if st.mode == "hold" and free and obs.frames and st.free_run >= PACE_FRAMES and len(st.pace) == PACE_FRAMES:
         st.free_fps.append(here)
-        if len(st.free_fps) >= FREE_LOOKS:
+        # (not in a wait; frames that stayed to its end are the reference at once, before a step down is judged)
+        if len(st.free_fps) >= FREE_LOOKS and not visit:
             level = statistics.median(st.free_fps)
             if st.ref is not None and level < st.ref * (1 - SHIFT):
                 # much less than before: a cutscene, a video, or a heavier place. As below: nothing under this limit
@@ -799,8 +797,10 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, want, clear, small, dippy,
     if visit:
         # at a limit that holds the chip (and under the target, with one): whatever this is, more watts may give
         # more (the game back from a long video at the limit the video needed, a lighter place that wants more). One
-        # look at the full limit
-        if _may_look(st, obs, cfg, top, here) and t - st.changed_at >= DWELL_S and t - st.visit_since >= ABOVE_S:
+        # look at the full limit: after ABOVE_S, or BOUND_S after the package began to draw all of a limit that it did
+        # not draw all of when the reference was taken
+        woke = st.ref_free and st.bound_since is not None and t - st.bound_since >= BOUND_S
+        if _may_look(st, obs, cfg, top, here) and t - st.changed_at >= DWELL_S and (woke or t - st.visit_since >= ABOVE_S):
             st.lost, st.visit_look_at = cur, t
             watch("check", top, f"more frames at {st.limit} W than before: checking what the full {top} W gives")
         return act

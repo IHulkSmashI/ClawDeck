@@ -585,6 +585,24 @@ def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(targ
     assert lost <= 3.0 and g.st.ref == pytest.approx(60, abs=1.5), (held, lost, [n for n in g.notes if n[0] >= t0][:12])
 
 
+
+@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("fps_before", [46.0, 30.0])
+def test_far_more_frames_that_stayed_at_the_full_limit_are_the_reference_before_any_step_down(target, fps_before):
+    """A lighter place after a heavy one, at the full limit: far more frames, so nothing moves for ADOPT_FAST_S. When
+    they have stayed, they are what the full limit gives: the first step down is judged against them, not against the
+    heavy place's frame rate (cloud fuzz seed 29, 2026-11-16: 46 fps known, 59 fps at the full 20 W, steps down to
+    14 W against 44 fps, 7.6 s at 47 to 56 fps)."""
+    heavy, light = (lambda w: fps_before * min(1.0, w / 20) ** 2), (lambda w: 59.0 * min(1.0, w / 19))
+    g = Game(gov.Cfg(floor=8, ceiling=20, target=target, start_w=20), fps=heavy).run(100)
+    assert g.limit == 20 and g.st.ref == pytest.approx(fps_before, abs=1.0)
+    g.fps, t0 = light, g.t
+    g.run(120)
+    lost = _seconds_under(g, t0, g.t, light, 55.5)
+    assert lost <= 1.5 and g.st.ref == pytest.approx(59, abs=1.5), (lost, g.st.ref, [n for n in g.notes if n[0] >= t0][:8])
+    assert g.limit < 20, "the lighter place gets a lower limit"
+
+
 def test_a_menu_with_far_too_many_frames_to_judge_gets_one_look_and_the_game_its_limit_back():
     """A menu at 3 times the game's rate at any limit (the draw not known): one look at the full limit, which gives as
     many: back, and nothing of the game forgotten."""
@@ -728,6 +746,30 @@ def test_a_short_video_keeps_the_level_that_held_before_it():
     g.run(60)
     assert g.limit <= held + 2 and g.st.ref > 57                     # the game is back, at its frame rate
     assert g.st.drop_floor is None and g.st.ref_high is None         # ... and the floor is gone with the video
+
+
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_has_drawn_the_whole_limit_for_bound_s(target):
+    """After a video the game is in a heavier place: at the limit that held before, more frames than the video's and
+    fewer than the game's. The package draws all of the limit, which it did not in the video: that is the sign for the
+    look, BOUND_S after it began, as without the far more frames (cloud fuzz seeds 22, 82, 150, 2026-11-16: the wait
+    for far more frames put the look at 5 s, with 51 of 60 fps until then)."""
+    need = [11.0]
+    game = lambda w: 60.0 * min(1.0, w / need[0])
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=game)
+    g.draw = lambda limit, t: min(limit, need[0])
+    g.run(150)
+    held = g.limit
+    assert 11 <= held <= 13, held
+    g.fps, g.draw = (lambda w: 30.0), (lambda limit, t: min(limit, 6.0))
+    g.run(60)
+    assert g.limit == held, g.notes[-3:]
+    need[0], g.fps, g.draw, t0 = held + 3.0, game, (lambda limit, t: min(limit, need[0])), g.t
+    g.run(8)
+    looks = [t for t, w in g.writes if t >= t0 and w == 30]
+    assert looks and looks[0] - t0 <= 3.6, (looks, [n for n in g.notes if n[0] >= t0][:4])
+
 
 
 def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
