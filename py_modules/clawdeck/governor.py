@@ -707,15 +707,23 @@ def _same(then: float | None, now: float | None) -> bool:
 
 
 def _lighter(then: float | None, now: float | None) -> bool:
-    """The full limit gives clearly more than it did then: a level that failed then may hold now. (When it gives less,
-    a video or a heavier place, what failed still counts: the game is back at the limit it needs.)"""
-    return then is not None and now is not None and now > then * (1 + ABOVE)
+    """The full limit gives so much more than it did then that this is another scene (SHIFT, as in the scene rule): a
+    level that failed then may hold now. A game whose own frame rate moves by less, for seconds and at every limit,
+    is one scene: what failed in its slow stretch failed. (When the full limit gives less, a video or a heavier place,
+    what failed still counts: the game is back at the limit it needs.)"""
+    return then is not None and now is not None and now > then * (1 + SHIFT)
 
 
 def _counts(entry: list, ref: float | None, t: float) -> bool:
-    """A level that failed still counts: in the scene it failed in, and in a heavier or slower one (a video, a cutscene:
-    the game comes back to the limit it needs) for RETRY_MAX_S. Not in a lighter scene: it may hold there."""
-    return not _lighter(entry[2], ref) and (_same(entry[2], ref) or t - entry[4] < RETRY_MAX_S)
+    """A level that failed still counts: in the scene it failed in; where the full limit gives a little more (under
+    SHIFT: the same game in a lighter stretch), until its time for another try; in a heavier or slower one (a video,
+    a cutscene: the game comes back to the limit it needs) for RETRY_MAX_S. Not in another, lighter scene: it may
+    hold there."""
+    if _lighter(entry[2], ref):
+        return False
+    if _same(entry[2], ref):
+        return True
+    return t < entry[0] if ref > entry[2] else t - entry[4] < RETRY_MAX_S
 
 
 def _slow_before(st: State, watts: int, ref: float | None, t: float) -> bool:
@@ -731,8 +739,8 @@ def _next_down(st: State, obs: Obs, cfg: Cfg, t: float, ref: float | None) -> in
     just over what the package draws."""
     under = [w for w in st.fail if w < st.limit and _counts(st.fail[w], ref, t)]
     if (st.home is not None and st.home < st.limit - STEP_W and st.home_ref is not None and ref is not None
-            and _same(st.home_ref, ref) and all(w < st.home for w in under)):
-        nxt = st.home
+            and _same(st.home_ref, ref) and all(w < st.home for w in under if _same(st.fail[w][2], ref))):
+        nxt = st.home                                # (held in this scene: what failed over it failed in another)
     elif under:
         nxt = (st.limit + max(under) + 1) // 2
         if nxt >= st.limit:
@@ -833,7 +841,10 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     known = max(here, st.lo) if st.lo is not None else here
     ref = known / st.ratio if st.ratio else max(st.ref or 0.0, known)
     ref = min(ref, cfg.target) if cfg.target else ref                # (frames over your target are no other scene)
-    if st.misses and _lighter(st.miss_ref, ref):     # a lighter scene: the steps that failed in a row were another's
+    # the steps that failed in a row were another scene's: this one is lighter by SHIFT, or it is the one a level held
+    # in for HOME_S (the place that drove the limit out is over)
+    if st.misses and (_lighter(st.miss_ref, ref) or (
+            st.home is not None and _same(st.home_ref, ref) and not _same(st.miss_ref, ref))):
         st.misses, st.quiet_until = 0, min(st.quiet_until, st.changed_at + HOLD_S)
     if st.limit < top and t - st.changed_at >= HOME_S and st.lo is not None and (
             st.home is None or t - st.home_at > HOME_FOR_S or (_same(st.home_ref, ref) and st.limit <= st.home)):

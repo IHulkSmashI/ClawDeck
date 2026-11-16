@@ -984,8 +984,9 @@ def test_the_full_limit_is_looked_at_again_soon_after_steps_down_from_it():
 
 
 def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_full_limit_looked_at():
-    """A lighter scene: this limit gives 6 % more than it did. The full limit gives more too, and the levels that
-    failed in the heavier scene say nothing here."""
+    """A lighter scene: this limit gives 20 % more than it did. The full limit gives more too, and the levels that
+    failed in the heavier scene say nothing here. (6 % more: the full limit is looked at as well, and what failed
+    still counts. A game whose own frame rate moves that much for seconds is one scene.)"""
     lift = {"x": 1.0}
     g = Game(gov.Cfg(floor=8, ceiling=30), fps=lambda w, t: lift["x"] * (60.0 if w >= 26 else 60.0 - (26 - w)))
     g.draw = lambda w, t: float(w)
@@ -993,10 +994,14 @@ def test_more_frames_at_a_held_limit_than_when_the_reference_was_taken_has_the_f
     assert g.st.mode == "hold" and g.limit < 26 and g.st.fail
     g.run(max(0.0, g.st.ref_at + 20 - g.t))
     lift["x"], t0, ref, failed = 1.07, g.t, g.st.ref, dict(g.st.fail)
-    g.run(15)                                                        # well inside CHECK_S of the last look
+    g.run(15)                                                        # well inside CHECK_MAX_S of the last look
     assert any("checking what the full" in n for t, n in g.notes if t >= t0)
-    old = [w for w in failed if w in g.st.fail and g.st.fail[w][4] < t0]         # (not failed again in the lighter scene)
-    assert g.st.ref > ref * 1.05 and not any(gov._counts(g.st.fail[w], g.st.ref, g.t) for w in old)
+    old = [w for w in failed if w in g.st.fail and g.st.fail[w][4] < t0]         # (not failed again since)
+    assert g.st.ref > ref * 1.05 and old and all(gov._counts(g.st.fail[w], g.st.ref, g.t) for w in old)
+    lift["x"], t1 = 1.07 * 1.2, g.t
+    g.run(15)
+    old = [w for w in old if w in g.st.fail and g.st.fail[w][4] < t1]
+    assert g.st.ref > ref * 1.2 and not any(gov._counts(g.st.fail[w], g.st.ref, g.t) for w in old)
 
 
 def test_no_look_at_the_full_limit_while_the_package_is_well_under_the_limit():

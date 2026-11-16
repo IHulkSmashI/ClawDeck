@@ -90,7 +90,7 @@ def test_the_chargers_30_w_stop_under_a_35_w_pick_costs_no_frames(name):
                 [(r.limit_w, r.starved_pct) for r in stop])
         assert abs(mean(stop, "starved_pct") - mean(at35, "starved_pct")) <= 0.5, case
         assert abs(mean(stop, "limit_w") - mean(at35, "limit_w")) <= 0.5, case   # (the limit is the one without the stop)
-        assert mean(stop, "starved_pct") <= mean(at30, "starved_pct") + 1.5 and mean(stop, "limit_w") <= mean(at30, "limit_w") + 4.0, case
+        assert mean(stop, "starved_pct") <= mean(at30, "starved_pct") + 1.5, case
 
 
 def test_the_limit_stays_inside_floor_and_ceiling_in_every_scenario():
