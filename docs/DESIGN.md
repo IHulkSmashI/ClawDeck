@@ -115,6 +115,17 @@ it ran, saved per game, battery and plugged in apart), else the last pick on tha
 `power_slot` returns it as `pick`, and the profile list and the slider show it, in a game and in the menus. With
 Autotune the slider stays that limit; the line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58
 fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
+
+**A pick and what Autotune learned are two records, and only the user writes a pick.** A game's slot (per power source)
+has `base` and `tdp` (the pick) and `learned` (Autotune's record: `start`, `held`, the limit and target it was found
+under). `base` and `tdp` are written in three places, each a user action: `set_tdp` (the slider), `apply_profile` and
+`reset_power_slot` (Use default). Autotune writes `learned` only (`_save_learned`). `_pick` reads the limit from
+`base`/`tdp` and never from `learned`; `learned.start` is only where a session begins under that limit, and it is
+dropped when the limit or the target is another one. So a level that held can never become the limit of a later
+session, and the slider never shows a value nobody picked. (A build that saved the TDP that held as the game's own pick
+left 8 W picks on a Claw that its user had not made, and a frontend's 8 W menu result became the limit of its games,
+2026-11-15/16; tests `test_what_autotune_learned_is_never_saved_or_shown_as_your_pick` and
+`test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games`.)
 - **Game start, a pick in a game, Use default, unplugging, resume:** `revert_all(keep_thermald=True)` (back to boot
   values, thermald stays stopped because a TDP follows at once), then the pick, then a fresh Autotune session under that
   limit: at the level the game held last time under it, else mid-range. After a pick in the game the session starts at

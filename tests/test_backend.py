@@ -952,6 +952,28 @@ def test_each_game_an_emulator_frontend_starts_has_its_own_power_and_autotune(pl
     assert p.running_key is None and p.running_title is None
 
 
+def test_what_autotune_learned_is_never_saved_or_shown_as_your_pick(plugin):
+    """Your pick (`base`, `tdp`: the slider, a profile, Use default) and what Autotune learned (`learned`) are two
+    records in a game's slot, and only your actions write the first. A build that saved the TDP that held as the game's
+    pick left 8 W picks nobody had made (Breath of the Wild, 2026-11-15; the user: "I didn't set anything"), and a
+    saved pick is the next session's limit. Here a game that held 8 W for minutes keeps no pick: the slider shows your
+    30 W, and the next start works under 30 W."""
+    p = plugin
+    p.settings["autotune_target"] = 60
+    p.run(p.set_tdp(30))                                               # your pick for every game
+    p.run(p.game_started("42"))
+    s = p.autotune.session
+    s.learned.tdp, s.learned.start, s.settled = 8, 8, True             # 60 fps at 8 W, for minutes
+    p.run(p.game_stopped("42"))
+    own = p.profiles.own("42", False)
+    assert own["learned"]["start"] == 8 and "tdp" not in own and not own.get("base")
+    slot = p.run(p.power_slot("42"))
+    assert slot["tdp"] is None and slot["base"] is None                # no "Saved for this game"
+    assert slot["pick"]["tdp"] == 30 and slot["pick"]["from"] != "game"
+    p.run(p.game_started("42"))
+    assert p.autotune.session.ceiling_tdp == 30 and p.autotune.session.learned.start == 8   # learning, under your limit
+
+
 def test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games(plugin):
     """ES-DE's menus hold 60 fps at 8 W. A target mode that saved what held as the game's own pick (the fork's build of
     2026-11-15) made that 8 W ES-DE's pick, and a game ES-DE starts without a pick of its own starts from ES-DE's:
