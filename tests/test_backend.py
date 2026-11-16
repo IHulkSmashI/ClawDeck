@@ -555,9 +555,7 @@ def test_a_cpu_clock_cap_from_the_guard_starts_the_search_over(fake_hw, monkeypa
     s.gov.lo, s.gov.hi, s.gov.ratio, s.gov.ref, s.gov.seen_hi, s.gov.fail[12] = 50.0, 50.0, 1.0, 50.0, 50.0, [1e12, 1, None, False, 0.0]
     at.thermal_clock(None)
     assert s.clock_pct is None and s.last_action == "thermal: CPU clock uncapped"
-    # what was measured under the cap says nothing without it (it stayed: 14 W at 50 fps for ten minutes, with 60 at
-    # the full limit and the target 60)
-    assert (s.gov.lo, s.gov.ratio, s.gov.ref, s.gov.seen_hi, s.gov.fail) == (None, None, None, None, {})
+    assert (s.gov.lo, s.gov.ratio, s.gov.ref, s.gov.seen_hi, s.gov.fail) == (None, None, None, None, {})   # all of the cap's
     at.session = None
 
 
@@ -1080,10 +1078,8 @@ def test_status_shows_your_limit_and_what_autotune_uses(plugin):
 
 
 def test_autotunes_own_maximum_is_the_limit_where_autotune_governs_and_the_tdp_setting_where_not(plugin):
-    """Two modes. Autotune off: the TDP setting is the limit. Autotune on: a target under Autotune's own maximum; no
-    maximum set, that is the TDP setting (nothing changes for who never moves it). The maximum is never saved as the
-    TDP setting, a change in a running game starts the game over under it, and where Autotune does not set the limit
-    (switched off, off on the charger) the TDP setting is on the chip and its slider is not greyed out."""
+    """Autotune off: the TDP setting is the limit. Autotune on: a target under Autotune's own maximum (none set: the
+    TDP setting). It is never saved as the TDP setting, and a change in a running game starts the game over."""
     p = plugin
     assert p.run(p.set_tdp(26))["ok"] and p.chip() == 26               # the TDP setting, in the menus
     st = p.run(p.get_power())

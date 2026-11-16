@@ -170,8 +170,6 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const onLever = (r: WriteResult) => { toast(r.summary); setAdvErr(r.ok ? null : r.error); refresh(); };
 
   const running = !!at?.running && !at.paused;
-  // Autotune sets the limit here (on, and for this power source and game): the TDP slider is greyed out, and the
-  // limit is Autotune's own maximum (none set: the TDP setting)
   const governs = !!st?.autotune_governs;
   const [atMaxV, setAtMaxV] = useState<number | null>(null);
   useEffect(() => setAtMaxV(null), [st?.autotune_max]);

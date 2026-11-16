@@ -444,7 +444,6 @@ class Plugin:
             if not value:
                 self.autotune.pause("autotune switched off")
                 if self.running_appid and self.settings.get("autotune_max"):
-                    # the game ran under Autotune's maximum: the TDP setting is the limit again
                     plugged = bool(self.battery.plugged())
                     w = self._pick(self._game_key(), plugged)["tdp"]
                     if w is not None:
@@ -544,8 +543,6 @@ class Plugin:
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_target"], st["autotune_auto_fps"] = self.autotune.target_of(
             int(self.settings.get("autotune_target") or 0), self.settings.get("autotune_auto_fps", True) is not False)
-        # Autotune's own maximum on this power source (none set: the TDP setting), and whether Autotune sets the limit
-        # here: the panel greys the TDP slider out then
         plugged = bool(self.battery.plugged())
         pk = self._pick(self._game_key() if self.running_appid else None, plugged)
         own = self.settings.get("autotune_max")
@@ -809,8 +806,6 @@ class Plugin:
         self._pl2_for(pk, plugged)
         governs, overrides = self._autotune_governs(prof, plugged), pk["overrides"]
         if governs and self.settings.get("autotune_max"):
-            # Autotune's own maximum is the limit in place of the TDP setting: on the chip from the start (so PL2 and
-            # the temperature guard follow it), also where Autotune then stays out (no frame rate)
             overrides = {**overrides, "tdp": self.power.clamp_tdp(int(self.settings["autotune_max"]), plugged)}
         result = self.power.apply_profile(pk["apply"], overrides, plugged)
         result["limit_w"] = result["applied"].get("tdp")
