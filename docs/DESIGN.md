@@ -223,11 +223,13 @@ It asks one question all the time: would more watts, up to your limit, give fram
     reference from them, what failed is kept (a menu's 60 fps over a 30 fps game took the limit to the floor). They
     may also be the game back from a video, at the limit the video needed: at a limit that holds the chip (the
     package within 2 W under it and not over it), and under the target when there is one, the full limit is looked at
-    once after 5 s, at most every 30 s. As many frames there: back, nothing learned from them. More there: the limit
+    once after 5 s (2 s after the package began to draw all of a limit that it did not draw all of when the reference
+    was taken), at most every 30 s. As many frames there: back, nothing learned from them. More there: the limit
     held them back, whatever they are, and it stays up. The same look for frames too many to judge (over 250 %), and
     in place of a further step down when the frames jump 15 % above what they were before the step. A look that
-    finds far more starts the same wait. Back from any stretch that was not judged, the pace starts again from the
-    game's own frames.
+    finds far more starts the same wait. Frames that stayed the 30 s at a limit that does not hold the chip are the
+    reference from that moment, before any step down. Back from any stretch that was not judged, the pace starts
+    again from the game's own frames.
   - *Slow frames* count only while the frame rates of five parts of the last 10 s agree (a faster menu inside them
     made every frame of the game a slow one).
   - *A log with a row a second* (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
