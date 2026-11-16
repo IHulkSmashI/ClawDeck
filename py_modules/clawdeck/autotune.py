@@ -944,7 +944,7 @@ class Autotune:
             log.info("autotune: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
     def _note(self, s: Session, text: str) -> None:
-        """For the log's "note" column: why the limit moved or stayed, next to the frames of that second."""
+        """For the log's "note" column: why the limit moved or stayed, next to the frames of that look."""
         s.notes.append(text)
         del s.notes[:-TRACE_NOTES]
 

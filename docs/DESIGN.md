@@ -184,7 +184,9 @@ It asks one question all the time: would more watts, up to your limit, give fram
   - *A cutscene or a video* gives fewer frames at every limit. When the full limit gives 15 % less than it did, the
     level that held before stays the lowest one for as long as that lower reference stands, no step down is tried for
     20 s, and the full limit is looked at again every 30 s for 2 minutes. More frames at a held limit than the full
-    limit is believed to give (the game is back) has the full limit looked at at once.
+    limit is believed to give (5 % for 5 s: the game is back) has the full limit looked at; far more (15 %) is a
+    menu's first, see below. A target counts as what the full limit gave only once it was held: a first look that
+    shows less than a target never met is no drop.
   - *A menu, a map, fast-forward, a loading screen:* frames under 35 % or over 250 % of the usual rate are not judged.
     When they stay for 5 s they are the game (a 20 fps stretch, a target far above what the game does), and nothing
     known before applies.
@@ -196,7 +198,10 @@ It asks one question all the time: would more watts, up to your limit, give fram
     2.5 times that wobble, at most fourfold. Frame rates are frames over their time, without frames over 2.5 times the
     median; frames that alternate short and long (generated frames) are read as their rate.
   - *Slow frames* count against the mean frame time of their own stretch and against the share the game had before
-    the step, with a margin for chance; not at all while the pace moves or in a game that dips by itself.
+    the step, with a margin for chance; not at all while the pace moves or in a game that dips by itself. More of
+    them at a held limit: one watt more, at most every 10 s. A watt that changed nothing: one look at the full limit
+    says whose they are. None there: the limit's, it stays up and comes down by steps judged against the share
+    there. As many there: the game's own in this place, the limit stays. The share is taken at every such look.
   - *The reference* while a limit is held that can't hold the game back is the median of the last five looks, not the
     last one; a look at the full limit made on purpose (after a loss, or to check) sets it from that look's frames:
     at least a second and 30 frames of them (a 20 fps game takes longer), once the draw and the frame rate have
@@ -213,8 +218,11 @@ It asks one question all the time: would more watts, up to your limit, give fram
   - *The reference follows the pace* only once every frame of the pace came in a look in which the limit could not
     hold the game back: at the start and the end of a loading screen the draw is low while the pace is still that of
     frames the limit did hold back.
-  - *Far more frames than usual* (a map, an inventory) are the game only after 30 s, not 5; back from any stretch that
-    was not judged, the pace starts again from the game's own frames.
+  - *Far more frames than the game gave* (15 %: a menu or a map over it) move nothing for 30 s: no step down, no
+    reference from them, what failed is kept (a menu's 60 fps over a 30 fps game took the limit to the floor). Under
+    the target at a limit that holds the chip there is one look at the full limit after 5 s (the game back from a
+    long video); a look that finds far more starts the same wait. Back from any stretch that was not judged, the
+    pace starts again from the game's own frames.
   - *Slow frames* count only while the frame rates of five parts of the last 10 s agree (a faster menu inside them
     made every frame of the game a slow one).
   - *A log with a row a second* (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
