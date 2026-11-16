@@ -156,7 +156,7 @@ def test_a_30_fps_video_does_not_become_the_reference_the_game_is_then_held_to()
         assert min(g.since(60), default=held) >= held             # never under what held the game before
         g.fps = HOLDS_FROM_14
         t0 = g.t
-        g.run(gov.ADOPT_FAST_S - 2)
+        g.run(gov.SCENE_S - 2)
         assert g.since(t0) == [], (seconds, g.since(t0))              # the target is met where the limit is: nothing moves
         g.run(12)
         assert g.st.ref == pytest.approx(60, abs=1) and g.limit >= 14 and not gov.out_of_reach(g.st, g.cfg), seconds
@@ -284,7 +284,7 @@ def test_another_scene_forgets_the_levels_that_failed():
     assert g.st.fail
     g.fps = lambda w: min(80.0, 5.0 * w)                    # 60 % more frames at the same limit, for good
     n, held = len(g.writes), g.limit
-    g.run(gov.ADOPT_FAST_S - 2)
+    g.run(gov.SCENE_S - 2)
     # as long as a menu may be: one look at the full limit (the draw is not known), no step down, nothing forgotten
     assert [w for _, w in g.writes[n:]] in ([], [30, held]) and g.limit == held and g.st.fail, g.writes[n:]
     g.run(6)
@@ -358,7 +358,7 @@ def test_the_edge_goes_up_one_watt_at_most_every_ten_seconds():
     g.run(45)
     ups = [(at, w) for at, w in g.writes if at > 20]
     assert [w for _, w in ups] == [17, 18, 19] or [w for _, w in ups] == [17, 18]
-    assert all(b[0] - a[0] >= gov.EDGE_UP_S - 0.6 for a, b in zip(ups, ups[1:]))
+    assert all(b[0] - a[0] >= 10 - 0.6 for a, b in zip(ups, ups[1:]))
 
 
 def test_a_watt_that_changes_nothing_has_the_full_limit_say_whose_slow_frames_they_are():
@@ -442,12 +442,12 @@ def test_the_game_back_under_its_target_at_the_limit_a_long_video_needed_gets_th
         game = lambda w: min(60.0, 60.0 * w / need_w)
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=need_w + 2), fps=game).run(60)
         g.fps = lambda w: 30.0
-        g.run(gov.REACH_FOR_S + 240)
+        g.run(120 + 240)
         low = g.limit
         assert low < need_w, (need_w, low)
         g.fps = game
         t0 = g.t
-        g.run(gov.ABOVE_S + 6)
+        g.run(2.0 + 6)
         assert g.limit >= need_w and g.st.ref == pytest.approx(60, abs=1), (need_w, low, g.since(t0))
 
 
@@ -466,12 +466,12 @@ def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_afte
             g.draw = lambda w, t: float(w)
         g.run(90)
         g.fps = lambda w: 30.0                                        # the video, for longer than the floor stands
-        g.run(gov.REACH_FOR_S + 240)
+        g.run(120 + 240)
         low = g.limit
         assert low < need_w - 2, (need_w, low)
         g.fps = game
         t0 = g.t
-        g.run(gov.ABOVE_S + 8)
+        g.run(2.0 + 8)
         assert game(g.limit) >= 114, (need_w, low, g.limit, g.notes[-4:])
     # a lighter place after a heavier one, both the game
     heavy, light = (lambda w: 40.0 * min(1.0, w / 14)), (lambda w: 80.0 * min(1.0, w / 24))
@@ -482,7 +482,7 @@ def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_afte
     held = g.limit
     assert 14 <= held <= 16
     g.fps = light                                                     # 47 to 53 fps here: far more than 40
-    g.run(gov.ABOVE_S + 8)
+    g.run(2.0 + 8)
     assert light(g.limit) >= 76, (held, g.limit, g.notes[-4:])
 
 
@@ -506,7 +506,7 @@ def test_far_too_many_frames_to_judge_at_a_limit_that_holds_them_back_get_a_look
         g.run(40)
         assert g.limit == held or g.limit == 30, g.notes[-3:]
         g.fps = after                                               # 109 to 127 fps at 12 to 14 W
-        g.run(gov.ABOVE_S + 8)
+        g.run(2.0 + 8)
         assert after(g.limit) >= 190, (need_w, held, g.limit, g.notes[-4:])
 
 
@@ -521,12 +521,12 @@ def test_the_look_for_far_more_frames_waits_until_the_chip_is_down_at_the_limit(
     g.draw = lambda w, t: min(float(w), 12.0)
     g.run(60)
     g.fps, g.draw = (lambda w, t: 30.0), (lambda w, t: 6.0)
-    g.run(gov.REACH_FOR_S + 240)
+    g.run(120 + 240)
     low, t0 = g.limit, g.t
     assert low <= 9, low
     drawn = lambda w, t: min(12.0, w + 4.0) if t < t0 + burst_s else min(float(w), 12.0)
     g.fps, g.draw = (lambda w, t: game(drawn(w, t))), drawn
-    g.run(burst_s + gov.ABOVE_S + 8)
+    g.run(burst_s + 2.0 + 8)
     assert game(g.limit) >= 114, (low, g.limit, [n for n in g.notes if n[0] >= t0])
 
 
@@ -627,7 +627,7 @@ def test_a_frame_rate_that_swings_across_far_more_gets_one_such_look_in_half_a_m
         g.fps = lambda w, t: min(40.0, 40.0 * w / 14) * (1.3 if (t - t0) % period < period - 1 else 1.0)
         g.run(180)
         looks = [at for at, note in g.notes if at >= t0 and note.startswith("more frames at")]
-        assert all(b - a >= gov.ADOPT_FAST_S for a, b in zip(looks, looks[1:])), (period, looks)
+        assert all(b - a >= gov.SCENE_S for a, b in zip(looks, looks[1:])), (period, looks)
 
 
 def test_a_menu_that_the_limit_holds_back_gets_the_full_limit_and_the_game_its_limit_back():
@@ -781,7 +781,7 @@ def _lighter_place(thermal=False):
     g.draw = lambda limit, t: float(limit)
     while not (g.st.mode == "hold" and g.limit == 14 and 13 in g.st.fail and g.t - g.st.changed_at >= 3) and g.t < 60:
         g.run(0.5)
-    assert g.limit == 14 and g.t - g.st.ref_at < gov.CHECK_S - 30, (g.t, g.limit, g.st.ref_at)    # no look for 30 s but this one
+    assert g.limit == 14 and g.t - g.st.ref_at < 60 - 30, (g.t, g.limit, g.st.ref_at)    # no look for 30 s but this one
     g.fps, g.thermal = (lambda w: 80.0 * min(1.0, w / 24)), thermal
     return g, g.t
 
@@ -816,7 +816,7 @@ def test_after_a_drop_of_the_reference_the_full_limit_is_looked_at_every_reach_s
     assert 22 <= held <= 28 and g.st.ref == pytest.approx(24, abs=0.5), (held, g.st.ref, g.notes[-4:])
     back = lambda w: 30.0 * min(1.0, w / (held * 30.0 / (heavy(held) * 1.02)))    # 2 % more at the held limit
     g.fps, t0 = back, g.t
-    g.run(gov.REACH_S + 5)
+    g.run(30 + 5)
     assert 30 in g.since(t0) and g.st.ref == pytest.approx(back(30), abs=0.5) and back(30) > 24 * 1.05, (g.limit, g.st.ref, [n for n in g.notes if n[0] >= t0][:5])
 
 
@@ -918,7 +918,7 @@ def test_a_visit_to_a_fast_map_changes_nothing_and_a_long_stay_is_the_game():
     assert held <= 15
     g.run(30)                                                        # 8 s in the map and back
     assert g.since(200) == [] and g.st.ref == pytest.approx(ref, rel=0.02) and set(fail) <= set(g.st.fail)
-    g.run(170 + gov.ADOPT_FAST_S + 10)                               # ... and a stay of over half a minute
+    g.run(170 + gov.SCENE_S + 10)                               # ... and a stay of over half a minute
     assert g.st.usual > 100
 
 
@@ -1062,7 +1062,7 @@ def test_a_held_limit_that_gives_more_than_the_reference_has_the_full_limit_look
     g.run(60)
     assert g.st.mode == "hold"
     g.st.ref, g.st.ref_at, g.st.ref_here, g.st.quiet_until, t0 = 40.0, g.t, None, g.t + 60, g.t
-    g.run(gov.ABOVE_S + 4)
+    g.run(2.0 + 4)
     assert any("checking what the full" in n for t, n in g.notes if t >= t0) and g.st.ref > 57
 
 
@@ -1079,7 +1079,7 @@ def test_a_frame_rate_that_moved_a_little_has_the_full_limit_looked_at_after_a_m
     assert not any("checking what the full" in n for t, n in g.notes if t >= t0)          # not yet
     g.run(25)
     looks = [t for t, n in g.notes if t >= t0 and "checking what the full" in n]
-    assert looks and gov.CHECK_S <= looks[0] - last <= gov.CHECK_S + 15
+    assert looks and 60 <= looks[0] - last <= 60 + 15
 
 
 def test_no_look_at_the_full_limit_while_the_package_is_well_under_the_limit():

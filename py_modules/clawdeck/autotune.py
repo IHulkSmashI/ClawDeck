@@ -677,7 +677,7 @@ class Autotune:
         s.clock_pct = pct
         if s.gov:
             s.gov.fail.clear()
-            s.gov.misses, s.gov.ref_at, s.gov.good, s.gov.home = 0, -1e9, None, None
+            s.gov.misses, s.gov.ref_at, s.gov.home = 0, -1e9, None
         self._did(s, "thermal: CPU clock " + ("uncapped" if pct is None else f"capped at {pct} %"), "thermal")
 
     def thermal_release(self, watts: int) -> bool:
