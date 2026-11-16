@@ -809,7 +809,7 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             # still: for a place that has its frame rate and draws the limit, nothing is known, as below)
             menu = st.free_w == st.limit
             (st.lo, st.hi, st.ratio, st.ref, _, st.band_at, st.free_w), st.was = st.was, None
-            if menu and out_of_reach(st, cfg):
+            if menu:
                 st.full_at = -1e9                    # (the place after a menu may be another one with this pace: where
                                                      # the goal is what the full limit gives, that is asked once)
             need = _need(st, cfg)
