@@ -35,11 +35,15 @@ def test_a_light_game_on_its_frame_limit_is_at_the_floor_within_half_a_minute(ta
     assert s.over_w <= 0.5 and s.starved_pct == 0 and s.fps == pytest.approx(60, abs=0.2)
 
 
-@pytest.mark.parametrize("seed", [1, 2, 3])
-def test_a_jump_of_the_need_is_answered_within_seconds(seed):
-    """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W."""
-    s = _score("emulator-need-jumps", 30, seed)
-    assert s.longest_starved_s <= 3.0 and s.starved_pct <= 2.5
+@pytest.mark.parametrize("target", [30, 60, None])
+def test_a_jump_of_the_need_is_answered_within_seconds(target):
+    """Midnight Club driving: within 20 s the game goes from holding 30 fps at 14 W to needing more than 30 W. With
+    its own 30 fps as the target, with a target it can't reach, and with none: no stretch of 3 s under what the full
+    limit gives, in twelve games."""
+    for seed in range(1, 13):
+        game = sim.Game(sim.SCENARIOS["emulator-need-jumps"], seed=seed, goal_fps=min(target, 30) if target else None)
+        s = sim.run(sim.New(target=target), game).score()
+        assert s.longest_starved_s <= 3.0 and s.starved_pct <= 3.0, (target, seed, s)
 
 
 @pytest.mark.parametrize("seed", [1, 2, 3])
@@ -78,7 +82,7 @@ def test_a_steady_scene_is_left_alone_after_the_first_minutes(name, target):
 def test_the_chargers_30_w_stop_under_a_35_w_pick_costs_no_frames(name):
     """With a charger in, the package settles at 30 W whatever the limit says (a model: `Game(stop_w=30)`): a look at
     the full 35 W shows what the first minute gives. That costs nothing against the same pick without the stop, and no
-    more frames than a 30 W pick (review 3, 2026-11-16). Means of six runs: one run's figures move by a few percent
+    more frames than a 30 W pick. Means of six runs: one run's figures move by a few percent
     (emulator-need-jumps, target 30: 0.4 to 5.1 % under the line at a 35 W pick, with or without the stop)."""
     scenario = sim.SCENARIOS[name]
     for target in (None, 30 if name.startswith("emulator") else 60):

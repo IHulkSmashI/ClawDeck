@@ -116,14 +116,14 @@ it ran, saved per game, battery and plugged in apart), else the last pick on tha
 Autotune the slider stays that limit; the line under it reads "Autotune: using 22 W of your 35 W · saves 13 W · 58
 fps" from `get_autotune` (polled every 3 s while the panel is open in a game).
 
-**A pick and what Autotune learned are two records, and only the user writes a pick.** A game's slot (per power source)
-has `base` and `tdp` (the pick) and `learned` (Autotune's record: `start`, the limit and target it was found
-under). `base` and `tdp` are written in three places, each a user action: `set_tdp` (the slider), `apply_profile` and
-`reset_power_slot` (Use default). Autotune writes `learned` only (`_save_learned`). `_pick` reads the limit from
+**A TDP setting and what Autotune learned are two records, and only the user writes a TDP setting.** A game's slot (per
+power source) has `base` and `tdp` (the setting) and `learned` (Autotune's record: `start`, the limit and target it was
+found under). `base` and `tdp` are written in three places, each a user action: `set_tdp` (the slider), `apply_profile`
+and `reset_power_slot` (Use default). Autotune writes `learned` only (`_save_learned`). `_pick` reads the limit from
 `base`/`tdp` and never from `learned`; `learned.start` is only where a session begins under that limit, and it is
 dropped when the limit or the target is another one. So a level that held can never become the limit of a later
-session, and the slider never shows a value nobody picked. (A build that saved the TDP that held as the game's own pick
-left 8 W picks on a Claw that its user had not made, and a frontend's 8 W menu result became the limit of its games,
+session, and the slider never shows a value nobody set. (A build that saved the TDP that held as the game's own setting
+left 8 W settings on a Claw that its user had not made, and a frontend's 8 W menu result became the limit of its games,
 2026-11-15/16; tests `test_what_autotune_learned_is_never_saved_or_shown_as_your_pick` and
 `test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games`.)
 - **Game start, a pick in a game, Use default, unplugging, resume:** `revert_all(keep_thermald=True)` (back to boot
@@ -147,9 +147,9 @@ coretemp's "Package id 0" as the fallback; `hw.find_pkg_temp`). Above 95 °C it 
 check until the package is under 90 °C, never below the floor (autotune's, else the user's, else the model's). With
 autotune running the step is `Autotune.thermal_step`: it becomes a cap the governor works under. A cap on the CPU
 clock (`thermal_clock`) makes it forget which levels failed (the same watts give other frames), and watts the guard
-gives back are not raised to, only looked at for what they give. The step stays until the user picks a profile or moves the slider (both reset
-the guard) or the power is reverted. The status line reads "thermal: stepped to N W". The SoC's TCC limit and the EC
-fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
+gives back are not raised to, only looked at for what they give. The step stays until the user picks a profile or
+moves the slider (both reset the guard) or the power is reverted. The status line reads "thermal: stepped to N W".
+The SoC's TCC limit and the EC fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
 
 ## Autotune governor (HARDWARE-FINDINGS §24)
 `governor.py` is one function, `step(state, obs, cfg)`: the frames since the last look, the package power, the guard's
@@ -157,86 +157,70 @@ cap in; a limit to write (or none), when to look again and a line for the panel 
 on frames written by hand, and `tools/autotune_sim.py` on games built from recordings. `autotune.py` is the rest: the
 frames (`Sampler`), the session, the loop, the writes, the status and the log.
 
-It asks one question all the time: would more watts, up to your limit, give frames it has to deliver?
-- **The goal** is your target less 5 %; with a target the full limit can't reach (and Auto FPS on), what the full limit
-  gives less 5 %; with no target, what the full limit gives less the keep margin (5 % by default, at least 2 fps). What
-  the full limit gives (the reference) is the pace whenever the limit can't be what holds the game back: at the full
-  limit, or with the package 2 W or more under the limit.
-- **No: try fewer.** A step down (2 W, or straight to just over what the package draws when that is far under the
-  limit) is watched for 2.5 s on every frame. A clear loss (the median of 10 frames 3 % under the goal), a small one
-  on all the frames of the watch, or more slow frames than before (frames more than 10 % over the pace: the edge of an
-  emulator's limit shows there first) takes it back at once. The level failed: it is not tried again for 2 minutes,
-  twice that after each further failure, and the next step goes halfway to it. Two measured points (the level that
-  failed and the one above it) also rule out the levels a straight line puts under the goal.
-- **Yes: all of them at once.** A clear loss while holding a lowered limit writes the full limit; a second later the
-  frames say which it was. They came back: the limit was too low, it joins the failed levels, and the way down starts
-  again. They didn't: the scene got heavier at every limit, the reference is what the full limit gives now, and the
-  limit before comes back. A small loss that stays goes one level up instead.
-- **What is known grows old.** The reference is checked at the full limit one second after steps down that began there,
-  when the frame rate at the held limit moved 3 % since it was taken (not more often than once a minute), and every
-  10 minutes; not from one watt under the full limit, unless the frames there are more than the reference says the
-  full limit gives (a reference from a video, with the game back). Failed levels are forgotten when the pace at one limit moved 15 % for 5 s (another scene), when the guard
-  changed the CPU clock, and when the frame-generation multiplier changed.
-- **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a menu, a pause). A
-  step being watched is taken back; a lowered limit goes to the full one while frames still come.
+It asks one question all the time: would more watts, up to your limit, give frames it has to deliver? Only the full
+limit answers that: an emulator that spins draws the whole limit at every limit, and a heavier scene and a limit that
+is too low look the same in the frames.
 
-- **What is not the limit's doing** (added after an adversarial review, 2026-11-15, which broke the first version on
-  each of these):
-  - *A cutscene or a video* gives fewer frames at every limit. When the full limit gives 15 % less than it did, the
-    level that held before stays the lowest one for as long as that lower reference stands, no step down is tried for
-    20 s, and the full limit is looked at again every 30 s for 2 minutes. More frames at a held limit than the full
-    limit is believed to give (5 % for 5 s: the game is back) has the full limit looked at; far more (15 %) is a
-    menu's first, see below. A target counts as what the full limit gave only once it was held: a first look that
-    shows less than a target never met is no drop.
-  - *A menu, a map, fast-forward, a loading screen:* frames under 35 % or over 250 % of the usual rate are not judged.
-    When they stay for 5 s they are the game (a 20 fps stretch, a target far above what the game does), and nothing
-    known before applies.
-  - *The game's own dips and hitches:* a loss at a limit that can't be its cause (the full limit, or the package well
-    under the limit) that is over within 2 s is a dip of the game's own. After two of them a loss counts only when it
-    is still there a second later, and a step is judged at the end of its watch on its typical frame. A level that had
-    held for 20 s is tried once more before it is given up.
-  - *A game whose frame rate wobbles* (the rates of its last six runs of ten frames differ): the thresholds widen to
-    2.5 times that wobble, at most fourfold. Frame rates are frames over their time, without frames over 2.5 times the
-    median; frames that alternate short and long (generated frames) are read as their rate.
-  - *Slow frames* count against the mean frame time of their own stretch and against the share the game had before
-    the step, with a margin for chance; not at all while the pace moves or in a game that dips by itself. More of
-    them at a held limit: one watt more, at most every 10 s. A watt that changed nothing: one look at the full limit
-    says whose they are. None there: the limit's, it stays up and comes down by steps judged against the share
-    there. As many there: the game's own in this place, the limit stays. The share is taken at every such look.
-  - *The reference* while a limit is held that can't hold the game back is the median of the last five to ten looks, not
-    the last one; a look at the full limit made on purpose (after a loss, or to check) sets it from that look's frames:
-    at least a second and 30 frames of them (a 20 fps game takes longer), once the draw and the frame rate have
-    stopped climbing.
-  - A step down is watched from when the package draws under 2.5 W over the new limit (at most 3 s late); a raise is
-    judged when the draw and the frame rate have stopped climbing.
+What it knows:
+- **The reference** is what the full limit gives: the pace there, or the pace while the package is 2 W or more under
+  the limit (the median of the last five looks, so one dip does not move it).
+- **The band** is the pace at the held limit when the limit was last known to cost no more than the margin: by a look
+  at the full limit, by the step that came here and held, or all the time while the limit can't hold the game back.
+  Lowest and highest, at most 15 % apart; a pace further away starts a new band and the one before is kept (the game
+  comes back to it after a menu, without a look). **The ratio** is what this limit gave over what the full limit
+  gave when both were last measured. Between looks the reference is the pace over the ratio: it moves with the
+  game's own frame rate.
+- **The goal** is your target less 5 %; with a target the full limit can't reach (and Auto FPS on) or with no
+  target, the band's lower edge while a limit is held, and for a step down what the full limit gives less 5 % (no
+  target: less the keep margin, 5 % by default and at least 2 fps).
+- **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
+  Frame rates are frames over their time, without frames over 2.5 times the median.
 
-- **After the second review (2026-11-15):**
-  - *The floor after a drop of the reference* (the level that held before a video) stands for 2 minutes; then the lower
-    reference is the game (a heavier place, a target that was never in reach) and the way down goes on. A reference
-    taken while the package did not draw the whole of the limit that is held says nothing once the package does draw
-    it all: after 2 s of that the full limit is looked at (the game after a long video, at a limit that gives it just
-    the video's frame rate, showed no loss).
-  - *The reference follows the pace* only once every frame of the pace came in a look in which the limit could not
-    hold the game back: at the start and the end of a loading screen the draw is low while the pace is still that of
-    frames the limit did hold back.
-  - *Far more frames than the game gave* (15 %: a menu or a map over it) move nothing for 30 s: no step down, no
-    reference from them, what failed is kept (a menu's 60 fps over a 30 fps game took the limit to the floor). They
-    may also be the game back from a video, at the limit the video needed: at a limit that holds the chip (the
-    package within 2 W under it and not over it), and under the target when there is one, the full limit is looked at
-    once after 5 s (2 s after the package began to draw all of the limit), at most every 30 s. As many frames there: back, nothing learned from them. More there: the limit
-    held them back, whatever they are, and it stays up. The same look for frames too many to judge (over 250 %), and
-    in place of a further step down when the frames jump 15 % above what they were before the step. A look that
-    finds far more starts the same wait. Frames that stayed the 30 s at a limit that does not hold the chip are the
-    reference from that moment, before any step down. Back from any stretch that was not judged, the pace starts
-    again from the game's own frames.
-  - *Slow frames* count only while the frame rates of five parts of the last 10 s agree (a faster menu inside them
-    made every frame of the game a slow one).
-  - *A log with a row a second* (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
-    frames of the whole time since its row before. *No frames for 30 s* at any time, not only at the start: your limit
-    goes back on the chip until frames come. *A refused write:* the governor rests for 30 s. *The guard's cap under
-    your floor:* the guard wins.
-  - *The look at the full limit a second after steps down from it* also comes when the steps took more than six in a
-    row (the pause after the sixth dropped it: 30 W to the floor in eleven steps ended without that look).
+The rules:
+1. **A look** is the full limit for a second (30 frames at least; longer while the draw or the frame rate still
+   climbs), from a held limit under it, and what it gives against what the limit gave just before. It starts when
+   - the last ten frames are 3 % under the goal, or the pace is 1 % under it and stays (a fall: at once);
+   - the pace is 5 % over the band at a limit the package draws all of, and under your target (the game back from a
+     video, a lighter place);
+   - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; the
+     look then lasts 240 frames, at most 10 s);
+   - nothing is known at this limit, steps down that did not start at the full limit have ended, or the last look
+     is 10 minutes old.
+   Not under the guard's clock cap, and for age alone not from one watt under the full limit.
+   One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, the band takes
+   that pace in, the ratio is this look's. Else the limit failed and the full limit stays; steps down follow. Two
+   exceptions: a level that had held for 20 s (or a game that dips by itself) is tried once more, watched, before it is
+   given up; and slow frames at a limit that held its frame rate get one watt more instead of the full limit, twice in
+   2 minutes (the edge of an emulator's limit is a watt wide).
+2. **A step down** starts 5 s after the last write, from a pace that is in the band, that the last ten frames agree
+   with and that stood still for 3 s. It goes to the level that held for 20 s in this scene; else halfway to the
+   highest level under it that failed; else 2 W down, or straight to just over what the package draws. It is watched
+   for 2.5 s on every frame (10 s when the level failed for slow frames before), from when the package draws no more
+   than 2.5 W over it. A clear loss on the last ten frames, a small one on all frames of the watch, or more slow
+   frames than before takes it back at once; the level failed and is not tried again for 2 minutes, twice that after
+   each further failure (up to 10 minutes), and steps wait 5 s, twice that after each failure in a row (up to 5
+   minutes). A step that loses 15 % gets the full limit at once: when that gives what the limit before gave, the
+   level failed; when not, the scene changed under the step and nothing is booked. A step that held but moved the
+   frame rate gets a look at once. After three steps in a row the rules of holding run, then the look. A step from
+   the full limit needs none: the frames before it were the full limit's.
+3. **A scene has to stay.** The pace 15 % away for 5 s is another scene; no step down is tried in it for 30 s (a menu,
+   a map, a video), except back to the level that held in the scene the game returns to. What failed counts in the
+   scene it failed in and where the full limit gives a little more; in a slower one (a video, a cutscene) for 10
+   minutes; not where the full limit gives 15 % more (a lighter place: it may hold there).
+4. **The game's own dips:** a loss at a limit that can't be its cause that is over within 2 s, and a second try that
+   holds. Not booked in the 10 s after a write (the wobble is measured over those). After two of them in 5 minutes a
+   loss counts only when it is still there a second later, and a step is judged at the end of its watch on its
+   typical frame.
+5. **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a pause). A write
+   being watched is taken back; a lowered limit goes to the full one while frames still come. When such frames stay
+   for 5 s they are the game, and nothing known before applies. Back from them the pace starts again from the game's
+   own frames.
+6. **The guard:** its cap is obeyed at once and a write being watched is dropped unjudged; under your floor the cap
+   wins. Watts given back are looked at like a limit never looked at.
+
+Also: a log with a row a second (the game's own MangoHud log while mangoapp gives nothing) hands the governor the
+frames of the whole time since its row before. No frames for 30 s: your limit is applied again until frames
+come. A refused write: the governor rests for 30 s.
 
 Frames: every frame of every game from mangoapp's log (Steam's overlay; `Sampler` turns its logging on through its
 control socket and deletes the log at the game's end). The launch wrapper's MangoHud log (a row a second) is read only
@@ -255,13 +239,13 @@ moved.
 What Autotune owns while it governs: PL1; PL2 at PL1 + 2 W, also over a PL2 set by hand (`Power.governed`; yours is back
 with your limit); the PL1 window at 8 s from the game's start to its end (RAPL averages PL1 over 56 s on the EX: for
 most of a minute after a change the package can run up to PL2, and a step down watched for 2.5 s would be judged on
-frames it didn't cost yet). The CPU and GPU levers stay as your pick set them.
+frames it didn't cost yet). The CPU and GPU levers stay as your profile set them.
 
 Start: where the game held last time under the same limit and for the same target (`Learned.start`: the level under
 which 80 % of the holding time lay; the session counts the seconds per watt, `State.held_s`), else mid-range between
-floor and limit. A limit picked while the game runs (slider, profile, Use default) goes on the chip as picked and
-Autotune works down from it. A manual change (Advanced) or switching it off in a game pauses it: your limit goes back on
-the chip and the change made by hand stays. xemu (`OWN_PACE`, looked for every 3 s for the whole game) and a game with
+floor and limit. A TDP set while the game runs (slider, profile, Use default) is applied as set and
+Autotune works down from it. A manual change (Advanced) or switching it off in a game pauses it: your limit is applied
+again and the change made by hand stays. xemu (`OWN_PACE`, looked for every 3 s for the whole game) and a game with
 no frame rate for 30 s get your limit and are left alone.
 
 ## Open items (need the device)

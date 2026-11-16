@@ -71,9 +71,9 @@ RETRY_DWELL_S = 10.0    # ... and the next try of a level that failed for its sl
                         # do not show a share of slow frames of 6 %)
 CHECK_MAX_S = 600.0     # the full limit is looked at when the last look is this old (a scene change that the held
                         # limit does not show)
-ABOVE = 0.05            # the pace this much over the band: the full limit may give more too. And what failed or held
-                        # belongs to a scene: a failed level counts until the full limit gives this much more than it
-                        # did then, a level that held while it gives within this of it
+ABOVE = 0.05            # the pace this much over the band: the full limit may give more too. And what held belongs
+                        # to a scene: a level that held counts while the full limit gives within this of what it gave
+                        # then (what failed: _counts)
 STEADY, STEADY_S = 0.15, 3.0           # a step down starts only while the frame rate of each half second of the last
                                        # STEADY_S is within STEADY of their median
 FREE_LOOKS = 5          # the reference is the median pace of the last looks at a limit that can't hold the game back,
@@ -155,7 +155,6 @@ class State:
     off_left: int = 0               # ... and this many frames of the game have to come before its pace is known again
     noise: float = 0.0              # how much the game's rate of N frames wobbles by itself (relative), from the pace
     noises: deque = field(default_factory=lambda: deque(maxlen=21))
-    noise_at: float = -1e9          # when the last of them was taken (one every LOOK_S: 21 of them are 10 s)
     dips: deque = field(default_factory=lambda: deque(maxlen=8))   # when it lost frames at a limit that can't be the cause
     loss_since: float | None = None # a loss seen in a game that dips by itself: since when
     small_since: float | None = None
@@ -467,11 +466,11 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.free_fps.clear()
     rising = obs.draw_w is not None and st.draw_was is not None and obs.draw_w > st.draw_was + RISE_W
     st.draw_was = obs.draw_w if obs.draw_w is not None else st.draw_was
-    if st.mode == "hold" and t - st.noise_at >= LOOK_S - WATCH_S / 2:
+    if st.mode == "hold":
         # the median of the figures of the last 10 s: a change of the frame rate (a loss!) is in a few of them, not in
-        # most (one figure every LOOK_S, also while a loss is waited out and looked at ten times a second)
+        # most
         st.noises.append(_spread(st.pace))
-        st.noise, st.noise_at = statistics.median(st.noises), t
+        st.noise = statistics.median(st.noises)
     # NOISE times what the game's own wobble does to a rate of N frames, and of PACE_FRAMES (at most four times the
     # plain thresholds)
     clear = min(4 * CLEAR, max(CLEAR, NOISE * st.noise))
@@ -527,9 +526,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             quick = t - st.loss_since >= PATIENT_S
         elif not quick:
             st.loss_since = None
-        # (a second try has to hold the goal with the wobble's margin to spare: a level a hair over the goal on one
-        # watch is under it on the next)
-        margin = small if seen < DWELL_S else -small if st.retest else 0.0
+        margin = small if seen < DWELL_S else 0.0
         lost = quick or (want is not None and got is not None and got < want * (1 - margin))
         if lost and cur < want * (1 - SHIFT) and st.prev < top and not st.retest:
             # far more lost than a step of this size usually costs: the scene may have changed under the step. All
@@ -571,7 +568,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             # 2.5 s of a step separates the two), so the full limit is looked at when the steps have ended. More
             # frames than before the step: the full limit gives at least as many, so the ratio is at most 1
             st.lo, st.hi, st.ratio = held, held, (min(1.0, ratio * held / st.before) if ratio and st.before else None)
-            st.ref_at = -1e9
+            # (a step from the full limit is that look: the frames before it were the full limit's)
+            st.ref_at = st.since if st.prev >= top and st.chain == 1 and not st.retest else -1e9
             nxt = _next_down(st, obs, cfg, t, scene)
             rate = got if dippy and got is not None else held        # (a game that dips: on its typical frame)
             if st.before and abs(rate - st.before) > 2 * small * st.before and not obs.thermal:
@@ -635,18 +633,18 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     want = _goal_at(now, cfg)
     if st.mode == "recover" and st.tried is not None:
         tried, st.tried = st.tried, None
-        failed(tried, now)
         if st.before and now >= st.before * (1 - CLEAR):
             # the full limit gives what the limit before the step gave: the same scene, with a steep edge under it
+            failed(tried, now)
             back(f"{tried} W lost {st.before - was:.0f} fps; back to {st.prev} W")
         else:
+            # ... fewer frames than the limit before the step gave: the scene changed under the step, and what the
+            # step lost says nothing of this scene (the level tried in the last second of an intro at the target was
+            # closed for two minutes of R1's game)
             act.note = f"another scene: {now:.0f} fps at {top} W"
         hold(AFTER_LOSS_S)
         return act
-    # (after a fall `was` is the ten frames of the moment: "within the margin" needs the wobble's margin to spare, as a
-    # second try does. A limit taken for innocent by a hair was held 15 s at 3 fps under the full limit's 24)
-    spare = small if st.mode == "recover" else 0.0
-    if was >= want * (1 + spare) and not (st.why == "slow" and share < st.lost_slow - EDGE):
+    if was >= want and not (st.why == "slow" and share < st.lost_slow - EDGE):
         # the limit before gives what the full one gives, within the margin (and has no more slow frames): the scene
         # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is this look's
         back(f"the full {top} W gives {now:.0f} fps: the scene, not the limit; back to {st.prev} W" if st.mode == "recover"
@@ -808,7 +806,6 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
         if dippy:                                    # this game dips by itself: only a loss that stays counts
             st.loss_since = st.loss_since if st.loss_since is not None else t
             if t - st.loss_since < PATIENT_S:
-                act.look_s = WATCH_S                 # (looked at as often as a write is: PATIENT_S, not half a second more)
                 return act
         st.lost, was_at, st.held_for, st.loss_since = cur, st.limit, t - st.changed_at, None
         watch("recover", top, f"{st.lost:.1f} fps at {was_at} W, under {need:.1f}: the full {top} W", "fall")
@@ -877,11 +874,12 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             return act
 
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed
-    if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S and t - st.scene_at >= SCENE_S
+    # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait)
+    if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and here >= need * (1 - small) and abs(cur - here) <= clear * here and _steady(st, t, clear)):
+            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
         nxt = _next_down(st, obs, cfg, t, ref)
-        if nxt is not None:
+        if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]
             share = _slow(ms)
             st.base_slow = share if st.limit >= top or st.base_slow is None else min(st.base_slow, share)

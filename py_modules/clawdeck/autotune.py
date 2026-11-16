@@ -909,7 +909,7 @@ class Autotune:
         """Shown frames per rendered frame, for the governor: a whole number that changes rarely. XeLL writes its
         rendered-frame figure once per 100 rendered frames (every 1.7 s at 60 fps), so a quotient of this look's shown
         frames and that line stands still between two lines and says nothing about the frames in between; the
-        governor then saw no loss at all (review, 2026-11-15). The quotient is taken once per XeLL line, over the
+        governor then saw no loss at all. The quotient is taken once per XeLL line, over the
         shown frames since the line before, and the median of the last five, rounded, is the multiplier."""
         line = self.sampler._xell
         if line is None or smp.source != "rendered":

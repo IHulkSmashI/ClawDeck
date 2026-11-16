@@ -2,6 +2,7 @@
 (tests/data/autotune/, a Claw 8 EX, 2026-11-14), its score, and Autotune as it is today on its scenarios.
 Run: python3 -m pytest -q tests"""
 import bisect
+import dataclasses
 import importlib.util
 import os
 import statistics
@@ -177,6 +178,50 @@ def test_autotune_wired_does_what_the_governor_alone_does():
         alone = sim.run(sim.New(target=target), sim.Game(scenario, goal_fps=target)).score()
         assert abs(wired.over_w - alone.over_w) <= 2.0, (name, wired, alone)
         assert wired.starved_pct <= alone.starved_pct + 1.5 and wired.longest_starved_s <= 3.5, (name, wired, alone)
+
+
+def _parked(tuner, scenario, seed=1):
+    """A game on its 30 fps lock under Autotune as wired: the limit after 60 s; then changes a minute, the share of
+    slow frames (over 1.1 times the lock's frame), the mean limit and the share of the time at the full limit."""
+    game = sim.Game(scenario, seed=seed, goal_fps=30)
+    game.trace, changes, set_limit = [], [], game.set_limit
+
+    def noted(w):
+        before = game.limit
+        set_limit(w)
+        if game.limit != before:
+            changes.append(game.t)
+    game.set_limit = noted
+    sim.run(tuner, game)
+    late = [(limit, ms) for t, limit, _, ms, _ in game.trace if t > 60]
+    total = sum(ms for _, ms in late)
+    return ([limit for t, limit, *_ in game.trace if t <= 60][-1], len([t for t in changes if t >= 60]) / (total / 60000.0),
+            100.0 * sum(1 for _, ms in late if ms > 1.1 * 1000 / 30) / len(late), sum(limit * ms for limit, ms in late) / total)
+
+
+@pytest.mark.parametrize("target", [30, 60])
+def test_midnight_club_parked_is_at_17_w_within_a_minute_and_then_left_alone(target):
+    """The 30 fps lock of the recording, 20 minutes, ten games, with the lock as the target and with a target of 60
+    that it can't reach: at or under 17 W after 60 s in every game; from then on one change a minute and 1 % of slow
+    frames, as means over the games (a look and a failed step are two writes within seconds; the simulator's share of
+    slow frames between the recorded 15 and 20 W is not a measurement)."""
+    runs = [_parked(sim.Wired(target=target), [(1200, "mcla", 1.0)], seed) for seed in range(1, 11)]
+    assert all(at60 <= 17 for at60, *_ in runs), runs
+    mean = lambda i: sum(r[i] for r in runs) / len(runs)
+    assert mean(1) <= 1.0 and mean(2) <= 1.0 and mean(3) <= 17.0, (mean(1), mean(2), mean(3))
+    assert max(r[1] for r in runs) <= 1.3 and max(r[2] for r in runs) <= 1.5, runs
+
+
+@pytest.mark.parametrize("target", [30, 60])
+@pytest.mark.parametrize("dip, seconds", [(0.0, 5), (0.08, 5), (0.08, 10), (0.12, 5)])
+def test_a_games_own_slower_stretches_do_not_move_the_limit(dip, seconds, target, monkeypatch):
+    """The same lock with stretches of seconds in which the emulator itself makes fewer frames at every limit (a busy
+    stretch of road): too long for a dip of the game's own, too small for another scene. The limit stays near the
+    lock's."""
+    monkeypatch.setitem(sim.SCENES, "mcla-busy", dataclasses.replace(sim.SCENES["mcla"], cap=30.0 * (1 - dip)))
+    scenario = [(seconds, "mcla", 1.0), (seconds, "mcla-busy", 1.0)] * (600 // (2 * seconds))
+    _, changes, _, limit = _parked(sim.Wired(target=target), scenario)
+    assert changes <= 3.0 and limit <= 20.0, (changes, limit)
 
 
 # ---- replay: recorded frames, whatever the governor asks -------------------------------------------------------------
