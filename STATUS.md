@@ -121,7 +121,7 @@ not affected. Check on the EX: Autotune on, an Xbox game started from xemu's App
 "Autotune stays out of xemu".
 
 **Autotune stays out of xemu (2026-11-14):** xemu presents 60 fps whatever the emulated game does (Project Gotham
-Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. 3, 10 and 30 s into a game
+Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the game slows. Every 3 s of a game
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
 EX: Autotune on, start an Xbox game from ES-DE: within 30 s the Power line says "Autotune stays out of xemu" and the
 TDP is the pick.

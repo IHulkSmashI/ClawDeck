@@ -184,14 +184,15 @@ The rules:
 1. **A look** is the full limit for a second (30 frames at least; longer while the draw or the frame rate still
    climbs), from a held limit under it, and what it gives against what the limit gave just before. It starts when
    - the last ten frames are 3 % under the goal, or the pace is 1 % under it and stays (a fall: at once);
-   - the pace is 5 % over the band at a limit the package draws all of, and under your target (the game back from a
+   - the pace is 3 % over the band at a limit the package draws all of, and under your target (the game back from a
      video, a lighter place);
    - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; not
      when they all lie in one burst, within a third of the frames: those are the game's; the look then lasts 240
      frames, at most 10 s);
    - nothing is known at this limit, steps down that did not start at the full limit have ended, or the last look
      is 10 minutes old.
-   Not under the guard's clock cap, and for age alone not from one watt under the full limit.
+   Under the guard's clock cap only a fall starts one, and for age alone none starts from one watt under the full
+   limit.
    One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, and the
    ratio is this look's. The band takes that pace in when the full limit gives what it gave at the look before; when
    it gives another frame rate this is another place, and its band is this look's alone (what a look found in a
@@ -208,7 +209,8 @@ The rules:
    frames than before takes it back at once; the level failed and is not tried again for 2 minutes, twice that after
    each further failure (up to 10 minutes), and steps wait 5 s, twice that after each failure in a row (up to 5
    minutes). A step that loses 15 % gets the full limit at once: when that gives what the limit before gave, the
-   level failed; when not, the scene changed under the step and nothing is booked. A step that held but moved the
+   level failed; when it gives fewer frames, or so many more that the limit before is under their goal, the scene
+   changed under the step and nothing is booked. A step that held but moved the
    frame rate gets a look at once. After three steps in a row the rules of holding run, then the look. A step from
    the full limit needs none: the frames before it were the full limit's.
 3. **A scene has to stay.** The pace 15 % away for 5 s is another scene (frames over your target are not), and so is
@@ -224,7 +226,8 @@ The rules:
 5. **Not judged:** no frames for 1.5 s, or a pace under 35 % of the usual one (a loading screen, a pause). A write
    being watched is taken back (a step down that leaves so few frames is judged as a step: it failed); a lowered
    limit goes to the full one while frames still come. When such frames stay for 5 s they are the game, and nothing
-   known before applies. After 5 s of them, and back in the band a limit had before a menu, a map or a video, the
+   known before applies; where the package then draws 2 W under the limit (a video), no step down is tried for
+   30 s, as in a new scene. After 5 s of them, and back in the band a limit had before a menu, a map or a video, the
    scene may be another one with the same frame rate at this limit: the full limit is looked at once.
 6. **The guard:** its cap is obeyed at once and a write being watched is dropped unjudged; under your floor the cap
    wins. Watts given back are looked at like a limit never looked at.
