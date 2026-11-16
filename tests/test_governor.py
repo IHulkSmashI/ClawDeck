@@ -753,7 +753,7 @@ def test_a_short_video_keeps_the_level_that_held_before_it():
 def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_has_drawn_the_whole_limit_for_bound_s(target):
     """After a video the game is in a heavier place: at the limit that held before, more frames than the video's and
     fewer than the game's. The package draws all of the limit, which it did not in the video: that is the sign for the
-    look, BOUND_S after it began, as without the far more frames (cloud fuzz seeds 22, 82, 150, 2026-11-16: the wait
+    look, BOUND_S after it began, as without the far more frames (cloud fuzz seeds 82, 150, 2026-11-16: the wait
     for far more frames put the look at 5 s, with 51 of 60 fps until then)."""
     need = [11.0]
     game = lambda w: 60.0 * min(1.0, w / need[0])
