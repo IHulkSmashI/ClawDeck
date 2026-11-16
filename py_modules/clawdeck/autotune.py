@@ -447,7 +447,6 @@ class Learned:
     target: int | None = None       # target fps mode: your target this was found for
     target_eff: float | None = None # ... the fps held when yours was out of reach (Auto FPS)
     start: int | None = None        # where to start next time: the level under which 80 % of the holding time lay
-    held: dict | None = None        # watts -> seconds held there, this session
 
 
 NO_FPS_S = 30          # seconds without any frame rate before autotune gives up on a game
@@ -624,7 +623,7 @@ class Autotune:
             s.paused, self.power.governed = False, True
         s.user_target, s.auto_fps = (int(target) if target else None), bool(auto_fps)
         s.phase = "target" if target else "hold"
-        s.learned.target, s.learned.target_eff, s.learned.start, s.learned.held = s.user_target, None, None, None
+        s.learned.target, s.learned.target_eff, s.learned.start = s.user_target, None, None
         s.settled = False
         on_chip = s.learned.tdp
         self._govern_from(s, on_chip)
@@ -753,7 +752,6 @@ class Autotune:
         level = governor.start_level(s.gov.held_s, s.floor_tdp, s.ceiling_tdp)
         if level is not None:
             s.learned.start, s.settled = level, True
-            s.learned.held = {str(w): round(sec) for w, sec in sorted(s.gov.held_s.items()) if sec >= 1}
 
     def _levers(self, l: Learned) -> None:
         """The other levers as the chip has them, for the log: Autotune sets the limit only."""

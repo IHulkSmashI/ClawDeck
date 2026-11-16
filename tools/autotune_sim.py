@@ -15,6 +15,8 @@ them). Each frame takes 1000 / rate(watts the chip gets now), with the spread th
 game's own frame limit. The chip follows a new limit with a short lag (LAG_S): recorded frames were slower from the 3rd
 frame after a step down and back on pace 0.25 s after a step up. A scenario is a list of scenes with a factor for the
 work each one asks (0.5: half the frames at the same watts), so the watts a game needs can move as they did in play.
+With stop_w the charger's hidden limit is modelled: the package settles at stop_w once its average over STOP_TAU_S got
+there, whatever the limit says (Claw 8 EX with a charger in, 2026-11-16: a 35 W pick gave 37 W for 29-85 s, then 30 W).
 Not modelled: the PL1 time window and PL2 (the chip running over PL1 for seconds), temperature, the CPU/GPU levers
 (the hardware here has none, so Autotune's balance phase finds nothing to try), frame generation, loading screens.
 
@@ -45,6 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from clawdeck import autotune, governor, hw, power  # noqa: E402
 
 LAG_S = 0.15            # the chip's sustained power follows a new limit with this time constant
+STOP_TAU_S = 56.0       # the average the charger's hidden limit acts on (the firmware's PL1 window)
 PRESENT_MS = 0.2        # spread of a frame held by the game's frame limit (recorded: 33.33 ms median, 33.9 ms p99)
 TOLERANCE = 0.05        # a limit "costs frames" when it gives this much less than the full limit would (without a
 KEEP_FPS = 2.0          # target: or 2 fps less, whichever is more, as Autotune's own rule says) ...
@@ -167,7 +170,8 @@ class Game:
     """Frames of a scenario at the limit a governor sets. All times are the simulation's own (self.t, seconds)."""
 
     def __init__(self, scenario: list, floor: int = FLOOR_W, ceiling: int = CEILING_W, seed: int = 1,
-                 goal_fps: float | None = None):
+                 goal_fps: float | None = None, stop_w: float | None = None):
+        self.stop_w, self._avg = stop_w, float(floor)   # the charger's hidden limit, and the average it acts on
         self.segs = [(float(d), SCENES[n], float(k)) for d, n, k in scenario]
         self.ends = []
         for d, _, _ in self.segs:
@@ -202,7 +206,7 @@ class Game:
 
     def best(self, scene: Scene, work: float) -> float:
         """The frame rate the full limit gives here (or the goal, when that is lower): what a governor owes."""
-        top = scene.shown(self.ceiling, work)
+        top = scene.shown(min(self.ceiling, self.stop_w) if self.stop_w else self.ceiling, work)
         return min(top, self.goal) if self.goal else top
 
     def line(self, best: float) -> float:
@@ -256,7 +260,9 @@ class Game:
             self._frames.append((self.t, ms))
             if self.trace is not None:
                 self.trace.append((round(self.t, 3), self.limit, round(self.watts, 2), round(ms, 2), need))
-            self.watts += (self.limit - self.watts) * (1.0 - math.exp(-dt / LAG_S))
+            self._avg += (draw - self._avg) * (1.0 - math.exp(-dt / STOP_TAU_S))
+            held = self.stop_w is not None and self._avg >= self.stop_w
+            self.watts += ((min(self.limit, self.stop_w) if held else self.limit) - self.watts) * (1.0 - math.exp(-dt / LAG_S))
 
     def _watts_for_cap(self, scene: Scene, work: float) -> float:
         return float(next((w for w in range(self.floor, self.ceiling + 1) if scene.rate(w, work) >= scene.cap),

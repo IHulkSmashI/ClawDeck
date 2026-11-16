@@ -1121,7 +1121,7 @@ def test_autotune_saves_only_a_finished_result(fake_hw, monkeypatch):
     at, s = _tuner(fake_hw, monkeypatch)
     _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(300)       # 60 fps from 15 W up
     r = at.stop(revert=False)
-    assert r["settled"] and r["learned"]["start"] in (15, 16) and r["learned"]["held"]
+    assert r["settled"] and r["learned"]["start"] in (15, 16)
     assert r["summary"].startswith(f"Autotune held 60 fps with {r['learned']['start']} W of your 20 W") and "saves" in r["summary"]
 
 
