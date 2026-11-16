@@ -138,6 +138,7 @@ class State:
     was: tuple | None = None        # band, ratio, reference and its time this limit had before its pace moved to another
                                     # band (a menu, a map, a video): back in it once, they are known again
     free_w: int | None = None       # the lowered limit whose band was taken while the package drew 2 W under it
+    bound: bool = False             # the package drew all of the held limit at the last look that could tell
     why: str | None = None          # why the look being watched was started: fall | rise | slow | old | none
     lost_slow: float = 0.0          # the share of slow frames at the limit before a look for them
     scene_fps: float | None = None  # the pace of the scene, since when the pace is SHIFT away from it, and when the
@@ -331,7 +332,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         watts = int(max(cfg.floor, min(top, watts)))
         if watts != st.limit:
             st.limit, st.changed_at, act.limit_w = watts, t, watts
-            st.free_w = None
+            st.free_w, st.bound = None, False
             st.lo = st.hi = st.ratio = st.was = None             # nothing is known at this limit yet
         act.note = note
 
@@ -446,6 +447,12 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     free = st.limit >= top or (obs.draw_w is not None and obs.draw_w <= st.limit - 2)
     st.free_run = st.free_run + len(obs.frames) if free else 0
     free = free and st.free_run >= PACE_FRAMES
+    if obs.draw_w is not None and st.limit < top:
+        # the package drew all of this limit and now draws 2 W less: a lighter scene (a menu, a map over the game).
+        # No step down from its frames before it has stayed (rule 3), whatever its pace
+        if free and st.bound:
+            st.scene_at = t
+        st.bound = not free if free or obs.draw_w > st.limit - 2 else st.bound
     met = bool(cfg.target) and here >= cfg.target * (1 - TOL)
     if st.mode == "hold" and (free or met) and len(st.pace) == PACE_FRAMES:
         if obs.frames:
@@ -647,7 +654,14 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         back(f"the full {top} W gives {now:.0f} fps: the scene, not the limit; back to {st.prev} W" if st.mode == "recover"
              else f"{top} W gives {now:.0f} fps, {st.prev} W {was:.0f}: back to {st.prev} W")
         st.lo, st.hi, st.ref = (lo, hi, before) if st.why != "old" else (None, None, before)
-        _take(st, was)                               # (another band: the one before the look is kept, with its reference)
+        if st.lo is not None and before is not None and abs(now - before) > 2 * small * before:
+            # the full limit gives another frame rate than at the look before: another place. Its band is this look's
+            # alone (taken into the band before, a slower place widened it, and a loss of 10 % in the place after was
+            # in it); the one before is kept, with its reference
+            st.was = (st.lo, st.hi, st.ratio, st.ref, st.ref_at)
+            st.lo = st.hi = was
+        else:
+            _take(st, was)
         st.ratio, st.ref = min(1.0, was / now), now
         if st.why == "slow":
             st.base_slow = max(st.lost_slow, share)  # as many at the full limit: the game's own in this place

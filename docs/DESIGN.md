@@ -163,16 +163,20 @@ is too low look the same in the frames.
 
 What it knows:
 - **The reference** is what the full limit gives: the pace there, or the pace while the package is 2 W or more under
-  the limit (the median of the last five looks, so one dip does not move it).
+  the limit (the median of the last five looks, so one dip does not move it). A pace at your target at a lowered limit
+  says only that the full limit gives your target at least.
 - **The band** is the pace at the held limit when the limit was last known to cost no more than the margin: by a look
   at the full limit, by the step that came here and held, or all the time while the limit can't hold the game back.
-  Lowest and highest, at most 15 % apart; a pace further away starts a new band and the one before is kept (the game
-  comes back to it after a menu, without a look). **The ratio** is what this limit gave over what the full limit
-  gave when both were last measured. Between looks the reference is the pace over the ratio: it moves with the
-  game's own frame rate.
-- **The goal** is your target less 5 %; with a target the full limit can't reach (and Auto FPS on) or with no
-  target, the band's lower edge while a limit is held, and for a step down what the full limit gives less 5 % (no
-  target: less the keep margin, 5 % by default and at least 2 fps).
+  Lowest and highest, at most 15 % apart. A band belongs to one reference: a pace further away, or a look at which
+  the full limit gives another frame rate than at the look before, starts a new band, and the one before is kept
+  once (the game comes back to it after a menu; when its look is over 30 s old the full limit is looked at). A band
+  taken while the package drew 2 W or more under the limit is dropped when the package draws all of that limit.
+  **The ratio** is what this limit gave over what the full limit gave when both were last measured. Between looks
+  the reference is the pace over the ratio: it moves with the game's own frame rate.
+- **The goal** is your target less 5 %. With no target, or when the band's lower edge is under that (the full limit
+  gave less than your target at the band's look; Auto FPS on), it is the band's lower edge while a limit is held,
+  and for a step down what the full limit gives less 5 % (no target: less the keep margin, 5 % by default and at
+  least 2 fps).
 - **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
   Frame rates are frames over their time, without frames over 2.5 times the median.
 
@@ -182,13 +186,17 @@ The rules:
    - the last ten frames are 3 % under the goal, or the pace is 1 % under it and stays (a fall: at once);
    - the pace is 5 % over the band at a limit the package draws all of, and under your target (the game back from a
      video, a lighter place);
-   - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; the
-     look then lasts 240 frames, at most 10 s);
+   - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; not
+     when they all lie in one burst, within a third of the frames: those are the game's; the look then lasts 240
+     frames, at most 10 s);
    - nothing is known at this limit, steps down that did not start at the full limit have ended, or the last look
      is 10 minutes old.
    Not under the guard's clock cap, and for age alone not from one watt under the full limit.
-   One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, the band takes
-   that pace in, the ratio is this look's. Else the limit failed and the full limit stays; steps down follow. Two
+   One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, and the
+   ratio is this look's. The band takes that pace in when the full limit gives what it gave at the look before; when
+   it gives another frame rate this is another place, and its band is this look's alone (what a look found in a
+   slower place says nothing of a loss in the place after it). So a game whose own frame rate moves for seconds
+   costs a look each time, and no frames. Else the limit failed and the full limit stays; steps down follow. Two
    exceptions: a level that had held for 20 s (or a game that dips by itself) is tried once more, watched, before it is
    given up; and slow frames at a limit that held its frame rate get one watt more instead of the full limit, twice in
    2 minutes (the edge of an emulator's limit is a watt wide).
@@ -203,8 +211,10 @@ The rules:
    level failed; when not, the scene changed under the step and nothing is booked. A step that held but moved the
    frame rate gets a look at once. After three steps in a row the rules of holding run, then the look. A step from
    the full limit needs none: the frames before it were the full limit's.
-3. **A scene has to stay.** The pace 15 % away for 5 s is another scene; no step down is tried in it for 30 s (a menu,
-   a map, a video), except back to the level that held in the scene the game returns to. What failed counts in the
+3. **A scene has to stay.** The pace 15 % away for 5 s is another scene (frames over your target are not), and so is
+   a package draw that falls 2 W under a limit it filled before (a menu at nearly the game's frame rate); no step
+   down is tried in it for 30 s (a menu, a map, a video), except back to the level that held in the scene the game
+   returns to. What failed counts in the
    scene it failed in and where the full limit gives a little more; in a slower one (a video, a cutscene) for 10
    minutes; not where the full limit gives 15 % more (a lighter place: it may hold there).
 4. **The game's own dips:** a loss at a limit that can't be its cause that is over within 2 s, and a second try that

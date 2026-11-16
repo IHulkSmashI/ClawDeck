@@ -182,7 +182,7 @@ def test_autotune_wired_does_what_the_governor_alone_does():
 
 def _parked(tuner, scenario, seed=1):
     """A game on its 30 fps lock under Autotune as wired: the limit after 60 s; then changes a minute, the share of
-    slow frames (over 1.1 times the lock's frame), the mean limit and the share of the time at the full limit."""
+    slow frames (over 1.1 times the lock's frame) and the mean limit."""
     game = sim.Game(scenario, seed=seed, goal_fps=30)
     game.trace, changes, set_limit = [], [], game.set_limit
 
@@ -213,15 +213,67 @@ def test_midnight_club_parked_is_at_17_w_within_a_minute_and_then_left_alone(tar
 
 
 @pytest.mark.parametrize("target", [30, 60])
-@pytest.mark.parametrize("dip, seconds", [(0.0, 5), (0.08, 5), (0.08, 10), (0.12, 5)])
-def test_a_games_own_slower_stretches_do_not_move_the_limit(dip, seconds, target, monkeypatch):
+@pytest.mark.parametrize("dip, seconds", [(0.0, 5), (0.08, 5), (0.08, 10), (0.12, 5), (0.12, 10)])
+def test_a_games_own_slower_stretches_cost_looks_and_no_frames(dip, seconds, target, monkeypatch):
     """The same lock with stretches of seconds in which the emulator itself makes fewer frames at every limit (a busy
-    stretch of road): too long for a dip of the game's own, too small for another scene. The limit stays near the
-    lock's."""
+    stretch of road): too long for a dip of the game's own, too small for another scene. Each one may cost a look at
+    the full limit (what a look found in one place is not taken for the other), and no frames: the slow frames are
+    the game's own (those of a stretch 12 % slower: 46.8 % of all frames) and 2.5 points at most."""
     monkeypatch.setitem(sim.SCENES, "mcla-busy", dataclasses.replace(sim.SCENES["mcla"], cap=30.0 * (1 - dip)))
     scenario = [(seconds, "mcla", 1.0), (seconds, "mcla-busy", 1.0)] * (600 // (2 * seconds))
-    _, changes, _, limit = _parked(sim.Wired(target=target), scenario)
-    assert changes <= 3.0 and limit <= 20.0, (changes, limit)
+    own = 100.0 * (1 - dip) / (2 - dip) if dip > 0.09 else 0.0
+    for seed in (1, 2):
+        _, changes, slow, limit = _parked(sim.Wired(target=target), scenario, seed)
+        assert slow <= own + 2.5 and changes <= 15.0, (seed, changes, slow, limit)
+
+
+@pytest.mark.parametrize("target", [30, 60])
+def test_a_dip_of_the_emulators_own_every_minute_leaves_the_slow_frames_at_one_percent(target, monkeypatch):
+    """The same lock with 0.6 s at 24 fps every minute, at every limit. The game counts as one that dips, and its
+    slow frames are still judged: outside the dips, 1.5 % at most (7 to 13 % at a limit under the edge)."""
+    monkeypatch.setitem(sim.SCENES, "mcla-dip", dataclasses.replace(sim.SCENES["mcla"], cap=24.0))
+    for seed in (1, 2):
+        game = sim.Game([(59.4, "mcla", 1.0), (0.6, "mcla-dip", 1.0)] * 20, seed=seed, goal_fps=30)
+        game.trace = []
+        sim.run(sim.Wired(target=target), game)
+        late = [ms for t, _, _, ms, _ in game.trace if t > 60 and game.place(t)[0].cap == 30.0]
+        slow = 100.0 * sum(1 for ms in late if ms > 1.1 * 1000 / 30) / len(late)
+        assert slow <= 1.5, (seed, slow)
+
+
+@pytest.mark.parametrize("target", [60, None])
+def test_a_place_where_the_last_watts_count_for_more_is_seen_after_a_slower_place(target, monkeypatch):
+    """Enshrouded at the Flame altar, as recorded; 20 s in a place 8 % slower at every limit (one look: the scene);
+    the altar again; then a place where the full limit gives the altar's 55.7 fps and 25 W gives 9 % less. That is a
+    loss, seen at once: under the limit it needs for 5 % of the time at most (all 400 s, inside the band the slower
+    place had widened)."""
+    altar = sim.SCENES["enshrouded-altar"]
+    monkeypatch.setitem(sim.SCENES, "steeper", dataclasses.replace(altar, curve=(
+        (8, 16.4), (10, 23.2), (12, 30.6), (15, 37.0), (18, 41.0), (21, 45.0), (24, 49.5), (27, 53.5), (28, 54.2), (30, 55.7))))
+    scenario = [(150, "enshrouded-altar", 1.0), (20, "enshrouded-altar", 0.92), (30, "enshrouded-altar", 1.0), (400, "steeper", 1.0)]
+    for seed in (1, 2, 3):
+        game = sim.Game(scenario, seed=seed, goal_fps=target)
+        game.trace = []
+        sim.run(sim.Wired(target=target), game)
+        after = [limit for t, limit, *_ in game.trace if t >= 200]
+        need = game.need(sim.SCENES["steeper"], 1.0)
+        assert sum(1 for limit in after if limit < need) <= 0.05 * len(after), (seed, need, after[0], after[-1])
+
+
+@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("menu", [20, 28])
+def test_a_menu_at_the_title_screens_frame_rate_takes_no_step_down(menu, target, monkeypatch):
+    """A title screen at 60 fps for 10 s, a game that gives 52 fps from 20 W, a menu at 60 fps over it for under 30 s,
+    the game again. By its frame rate the menu is the title screen's scene; the package draws 9 W in it and all of
+    the limit in the game. No step down in the menu (to 8 W in half the games: the game came back at 21 of 52 fps)."""
+    monkeypatch.setitem(sim.SCENES, "title", sim.Scene(curve=((8, 75.0), (30, 75.0)), cap=60.0, free_w=9.0, jitter=0.02, cpu_pct=15))
+    monkeypatch.setitem(sim.SCENES, "game", sim.Scene(curve=((8, 20.8), (20, 52.0), (30, 52.0)), cpu_pct=40, gpu_bound=True))
+    for seed in (1, 2, 3):
+        game = sim.Game([(10, "title", 1.0), (240, "game", 1.0), (menu, "title", 1.0), (60, "game", 1.0)], seed=seed, goal_fps=target)
+        game.trace = []
+        sim.run(sim.Wired(target=target), game)
+        before = [limit for t, limit, *_ in game.trace if t < 250][-1]
+        assert min(limit for t, limit, *_ in game.trace if 250 <= t < 250 + menu) >= before, (seed, before)
 
 
 # ---- replay: recorded frames, whatever the governor asks -------------------------------------------------------------

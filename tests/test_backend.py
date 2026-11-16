@@ -358,6 +358,24 @@ def test_a_new_floor_is_in_effect_at_once(fake_hw, monkeypatch):
     at.session = None
 
 
+def test_a_raised_floor_ends_a_second_try_under_it(fake_hw, monkeypatch):
+    """The governor is in the second try of a level (the frames were lost there once) when the floor is raised over
+    it: the try ends, and nothing is booked for a level that is no longer allowed (it went on at the new floor, and
+    "the game's own dip" was booked for it)."""
+    from test_governor import _into_retest
+    g, held = _into_retest()
+    at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
+    s.gov, s.cfg, s.learned.tdp = g.st, g.cfg, g.limit
+    assert s.gov.mode == "probe" and s.gov.retest and s.learned.tdp == held
+    at.set_floor(held + 1)
+    g.limit = s.learned.tdp
+    g.run(0.2)
+    assert s.gov.mode == "hold" and not s.gov.retest
+    g.run(15)
+    at.session = None
+    assert not any("own dip" in n for _, n in g.notes), g.notes[-3:]
+
+
 def test_autotune_starts_where_the_game_held_under_the_same_limit_and_target_else_mid_range(fake_hw, monkeypatch):
     pw = power.Power(fake_hw)
     monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
@@ -993,6 +1011,18 @@ def test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games(plugin):
     p.run(p.game_started(esde))
     assert _frontend_event(p, "start", "xbox", "/roms/xbox/Halo.iso", "Halo")
     assert p.autotune.session.ceiling_tdp == 30
+
+
+def test_a_frontend_games_own_settings_count_without_a_power_choice_of_its_own(plugin):
+    """A game started by a frontend whose own slot holds settings but no power choice ("autotune": false for this
+    game): those settings are the game's, not the frontend's (Autotune ran in it)."""
+    p = plugin
+    esde, game = "3119184808", "3119184808#ps3/Demon's Souls"
+    p.profiles.set(esde, False, {"base": "custom", "tdp": 12})
+    p.profiles.set(game, False, {"autotune": False, "cpu_max_pct": 70})
+    p.run(p.game_started(esde))
+    assert _frontend_event(p, "start", "ps3", "/roms/ps3/Demon's Souls.iso", "Demon's Souls")
+    assert p._profile_source(game, False) == game and p.autotune.session is None
 
 
 def test_a_frontend_game_has_no_launch_file_of_its_own(plugin, monkeypatch):
@@ -2376,8 +2406,6 @@ def test_a_frontend_games_limit_does_not_change_because_autotune_saved_learning(
     assert "learned" in own and not own.get("base")                # learning only, no pick
     assert _frontend_event(p, "start", "ps2", "/roms/ps2/GT4.iso", "GT4")
     s = p.autotune.session
-    slot = p.run(p.power_slot(esde))
-    print("second session ceiling", s.ceiling_tdp, "pick shown", slot["pick"])
     assert s.ceiling_tdp == 30, f"the ceiling moved to {s.ceiling_tdp} W because Autotune saved learning"
     assert s.cfg.start_w == 20 and s.learned.tdp == 20             # ... and it starts where the game held last time
 
@@ -2390,12 +2418,9 @@ def test_the_toast_says_nothing_was_saved_when_it_was(plugin):
     p.settings["autotune_target"] = 30
     p.run(p.set_tdp(30))
     p.run(p.game_started("77"))
-    s = p.autotune.session
     _Game(p.autotune, lambda tdp, *_: 30.0 if tdp >= 14 else 2.1 * tdp).run(150)
-    print("ref", s.gov.ref, "settled", s.settled, "tdp", s.learned.tdp, "held", dict(s.gov.held_s))
     r = p.run(p.game_stopped("77"))
     own = p.profiles.own("77", False)
-    print("saved:", own.get("learned", {}).get("start"), "toast:", r["learned"]["summary"])
     assert not ("learned" in own and "nothing new saved" in r["learned"]["summary"]), "toast contradicts the save"
 
 
@@ -2405,7 +2430,6 @@ def test_a_guard_step_whose_write_fails_leaves_no_cap_the_guard_cannot_lift(fake
     the governor works under the cap for the rest of the session."""
     at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
     _Game(at, lambda tdp, *_: min(60.0, 3.0 * tdp)).run(30)          # needs 20 W
-    held = s.learned.tdp
     temp = tmp_path / "temp"
     temp.write_text("97000\n")
     g = thermal.Guard(str(temp), "pkg")
@@ -2417,11 +2441,9 @@ def test_a_guard_step_whose_write_fails_leaves_no_cap_the_guard_cannot_lift(fake
         return False if ok["n"] == 1 else real(w, plugged)
     monkeypatch.setattr(at.power, "set_tdp", flaky)
     g.check(at.held_w(), 8, at.thermal_step, limit_w=30, raise_tdp=at.thermal_release)
-    print("after the failed step: guard stepped_w", g.stepped_w, "autotune thermal_cap", s.thermal_cap, "held", held)
     temp.write_text("60000\n")                                       # cooled down, for minutes
     for _ in range(20):
         g.check(at.held_w(), 8, at.thermal_step, limit_w=30, raise_tdp=at.thermal_release)
-    print("after 20 cool checks: thermal_cap", s.thermal_cap)
     assert s.thermal_cap is None, "a cap nobody will lift"
 
 
@@ -2433,12 +2455,11 @@ def test_a_hand_edited_or_foreign_record_does_not_stop_the_game_from_starting(pl
     p.run(p.set_tdp(30))
     p.profiles.set("55", False, {"learned": {"ceiling": 30, **bad}})
     try:
-        r = p.run(p.game_started("55"))
+        p.run(p.game_started("55"))
     except Exception as e:                       # noqa: BLE001
         pytest.fail(f"{bad}: game_started raised {type(e).__name__}: {e}; session={p.autotune.session is not None}, "
                     f"governed={p.power.governed}, loop={'gov None' if p.autotune.session and p.autotune.session.gov is None else 'ok'}")
     s = p.autotune.session
-    print(bad, "->", s.learned.tdp, p.chip())
     assert 8 <= s.learned.tdp <= 30 and isinstance(s.learned.tdp, int)
 
 
@@ -2453,7 +2474,6 @@ def test_xemu_already_running_gets_no_write_of_autotunes_own(plugin, tmp_path, m
     monkeypatch.setattr(autotune, "PROC", str(proc))
     p.run(p.set_tdp(30))
     p.run(p.game_started("3119184808"))
-    print("PL1 right after the start, xemu running:", p.chip(), "W; governed", p.power.governed)
     assert p.chip() == 30, "Autotune's start level is on the chip of a game it must stay out of"
 
 
@@ -2465,22 +2485,17 @@ def test_a_pause_of_half_a_minute_does_not_throw_away_what_the_session_held(plug
     p.settings["autotune_target"] = 30
     p.run(p.set_tdp(30))
     p.run(p.game_started("88"))
-    s = p.autotune.session
     fps = {"on": True}
     g = _Game(p.autotune, lambda tdp, *_: (30.0 if tdp >= 14 else 2.1 * tdp) if fps["on"] else None)
     import time as _t
     monkeypatch.setattr(autotune, "time", type("C", (), {"monotonic": staticmethod(lambda: g.t), "time": staticmethod(_t.time)}))
     g.run(150)
-    held_before = dict(s.gov.held_s)
     fps["on"] = False
     g.run(31)
-    print("after the pause: paused", s.paused, "no_frames", s.no_frames, "chip", p.chip())
     fps["on"] = True
     g.run(40)
-    print("held before the pause", held_before, "governor held now", dict(s.gov.held_s), "chip", p.chip())
-    r = p.run(p.game_stopped("88"))
+    p.run(p.game_stopped("88"))
     own = p.profiles.own("88", False).get("learned", {})
-    print("saved start", own.get("start"), "saved tdp", own.get("tdp"), "held", own.get("held"))
     assert own.get("start") == 14, f"saved start {own.get('start')} (tdp {own.get('tdp')})"
 
 

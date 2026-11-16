@@ -393,7 +393,7 @@ def test_a_watt_that_changes_nothing_has_the_full_limit_say_whose_slow_frames_th
 
 
 def test_a_menu_over_the_game_takes_no_step_down_whatever_it_shows():
-    """A menu or a map over a 30 fps game whose target of 60 is out of reach, for up to ADOPT_FAST_S: 40 to 90 fps at
+    """A menu or a map over a 30 fps game whose target of 60 is out of reach, for up to half a minute: 40 to 90 fps at
     any limit. The menu's 60 fps took the limit to the floor, and the game came back at 19 fps.
     No step down from its frames; under the target one look at the full limit; the game back: the limit before."""
     for menu_fps in (40.0, 45.0, 60.0, 72.0, 90.0):
@@ -446,9 +446,9 @@ def test_a_menu_takes_no_step_down_in_any_mode(target, game, menus):
 @pytest.mark.parametrize("target", [None, 90, 120])
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_after_a_look(target, draw_known):
-    """Far more frames than before are a menu's for ADOPT_FAST_S, but not when the limit holds them back: the game back
+    """Far more frames than before are a menu's for half a minute, but not when the limit holds them back: the game back
     from a 30 fps video at the limit the video needed (46 of 120 fps for 31 s, cloud fuzz seed 51, 2026-11-16), or a
-    lighter place that wants more watts. One look at the full limit after ABOVE_S says it, with or without a target
+    lighter place that wants more watts. One look at the full limit says it, with or without a target
     (a target these frames reach needs no look)."""
     for need_w in (16, 20, 26):
         game = lambda w: 120.0 * min(1.0, w / need_w)
@@ -482,8 +482,8 @@ def test_far_more_frames_at_a_limit_that_holds_them_back_get_the_full_limit_afte
 @pytest.mark.parametrize("draw_known", [False, True])
 def test_far_too_many_frames_to_judge_at_a_limit_that_holds_them_back_get_a_look_too(target, draw_known):
     """After a short video the level that held before it is on the chip, and a heavier, faster place gives over 2.5
-    times the video's frames there: not judged for ADOPT_FAST_S, and 21 % under the need all that time (cloud fuzz seed
-    117, 2026-11-16). One look at the full limit after ABOVE_S, as for far more frames that are judged."""
+    times the video's frames there: not judged for half a minute, and 21 % under the need all that time (cloud fuzz seed
+    117, 2026-11-16). One look at the full limit, as for far more frames that are judged."""
     for need_w in (22, 26):
         after = lambda w: 200.0 * min(1.0, w / need_w)
         g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=20), fps=lambda w: 60.0 * min(1.0, w / 12))
@@ -559,7 +559,7 @@ def _seconds_under(g, t0, t1, fps, line):
 @pytest.mark.parametrize("before_w, after_w", [(14, 14), (30, 20), (30, 26), (22, 16)])   # 30: held one watt under the full limit
 def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(target, before_w, after_w):
     """After a video the game is back at the level that held before it, with all its frames there. The look of the
-    wait finds as many at the full limit and takes no reference; when the frames had stayed ADOPT_FAST_S, the video's
+    wait finds as many at the full limit and takes no reference; when the frames had stayed half a minute, the video's
     30 fps was still what the full limit was believed to give, and the steps down were judged against it: 10 to 17 s
     at 20 % under (cloud fuzz seeds 2, 122, 193, 194, 2026-11-16). Also from one watt under the full limit."""
     before, after = (lambda w: 60.0 * min(1.0, w / before_w)), (lambda w: 60.0 * min(1.0, w / after_w))
@@ -579,7 +579,7 @@ def test_frames_that_stayed_after_a_video_are_the_game_before_any_step_down(targ
 @pytest.mark.parametrize("target", [None, 60])
 @pytest.mark.parametrize("fps_before", [46.0, 30.0])
 def test_far_more_frames_that_stayed_at_the_full_limit_are_the_reference_before_any_step_down(target, fps_before):
-    """A lighter place after a heavy one, at the full limit: far more frames, so nothing moves for ADOPT_FAST_S. When
+    """A lighter place after a heavy one, at the full limit: far more frames, so nothing moves for half a minute. When
     they have stayed, they are what the full limit gives: the first step down is judged against them, not against the
     heavy place's frame rate (cloud fuzz seed 29, 2026-11-16: 46 fps known, 59 fps at the full 20 W, steps down to
     14 W against 44 fps, 7.6 s at 47 to 56 fps)."""
@@ -610,7 +610,7 @@ def test_a_menu_with_far_too_many_frames_to_judge_gets_one_look_and_the_game_its
 
 def test_a_frame_rate_that_swings_across_far_more_gets_one_such_look_in_half_a_minute():
     """A rate that goes over and under "far more than the game gave" every few seconds starts the wait again each time;
-    the look at the full limit that belongs to the wait does not come more often than every ADOPT_FAST_S."""
+    the look at the full limit that belongs to the wait does not come more often than twice a minute."""
     for period in (7.0, 12.0, 20.0):
         g = Game(gov.Cfg(floor=8, ceiling=30, target=None, start_w=20), fps=lambda w: min(40.0, 40.0 * w / 14)).run(150)
         t0 = g.t
@@ -764,10 +764,10 @@ def test_a_short_video_keeps_the_level_that_held_before_it():
 
 
 @pytest.mark.parametrize("target", [None, 60])
-def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_has_drawn_the_whole_limit_for_bound_s(target):
+def test_a_heavier_place_after_a_video_gets_the_look_when_the_package_draws_the_whole_limit(target):
     """After a video the game is in a heavier place: at the limit that held before, more frames than the video's and
     fewer than the game's. The package draws all of the limit, which it did not in the video: that is the sign for the
-    look, BOUND_S after it began, as without the far more frames (cloud fuzz seeds 82, 150, 2026-11-16: the wait
+    look, seconds after it began, as without the far more frames (cloud fuzz seeds 82, 150, 2026-11-16: the wait
     for far more frames put the look at 5 s, with 51 of 60 fps until then)."""
     need = [11.0]
     game = lambda w: 60.0 * min(1.0, w / need[0])
@@ -1296,7 +1296,7 @@ def test_back_from_a_menu_the_game_is_judged_on_frames_of_the_game_alone():
 
 def test_steam_menu_over_a_30fps_game_moves_nothing():
     """R7: the Steam menu over a game for 30 s, then back: no step taken from the menu's frames. Here the menu shows
-    60 fps over a game locked at 30 (a 2x rate, inside OFF_HI = 2.5, so it is judged as the game)."""
+    60 fps over a game locked at 30 (twice the game's rate: it is judged as the game)."""
     menu = {"on": False}
     fps = lambda w, t: 60.0 if menu["on"] else (30.0 if w >= 14 else 2.08 * w)
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=fps).run(120)
@@ -1773,3 +1773,214 @@ def test_a_look_is_judged_when_the_package_draw_has_stopped_rising(a_look, judge
         g.run(0.1)
         assert g.t < t1 + 20
     assert judged_after[0] <= g.t - t1 <= judged_after[1], (g.t - t1, g.notes[-2:])
+
+
+# ---- what a look found is that place's ------------------------------------------------------------------------------
+@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("other, seconds, lost, need", [(30.0, 12, 30.0, 28), (53.0, 12, 54.0, 20), (56.0, 20, 55.0, 20),
+                                                        (45.0, 40, 48.0, 24)])
+def test_a_loss_at_the_frame_rate_of_an_earlier_video_or_heavier_place_gets_the_full_limit(other, seconds, lost, need, target):
+    """A video or a heavier place gives `other` fps at every limit: one look, the scene, and back. The game goes on.
+    Later the need rises, and the limit that held gives about the frame rate that look saw, the full limit all 60: a
+    loss, and the full limit within 3 s (taken into the band of the limit, the slower place hid it for 9 minutes)."""
+    place = {"p": "game"}
+
+    def fps(w, t):
+        if place["p"] == "other":
+            return other
+        if place["p"] == "lost":
+            return 60.0 if w >= need else lost
+        return 60.0 * min(1.0, w / 14)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=16), fps=fps)
+    g.run(150)
+    place["p"] = "other"
+    g.run(seconds)
+    place["p"] = "game"
+    g.run(20)
+    t0 = g.t
+    place["p"] = "lost"
+    g.run(60)
+    first = next((at for at, w in g.writes if at >= t0), None)
+    assert first is not None and first - t0 <= 3.0 and g.limit >= need, (first, t0, g.limit, g.since(t0)[:6])
+
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_a_heavier_place_at_the_frame_rate_of_an_earlier_video_is_a_loss(target):
+    """A 30 fps video over a game held at the 12 W it needs: one look, the scene. The game again. Later a place that
+    needs 24 W gives the video's 30 fps at 12 W and 60 at the full limit: a fall, not the video's band again (120 s of
+    120 at half the frames)."""
+    place = {"p": "game"}
+
+    def fps(w, t):
+        return 30.0 if place["p"] == "video" else 60.0 * min(1.0, w / (24.0 if place["p"] == "heavy" else 12.0))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=14), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(90)
+    place["p"] = "video"
+    g.run(15)
+    place["p"] = "game"
+    g.run(15)
+    place["p"], lost = "heavy", 0
+    for _ in range(120):
+        g.run(1.0)
+        lost += fps(g.limit, g.t) < 54
+    assert lost <= 12, lost
+
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_the_game_after_an_intro_video_that_drew_little_is_not_held_at_the_videos_limit(target):
+    """A 30 fps intro video that draws 6 W, then the game: 60 fps from 22 W, 30 under it, and the package draws all
+    of the limit. The band of the lowered limit was taken while the package drew far less than it: nothing is known
+    there once the package draws all of it (597 s at half the frames)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target), fps=lambda w, t: 30.0 if t < 40 else 60.0 if w >= 22 else 30.0)
+    g.draw = lambda w, t: 6.0 if t < 40 else float(w)
+    starved = 0
+    for _ in range(300):
+        g.run(1.0)
+        starved += g.t > 45 and g.limit < 22
+    assert starved <= 15, (starved, g.writes[:12])
+
+
+def test_frames_over_the_target_from_the_limits_own_steps_are_no_other_scene():
+    """Target 60 in a game that makes 4 fps a watt (120 at the full limit; 60 needs 15 W). The frame rate moves only
+    because the limit does: no new scene, and no 30 s of waiting before each step (15 W after 60 s and more)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=12), fps=lambda w: 4.0 * w)
+    g.draw = lambda w, t: float(w)
+    g.run(120)
+    assert next(t for t, w in g.writes if w == 15) < 45, g.writes
+
+
+def test_a_target_that_a_lowered_limit_nearly_gives_is_not_out_of_reach():
+    """60 fps from 18 W, 58 at 16 and 17 W (within the margin of a target of 60): the target is reached, and what is
+    shown and saved says so (58 was booked as what the full limit gives: "60 out of reach")."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0 if w >= 18 else 58.0 if w >= 16 else 50.0)
+    g.draw = lambda w, t: float(w)
+    g.run(180)
+    assert not gov.out_of_reach(g.st, g.cfg) and gov.goal(g.st, g.cfg) == pytest.approx(57.0), (g.st.ref, g.limit)
+
+
+def test_a_level_that_failed_at_a_look_is_not_the_level_to_go_back_to_in_that_scene():
+    """Target 60, 4 fps a watt: 15 W held for minutes. A heavier place (3 fps a watt): the look says 15 W was too low.
+    15 W is not tried again seconds later as "the level that held in this scene" (its failure was booked with the
+    full limit's 90 fps, the level with the target's 60)."""
+    heavy = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: (3.0 if heavy["on"] else 4.0) * w)
+    g.draw = lambda w, t: float(w)
+    g.run(100)
+    while not (g.notes[-1][0] > 100 and "back to 15 W" in g.notes[-1][1]):
+        g.run(0.1)
+        assert g.t < 900, g.notes[-3:]
+    g.run(3)
+    n, heavy["on"] = len(g.notes), True
+    g.run(20)
+    assert [x for x in g.notes[n:] if x[1].startswith("15 W was too low")], g.notes[n:]
+    assert not [x for x in g.notes[n:] if "trying 15 W" in x[1]], g.notes[n:]
+
+
+def test_in_a_lighter_scene_a_level_that_failed_is_tried_again_as_a_first_failure():
+    """14 W fails in a scene where the full limit gives 60 fps. From 150 s on the full limit gives 80 (a third more:
+    another scene): 14 W is tried again there without its wait, and when it fails there too that is a first failure
+    (the next try after 2 minutes, not 8)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=None), fps=lambda w, t: (60.0 if t < 150 else 80.0) * min(1.0, w / 15))
+    g.draw = lambda w, t: float(w)
+    g.run(150)
+    assert g.st.fail[14][1] == 2 and g.st.fail[14][0] > 300, g.st.fail[14]       # failed twice: the next try at 379 s
+    while g.st.fail[14][4] < 150:
+        g.run(0.5)
+        assert g.t < 200, (g.st.fail[14], g.writes[-6:])
+    assert g.st.fail[14][1] == 1 and g.st.fail[14][2] == pytest.approx(80.0, rel=0.02), g.st.fail[14]
+
+
+@pytest.mark.parametrize("target", [60, None])
+def test_the_level_that_held_in_another_place_is_not_taken_in_a_menu(target):
+    """A light place held at 14 W for minutes, then a heavy place (45 fps from 26 W) held near 26 W. A menu at 60 fps
+    over it for 20 s: no step from the menu's frames, and not the light place's level either."""
+    place = {"p": "light"}
+
+    def fps(w, t):
+        if place["p"] == "menu":
+            return 60.0
+        return 45.0 * min(1.0, w / 26) if place["p"] == "heavy" else 60.0 * min(1.0, w / 14)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=16), fps=fps)
+    g.run(120)
+    place["p"] = "heavy"
+    g.run(240)
+    t0, place["p"] = g.t, "menu"
+    g.run(20)
+    assert all(w >= 25 for w in g.since(t0)), g.since(t0)
+
+
+@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("menu_s", [20, 28])
+def test_a_menu_at_nearly_the_games_frame_rate_takes_no_step_down_when_the_package_draws_less(menu_s, target):
+    """A title screen and a menu at 60 fps, a game at 52 fps from 20 W: by its frame rate the menu is no other scene
+    (under 15 % away). The package draws 9 W in it and all of the limit in the game: a lighter scene, and no step
+    down from its frames (the game came back at 8 W: 21 of its 52 fps)."""
+    place = {"p": "title"}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target), fps=lambda w, t: 52.0 * min(1.0, w / 20) if place["p"] == "game" else 60.0)
+    g.draw = lambda w, t: min(float(w), 21.0) if place["p"] == "game" else 9.0
+    g.run(10)
+    place["p"] = "game"
+    g.run(300)
+    held, t0, place["p"] = g.limit, g.t, "menu"
+    g.run(menu_s)
+    assert held <= 22 and all(w >= held for w in g.since(t0)), (held, g.since(t0))
+
+
+def test_bursts_of_the_games_own_slow_frames_are_not_the_limits():
+    """Every third frame 20 % long for 1.5 s every 30 s, at every limit; the need is 14 W. The look for slow frames
+    finds none at the full limit, because it falls between two bursts: slow frames in one burst are the game's (23 to
+    26 W, with each level under it booked as failed)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=16), fps=lambda w: 30.0 if w >= 14 else 30.0 * w / 14,
+             shape=lambda i, w, t: 1.2 if (t % 30) < 1.5 and i % 3 == 0 else 1.0)
+    g.draw = lambda w, t: float(w)
+    g.run(1200)
+    late = [(at, w) for at, w in g.writes if at >= 120]
+    assert g.limit <= 17 and len(late) <= 18 and not [n for a, n in g.notes if a >= 120 and "none of the slow frames" in n], (g.limit, late)
+
+
+@pytest.mark.parametrize("target", [None, 60])
+@pytest.mark.parametrize("drop", [0.035, 0.045, 0.06, 0.12])
+def test_a_fall_that_stays_at_the_full_limit_is_no_dip_of_the_games_own(drop, target):
+    """At the full limit a place gets heavier for good. A dip of the game's own is over within 2 s: a frame rate that
+    stays at the edge of a clear loss is not booked as a dip each time it crosses that edge (two or three were booked,
+    and the game counted as one that dips)."""
+    heavy = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30),
+             fps=lambda w, t: 50.0 * (w / 30) ** 2 * ((1 - drop) if heavy["on"] else 1.0),
+             shape=lambda i, w, t: 1.0 + 0.02 * math.sin(i * 0.37) + 0.02 * math.sin(i * 0.011))
+    g.run(100)
+    while not (g.st.mode == "hold" and g.limit == 30 and g.t - g.st.changed_at > 12 and g.st.quiet_until > g.t + 6):
+        g.run(0.5)
+        assert g.t < 2000, (g.limit, g.st.mode, g.writes[-6:])
+    before, heavy["on"] = len(g.st.dips), True
+    g.run(10)
+    assert len(g.st.dips) - before <= (0 if drop == 0.045 else 1), g.st.dips
+
+
+def test_the_share_of_slow_frames_before_a_look_is_counted_as_every_other_share(monkeypatch):
+    """A look for slow frames is judged against the share of slow frames at the limit before it. That share is counted
+    as every other one (over the frames a share can be told for), not over all the frames of the limit."""
+    seen, real = [], gov._edge
+
+    def edge(ms, base):
+        n = real(ms, base)
+        seen.append((list(ms), n))
+        return n
+    monkeypatch.setattr(gov, "_edge", edge)
+    rough = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=16), fps=lambda w: 30.0 if w >= 14 else 2.1 * w,
+             shape=lambda i, w, t: 1.3 if rough["on"] and w < 17 and i % 12 == 0 else 1.0)
+    g.draw = lambda w, t: float(w)
+    g.run(100)
+    rough["on"] = True
+    looks, end, was = 0, g.t + 40, False
+    while g.t < end:
+        seen.clear()
+        g.run(g.look)
+        now = g.st.mode == "check" and g.st.why == "slow"
+        if now and not was:
+            looks += 1
+            assert g.st.lost_slow == pytest.approx(gov._slow([ms for ms, n in seen if n][-1]))
+        was = now
+    assert looks

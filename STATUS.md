@@ -70,12 +70,12 @@ Check on the EX, Autotune on:
   window; what Autotune reads meanwhile is not known. The TDP must not end up lower than before, or must be back within
   a second of closing the menu;
 - an emulator from ES-DE: `autotune.csv` rows end in four figures; in xemu "Autotune stays out of xemu";
-- `tools/soak.py` over two hours with a game: the backend under 0.5 % CPU (it looks twice a second now, ten times a
-  second for a second or two after its own change);
+- `tools/soak.py` over two hours with a game: the backend under 0.5 % CPU (it looks twice a second, and ten times a
+  second while it watches a change of its own: 1 to 3 s, up to 10 s in a look for slow frames);
 - cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
 - a 30 fps cutscene or video in a 60 fps game, 20 s and a minute: the TDP does not go under what it was before the
   video, and the game is at its frame rate within a second of the video's end. A video of over 2 minutes: the TDP may
-  go down in it; the game is at its frame rate within about 3 s of its end ("the package draws all of N W now");
+  go down in it; the game is at its frame rate within about 3 s of its end;
 - a map or inventory that renders much faster than the game, for some seconds: the TDP is the same before and after;
 - loading screens: after several of them the TDP is where it was (in the simulator each one lowered what Autotune took
   for the game's frame rate, and the TDP with it; fixed);
