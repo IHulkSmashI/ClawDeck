@@ -453,9 +453,8 @@ NO_FPS_S = 30          # seconds without any frame rate before autotune gives up
 # Emulators whose frame rate is not the game's: xemu presents 60 frames a second whatever the emulated game does
 # (Project Gotham Racing 2 at a 16 W limit: 16-18 game fps, 60 shown; 2026-11-14), and under its own draw (~20 W on a
 # Claw 8 EX) the game slows down. No frame rate can show Autotune what a lower limit costs there, so it stays out of
-# these and your limit stays on the chip. Looked for (process name, else the file it runs) every few seconds for the
-# whole game: a frontend starts the emulator after the game-start event, a launcher or a frontend without its event
-# script minutes later. One walk over /proc takes 11 ms on the Claw (450 processes).
+# these and your limit stays on the chip. Looked for (process name, else the file it runs) every few seconds of a
+# game: a frontend starts the emulator after the game-start event, a launcher minutes later.
 OWN_PACE = {"xemu": "it shows 60 fps whatever the game's speed"}
 OWN_PACE_CHECK_S = 3
 PROC = "/proc"
@@ -543,7 +542,6 @@ class Session:
 
     @property
     def target(self) -> float | None:
-        """The fps held now: yours, or what the full limit gives when yours is out of reach (Auto FPS)."""
         if not self.user_target or self.gov is None or self.cfg is None:
             return float(self.user_target) if self.user_target else None
         return self.gov.ref if governor.out_of_reach(self.gov, self.cfg) else float(self.user_target)
@@ -572,8 +570,7 @@ class Autotune:
               keep_pct: float | None = None, xell_log: str | None = None, target: int | None = None,
               auto_fps: bool = True, fg: int = 0, at_limit: bool = False) -> None:
         """Start for a game: where it held last time under the same limit and for the same target, else mid-range.
-        at_limit: the limit was picked just now, in the game: it goes on the chip as picked, and Autotune works down
-        from there."""
+        at_limit: the limit was picked just now, in the game, and goes on the chip as picked."""
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
         same = known.get("ceiling") == ceiling_tdp and (known.get("target") or None) == (int(target) if target else None)
@@ -602,8 +599,7 @@ class Autotune:
             self.task = asyncio.get_event_loop().create_task(self._loop())
 
     def _govern_from(self, s: Session, start_w: int | None) -> None:
-        """A fresh governor for this session, from `start_w` (None: mid-range). The limit it starts at is in learned.tdp;
-        the caller writes it."""
+        """A fresh governor for this session, from `start_w` (None: mid-range); the caller writes its limit."""
         s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target) if s.user_target else None,
                              keep_pct=s.keep_pct, auto_fps=s.auto_fps, start_w=start_w)
         s.gov, act = governor.start(s.cfg, time.monotonic())
@@ -827,7 +823,6 @@ class Autotune:
             if smp.t - s.logged_at >= 0.95:              # a row a second, also while it looks ten times a second
                 s.logged_at = smp.t
                 self._log(s, smp)
-        # (also before the first frames after a give-up are taken as the game's: a launcher's emulator, started late)
         if s.own_pace is None and (smp.t - s.own_checked_at >= OWN_PACE_CHECK_S or (smp.fps and s.no_frames)):
             s.own_checked_at = smp.t
             emu = own_pace_emulator()
@@ -946,7 +941,6 @@ class Autotune:
             log.info("autotune: PL1 time window back to the firmware's (%s us)", self.power.pl1_window_us())
 
     def _note(self, s: Session, text: str) -> None:
-        """For the log's "note" column: why the limit moved or stayed, next to the frames of that look."""
         s.notes.append(text)
         del s.notes[:-TRACE_NOTES]
 

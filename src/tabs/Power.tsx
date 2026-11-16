@@ -172,7 +172,6 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
 
   const running = !!at?.running && !at.paused;
   const thermalLine = at?.thermal?.line ?? null;     // "thermal: stepped to 15 W" once the temperature guard acted
-  // what the governor is doing right now (a write of its own is watched for a second or two), else what it holds
   const step = { probe: "trying fewer watts", back: "took the step back", recover: "full limit after a loss",
     check: "checking what your limit gives", hold: "" }[at?.step ?? "hold"];
   const phase = step || (at?.phase === "target" && at?.target ? `holding ${at.target} fps` : "holding");

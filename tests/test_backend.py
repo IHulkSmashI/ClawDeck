@@ -296,8 +296,7 @@ def test_thermald_paused_while_tdp_held_and_restarted_on_revert(fake_hw, monkeyp
 
 # ---- autotune v3 (findings §22): the most the set TDP gives, CPU/GPU balance, the lowest TDP within KEEP % --------
 class _Game:
-    """A game whose fps follows the power it gets: fps(tdp, cpu_max_pct, gpu_min_mhz, boost). Each sample is one look of
-    Autotune's loop later (the session's look_s), on a clock of its own that starts at now."""
+    """A game whose fps follows the power it gets: fps(tdp, cpu_max_pct, gpu_min_mhz, boost), one sample a look."""
     def __init__(self, at, fps, **smp):
         self.at, self.fps, self.smp, self.t = at, fps, smp, time.monotonic()
         at.sampler.sample = self.sample
@@ -320,7 +319,6 @@ class _Game:
 
 
 def _tuner(fake_hw, monkeypatch, ceiling=20, target=None, **learned):
-    """Autotune started for a game on a Claw whose TDP writes work. learned: what an earlier session saved."""
     pw = power.Power(fake_hw)
     monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: True)
     monkeypatch.setattr(autotune.asyncio, "get_event_loop", lambda: type("L", (), {"create_task": lambda self, c: c.close()})())
@@ -359,9 +357,6 @@ def test_a_new_floor_is_in_effect_at_once(fake_hw, monkeypatch):
 
 
 def test_a_raised_floor_ends_a_second_try_under_it(fake_hw, monkeypatch):
-    """The governor is in the second try of a level (the frames were lost there once) when the floor is raised over
-    it: the try ends, and nothing is booked for a level that is no longer allowed (it went on at the new floor, and
-    "the game's own dip" was booked for it)."""
     from test_governor import _into_retest
     g, held = _into_retest()
     at, s = _tuner(fake_hw, monkeypatch, ceiling=30, target=60)
@@ -549,7 +544,6 @@ def test_autotune_stays_under_the_thermal_step_until_the_user_sets_a_tdp(fake_hw
 
 
 def test_a_cpu_clock_cap_from_the_guard_starts_the_search_over(fake_hw, monkeypatch):
-    """The same watts give other frames under the cap: what failed or held before says nothing."""
     at, s = _tuner(fake_hw, monkeypatch, tdp=20)
     _Game(at, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(40)
     assert s.gov.fail
@@ -721,8 +715,6 @@ def test_autotune_gives_the_window_back_when_paused_and_stops_asking_if_refused(
 
 
 def test_a_pl2_set_by_hand_is_the_picks_not_the_governed_limits(fake_hw, tmp_path, monkeypatch):
-    """With PL2 far over PL1 the package runs over a lowered limit for seconds, and a step down would be judged on
-    frames it didn't yet cost. While Autotune governs, PL2 is PL1 + 2 W; your PL2 comes back with your limit."""
     root = tmp_path / "rapl"
     _w(str(root / "constraint_0_power_limit_uw"), 25_000_000)
     _w(str(root / "constraint_1_power_limit_uw"), 37_000_000)
@@ -965,10 +957,8 @@ def test_each_game_an_emulator_frontend_starts_has_its_own_power_and_autotune(pl
 
 def test_what_autotune_learned_is_never_saved_or_shown_as_your_pick(plugin):
     """Your pick (`base`, `tdp`: the slider, a profile, Use default) and what Autotune learned (`learned`) are two
-    records in a game's slot, and only your actions write the first. A build that saved the TDP that held as the game's
-    pick left 8 W picks nobody had made (Breath of the Wild, 2026-11-15; the user: "I didn't set anything"), and a
-    saved pick is the next session's limit. Here a game that held 8 W for minutes keeps no pick: the slider shows your
-    30 W, and the next start works under 30 W."""
+    records in a game's slot, and only your actions write the first. A game that held 8 W for minutes keeps no pick:
+    the slider shows your 30 W, and the next start works under 30 W."""
     p = plugin
     p.settings["autotune_target"] = 60
     p.run(p.set_tdp(30))                                               # your pick for every game
@@ -986,11 +976,9 @@ def test_what_autotune_learned_is_never_saved_or_shown_as_your_pick(plugin):
 
 
 def test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games(plugin):
-    """ES-DE's menus hold 60 fps at 8 W. A target mode that saved what held as the game's own pick (the fork's build of
-    2026-11-15) made that 8 W ES-DE's pick, and a game ES-DE starts without a pick of its own starts from ES-DE's:
-    Project Gotham Racing 2 in xemu, where Autotune stays out, started and stayed at 8 W (2026-11-16 01:21:35). Here
-    what held is learning under the game's own key and never a pick: ES-DE's slot gets no TDP, and its games work under
-    your limit."""
+    """ES-DE's menus hold 60 fps at 8 W, and a game ES-DE starts without a pick of its own starts from ES-DE's pick.
+    What held is learning under the game's own key and never a pick: ES-DE's slot gets no TDP, and its games work
+    under your limit."""
     p = plugin
     esde = "3119184808"
     p.settings["autotune_target"] = 60
@@ -1539,10 +1527,6 @@ def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin)
 
 
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
-    """In xemu's own AppImage, AppRun is a link to usr/bin/xemu, and a program started through a link has the link's
-    name: the process is "AppRun". The check went by the process name alone, so Autotune governed the game on xemu's
-    60 shown frames: a 60 fps target, the limit down to 8 W (Project Gotham Racing 2, 2026-11-15; the Flatpak's process
-    is "xemu"). Found by the file it runs."""
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
         for pid, c, e in (("1", "systemd", "/usr/lib/systemd/systemd"), ("4000", comm, exe)):
@@ -2065,9 +2049,8 @@ def test_a_manual_cpu_ceiling_pauses_autotune_and_the_guard_gets_the_limit_it_ho
 
 def test_frames_that_stop_for_good_give_the_limit_you_picked_back(fake_hw, monkeypatch):
     """The frame log stops in the middle of a game (mangoapp's logging switched off and not coming back): the governor
-    is blind, and the lowered limit stayed on the chip for the rest of the game with "holding at 14 W" in the panel,
-    whatever the game needed by then. After NO_FPS_S without a frame the pick goes back, as for a game that never
-    showed a frame; frames coming back hand the game to Autotune again."""
+    is blind. After NO_FPS_S without a frame the pick goes back, as for a game that never showed a frame; frames
+    coming back hand the game to Autotune again."""
     pw = power.Power(fake_hw)
     chip = {}
     monkeypatch.setattr(pw, "set_tdp", lambda w, plugged=None: chip.update(tdp=w) or True)
@@ -2146,8 +2129,6 @@ def test_mangoapp_log_goes_off_when_the_game_stops_not_at_an_es_de_switch(plugin
 
 
 def test_sampler_reads_the_games_own_mangohud_log_only_while_mangoapp_gives_nothing(fake_hw, tmp_path, monkeypatch):
-    """mangoapp's log has every frame of every game, so it comes first. The launch wrapper's MangoHud log (a row a
-    second) is what is left when mangoapp isn't there or hasn't written yet."""
     sent = []
     monkeypatch.setattr(autotune, "mangoapp_command", lambda c: sent.append(c) or True)
     logs = tmp_path / "mangohud"

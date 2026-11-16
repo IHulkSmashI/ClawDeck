@@ -55,8 +55,7 @@ class Power:
         self._hhd_orig: dict | None = None    # HHD's TDP state before ClawDeck's first change, for revert_all
         self.boost = True                     # TDP boost (short bursts above the TDP); off = PL2 is TDP + 1 W
         self.pl2_w: int | None = None         # PL2 set by hand (Power → Custom → "Set PL2 yourself"); None = PL1 + 2 W
-        self.governed = False                 # Autotune governs the limit: PL2 = PL1 + 2 W whatever was set by hand,
-                                              # or a step down doesn't bind while its frames are judged
+        self.governed = False                 # Autotune governs the limit: PL2 = PL1 + 2 W whatever was set by hand
         self._thermald_paused = False         # True while ClawDeck holds a TDP and has stopped thermald (see _set_rapl)
         self.cpu_cap: int | None = None       # the temperature guard's cap on the CPU's top clock, % (thermal.py)
         self._cpu_asked: int | None = None    # the CPU's top clock a profile, Autotune or the user asked for, %
@@ -368,9 +367,8 @@ class Power:
 
     def set_pl1_window(self, us: int) -> bool:
         """RAPL enforces PL1 as an average over this window (56 s on the Claw 8 EX): for most of a minute after a change
-        the package may run up to PL2. Autotune shortens it while it governs, so a step down watched for 2.5 s sees
-        sustained behaviour. Through sysfs.write, so revert_all restores the firmware's value; True only if it reads
-        back."""
+        the package may run up to PL2. Autotune shortens it while it governs, so a step down watched for 2.5 s sees the
+        sustained rate. Through sysfs.write, so revert_all restores the firmware's value; True only if it reads back."""
         if not self.p.rapl_pl1_window:
             return False
         if not sysfs.write(self.p.rapl_pl1_window, int(us)):
