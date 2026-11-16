@@ -169,6 +169,8 @@ class State:
     lost: float | None = None       # the frame rate before a raise, fps
     before: float | None = None     # the frame rate before the step down being watched, fps
     typ: float | None = None        # ... and the typical frame then, ms (the median)
+    edged: deque = field(default_factory=lambda: deque(maxlen=STEP_W))   # when the limit last went a watt over a
+                                    # level that failed for its slow frames
     tried: int | None = None        # a step down that lost far more than its size explains (the loss is its, not prev's)
     home: int | None = None         # the last limit that held for HOME_S, when, and what the full limit gave then:
     home_at: float = -1e9           # tried first when its scene is back
@@ -641,7 +643,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             act.note = f"another scene: {now:.0f} fps at {top} W"
         hold(AFTER_LOSS_S)
         return act
-    if was >= want and not (st.why == "slow" and share < st.lost_slow - EDGE):
+    # (after a fall `was` is the ten frames of the moment: "within the margin" needs the wobble's margin to spare, as a
+    # second try does. A limit taken for innocent by a hair was held 15 s at 3 fps under the full limit's 24)
+    spare = small if st.mode == "recover" else 0.0
+    if was >= want * (1 + spare) and not (st.why == "slow" and share < st.lost_slow - EDGE):
         # the limit before gives what the full one gives, within the margin (and has no more slow frames): the scene
         # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is this look's
         back(f"the full {top} W gives {now:.0f} fps: the scene, not the limit; back to {st.prev} W" if st.mode == "recover"
@@ -661,6 +666,16 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.before, st.retest, st.loss_since, st.long = now, True, None, False
         st.typ = statistics.median(st.watch[len(st.watch) // 2:] if len(st.watch) >= 4 * N else st.watch)
         watch("probe", level, f"{was:.0f} fps at {level} W, {now:.0f} at {top} W: {level} W once more")
+    elif was >= want and st.prev + 1 < top and (len(st.edged) < STEP_W or t - st.edged[0] >= RETRY_S):
+        # the frame rate held and the slow frames were the limit's: the edge of what the game needs. A watt over it,
+        # STEP_W times in RETRY_S: when that level has the limit's slow frames too, the edge is not near, and the
+        # limit stays up
+        failed(st.prev, now, True)
+        st.edged.append(t)
+        level = st.prev + 1
+        write(level, f"{top} W has none of the slow frames of {st.prev} W: {level} W")
+        st.lo, st.hi, st.ratio = was, was, min(1.0, was / now)
+        hold(AFTER_LOSS_S)
     else:
         failed(st.prev, now, was >= want)
         act.note = (f"{top} W has none of the slow frames of {st.prev} W: staying up" if was >= want
@@ -750,8 +765,9 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
 
     need = _need(st, cfg)
     if need is None:                                 # no target and nothing known here: what does the full limit give?
-        if st.limit < top and len(st.pace) >= 2 * N:     # (asked on the first 2 N frames: the answer may be "far more")
-            st.lost = here
+        mine = [ms for end, ms in st.recent if end >= st.changed_at + SETTLE_S]
+        if st.limit < top and len(mine) >= 2 * N:    # (asked on the first 2 N frames of this limit: the answer may be
+            st.lost = _fps(mine[-2 * N:])            # "far more")
             watch("check", top, f"measuring what the full {top} W gives", "none")
         return act
 
@@ -789,11 +805,14 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
         st.lost, was_at, st.held_for, st.loss_since = cur, st.limit, t - st.changed_at, None
         watch("recover", top, f"{st.lost:.1f} fps at {was_at} W, under {need:.1f}: the full {top} W", "fall")
         return act
+    # (a dip is booked from RECENT_S after the last write on: the wobble that says what a clear loss is, is the
+    # median of that long, and in a place that wobbles more than the last one every wobble looked like a dip)
     if st.loss_since is not None and _fps(list(st.pace)[-2 * N:]) >= need * (1 - small):
-        st.dips.append(t)                            # it passed by itself (the last 2 N frames are back): one more of
+        if st.loss_since - st.changed_at >= RECENT_S:
+            st.dips.append(t)                        # it passed by itself (the last 2 N frames are back): one more of
         st.loss_since = None                         # the game's own dips. A loss at the edge of "clear" comes and goes
     if st.free_loss is not None:                     # over: a dip of the game's own if it was short, else another scene
-        if t - st.free_loss <= DIP_MAX_S:
+        if t - st.free_loss <= DIP_MAX_S and st.free_loss - st.changed_at >= RECENT_S:
             st.dips.append(t)
         st.free_loss = None
     if sustained and dippy and st.limit < top:       # as above: a second of it, not one dip's worth of frames

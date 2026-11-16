@@ -2006,10 +2006,10 @@ def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypa
     at.set_keep(12)
     g.run(1)
     assert seen[-1][1].keep_pct == 12
-    s.gov.fail[11], s.gov.met = [1e12, 1], True
+    s.gov.fail[11], s.gov.lo, s.gov.hi, s.gov.ratio = [1e12, 1, None, False, 0.0], 55.0, 56.0, 0.97
     s.fg = 2                                                                  # frame generation switched on in the game
     g.run(1)
-    assert seen[-1][0].multiplier == 2.0 and s.gov.fail == {} and not s.gov.met
+    assert seen[-1][0].multiplier == 2.0 and s.gov.fail == {} and s.gov.lo is None and s.gov.ratio is None
     assert at.power.governed
     at.stop(revert=False)
     assert not at.power.governed
