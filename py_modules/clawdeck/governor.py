@@ -139,7 +139,7 @@ class State:
     was: tuple | None = None        # band, ratio and reference this limit had before its pace moved to another band
                                     # (a menu, a map, a video), when that was, and since when it had been the band:
                                     # back in it once within SCENE_S, they are known again
-    seen_hi: float | None = None    # the highest pace at this limit that the full limit did not beat: up to it, more
+    seen_hi: float | None = None    # the pace at this limit that the full limit last did not beat: up to it, more
                                     # frames than the band has are no news (a game that goes between two paces) ...
     seen_at: float = -1e9           # ... for SCENE_S after the pace was last there (then it may be another place's)
     full_at: float = -1e9           # when the full limit last said what the held limit costs
@@ -680,7 +680,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.lo, st.hi, st.band_at = was, was, t
         else:
             _take(st, was)
-        st.ratio, st.ref, st.seen_hi, st.seen_at = min(1.0, was / now), now, max(was, st.seen_hi or was), t
+        st.ratio, st.ref, st.seen_hi, st.seen_at = min(1.0, was / now), now, was, t
         if st.why == "slow":
             st.base_slow = max(st.lost_slow, share)  # as many at the full limit: the game's own in this place
         hold(AFTER_LOSS_S)

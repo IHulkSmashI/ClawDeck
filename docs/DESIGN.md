@@ -191,7 +191,7 @@ What it knows:
   the full limit gives another frame rate than at the look before, starts a new band. The one before is kept once,
   for 30 s, when it is the faster one or had stood for 30 s (the game comes back to it after a menu); the band of a
   short visit to a slower place is not (another place, where the last watts count for more, has that pace too). Up
-  to the highest pace at which the full limit gave no more at this limit, more frames are no news, for 30 s after
+  to the pace at which the full limit last gave no more at this limit, more frames are no news, for 30 s after
   the pace was last there (then it may be another place's). A band
   taken while the package drew 2 W or more under the limit (also by a step watched at such a draw) is dropped when
   the package draws all of that limit, also when it was set aside and came back (a video's band, and a place with
