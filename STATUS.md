@@ -83,6 +83,16 @@ Autotune looks for an `xemu` process; if one runs, the pick goes back on the chi
 EX: Autotune on, start an Xbox game from ES-DE: within 30 s the Power line says "Autotune stays out of xemu" and the
 TDP is the pick.
 
+**Temperature guard: the CPU clock comes back when the package is cool (2026-11-16):** Project Gotham Racing 2 in xemu,
+one hot half minute at the start of a race: the guard's readings 10 s apart were 97, 97, 91, 79, 72, 69 °C. The cap went
+to 90, 80 and 70 % (the last step at 91 °C, when the one before already showed), and came back one step per 30 s under
+80 °C, with the count started over by each warmer reading: 160 s from the trip to no cap, capped for 176 of 233 s, the
+race at 27.0 fps instead of 28.2. A clock cap acts within a second, and so does its release. Now there is no further
+clock step while the package is under 95 °C and cooler than at the check before, and the clock comes back one step per
+cool check (under 80 °C). The watts steps are as before (2 W every 30 s). Check on the EX: an xemu game with Autotune off
+until the Power line says "thermal: CPU clock 90 %"; when `pkg_c` in `~/homebrew/logs/ClawDeck/thermal.csv` is under 80,
+the line is gone within 10 s per step.
+
 **Temperature guard gives the TDP back while Autotune is out (2026-11-15):** a paused Autotune (xemu, no frame rate, a
 manual change, Autotune switched off in the game) never raises the TDP, and the guard's steps back up only moved
 Autotune's cap. With a target, the chip stayed at the guard's step until the game ended while the log said "back at

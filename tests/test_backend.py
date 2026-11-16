@@ -587,12 +587,30 @@ def test_thermal_guard_gives_the_clock_back_first_then_the_watts(tmp_path, monke
     assert g.clock_pct == 80
     check(75, 12, tdp, set_w, cap, limit=30)                            # under 90 °C: the trip ends, the cap stays
     assert not g.tripped and g.clock_pct == 80
-    for _ in range(3):
-        check(75, 12, tdp, set_w, cap, limit=30)
+    check(85, 12, tdp, set_w, cap, limit=30)                            # 80-90 °C: not cool, no step back
+    assert g.clock_pct == 80
+    check(75, 12, tdp, set_w, cap, limit=30)                            # cool: a step back at each check
     assert g.clock_pct == 90 and caps[-1] == 90
-    for _ in range(3):
-        check(75, 12, tdp, set_w, cap, limit=30)
+    check(75, 12, tdp, set_w, cap, limit=30)
     assert g.clock_pct is None and caps[-1] is None and g.status()["line"] is None
+
+
+def test_thermal_guard_takes_no_clock_step_while_the_last_one_shows_and_gives_the_clock_back_at_once(tmp_path, monkeypatch):
+    """Project Gotham Racing 2 in xemu, 2026-11-16, the guard's own readings 10 s apart: 97, 97, 91, 79, 72, 69 °C. The
+    cap went 90, 80, 70 % (the last one at 91 °C, 6 °C down in 10 s), and came back a step per 30 s under 80 °C: 160 s
+    from the trip to no cap, at 68-77 °C for 140 s of it."""
+    g, check = _hot_guard(tmp_path, monkeypatch)
+    tdp, caps = {"w": 30}, []
+    set_w = lambda w: tdp.update(w=w) or True
+    cap = lambda pct: caps.append(pct) or True
+    check(94, 19, tdp, set_w, cap, limit=30)
+    for c in (97, 97, 91, 79, 72, 69):
+        check(c, 15, tdp, set_w, cap, limit=30)
+    assert caps == [90, 80, 90, None] and g.clock_pct is None and tdp["w"] == 30    # no cap 50 s after the trip
+    # between 90 and 95 °C and not cooler than at the check before: the last step did not do it
+    for c in (97, 93, 93):
+        check(c, 19, tdp, set_w, cap, limit=30)
+    assert caps[4:] == [90, 80]
 
 
 def test_cpu_clock_cap_holds_under_every_other_write_and_lets_it_back(fake_hw):
