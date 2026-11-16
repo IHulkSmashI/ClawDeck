@@ -64,6 +64,12 @@ OptiScaler (old → new)** button under Uninstall, tested there too: The Blood o
 FSR 4.1.2 on a game kept on 0.9.4 (Dawnwalker, position 6) both showed the right model in OptiScaler's menu.
 Check before the release: the same on a Claw 8 AI+ (Xe2) and on Bazzite.
 
+**TDP setting applied at start (2026-11-16):** after a boot or a Decky restart, the firmware's limits applied with
+thermald running (30 W and PL2 37 W on the EX) until a game started, the setting changed or the power source
+changed, while the Power section showed the setting. Now the plugin applies the TDP setting for the current power
+source when it starts. Check on the EX: set 8 W with no game, then `sudo systemctl restart plugin_loader`:
+`constraint_0_power_limit_uw` reads 8 W, PL2 10 W, and `systemctl is-active thermald` says inactive.
+
 **Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
 its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
 percentile frame time and the share of slow frames (more than 10 % over the pace of the 60 frames before): a limit
