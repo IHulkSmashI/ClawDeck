@@ -205,9 +205,10 @@ class Game:
             self.limit, self.changes = w, self.changes + 1
 
     def best(self, scene: Scene, work: float) -> float:
-        """The frame rate the full limit gives here (or the goal, when that is lower): what a governor owes."""
+        """The frame rate the full limit gives here (or the goal, when that is lower; with none set, the screen's
+        highest refresh rate): what a governor owes."""
         top = scene.shown(min(self.ceiling, self.stop_w) if self.stop_w else self.ceiling, work)
-        return min(top, self.goal) if self.goal else top
+        return min(top, self.goal or TOP_HZ)
 
     def line(self, best: float) -> float:
         """The frame rate under which the limit costs frames."""
@@ -390,7 +391,8 @@ class Wired:
 
     def start(self, game, floor: int, ceiling: int) -> None:
         self.game = game
-        model = {"tdp": {"min": floor, "battery_max": ceiling, "plugged_max": ceiling, "sppt_max": ceiling + 2}}
+        model = {"tdp": {"min": floor, "battery_max": ceiling, "plugged_max": ceiling, "sppt_max": ceiling + 2},
+                 "panel_hz": [TOP_HZ]}
         h = hw.Hardware(product="sim", model=model, known=True, kernel="sim", cpu_model="sim", gpu_driver=None,
                         paths=hw.Paths())
         pw = power.Power(h)

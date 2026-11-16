@@ -552,8 +552,12 @@ def test_a_cpu_clock_cap_from_the_guard_starts_the_search_over(fake_hw, monkeypa
     assert s.gov.fail
     at.thermal_clock(80)
     assert s.clock_pct == 80 and not s.gov.fail and s.last_action == "thermal: CPU clock capped at 80 %"
+    s.gov.lo, s.gov.hi, s.gov.ratio, s.gov.ref, s.gov.seen_hi, s.gov.fail[12] = 50.0, 50.0, 1.0, 50.0, 50.0, [1e12, 1, None, False, 0.0]
     at.thermal_clock(None)
     assert s.clock_pct is None and s.last_action == "thermal: CPU clock uncapped"
+    # what was measured under the cap says nothing without it (it stayed: 14 W at 50 fps for ten minutes, with 60 at
+    # the full limit and the target 60)
+    assert (s.gov.lo, s.gov.ratio, s.gov.ref, s.gov.seen_hi, s.gov.fail) == (None, None, None, None, {})
     at.session = None
 
 

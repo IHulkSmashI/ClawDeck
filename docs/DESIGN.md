@@ -146,7 +146,8 @@ every 10 s, only while `power.thermald_paused()`; it reads the package temperatu
 coretemp's "Package id 0" as the fallback; `hw.find_pkg_temp`). Above 95 °C it trips and steps the TDP −2 W per
 check until the package is under 90 °C, never below the floor (autotune's, else the user's, else the model's). With
 autotune running the step is `Autotune.thermal_step`: it becomes a cap the governor works under. A cap on the CPU
-clock (`thermal_clock`) makes it forget which levels failed (the same watts give other frames), and watts the guard
+clock (`thermal_clock`) makes it forget which levels failed (the same watts give other frames); when the cap comes
+off, all that was measured under it goes. Watts the guard
 gives back are not raised to: the governor climbs when the frames ask for them. The step stays until the user picks a
 profile or moves the slider (both reset the guard) or the power is reverted. The status line reads "thermal: stepped to N W".
 The SoC's TCC limit and the EC fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
@@ -171,9 +172,11 @@ What it knows:
   the full limit gives another frame rate than at the look before, starts a new band. The one before is kept once,
   for 30 s, when it is the faster one or had stood for 30 s (the game comes back to it after a menu); the band of a
   short visit to a slower place is not (another place, where the last watts count for more, has that pace too). Up
-  to the highest pace at which the full limit gave no more at this limit, more frames are no news. A band
+  to the highest pace at which the full limit gave no more at this limit, more frames are no news, for 30 s after
+  the pace was last there (then it may be another place's). A band
   taken while the package drew 2 W or more under the limit (also by a step watched at such a draw) is dropped when
-  the package draws all of that limit.
+  the package draws all of that limit, also when it was set aside and came back (a video's band, and a place with
+  the video's frame rate).
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your
@@ -197,9 +200,12 @@ The rules:
    - nothing is known at this limit (the start, after a loading screen, watts back from the guard), the pace is
      under your target and the package draws all of the limit: a fall. Where the package draws 2 W less, the limit
      holds nothing back, and the band comes from those frames.
-   Under the guard's clock cap only a fall starts one. None starts by the clock, and none because a step held or
-   failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and each found the frames it had,
-   and the auto-TDP governors of other projects have none.
+   - the goal is what the full limit gives (your target is out of reach), the limit is 2 W or more under the full
+     one, and the full limit was last measured 10 minutes ago: a scene that got lighter under a step, or another
+     place with the same frame rate at this limit, shows in no frame at the held limit (0.2 changes a minute).
+   Under the guard's clock cap only a fall starts one, and nothing known is dropped (a pause, watts back). None
+   starts because a step held or failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and
+   each found the frames it had, and the auto-TDP governors of other projects have none.
    One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, and the
    ratio is this look's. The band takes that pace in when the full limit gives what it gave at the look before; when
    it gives another frame rate this is another place, and its band is this look's alone (what a look found in a
@@ -233,7 +239,7 @@ The rules:
    limit goes to the full one while frames still come. When such frames stay for 5 s they are the game, and nothing
    known before applies; where the package then draws 2 W under the limit (a video), no step down is tried for
    30 s, as in a new scene. After 5 s of them the scene may be another one with the same frame rate at this limit:
-   nothing is known at the limit any more.
+   nothing is known at the limit any more, and the pace starts again from the frames after them.
 6. **The guard:** its cap is obeyed at once and a write being watched is dropped unjudged; under your floor the cap
    wins. With watts given back, nothing that was measured under the cap is known any more.
 

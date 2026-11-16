@@ -668,7 +668,9 @@ class Autotune:
         if not s:
             return
         s.clock_pct = pct
-        if s.gov:
+        if s.gov and pct is None:
+            governor.forget(s.gov)                   # (also the band and the ratio: they were measured under the cap)
+        elif s.gov:
             s.gov.fail.clear()
             s.gov.misses, s.gov.home = 0, None
         self._did(s, "thermal: CPU clock " + ("uncapped" if pct is None else f"capped at {pct} %"), "thermal")

@@ -4,8 +4,9 @@ One question, asked all the time: would more watts, up to your limit, give frame
   no  -> try fewer: a step down, watched for DWELL_S on every frame and taken back at the first loss;
   yes -> all of them at once (the full limit), then down again between the watts that failed and the watts that hold.
 The full limit is written when the frames ask for it: a loss; more frames than the held limit was known to give (another
-place); slow frames that a watt more did not end. Never by the clock and never because a step held or failed: the governors of other projects have no such looks, and on the Claw they cost changes and gave
-nothing.
+place); slow frames that a watt more did not end. By the clock only every CHECK_MAX_S, and only while the goal is what
+the full limit gives (a target out of reach). Never because a step held or failed: the governors of other projects
+have no such looks, and on the Claw they cost changes and gave nothing.
 
 Why this shape (Claw 8 EX, 2026-11-14/15, docs/HARDWARE-FINDINGS):
   - frames answer a new limit within 0.15-0.35 s and are back 0.25 s after a raise, so a step down can be tried and
@@ -79,6 +80,7 @@ BIND_S, BIND_W = 3.0, 2.5   # a step down is watched from when the package draws
                         # (PL2 allows 2 W over it): a cut made while the chip ran over its limit took 2.3 s to bind. A
 RISE_W = 0.3            # raise is judged when the draw has stopped rising by this much a look. Both at most BIND_S late
 SHIFT, SHIFT_S = 0.15, 5.0             # the pace moved this much for this long at one limit: another scene
+CHECK_MAX_S = 600.0     # what the full limit said of a held limit is asked again when it is this old
 SCENE_S = 30.0          # ... and no step down is tried in it before it has stayed this long (a menu, a map, a video)
 OFF_LO = 0.35           # frames this far under the usual rate are a loading screen or a pause: not judged ...
 ADOPT_S = 5.0           # ... unless they stay this long: then that is the game now
@@ -138,7 +140,9 @@ class State:
                                     # (a menu, a map, a video), when that was, and since when it had been the band:
                                     # back in it once within SCENE_S, they are known again
     seen_hi: float | None = None    # the highest pace at this limit that the full limit did not beat: up to it, more
-                                    # frames than the band has are no news (a game that goes between two paces)
+                                    # frames than the band has are no news (a game that goes between two paces) ...
+    seen_at: float = -1e9           # ... for SCENE_S after the pace was last there (then it may be another place's)
+    full_at: float = -1e9           # when the full limit last said what the held limit costs
     free_w: int | None = None       # the lowered limit whose band was taken while the package drew 2 W under it
     bound: bool = False             # the package drew all of the held limit at the last look that could tell
     why: str | None = None          # why the full limit was written: fall (a loss) | slow (slow frames that a watt
@@ -197,17 +201,22 @@ def drop(st: State) -> None:
     step down is a first try."""
     st.mode = "hold"
     st.retest, st.before, st.tried, st.loss_since = False, None, None, None
-    st.lo = st.hi = st.ratio = st.was = None         # (what is on the chip now is not a limit that was judged)
+    _unknown(st)                                     # (what is on the chip now is not a limit that was judged)
 
 
 def forget(st: State) -> None:
     """Nothing known of the game applies any more: frames far under the usual rate that stayed, another
     frame-generation multiplier."""
     st.ref = None
-    st.lo = st.hi = st.ratio = st.was = None
+    _unknown(st)
     st.fail.clear()
     st.misses, st.home = 0, None
     st.scene_fps = st.scene_since = None
+
+
+def _unknown(st: State) -> None:
+    """Nothing is known at the held limit."""
+    st.lo = st.hi = st.ratio = st.was = st.seen_hi = st.free_w = None
 
 
 def start_level(held_s: dict, floor: int, ceiling: int) -> int | None:
@@ -321,7 +330,7 @@ def _take(st: State, pace: float) -> None:
     if st.lo is not None and max(st.hi, pace) <= min(st.lo, pace) * (1 + SHIFT):
         st.lo, st.hi = min(st.lo, pace), max(st.hi, pace)
     else:
-        st.was = (st.lo, st.hi, st.ratio, st.ref, st.t, st.band_at) if st.lo is not None else st.was
+        st.was = (st.lo, st.hi, st.ratio, st.ref, st.t, st.band_at, st.free_w) if st.lo is not None else st.was
         st.lo, st.hi, st.band_at = pace, pace, st.t
 
 
@@ -386,8 +395,9 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     while st.recent and st.recent[0][0] < t - RECENT_S:
         st.recent.popleft()
 
-    if st.top is not None and top > st.top:          # the guard gave watts back: what they give isn't known, and
-        st.ref = st.lo = st.hi = st.ratio = st.was = None    # nothing that was measured under the cap says it
+    if st.top is not None and top > st.top and not obs.thermal:      # the guard gave watts back: what they give isn't
+        st.ref = None                                # known, and nothing that was measured under the cap says it
+        _unknown(st)                                 # (under its clock cap: when that goes, autotune.thermal_clock)
     st.top = top
     if st.limit < cfg.floor:                         # the floor was raised
         write(cfg.floor, f"the floor is {cfg.floor} W")
@@ -444,9 +454,11 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.free_fps.clear()                          # what comes after it is another stretch of frames
         st.free_run = 0
         st.gap_s += dt
+        if silent and st.gap_s >= SHIFT_S:           # ... and of another place, maybe: its pace is of its own frames
+            st.pace.clear(), st.last.clear(), st.recent.clear()
         return act
-    if st.gap_s >= SHIFT_S:                          # after a loading screen the place may be another one with the same
-        st.lo = st.hi = st.ratio = st.was = None     # pace at this limit: nothing is known at this limit
+    if st.gap_s >= SHIFT_S and not obs.thermal:      # after a loading screen the place may be another one with the same
+        _unknown(st)                                 # pace at this limit: nothing is known at this limit
     st.gap_s = 0.0
     # the limit can't be what holds the game back: at the full limit, with the package 2 W or more under the limit, or
     # with the pace at your target. The band takes the pace in there (the median of the last looks: one of the game's
@@ -473,6 +485,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             _take(st, level)
             if free:
                 st.ref, st.ratio = level, 1.0
+                st.full_at = t if st.limit >= top else st.full_at
                 st.free_w = st.limit if st.limit < top else None
             elif st.ref is None or cfg.target > st.ref:
                 st.ref = cfg.target                  # the full limit gives at least what this limit gives (of your
@@ -635,7 +648,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     was, share = st.lost or now, _slow(st.watch)
     lo, hi = st.kept[:2]
     before = st.ref
-    st.ref, st.lo, st.hi, st.ratio, st.base_slow = now, now, now, 1.0, share
+    st.ref, st.lo, st.hi, st.ratio, st.base_slow, st.full_at = now, now, now, 1.0, share, t
     want = _goal_at(now, cfg)
     if st.mode == "recover" and st.tried is not None:
         tried, st.tried = st.tried, None
@@ -663,11 +676,11 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             # game under a menu): a pace that falls into the band of a short visit to a slower place is a loss until
             # the full limit says otherwise (another place, where the last watts count for more, has that pace too)
             keep = now < before or t - st.band_at >= SCENE_S
-            st.was = (st.lo, st.hi, st.ratio, st.ref, t, st.band_at) if keep else None
+            st.was = (st.lo, st.hi, st.ratio, st.ref, t, st.band_at, None) if keep else None
             st.lo, st.hi, st.band_at = was, was, t
         else:
             _take(st, was)
-        st.ratio, st.ref, st.seen_hi = min(1.0, was / now), now, was
+        st.ratio, st.ref, st.seen_hi, st.seen_at = min(1.0, was / now), now, max(was, st.seen_hi or was), t
         if st.why == "slow":
             st.base_slow = max(st.lost_slow, share)  # as many at the full limit: the game's own in this place
         hold(AFTER_LOSS_S)
@@ -792,14 +805,15 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
                 return act
         elif st.was[0] * (1 - clear) <= cur <= st.was[1] * (1 + clear):
             # (once: the band left is not kept, or a video's band was there for a heavier place of the game that has
-            # the video's frame rate)
-            (st.lo, st.hi, st.ratio, st.ref, _, st.band_at), st.was, st.free_w = st.was, None, None
+            # the video's frame rate. And a band that was a video's, taken with the package under the limit, is one
+            # still: for a place that has its frame rate and draws the limit, nothing is known, as below)
+            (st.lo, st.hi, st.ratio, st.ref, _, st.band_at, st.free_w), st.was = st.was, None
             need = _need(st, cfg)
 
     # the band was taken while the package drew 2 W under this limit (a video, a light place), and now the package
     # draws all of it: another scene, which the limit may hold back at the same frame rate. Nothing is known here
     if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5:
-        st.lo = st.hi = st.ratio = st.was = st.free_w = None
+        _unknown(st)
         return act
 
     # a fall: the last frames are clearly under what this limit has to give, or the pace is a little under it and
@@ -898,14 +912,24 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
         # the video needed); a little more on the pace
         tail = _jumped(mine, st.hi, clear) if st.hi is not None else None
         jump = tail is not None and tail < cfg.target * (1 - TOL)
+        if st.seen_hi is not None and here >= st.seen_hi * (1 - ABOVE):
+            st.seen_at = t
         if binds and (jump or (over and not met)):
             pace = tail if jump else here
-            if st.seen_hi is not None and pace <= st.seen_hi * (1 + ABOVE):
+            if st.seen_hi is not None and t - st.seen_at < SCENE_S and pace <= st.seen_hi * (1 + ABOVE):
                 _take(st, pace)                      # (so many frames were seen at this limit, and the full limit gave
             else:                                    # no more)
                 st.lost, st.lost_slow = pace, 0.0
                 watch("check", top, f"checking what the full {top} W gives", "rise")
                 return act
+        # the goal hangs on what the full limit gave (your target is out of reach), and that is CHECK_MAX_S old: a
+        # scene that got lighter under a step, or another place that has this pace at this limit (after a menu: back
+        # in the band, and no look), shows in no frame here
+        if (settled and binds and st.limit < top - 1 and need < cfg.target * (1 - TOL)
+                and t - st.full_at >= CHECK_MAX_S):
+            st.lost, st.lost_slow = here, 0.0
+            watch("check", top, f"{CHECK_MAX_S / 60:.0f} min since the full {top} W was measured: checking what it gives", "rise")
+            return act
 
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed
     # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait)
