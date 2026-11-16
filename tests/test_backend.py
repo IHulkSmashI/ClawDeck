@@ -1805,6 +1805,7 @@ def test_a_new_target_leaves_xemu_alone_and_hands_control_back_after_a_change_by
     s.own_pace, s.paused = "xemu", True
     at._give_back(s)
     at._tau(s, False)
+    at.enabled = True
     at.set_target(60)
     assert s.paused and s.learned.tdp == 20 and s.user_target == 60       # the target is kept for when it governs
     assert sysfs.read_int(t) == TAU_FW and not s.short_tau                # ... and the chip's window stays the firmware's
@@ -1855,6 +1856,7 @@ def test_a_refused_write_is_tried_again_later_not_ten_times_a_second(fake_hw, mo
     with caplog.at_level("WARNING", logger="clawdeck.autotune"):
         g.run(20)
     assert s.learned.tdp == 16 and s.gov.limit == 16 and s.look_s == 1.0     # resting, a look a second
+    assert s.gov.mode == "hold" and not s.gov.retest                         # ... with no write of the governor's watched
     assert len([r for r in caplog.records if "not applied" in r.getMessage()]) == 1
     assert len(tries) <= 2                                                   # once, and not again within REFUSED_S
     g.run(autotune.REFUSED_S + 5)

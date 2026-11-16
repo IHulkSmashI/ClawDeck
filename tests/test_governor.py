@@ -646,6 +646,23 @@ def _video_game(video_from, video_to):
     return g
 
 
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_after_a_drop_of_what_the_full_limit_gives_no_step_down_for_confirm_s(target):
+    """At the full limit, a video: what the full limit gives is 15 % less from one look to the next. A cutscene of a few
+    seconds looks the same, so no step down is tried for CONFIRM_S; after it the way down starts."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=lambda w: 60.0 * (w / 30) ** 3)   # needs it all
+    g.draw = lambda w, t: float(w)
+    g.run(40)
+    assert g.limit == 30
+    g.fps, g.draw = (lambda w: 30.0), (lambda w, t: 6.0)
+    t0 = g.t
+    g.run(18)                                                         # (the design's 20 s, not the constant: it is the rule)
+    assert g.since(t0) == [], g.since(t0)
+    g.run(40)
+    assert g.limit < 30, g.notes[-3:]
+
+
 def test_a_short_video_keeps_the_level_that_held_before_it():
     g = _video_game(150, 190)
     g.run(150)
