@@ -820,6 +820,48 @@ def test_after_a_drop_of_the_reference_the_full_limit_is_looked_at_every_reach_s
     assert 30 in g.since(t0) and g.st.ref == pytest.approx(back(30), abs=0.5) and back(30) > 24 * 1.05, (g.limit, g.st.ref, [n for n in g.notes if n[0] >= t0][:5])
 
 
+
+@pytest.mark.parametrize("target", [None, 60])
+def test_a_menus_frames_at_the_full_limit_are_never_the_reference(target):
+    """A game that gets 30 fps from the full limit; a menu over it at 60 fps for 20 s. Neither in the menu nor in the
+    seconds after it is the menu's frame rate what the full limit is believed to give (it would make the game's own
+    30 fps a drop: a floor, and no step down for CONFIRM_S)."""
+    game = lambda w: 30.0 * min(1.0, w / 30) ** 4
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target, start_w=30), fps=game).run(60)
+    assert g.limit == 30 and g.st.ref == pytest.approx(30, abs=0.5)
+    refs = []
+    for fps, seconds in ((lambda w: 60.0, 20), (game, 10)):
+        g.fps = fps
+        for _ in range(seconds * 2):
+            g.run(0.5)
+            refs.append(g.st.ref)
+    assert max(refs) < 33 and g.st.drop_floor is None, (max(refs), g.st.drop_floor)
+
+
+def test_a_look_that_finds_as_many_frames_in_a_menu_leaves_the_reference_alone():
+    """A menu at 60 fps over a 30 fps game, the package at the limit: one look at the full limit. As many frames there:
+    back, and the game's reference stays (the menu's 60 fps as the reference made the game's 30 fps a loss)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 30.0 * min(1.0, w / 20))
+    g.draw = lambda limit, t: float(limit)
+    g.run(90)
+    held, t0 = g.limit, g.t
+    assert 19 <= held <= 22 and g.st.ref == pytest.approx(30, abs=0.5)
+    g.fps = lambda w: 60.0
+    g.run(20)
+    assert g.since(t0) == [30, held], (g.since(t0), [n for n in g.notes if n[0] >= t0][:4])
+    assert g.st.ref == pytest.approx(30, abs=0.5)
+
+
+def test_one_watt_under_the_full_limit_gets_no_look_while_the_frames_say_nothing():
+    """What one watt more gives is not worth a look: at one watt under the full limit there is none, also not the one
+    of every CHECK_MAX_S."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30)).run(120)
+    t0 = g.t
+    assert g.limit == 29, g.notes[-3:]
+    g.run(gov.CHECK_MAX_S + 120)
+    assert 30 not in g.since(t0), [n for n in g.notes if n[0] >= t0][:4]
+
+
 def test_after_a_long_video_the_full_limit_is_looked_at_when_the_package_draws_the_whole_limit():
     """After REACH_FOR_S the lower reference is the game and the limit goes down. When the game is back, the low limit
     may give just what the video gave (30 fps at 8 W): no loss shows. But the package now draws all of the limit, which
