@@ -84,6 +84,54 @@ def test_a_scene_that_is_heavy_at_every_limit_gets_its_limit_back():
     assert gov.goal(g.st, g.cfg) == pytest.approx(45 * 0.95, abs=0.5)   # Auto FPS: what the full limit gives
 
 
+@pytest.mark.parametrize("fall_s, end, share", [(2, 26, 0.97), (4, 25, 0.97), (8, 18, 0.97), (8, 18, 0.90)])
+def test_a_place_that_gets_heavier_under_the_look_keeps_the_full_limit(fall_s, end, share):
+    """Walking into a heavier place: the frame rate falls for some seconds at every limit. The look at the full limit
+    sees it fall, so what the limit before gave when it lost is of a lighter moment: no way back on it. (The limit went
+    back, lost again at once, and so on: 8 writes in 7 s on the Claw, 10 in 10 s here.)"""
+    base = lambda t: 37.0 if t < 60 else max(end, 37.0 - (37.0 - end) * (t - 60) / fall_s)
+    g = Game(gov.Cfg(floor=8, ceiling=32, target=45, start_w=32), fps=lambda w, t: base(t) * (1.0 if w >= 28 else share))
+    g.draw = lambda w, t: min(float(w), 27.0)
+    g.run(60)
+    assert g.limit == 28
+    g.run(fall_s + 20)
+    assert g.since(60) == [32]
+
+
+@pytest.mark.parametrize("fall_s, end", [(15, 18), (8, 30)])
+def test_a_place_that_gets_heavier_slowly_keeps_the_full_limit_at_its_second_loss(fall_s, end):
+    """... too slowly to show in one look: the look says "the scene", the limit goes back and loses again within
+    AFTER_LOSS_S. Then the full limit stays (14 writes in 16 s before)."""
+    base = lambda t: 37.0 if t < 60 else max(end, 37.0 - (37.0 - end) * (t - 60) / fall_s)
+    g = Game(gov.Cfg(floor=8, ceiling=32, target=45, start_w=32), fps=lambda w, t: base(t) * (1.0 if w >= 28 else 0.97))
+    g.draw = lambda w, t: min(float(w), 27.0)
+    g.run(60 + fall_s + 20)
+    assert g.since(60) == [32, 28, 32]
+
+
+@pytest.mark.parametrize("gap, writes", [(4.0, [30, 16, 30]), (8.0, [30, 16, 30, 16])])
+def test_a_second_fall_of_the_scene_gets_its_own_look_after_five_seconds(gap, writes):
+    """Two falls of the scene at every limit, `gap` apart: within AFTER_LOSS_S of the answer "the scene" the second one
+    keeps the full limit, later it is a fall like the first and the limit goes back."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0).run(3)
+    g.fps = lambda w: 45.0
+    g.run(gap)
+    g.fps = lambda w: 36.0
+    g.run(8)
+    assert [w for _, w in g.writes] == writes, g.writes
+
+
+@pytest.mark.parametrize("at", [3.25, 3.35, 3.44])
+def test_a_video_that_begins_between_two_looks_gets_its_limit_back(at):
+    """A 30 fps video at every limit begins a moment before a look: the last ten frames are part game, part video, the
+    full limit gives 30, and the limit goes back with a band of that mixed rate. The video's own 30 fps are a loss
+    against it; the second look finds the 30 fps of the first: no heavier place, back again (fuzz seed 55: the full
+    limit for the 100 s of the video)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0,
+             shape=lambda i, w, t: 2.0 if t >= at else 1.0).run(14)
+    assert [w for _, w in g.writes] == [30, 16, 30, 16], g.writes
+
+
 def test_auto_fps_off_a_target_out_of_reach_keeps_the_full_limit():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16, auto_fps=False), fps=lambda w: 45.0).run(40)
     assert g.limit == 30 and [w for _, w in g.writes] == [30]

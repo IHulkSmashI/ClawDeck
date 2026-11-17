@@ -166,6 +166,8 @@ class State:
     small_since: float | None = None
     free_loss: float | None = None  # a loss at a limit that can't be its cause: since when (a dip if it is over soon)
     held_for: float | None = None   # how long the limit had held when a loss sent it to the full limit
+    said: tuple = (-1e9, 0.0)       # when the full limit last said of a loss "the scene, not the limit", and what
+                                    # it gave then
     retested: dict = field(default_factory=dict)    # watts -> when a level that lost frames was last tried once more
     retest: bool = False            # the step being watched is such a second try
     long: bool = False              # the step being watched is the next try of a level that failed: RETRY_DWELL_S
@@ -647,6 +649,16 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     third = len(st.watch) // 3
     if third >= N and t - st.wrote_at < 2 * BIND_S and _fps(st.watch[-third:]) > _fps(st.watch[:third]) * (1 + CLEAR):
         return act                                   # the frame rate is still climbing: not judged yet
+    if (st.mode == "recover" and st.tried is None and third >= N
+            and _fps(st.watch[-third:]) < _fps(st.watch[:third]) * (1 - clear)):
+        # the frame rate falls at the full limit: the place gets heavier under the look, and what the limit before gave
+        # when it lost is of a lighter moment. Taken for "the scene, not the limit", the limit went back, lost again at
+        # once, and so on (the way into a heavier place: 8 writes in 7 s). The full limit stays; what it gives is
+        # measured when the place has stayed
+        act.note = f"{_fps(st.watch[-third:]):.0f} fps at {top} W and falling: a heavier place; staying at {top} W"
+        st.ref = None
+        hold(AFTER_LOSS_S)
+        return act
     if st.why == "slow" and len(st.watch) < SLOW_FRAMES and seen < SLOW_MAX_S:
         return act                                   # a share of slow frames needs more frames than a frame rate
     now = _fps(st.watch[len(st.watch) // 2:]) if len(st.watch) >= 4 * N else _fps(st.watch)
@@ -673,6 +685,15 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if was >= want and not (st.why == "slow" and share < st.lost_slow - EDGE):
         # the limit before gives what the full one gives, within the margin (and has no more slow frames): the scene
         # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is from now
+        if st.mode == "recover" and st.since - st.said[0] < AFTER_LOSS_S and now < st.said[1] * (1 - clear):
+            # ... unless this loss came within AFTER_LOSS_S of the last such answer and the full limit gives less than
+            # it gave then: the place is still getting heavier (too slowly to show in one look), and each way back
+            # loses again. (The same frame rate as then is a place that has stayed: a video that began between two
+            # looks loses twice, the second time against the band of its first frames)
+            act.note = f"{now:.0f} fps at {top} W, {st.said[1]:.0f} at the last look: a heavier place; staying at {top} W"
+            hold(AFTER_LOSS_S)
+            return act
+        st.said = (t, now) if st.mode == "recover" else st.said
         back(f"the full {top} W gives {now:.0f} fps: the scene, not the limit; back to {st.prev} W" if st.mode == "recover"
              else f"{top} W gives {now:.0f} fps, {st.prev} W {was:.0f}: back to {st.prev} W")
         st.lo, st.hi, st.ref = lo, hi, before
