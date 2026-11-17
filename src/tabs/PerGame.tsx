@@ -18,6 +18,11 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
 const picks = new Map<string, { up?: string; fg?: number; ov?: number }>();   // unapplied picks per game, across re-mounts
+// the last status, launch options and recommendation per game: Steam's dropdowns re-mount Quick Access when their
+// menu closes, and the panel drew empty until the backend answered again (a flash after every pick). A re-mount draws
+// the last copy at once and reads the game again behind it.
+const seen = new Map<string, { gs?: GameStatus; opts?: string | null; rec?: Recommendation | null }>();
+const remember = (appid: string, v: { gs?: GameStatus; opts?: string | null; rec?: Recommendation | null }) => seen.set(appid, { ...(seen.get(appid) ?? {}), ...v });
 
 const UPSCALERS = [
   { data: "xess", label: "XeSS 2" },
@@ -48,10 +53,15 @@ const FRAMEGENS = [
 export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null; embedded?: boolean }> = ({ quick, pick, embedded }) => {
   useExplanations();
   const app = pick ?? runningApp();
-  const [gs, setGs] = useState<GameStatus | null>(null);
+  const was = app ? seen.get(app.appid) : undefined;
+  const [gs, setGs] = useState<GameStatus | null>(was?.gs ?? null);
   const [err, setErr] = useState<string | null>(null);
-  const [opts, setOpts] = useState<string | null>(null);    // the game's Steam launch options; null = unreadable
-  const load = async () => { if (app) { setGs(await gameStatus(app.appid)); setOpts(await getLaunchOptions(app.appid)); } };
+  const [opts, setOpts] = useState<string | null>(was?.opts ?? null);    // the game's Steam launch options; null = unreadable
+  const load = async () => {
+    if (!app) return;
+    const g = await gameStatus(app.appid); remember(app.appid, { gs: g }); setGs(g);
+    const o = await getLaunchOptions(app.appid); remember(app.appid, { opts: o }); setOpts(o);
+  };
   useEffect(() => { load(); }, [app?.appid]);
 
   if (!app) {
@@ -86,8 +96,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     }
     load();
   };
-  const [rec, setRec] = useState<Recommendation | null>(null);
-  useEffect(() => { gameRecommend(app.appid).then(setRec).catch(() => setRec(null)); }, [app.appid, gs]);
+  const [rec, setRec] = useState<Recommendation | null>(was?.rec ?? null);
+  useEffect(() => { gameRecommend(app.appid).then((r) => { remember(app.appid, { rec: r }); setRec(r); }).catch(() => setRec(null)); }, [app.appid, gs]);
 
 
   const ours = gs?.opti_owner === "clawdeck";
