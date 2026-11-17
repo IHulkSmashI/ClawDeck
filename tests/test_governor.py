@@ -1238,20 +1238,21 @@ def test_a_pause_at_a_limit_the_package_does_not_fill_writes_nothing():
     assert g.since(t0) == [], [n for n in g.notes if n[0] >= t0]
 
 
-@pytest.mark.parametrize("knee", [19.3, 20.0, 20.6])
+@pytest.mark.parametrize("knee, first", [(19.3, 150), (20.0, 160), (20.3, 150), (20.6, 150)])
 @pytest.mark.parametrize("period, rises", [(20, 1), (25, 1), (40, 4)])
-def test_a_game_that_goes_between_two_frame_rates_is_asked_once_what_the_faster_one_costs(knee, period, rises):
+def test_a_game_that_goes_between_two_frame_rates_is_asked_once_what_the_faster_one_costs(knee, first, period, rises):
     """56 fps, then 60 for a while, and so on for five minutes (no target set, the package at the limit). The first
     time at 60 fps the full limit says that it gives no more; after that 60 fps at this limit is no news for half a
     minute after the pace was last there (four looks in half a minute of Enshrouded: the band of the faster place was
     dropped at each return to the slower one). The highest pace the full limit did not beat counts, not the last
-    one; away from it for longer, the pace may be another place's and is asked again."""
+    one; away from it for longer, the pace may be another place's and is asked again. (With the knee on 20 W the
+    second try of 19 W is at 150 s: the first rise is 10 s after it.)"""
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30),
-             fps=lambda w, t: (60.0 if t >= 160 and ((t - 160) // period) % 2 == 0 else 56.0) * min(1.0, w / knee))
+             fps=lambda w, t: (60.0 if t >= first and ((t - first) // period) % 2 == 0 else 56.0) * min(1.0, w / knee))
     g.draw = lambda w, t: float(w)
-    g.run(460)
-    asked = [n for t, n in g.notes if t >= 160 and n.startswith("checking what the full")]
-    assert 1 <= len(asked) <= rises, [n for n in g.notes if n[0] >= 160]
+    g.run(first + 300)
+    asked = [n for t, n in g.notes if t >= first and n.startswith("checking what the full")]
+    assert 1 <= len(asked) <= rises, [n for n in g.notes if n[0] >= first]
 
 
 def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_step_costs():
@@ -1374,6 +1375,16 @@ def test_a_step_down_is_watched_from_when_it_binds():
     assert [a for _, a, _, _ in low] == [25]                         # 30 -> 25 W: halfway to the 19 W that failed
     for t1, a, t2, b in low:
         assert b >= 26 and t2 - t1 <= gov.BIND_S + 1.0               # the level under the need was never built upon
+
+
+def test_a_step_of_two_watts_is_watched_from_its_write():
+    """The package draws the 2 W of a step for a second more: no more than BIND_W over the new limit, so the watch
+    does not wait for it and the next step follows after DWELL_S."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 20 else 50.0)
+    g.draw = lambda w, t: float(w + 2) if g.writes and t - g.writes[-1][0] < 1.0 else float(w)
+    g.run(12)
+    assert [w for _, w in g.writes][:2] == [28, 26]
+    assert g.writes[1][0] - g.writes[0][0] <= gov.DWELL_S + 0.2, g.writes[:3]
 
 
 def test_a_second_try_that_holds_counts_as_one_of_the_games_own_dips():
