@@ -60,8 +60,9 @@ so FSR 4.1.2X and its Lite are one later than in 0.9.4: `versions.json` keeps th
 (XeSS 2 + XeFG loaded in the game), then FSR 4.1.2 picked showed FSR 4.1.2X in OptiScaler's menu. The new **Update
 OptiScaler (old → new)** button under Uninstall, tested there too: The Blood of Dawnwalker on 0.9.4, frame generation
 2x → 3x with Apply changes kept 0.9.4 (a setting keeps the game's earlier pinned OptiScaler, `versions.json`
-`previous`), then Update moved it to 0.9.5 with 3x kept. Not tested on hardware: FSR 4.1.2 Lite (position 10, from
-the same log), and FSR 4.1.2 on a game kept on 0.9.4 (position 6, as before 0.9.5).
+`previous`), then Update moved it to 0.9.5 with 3x kept. FSR 4.1.2 Lite on 0.9.5 (Stellar Blade, position 10) and
+FSR 4.1.2 on a game kept on 0.9.4 (Dawnwalker, position 6) both showed the right model in OptiScaler's menu.
+Check before the release: the same on a Claw 8 AI+ (Xe2) and on Bazzite.
 
 **Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
 its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
