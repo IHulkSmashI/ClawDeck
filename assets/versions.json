@@ -28,6 +28,7 @@
   "version": "0.9.5",
   "url": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.5/Optiscaler_0.9.5-final.20261116.7z",
   "sha256": "77e3ed76bed04e1fb32bacb5a72799ff172f3da22ed5231c0cf3e84fe6761662",
+  "fsr4_xmx_index": {"regular": 7, "lite": 10},
   "extras": [
    {
     "name": "OptiPatcher",
@@ -36,7 +37,7 @@
     "dest": "plugins/OptiPatcher.asi"
    }
   ],
-  "note": "ClawDeck's own OptiScaler (optiscaler.py). 0.9.5 (2026-11-16) since 2026-11-17: the last packed release of the 0.9 branch (upstream: maintenance mode, v10 is where work goes); FFX 2.4 SDK (FSR 4.1.2, FSR-FG 4.0.2), XeSS 3.0.2 SDK, fakenvapi 1.4.1 and nukem 0.130 bundled. Same flat layout as 0.9.4 plus amd_fidelityfx_upscaler_vk.dll and amd_fidelityfx_framegeneration_vk.dll; every OptiScaler.ini key ClawDeck writes is still there, [FSR] Fsr4ForceEnableInt8 is now 0-3 instead of true/false (ClawDeck doesn't write it: the retired fsr4 preset becomes fsr4_xmx), [FSRFG] DisableFlipMetering is new. sha256 is GitHub's asset digest, checked against the download. 0.9.4 before it: the same release and OptiPatcher build Decky Framegen v0.17 pins."
+  "note": "ClawDeck's own OptiScaler (optiscaler.py). 0.9.5 (2026-11-16) since 2026-11-17: the last packed release of the 0.9 branch (upstream: maintenance mode, v10 is where work goes); FFX 2.4 SDK (FSR 4.1.2, FSR-FG 4.0.2), XeSS 3.0.2 SDK, fakenvapi 1.4.1 and nukem 0.130 bundled. Same flat layout as 0.9.4 plus amd_fidelityfx_upscaler_vk.dll and amd_fidelityfx_framegeneration_vk.dll; every OptiScaler.ini key ClawDeck writes is still there, [FSR] Fsr4ForceEnableInt8 is now 0-3 instead of true/false (ClawDeck doesn't write it: the retired fsr4 preset becomes fsr4_xmx), [FSRFG] DisableFlipMetering is new. sha256 is GitHub's asset digest, checked against the download. fsr4_xmx_index: where FSR 4.1.2X and its Lite sit in OptiScaler's FFX upscaler list with nitec's files ([FSR] UpscalerIndex; 0.9.5 selects by position only), read from OptiScaler's log in Stellar Blade on a Claw 8 EX AI+ 2026-11-17: [0] 4.1.1 * (FFX 2.4's own, new in 0.9.5), [1-6] 4.0.2X (Skip, QSkip, Hybrid, Hybrid Skip, Hybrid QSkip), [7] 4.1.2X, [8-9] its Skip / QSkip, [10] 4.1.2X Lite, [11] Lite Skip; one later than 0.9.4's 6 / 9, so 0.9.4's 6 picked 4.0.2X Hybrid QSkip. 0.9.4 before it: the same release and OptiPatcher build Decky Framegen v0.17 pins."
  },
  "optiscaler_v10": {
   "version": "10.0.0-pre1-20261030",

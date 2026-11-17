@@ -1432,7 +1432,7 @@ class Plugin:
             u = await self._bg(optiscaler.unpatch, old)
             decky.logger.info("OptiScaler moved from %s to %s: %s", old, folder, u)
         _, page = await self._bg(self._wiki_for, appid)
-        r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}),
+        r = await self._bg(optiscaler.patch, HOME, folder, entry["version"], launchenv.opti_ini({**launch, "opti": opti}, entry.get("fsr4_xmx_index")),
                            opti, opti in launchenv.FSR4_XMX, entry.get("layout") or "flat", (page or {}).get("proxies"))
         if r.get("ok"):
             games = self.settings.setdefault("opti_games", {})
