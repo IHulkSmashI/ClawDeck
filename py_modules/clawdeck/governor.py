@@ -539,7 +539,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if st.mode == "probe":
         dwell = RETRY_DWELL_S if st.long else DWELL_S
         slow = _edge(st.watch, st.base_slow or 0.0) if seen >= DWELL_S / 2 else 0
-        edge = slow > 0
+        edge = slow > 0 and not _burst(st.watch)     # (one burst is the game's own, as at a held limit)
         # a clear loss on the last N frames; a small one on all the frames of the watch, once there are enough of them
         # to tell; at the end of the watch, the goal itself
         got = _fps(st.watch) if st.watch and (seen >= DWELL_S or (len(st.watch) >= 2 * N and not dippy)) else None

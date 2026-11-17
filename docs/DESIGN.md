@@ -241,8 +241,8 @@ The rules:
    for 2.5 s on every frame (10 s when the level failed for slow frames before), from when the package draws no more
    than 2.5 W over it. A step has to leave 3 % over the goal, unless it gives what the full limit gives: with
    less, the game's own wobble crosses the goal. A clear loss on the last ten frames, a small one on all frames of
-   the watch, or more slow frames than before takes it back at once; the level failed and is not tried again for 2
-   minutes, twice that after
+   the watch, or more slow frames than before (not in one burst) takes it back at once; the level failed and is not
+   tried again for 2 minutes, twice that after
    each further failure (up to 10 minutes), and steps wait 5 s, twice that after each failure in a row (up to 5
    minutes). A step that loses 15 % gets the full limit at once: when that gives what the limit before gave, the
    level failed; when it gives fewer frames, or so many more that the limit before is under their goal, the scene

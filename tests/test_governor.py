@@ -132,6 +132,18 @@ def test_a_video_that_begins_between_two_looks_gets_its_limit_back(at):
     assert [w for _, w in g.writes] == [30, 16, 30, 16], g.writes
 
 
+@pytest.mark.parametrize("period, seconds", [(300, 900), (420, 300)])
+def test_one_burst_of_the_games_own_slow_frames_does_not_fail_a_step(period, seconds):
+    """A game on its 60 fps limit from 10 W, with 6 frames in a row 30 % long every `period` frames at every limit. A
+    step whose watch has one such burst failed for slow frames, at every level (14 to 22 W held for a need of 10 W;
+    walking in Enshrouded: 26 W for a need of 20 W). One burst is the game's own, as at a held limit."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 10 else 6.0 * w,
+             shape=lambda i, w, t: 1.3 if i % period < 6 else 1.0)
+    g.draw = lambda w, t: float(min(w, 12))
+    g.run(seconds)
+    assert g.limit <= 11 and not [n for _, n in g.notes if "slow frames; back" in n], (g.limit, g.notes[-4:])
+
+
 def test_auto_fps_off_a_target_out_of_reach_keeps_the_full_limit():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16, auto_fps=False), fps=lambda w: 45.0).run(40)
     assert g.limit == 30 and [w for _, w in g.writes] == [30]
