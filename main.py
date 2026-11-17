@@ -1396,11 +1396,26 @@ class Plugin:
                          "xmx": not self._xmx_off(appid) and not self._no_xmx()},
                 "reframework_state": reframework.status(folder) if folder and rec["re_engine"] else None}
 
-    def _opti_entry(self, launch: dict) -> dict:
+    def _opti_entry(self, launch: dict, folder: str | None = None, update: bool = True) -> dict:
         """The OptiScaler this game gets: the Capcom setup (v10, subfolder layout) for a Capcom RE Engine
-        game, 0.9.4 for every other one."""
+        game, 0.9.5 for every other one. With update=False and the game folder, a game that already has an earlier
+        pinned ClawDeck OptiScaler of the same layout keeps it (versions.json "previous"): changing a setting doesn't
+        update OptiScaler, only Per-game's Update OptiScaler does. A layout change (0.9.x next to the exe -> v10 in
+        OptiScaler/ for a Capcom game) always takes the pinned one: the Capcom ini doesn't load on the flat layout."""
         v = self._versions()
-        return v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+        want = v["optiscaler_v10"] if launchenv.v10(launch) and v.get("optiscaler_v10") else v["optiscaler"]
+        if update or not folder:
+            return want
+        own = optiscaler.owner(folder)
+        have = own.get("version") if own.get("owner") == "clawdeck" else None
+        if not have or have == want["version"]:
+            return want
+        layout = want.get("layout") or "flat"
+        base = {k: x for k, x in want.items() if k not in ("version", "url", "sha256", "fsr4_xmx_index", "previous", "note")}
+        for e in want.get("previous") or []:
+            if e.get("version") == have and (e.get("layout") or layout) == layout:
+                return {**base, **e}
+        return want
 
     def _ref_shas(self) -> tuple[str, ...]:
         e = self._versions().get("reframework") or {}
@@ -1411,9 +1426,10 @@ class Plugin:
         """XMX switched off for this game (Per-game): FSR 4.1.2 isn't offered then (a black screen without XMX)."""
         return self.profiles.get_launch(appid).get("xmx") is False
 
-    async def _opti_into(self, appid: str, folder: str, launch: dict) -> dict:
-        """ClawDeck's OptiScaler into the game with the settings of `launch` (preset, XeSS-FG, the game's fixes)."""
-        entry = self._opti_entry(launch)
+    async def _opti_into(self, appid: str, folder: str, launch: dict, update: bool = False) -> dict:
+        """ClawDeck's OptiScaler into the game with the settings of `launch` (preset, XeSS-FG, the game's fixes).
+        The game keeps the OptiScaler version it has unless `update` (Per-game's Update OptiScaler)."""
+        entry = self._opti_entry(launch, folder, update)
         if not optiscaler.installed(HOME, entry["version"]) or not optiscaler.extras_ready(HOME, entry):
             if self._install_lock.locked():
                 return {"ok": False, "busy": True, "error": "already downloading; wait for the first one to finish"}
@@ -1474,11 +1490,12 @@ class Plugin:
         return {**r, "recommended": rec, "next": rec["reasons"][0]}
 
     async def game_choose(self, appid: str, upscaler: str, fg: int, allow_unpinned: bool = False,
-                          overlay: int | None = None) -> dict:
+                          overlay: int | None = None, update: bool = False) -> dict:
         """Per-game's two choices, kept plain: the upscaler (the game's own, or XeSS / FSR 4.1.2 /
         FSR 4.1.2 Lite on the XMX cores through ClawDeck's OptiScaler) and frame generation (off, or XeSS frame
         generation on XMX at 2x-4x, fed from the game's own frame generation when it has one). Everything they need
-        (OptiScaler, REFramework for Capcom games, the game's fixes) is put in or taken out here."""
+        (OptiScaler, REFramework for Capcom games, the game's fixes) is put in or taken out here. A game with an
+        earlier ClawDeck OptiScaler keeps that version; update=True (Update OptiScaler) moves it to the pinned one."""
         if upscaler not in ("own", "xess", "fsr4_xmx", "fsr4_xmx_lite"):
             return {"ok": False, "error": f"unknown upscaler {upscaler!r}"}
         fg = int(fg or 0)
@@ -1517,7 +1534,7 @@ class Plugin:
                   "fg": fg or None, "reframework": True if rec["re_engine"] else None, "fsr": None, "opti_xefg": None,
                   "opti_overlay": overlay if isinstance(overlay, int) and overlay in launchenv.OVERLAYS else None}
         r = await self._opti_into(appid, folder, {**{k: v for k, v in launch.items() if v is not None},
-                                                  "xmx": self.profiles.get_launch(appid).get("xmx")})
+                                                  "xmx": self.profiles.get_launch(appid).get("xmx")}, bool(update))
         if not r.get("ok"):
             return r
         launch["opti_dll"] = r["dll_override"]

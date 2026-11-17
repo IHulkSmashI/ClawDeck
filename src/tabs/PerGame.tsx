@@ -136,13 +136,14 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
   // yet stay picks
   const update = async () => {
     setBusy(true);
-    try { await choose(nowUp, nowFg, false, nowOv); } finally { setBusy(false); }
+    try { await choose(nowUp, nowFg, false, nowOv, true); } finally { setBusy(false); }
   };
-  const choose = async (upscaler: string, fg: number, allow = false, ov = wantOv) => {
+  // a game with an older ClawDeck OptiScaler keeps it when a setting changes; only update (the Update button) moves it
+  const choose = async (upscaler: string, fg: number, allow = false, ov = wantOv, update = false) => {
     const size = rec?.capcom ? "about 85 MB with REFramework" : "about 70 MB";
-    if (upscaler !== "own" && (!ours || outdated)) notify(`${app.name}: setting up OptiScaler ${optiVer ?? ""} (the first time downloads it, ${size})…`, { title: `${app.name}: installing…`, body: `OptiScaler ${optiVer ?? ""} (first time: ${size} download)` });
-    const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || ov < 0 ? null : ov);
-    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true, ov)); return; }
+    if (upscaler !== "own" && (!ours || update)) notify(`${app.name}: setting up OptiScaler ${optiVer ?? ""} (the first time downloads it, ${size})…`, { title: `${app.name}: installing…`, body: `OptiScaler ${optiVer ?? ""} (first time: ${size} download)` });
+    const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || ov < 0 ? null : ov, update);
+    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true, ov, update)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
     const needsWrapper = Object.keys(r.env ?? {}).length > 0;
     if (r.ok && needsWrapper && opts !== null && !hasWrapper(opts) && gs?.wrapper) {

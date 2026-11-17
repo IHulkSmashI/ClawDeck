@@ -1914,6 +1914,40 @@ def test_no_xmx_chip_gets_no_xmx_driver_and_no_fsr4(plugin):
     assert p.run(p.get_brightness()) == {"supported": False}
 
 
+def test_changing_a_setting_keeps_the_games_optiscaler_only_update_moves_it(plugin, tmp_path, monkeypatch):
+    """The Blood of Dawnwalker on 0.9.4 (Claw 8 EX AI+, 2026-11-17): frame generation None -> 2x and Apply changes
+    updated it to 0.9.5 as well. A setting keeps the game's earlier pinned OptiScaler (versions.json "previous", with
+    that version's FSR 4.1.2 position); only Update OptiScaler (update=True) and a first install take the pinned one."""
+    import asyncio
+    from clawdeck import optiscaler
+    p = plugin
+    p._install_lock = asyncio.Lock()
+    v = p._versions()
+    pinned, old = v["optiscaler"], v["optiscaler"]["previous"][0]
+    assert old["version"] == "0.9.4" and old["fsr4_xmx_index"] == {"regular": 6, "lite": 9}
+    game = tmp_path / "Dawnwalker"
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.4", "layout": "flat", "dll": "dxgi.dll"}))
+    e = p._opti_entry({"opti": "xess"}, str(game), update=False)
+    assert e["version"] == "0.9.4" and e["url"] == old["url"] and e["sha256"] == old["sha256"]
+    assert e["extras"] == pinned["extras"] and "previous" not in e                # OptiPatcher as pinned
+    assert p._opti_entry({"opti": "xess"}, str(game), update=True)["version"] == pinned["version"]
+    assert p._opti_entry({"opti": "xess"})["version"] == pinned["version"]         # Per-game's "newest" line
+    assert p._opti_entry({"opti": "xess"}, str(tmp_path / "fresh"), update=False)["version"] == pinned["version"]
+    # a version ClawDeck never pinned (or a layout change) can't be kept: the pinned one
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.1", "layout": "flat"}))
+    assert p._opti_entry({"opti": "xess"}, str(game), update=False)["version"] == pinned["version"]
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.4", "layout": "flat", "dll": "dxgi.dll"}))
+    # through _opti_into: which package goes in, with which FSR 4.1.2 position
+    got = []
+    monkeypatch.setattr(optiscaler, "installed", lambda h, ver: True)
+    monkeypatch.setattr(optiscaler, "extras_ready", lambda h, ent: True)
+    monkeypatch.setattr(p, "_wiki_for", lambda appid: (None, None))
+    monkeypatch.setattr(optiscaler, "patch", lambda home, folder, ver, ini, *a: got.append((ver, ini.get("FSR_UpscalerIndex"))) or {"ok": True, "dll_override": "dxgi"})
+    assert p.run(p._opti_into("1", str(game), {"opti": "fsr4_xmx", "fg": 2, "opti_fg": "dlssg"}))["ok"]
+    assert p.run(p._opti_into("1", str(game), {"opti": "fsr4_xmx"}, update=True))["ok"]
+    assert got == [("0.9.4", "6"), (pinned["version"], str(pinned["fsr4_xmx_index"]["regular"]))]
+
+
 def test_fsr4_refused_after_a_launch_without_xmx(plugin, tmp_path, monkeypatch):
     """FH5 on a Claw 8 AI+ (r/MSIClaw 2026-11-07): FSR 4.1.2 drew a black screen because that launch ran without the
     XMX cores. While the game's last launch shows that, FSR 4.1.2 is refused (Per-game hides it too); XeSS 2 is not."""
