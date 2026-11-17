@@ -354,6 +354,18 @@ def test_after_a_heavier_scene_the_level_that_held_is_tried_first():
     assert lower and lower[0] == home and g.limit <= home, g.since(t0)     # once, not 2 W at a time
 
 
+def test_a_step_down_has_to_leave_the_wobble_over_the_goal():
+    for under, held in ((57.6, 20), (59.0, 8)):              # 1 % over the goal of 57: not kept; 3.5 % over: kept
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=22), fps=lambda w: 60.0 if w >= 20 else under).run(200)
+        assert g.limit == held, (under, g.limit, g.notes[-3:])
+    for under, held in ((46.0, 20), (47.2, 8)):              # your target out of reach: the goal is 5 % under the 48
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else under).run(200)
+        assert g.limit == held, (under, g.limit, g.notes[-3:])                          # fps the full limit gives
+    # 0.8 % a watt, less than counts as a loss from one level to the next: what the full limit gives is the measure
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.992 ** (30 - w)).run(200)
+    assert g.limit == 28, (g.limit, g.notes[-3:])
+
+
 def test_failed_steps_are_approached_by_halving_and_wait_longer_each_time():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 21 else 50.0).run(200)
     tried = [w for _, w in g.writes if w < 30]
@@ -857,7 +869,7 @@ def test_a_menu_at_a_limit_that_holds_the_chip_gets_one_look_and_the_game_its_li
 
 def test_one_watt_under_the_full_limit_gets_no_look_while_the_frames_say_nothing():
     """What one watt more gives is not worth a look: at one watt under the full limit there is none in twelve minutes."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30)).run(120)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30) ** 0.5).run(120)
     t0 = g.t
     assert g.limit == 29, g.notes[-3:]
     g.run(720)
@@ -1069,7 +1081,7 @@ def test_a_fall_that_stays_inside_the_kept_margin_is_no_loss(target, fall, answe
 def test_a_scene_that_got_lighter_under_a_step_is_found_at_the_next_look_by_the_clock(by, slope):
     """50 fps at the full 30 W and 2 to 4 % less for every watt under it. During the first step down the scene gets 6
     to 10 % lighter: the step shows about as many frames as before it, so its cost goes into the ratio as none, and
-    the steps after it hold on that (7.8 to 11.5 % under what the full limit gives, with no frame to say so). Ten
+    the steps after it hold on that (5.9 to 7.8 % under what the full limit gives, with no frame to say so). Ten
     minutes after the full limit was last measured it is asked again."""
     light = {"on": False}
 
@@ -1079,7 +1091,7 @@ def test_a_scene_that_got_lighter_under_a_step_is_found_at_the_next_look_by_the_
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=fps)
     g.draw = lambda w, t: float(w)
     g.run(500)
-    assert fps(g.limit) < fps(30) * 0.93                    # (the case: held where the margin is not kept)
+    assert fps(g.limit) < fps(30) * 0.95                    # (the case: held where the margin is not kept)
     g.run(400)
     assert fps(g.limit) >= fps(30) * 0.95 and [n for t, n in g.notes if "min since the full" in n]
 
@@ -1235,11 +1247,11 @@ def test_a_game_that_goes_between_two_frame_rates_is_asked_once_what_the_faster_
     dropped at each return to the slower one). The highest pace the full limit did not beat counts, not the last
     one; away from it for longer, the pace may be another place's and is asked again."""
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30),
-             fps=lambda w, t: (60.0 if t >= 150 and ((t - 150) // period) % 2 == 0 else 56.0) * min(1.0, w / knee))
+             fps=lambda w, t: (60.0 if t >= 160 and ((t - 160) // period) % 2 == 0 else 56.0) * min(1.0, w / knee))
     g.draw = lambda w, t: float(w)
-    g.run(450)
-    asked = [n for t, n in g.notes if t >= 150 and n.startswith("checking what the full")]
-    assert 1 <= len(asked) <= rises, [n for n in g.notes if n[0] >= 150]
+    g.run(460)
+    asked = [n for t, n in g.notes if t >= 160 and n.startswith("checking what the full")]
+    assert 1 <= len(asked) <= rises, [n for n in g.notes if n[0] >= 160]
 
 
 def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_step_costs():

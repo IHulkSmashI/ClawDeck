@@ -166,7 +166,7 @@ def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit():
     governor before this one kept the full 30 W there."""
     for seed in (1, 2, 3):
         s = sim.run(sim.Wired(target=60), sim.Game(sim.SCENARIOS["out-of-reach"], seed=seed, goal_fps=60)).score()
-        assert s.over_w <= 3.5 and s.starved_pct <= 1
+        assert s.limit_w <= 28 and s.lost_pct <= 2.5 and s.starved_pct <= 1
 
 
 def test_autotune_wired_does_what_the_governor_alone_does():

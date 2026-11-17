@@ -555,7 +555,14 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         elif not quick:
             st.loss_since = None
         margin = small if seen < DWELL_S else 0.0
-        lost = quick or (got is not None and got < want * (1 - margin))
+        # a step down has to leave CLEAR over the goal: a level with less has, in the game's own wobble, losses of
+        # the size that counts (a walk at 45: seconds under the goal at the lowest level that held it; in the fuzz
+        # three times the frames lost). Unless it gives what the full limit gives (the limit before, where that is
+        # not known): nothing is lost to the limit then, whatever the rate (a game on its own frame limit with slow
+        # frames of its own is under that line at every limit)
+        most = full or st.before
+        line = want * (1 + CLEAR) if got is not None and most and got < most * (1 - small) else want
+        lost = quick or (got is not None and got < line * (1 - margin))
         if lost and cur < want * (1 - SHIFT) and st.prev < top and not st.retest:
             # far more lost than a step of this size usually costs: the scene may have changed under the step. All
             # the watts at once; what the full limit gives then says which it was
@@ -564,7 +571,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             watch("recover", top, f"{cur:.1f} fps at {tried} W, under {want:.1f}: the full {top} W", "fall")
             st.tried = tried
         elif lost or edge:
-            why = f"{got if got is not None and got < want else cur:.1f} fps, under {want:.1f}" if lost else f"{slow} slow frames"
+            why = f"{got if got is not None and got < line else cur:.1f} fps, under {line:.1f}" if lost else f"{slow} slow frames"
             tried, before = st.limit, st.prev
             st.retest = False                        # (a loss that was waited out is waited for no more at the limit before)
             failed(tried, scene, edge and not lost)

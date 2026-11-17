@@ -48,9 +48,10 @@ def test_a_jump_of_the_need_is_answered_within_seconds(target):
 
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_a_target_out_of_reach_is_not_a_reason_for_the_full_limit(seed):
-    """Enshrouded where 30 W gives 48 fps and 22 W gives 46: a 60 fps target can't be held at any limit."""
+    """Enshrouded where 30 W gives 48 fps and 22 W gives 46: a 60 fps target can't be held at any limit. The limit
+    comes down to where 2 % of the frames are lost (a step has to leave 3 % over the goal of 5 % less)."""
     s = _score("out-of-reach", 60, seed)
-    assert s.over_w <= 2.5 and s.starved_pct <= 1
+    assert s.limit_w <= 28 and s.lost_pct <= 2.5 and s.starved_pct <= 1
 
 
 @pytest.mark.parametrize("name, target", [("uncapped", None), ("cap-need-moves", 60), ("cap-need-moves", None)])
