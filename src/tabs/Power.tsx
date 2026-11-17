@@ -216,7 +216,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
               quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
               quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
         {custom && <ToggleField label="Set PL2 yourself" checked={!!st?.pl2_manual}
-          description={explain(st?.pl2_manual ? "PL2, the short-burst limit, is the slider below instead of your TDP + 2 W." : `PL2, the short-burst limit, follows your TDP: ${tdp + 2} W (TDP + 2 W, as Handheld Daemon and PowerControl do).`,
+          description={explain(st?.pl2_manual ? "PL2, the short-burst limit, is the slider below instead of your TDP + 2 W." : `PL2, the short-burst limit, follows ${governs ? "Autotune's max TDP" : "your TDP"}: ${(governs ? atMax : tdp) + 2} W (TDP + 2 W, as Handheld Daemon and PowerControl do).`,
             "a higher PL2 gives the CPU and graphics short bursts above the TDP: snappier loading, more heat, and frame times can get less even.")}
           onChange={async (v) => { const r = await setPl2(v, v ? (st?.pl2_set_w ?? tdp + 2) : null); toast(r.summary); refresh(); }} />}
         {custom && st?.pl2_manual && <SliderField label={`PL2 ${slot?.plugged ? "plugged in" : "on battery"} (W)`} value={Math.max(tdp, st?.pl2_set_w ?? tdp + 2)} min={tdp} max={st?.pl2_max ?? 45} step={1} showValue
@@ -254,7 +254,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {autotune && (
           <SliderField label="Autotune max TDP (W)" value={atMax} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend}
             onChange={(w) => { setAtMaxV(w); latest("atmax", () => setAutotuneMax(w), (r) => { toast(r.summary); refresh(); }); }}
-            description={explain(`The most watts Autotune may use to hold ${st?.autotune_target} fps, ${lo}–${hi} W. Not moved yet: your TDP setting.`,
+            description={explain(`The most watts Autotune may use to hold ${st?.autotune_target} fps, ${lo}–${hi} W. Until moved, it is your TDP setting.`,
               undefined, quick ? undefined : "each watt more buys fps with play time and heat.")} />
         )}
         {autotune && (
