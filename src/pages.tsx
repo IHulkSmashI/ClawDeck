@@ -54,7 +54,9 @@ const TABS_CSS = ((c) => {
  * definite height, and Decky's per-plugin wrapper sizes to its content, so the height comes from Decky's Quick
  * Access content slot, measured at run time. */
 export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
-  const [cur, setCur] = useState<string>(() => (tabs.some((t) => t.id === lastTab) ? lastTab : tabs[0].id));
+  // the remembered tab is kept even while it isn't in the list yet (Game waits for the setup check after a re-mount):
+  // Power shows meanwhile, and the tab comes back as soon as it is listed, instead of the panel settling on Power
+  const [cur, setCur] = useState<string>(lastTab);
   const active = tabs.some((t) => t.id === cur) ? cur : tabs[0].id;
   const rootRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
@@ -77,6 +79,10 @@ export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
   );
 };
 
+// the last setup check, kept while the plugin is loaded: a Quick Access re-mount (a dropdown's menu closing) lists the
+// Game tab from the first render instead of after the check, so a pick in the Game tab stays in the Game tab
+let lastSetupDone: boolean | null = null;
+
 /**
  * The Quick Access panel holds the four panels (Power, Game, Fixes, Setup) in their short form, one tab each: short
  * labels, the read-back line after every change, nothing that needs a settings page. The full-screen page below has
@@ -84,7 +90,8 @@ export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
  */
 export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
-  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  const [setupDone, setSetupDoneState] = useState<boolean | null>(lastSetupDone);
+  const setSetupDone = (v: boolean) => { lastSetupDone = v; setSetupDoneState(v); };
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
   // the steps show on the first start and stay until Done or Skip; without the XMX driver they come back (nothing on
   // the XMX cores works without it). A driver left over from an earlier install no longer skips the VRR step.
