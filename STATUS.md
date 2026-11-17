@@ -57,10 +57,11 @@ sleep/wake several times fine.
 OptiScaler is 0.9.5 (sha256 = GitHub's asset digest). 0.9.5 lists FFX 2.4's own FSR 4.1.1 first in the FFX upscaler list,
 so FSR 4.1.2X and its Lite are one later than in 0.9.4: `versions.json` keeps the positions per pinned OptiScaler
 (`fsr4_xmx_index`, 7 / 10). Tested on a Claw 8 EX AI+ (CachyOS, Proton-CachyOS): Stellar Blade installed with 0.9.5
-(XeSS 2 + XeFG loaded in the game), then FSR 4.1.2 picked showed FSR 4.1.2X in OptiScaler's menu. Not tested on
-hardware: FSR 4.1.2 Lite (position 10, from the same log), and the new **Update OptiScaler (old → new)** button under
-Uninstall (backend test only): a game set up with an earlier ClawDeck (0.9.4) should show it, and after it the game's
-manifest says 0.9.5 with its upscaler, frame generation and overlay kept.
+(XeSS 2 + XeFG loaded in the game), then FSR 4.1.2 picked showed FSR 4.1.2X in OptiScaler's menu. The new **Update
+OptiScaler (old → new)** button under Uninstall, tested there too: The Blood of Dawnwalker on 0.9.4, frame generation
+2x → 3x with Apply changes kept 0.9.4 (a setting keeps the game's earlier pinned OptiScaler, `versions.json`
+`previous`), then Update moved it to 0.9.5 with 3x kept. Not tested on hardware: FSR 4.1.2 Lite (position 10, from
+the same log), and FSR 4.1.2 on a game kept on 0.9.4 (position 6, as before 0.9.5).
 
 **Autotune's log has the frame times (2026-11-15):** for a game read from mangoapp's per-frame log (no MangoHud log of
 its own), each row of `autotune.csv` now also has the number of frames in that second, their median and 95th
