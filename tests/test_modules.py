@@ -863,6 +863,23 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
 
 
+def test_fsr4_xmx_index_follows_the_pinned_optiscaler():
+    """OptiScaler picks the FFX upscaler by position, and the list moves with each release (0.9.5 put FFX 2.4's own
+    4.1.1 first): ClawDeck's own OptiScaler takes the positions measured for the pinned version."""
+    from clawdeck import launchenv
+    with open(os.path.join(ROOT, "assets", "versions.json"), encoding="utf-8") as f:
+        v = json.load(f)
+    idx = v["optiscaler"]["fsr4_xmx_index"]
+    assert idx == {"regular": 7, "lite": 10}                     # 0.9.5, read from OptiScaler's log on a Claw
+    assert launchenv.opti_ini({"opti": "fsr4_xmx"}, idx)["FSR_UpscalerIndex"] == "7"
+    assert launchenv.opti_ini({"opti": "fsr4_xmx_lite"}, idx)["FSR_UpscalerIndex"] == "10"
+    assert launchenv.opti_ini({"opti": "fsr4"}, idx)["FSR_UpscalerIndex"] == "7"          # the retired preset too
+    assert "FSR_UpscalerIndex" not in launchenv.opti_ini({"opti": "xess"}, idx)
+    # without a measured list (v10's Capcom setup, Decky Framegen's 0.9.4): the presets' 0.9.4 positions
+    assert launchenv.opti_ini({"opti": "fsr4_xmx"})["FSR_UpscalerIndex"] == "6"
+    assert launchenv.OPTI_PRESETS["fsr4_xmx_lite"]["FSR_UpscalerIndex"] == "9"
+
+
 def test_optiscaler_update_moves_a_game_to_the_new_version(tmp_path, monkeypatch):
     """Per-game "Update OptiScaler": a game on 0.9.4 patched again with 0.9.5 gets 0.9.5's files and nothing of 0.9.4,
     keeps its proxy name, and the game's own files still come back on unpatch."""
