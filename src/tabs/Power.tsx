@@ -211,7 +211,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(custom ? "Your own limit, from the slider below." : `${picked?.short}: ${picked?.does}.`,
             quick ? undefined : "the most power the game may use; Autotune saves below it.", quick || custom ? undefined : picked?.cost)} /></Anchor>
         <Anchor id="tdp"><SliderField label="TDP (W)" value={tdp} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend || governs} onChange={(w) => { markPick("tdp"); slide(w); }}
-          description={governs ? explain("Autotune is on, so set an FPS target and a wattage limit in the Autotune section.")
+          description={governs ? "Autotune is on, so set an FPS target and a wattage limit in the Autotune section."
             : explain(`The power CPU and graphics share, ${lo}–${hi} W. Moving it makes a Custom profile.`,
               quick ? undefined : "Steam's TDP slider does nothing on the Claw 8 EX (PowerStation reports no TDP range for this chip), so ClawDeck sets the chip's own limit." + rapl25,
               quick ? undefined : "each watt more buys fps with play time and heat.")} /></Anchor>
