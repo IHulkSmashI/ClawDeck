@@ -30,8 +30,11 @@ let lastTab = "power";
 const tabClasses = findClassModule((m: any) => m.TabContentsScroll && m.TabRowTabs) as Record<string, string> | undefined;
 const ROOT_CLASS = "clawdeck-qam-tabs";
 // Tabs is laid out for a full page; in the narrow Quick Access panel its side padding and spacers clip the tabs.
-// Four equal tabs, little padding, content under the 46 px header. Empty if Steam renames the module: the panel then
-// keeps Steam's own (wider) spacing instead of breaking.
+// Four equal tabs, little padding, content under the 46 px header. Steam fades the row's first and last 24 px (a
+// mask for scrolling tabs) and sets text-align: start: in a row this tight that cut into Power and Setup and pushed
+// every title to the left of its pill, so the mask is off and the titles are centred; without the fade the end pills
+// met the L1 / R1 glyphs, so the row keeps a small gap beside them (Claw 8 EX, 2026-11-17).
+// Empty if Steam renames the module: the panel then keeps Steam's own (wider) spacing instead of breaking.
 const TABS_CSS = ((c) => {
   if (!c) return "";
   const s = `.${ROOT_CLASS}`;
@@ -40,9 +43,11 @@ const TABS_CSS = ((c) => {
     ${s} .${c.TabRowSpacer} { display: none !important; }
     ${s} .${c.TabRow}, ${s} .${c.TabRowTabs}, ${s} .${c.TabsRowScroll} { width: 100%; }
     ${s} .${c.FixCenterAlignScroll} { display: flex; gap: 4px; width: 100%; padding: 0 !important; }
-    ${s} .${c.Tab} { flex: 1; min-width: 0; padding: 10px 2px !important; justify-content: center; font-size: 0.85em;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    ${s} .${c.TabTitle} { flex: 1; min-width: 0; overflow: hidden; }
+    ${s} .${c.TabRow} { gap: 6px; }
+    ${s} .${c.TabsRowScroll} { mask-image: none !important; -webkit-mask-image: none !important; }
+    ${s} .${c.Tab} { flex: 1; min-width: 0; padding: 10px 4px !important; justify-content: center; text-align: center; font-size: 0.85em;
+      white-space: nowrap; overflow: hidden; }
+    ${s} .${c.TabTitle} { flex: 1; min-width: 0; overflow: hidden; text-align: center; white-space: nowrap; text-overflow: ellipsis; }
     ${s} .${c.TabContentsScroll} { padding: 54px 0 40px !important; }
   `;
 })(tabClasses);
