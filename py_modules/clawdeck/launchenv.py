@@ -80,7 +80,7 @@ KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "
 # OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
 # generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
 OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
-# OptiScaler.ini sections (0.9.4, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
+# OptiScaler.ini sections (0.9.4 and 0.9.5, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
 INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "DLSSG", "NvngxFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
                 "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
                 "fakenvapi", "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
@@ -110,7 +110,7 @@ CAPCOM_FG_COUNT = "2"
 
 
 def v10(launch: dict) -> bool:
-    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for the Capcom setup, which was
+    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.5: only for the Capcom setup, which was
     tested with it. 3x / 4x in other games come from XESS_FG (xess-xmx-linux's ControlLib.dll answers XeSS frame
     generation's override query, as Intel Graphics Software does on Windows), with any OptiScaler."""
     return capcom(launch)
