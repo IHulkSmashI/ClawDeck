@@ -863,6 +863,32 @@ def test_optiscaler_patch_and_unpatch_leave_the_game_as_it_was(tmp_path, monkeyp
     assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
 
 
+def test_optiscaler_update_moves_a_game_to_the_new_version(tmp_path, monkeypatch):
+    """Per-game "Update OptiScaler": a game on 0.9.4 patched again with 0.9.5 gets 0.9.5's files and nothing of 0.9.4,
+    keeps its proxy name, and the game's own files still come back on unpatch."""
+    from clawdeck import optiscaler
+    monkeypatch.setattr(optiscaler.userexec, "chown_tree", lambda p, h: None)
+    home = str(tmp_path)
+    _opti_pkg(home, "0.9.4")
+    new = _opti_pkg(home, "0.9.5")
+    _w(os.path.join(new, "OptiScaler.dll"), "opti-095")
+    _w(os.path.join(new, "amd_fidelityfx_upscaler_vk.dll"), "vk")              # new in 0.9.5
+    _w(os.path.join(home, optiscaler.ROOT, "0.9.4", "only094.dll"), "old")    # gone from 0.9.5
+    g = tmp_path / "game"
+    _w(g / "Game.exe", "x")
+    _w(g / "libxess.dll", "game-own-xess")
+    r = optiscaler.patch(home, str(g), "0.9.4", {"Upscalers_Dx12Upscaler": "xess"})
+    assert r["ok"] and optiscaler.owner(str(g))["version"] == "0.9.4" and (g / "only094.dll").exists()
+    r = optiscaler.patch(home, str(g), "0.9.5", {"Upscalers_Dx12Upscaler": "xess"})
+    assert r["ok"] and r["version"] == "0.9.5" and r["dll"] == "dxgi.dll"
+    assert optiscaler.owner(str(g))["version"] == "0.9.5"
+    assert (g / "dxgi.dll").read_text().strip() == "opti-095" and (g / "amd_fidelityfx_upscaler_vk.dll").exists()
+    assert not (g / "only094.dll").exists() and "Dx12Upscaler=xess" in (g / "OptiScaler.ini").read_text()
+    assert optiscaler.unpatch(str(g))["removed"]
+    assert sorted(p.name for p in g.iterdir()) == ["Game.exe", "libxess.dll"]
+    assert (g / "libxess.dll").read_text().strip() == "game-own-xess"
+
+
 def test_optiscaler_never_touches_another_tools_install(tmp_path, monkeypatch):
     from clawdeck import optiscaler
     home = str(tmp_path)
@@ -1106,7 +1132,7 @@ def test_versions_pin_the_capcom_setup():
     assert fnv["sha256"] == "e1239f74f458e3bafd7e86fb6c02557abb267499650580c4bfbdd60815304ddd"
     assert fnv["files"] == {"fakenvapi.dll": "OptiScaler/fakenvapi.dll"} and fnv["ini"] == "OptiScaler/fakenvapi.ini"
     assert fnv["file_sha256"]["fakenvapi.dll"] == "373e73dc06e2d66e90083fde3bc99ef5c1ed0bef98d1f7eda56c8b073269c3f1"
-    assert v["optiscaler"]["version"] == "0.9.4" and "layout" not in v["optiscaler"]       # everything else unchanged
+    assert v["optiscaler"]["version"] == "0.9.5" and "layout" not in v["optiscaler"]       # everything else unchanged
     with open(os.path.join(ROOT, "assets", "upstream.lock.json"), encoding="utf-8") as f:
         lock = json.load(f)
     assert lock["REFramework (onehoon fork)"] == ref["tag"] and lock["OptiScaler nightly (v10)"] == o10["tag"]
