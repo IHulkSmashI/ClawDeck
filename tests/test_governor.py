@@ -1238,7 +1238,7 @@ def test_a_pause_at_a_limit_the_package_does_not_fill_writes_nothing():
     assert g.since(t0) == [], [n for n in g.notes if n[0] >= t0]
 
 
-@pytest.mark.parametrize("knee, first", [(19.3, 150), (20.0, 160), (20.3, 150), (20.6, 150)])
+@pytest.mark.parametrize("knee, first", [(19.3, 150), (19.3, 160), (20.0, 160), (20.3, 150), (20.6, 150)])
 @pytest.mark.parametrize("period, rises", [(20, 1), (25, 1), (40, 4)])
 def test_a_game_that_goes_between_two_frame_rates_is_asked_once_what_the_faster_one_costs(knee, first, period, rises):
     """56 fps, then 60 for a while, and so on for five minutes (no target set, the package at the limit). The first
