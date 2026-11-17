@@ -12,6 +12,8 @@ import { PerGameTab } from "./PerGame";
 // game's settings
 let lastPick: string | null = null;
 export const forgetGamePick = () => { lastPick = null; };
+// the last game list: a re-mount draws it at once (no "Reading your games…" flash) and reads it again behind
+let lastGames: GameEntry[] | null = null;
 
 /** One game at a time, picked from a list: the running game first, then every installed game. Nothing is picked
  * while no game that can be set up runs, until the user picks one.
@@ -19,7 +21,8 @@ export const forgetGamePick = () => { lastPick = null; };
  * full view; the full view adds the explanations and the less used switches. */
 export const GameSection: FC<{ quick?: boolean }> = ({ quick }) => {
   const running = runningApp();
-  const [games, setGames] = useState<GameEntry[] | null>(null);
+  const [games, setGamesS] = useState<GameEntry[] | null>(lastGames);
+  const setGames = (g: GameEntry[]) => { lastGames = g; setGamesS(g); };
   const [pick, setPick] = useState<string | null>(lastPick);
   useEffect(() => { gamesList().then(setGames).catch(() => setGames([])); }, []);
 
