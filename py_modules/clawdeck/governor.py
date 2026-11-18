@@ -862,9 +862,13 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             need = _need(st, cfg)
 
     # the band was taken while the package drew 2 W under this limit (a video, a light place), and now the package
-    # draws all of it: another scene, which the limit may hold back at the same frame rate. Nothing is known here
-    if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5 and cur >= need * (1 - clear):
+    # draws all of it: another scene, which the limit may hold back at the same frame rate. Nothing is known here, and
+    # a clear fall gets the full limit at once, as far too few frames do
+    if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5:
         _unknown(st)
+        if cur < need * (1 - clear):
+            write(top, f"{cur:.0f} fps at {st.limit} W: the full {top} W")
+            hold()
         return act
 
     # a fall: the last frames are clearly under what this limit has to give, or the pace is a little under it and

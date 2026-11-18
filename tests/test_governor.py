@@ -1474,6 +1474,26 @@ def test_a_clear_fall_at_a_band_taken_with_the_package_under_the_limit_gets_the_
     assert full_after(video_w) <= full_after(8.0), (full_after(video_w), full_after(8.0))
 
 
+@pytest.mark.parametrize("video_s", [20.0, 60.0])
+@pytest.mark.parametrize("at_floor", [12.0, 20.0])
+@pytest.mark.parametrize("drawn", [6.1, 7.0, 8.0])
+def test_a_clear_fall_at_a_band_taken_with_the_package_under_the_limit_books_nothing_for_that_limit(video_s, at_floor,
+                                                                                                   drawn):
+    """A 30 fps intro video for 20 or 60 s: the steps end at the 8 W floor, with the package at 6.1 or 7 W (the band is
+    free) or at 8 W. The game then gives 12 or 20 fps at 8 W and 27 at 30 W, with the package at the limit: a clear
+    fall, and the full limit. Where the band was free, the game never held at 8 W: 8 W is not tried once more and not
+    booked as failed (with it booked, the first step down from 30 W went to 19 W, and the steps after it held 29 W
+    where the game gave 26 of 27 fps: 2.5 % of the frames lost, cloud fuzz seed 127). Where the package drew the
+    limit, the fall is judged as at any held limit: 8 W failed."""
+    fps = lambda w, t: 30.0 if t < video_s else min(27.0, at_floor + (27.0 - at_floor) * (w - 8) / 20)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=30.0, start_w=None), fps=fps)
+    g.draw = lambda w, t: min(float(w), drawn) if t < video_s else float(w)
+    g.run(video_s + 120)
+    after = [w for t, w in sorted(g.writes) if t >= video_s]
+    assert [w for t, w in sorted(g.writes) if t < video_s][-1] == 8 and after[0] == 30, g.writes
+    assert (8 in after or 8 in g.st.fail) == (drawn == 8.0), (after, sorted(g.st.fail), g.notes)
+
+
 def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws_the_limit():
     """Held at 20 W. A video (30 fps, the package at 8 W), a loading screen, a light place for 20 s (75 fps at 10 W),
     then a heavy one: 30 fps at 20 W with the package at the limit, 45 at the full 30 W. The frame rate is the one the
