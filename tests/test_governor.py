@@ -403,6 +403,7 @@ def test_the_edge_rule_counts_slow_frames_of_their_own_time():
     some = ([33.3] * 14 + [40.0]) * 5 + [33.3] * 10
     assert gov._edge(some, 0.0) == 5 and gov._edge(some, 0.06) == 0
     assert gov._edge([33.3] * 70 + [40.0] * 5, 0.0) == 0 and gov._edge([33.3] * 40 + [40.0] * 40, 0.0) == 0    # a slower stretch
+    assert gov._edge([33.3] * 80 + [36.0, 38.0] * 20, 0.0) == 0                                  # (one that wobbles)
 
 
 def test_the_edge_rule_counts_slow_frames_alone_and_in_pairs_not_three_in_a_row():
