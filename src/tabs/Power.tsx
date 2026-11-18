@@ -245,11 +245,13 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           description={explain(`Holds your target frame rate with the fewest watts (within 5 %; a game whose frame rate wobbles by itself can lose more for some seconds). It tries a lower TDP for a moment, watches every frame, and takes the step back at the first loss; when a heavier scene loses frames, its max TDP is back within a second. On battery and on the charger too: less heat and fan. Counts rendered frames, not the ones frame generation adds.`,
             quick ? undefined : "the frames you asked for with less power: longer play time.", quick ? undefined : "a step that fails is about half a second of slightly slower frames; it tries less often the longer a scene stays the same.")} />
         {autotune && (
-          <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max" rgOptions={TARGETS}
+          <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max"
+            rgOptions={!st?.autotune_target || TARGETS.some((o) => o.data === st.autotune_target) ? TARGETS
+              : [...TARGETS, { data: st.autotune_target, label: `${st.autotune_target} fps` }]}
             selectedOption={st?.autotune_target}
             onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
             description={explain("A frame rate to hold with the fewest watts: the max TDP below is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
-              quick ? undefined : `${TARGETS[TARGETS.length - 1].data} fps with Auto FPS: nearly the most frames the max TDP below gives.`, undefined)} />
+              quick ? undefined : "the screen's highest refresh rate with Auto FPS: nearly the most frames the max TDP below gives.", undefined)} />
         )}
         {autotune && (
           <SliderField label="Autotune max TDP (W)" value={atMax} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend}
