@@ -2592,8 +2592,8 @@ def test_after_many_failed_steps_in_a_row_the_next_step_waits_five_minutes_at_mo
     g.st.fail[low][0], g.st.misses, g.st.miss_ref, g.st.quiet_until = g.t, misses, g.st.fail[low][2], g.t
     t0 = g.t
     g.run(30)
-    assert low in g.since(t0) and g.st.misses == misses + 1 and 270 <= g.st.quiet_until - g.t <= 300, (g.since(t0),
-                                                                                                     g.st.misses)
+    assert low in g.since(t0) and g.st.misses == misses + 1, (g.since(t0), g.st.misses)
+    assert g.st.quiet_until - g.writes[-1][0] == pytest.approx(gov.BACK_S + gov.AFTER_LOSS_MAX_S, abs=0.5), g.writes[-2:]
 
 
 @pytest.mark.parametrize("apart, waited", [(200, True), (400, False)])
