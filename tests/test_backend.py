@@ -1666,20 +1666,28 @@ def test_switching_autotune_off_in_a_game_keeps_the_start_level_where_the_game_h
     assert saved.get("ceiling") == 25 and saved.get("start") == held, saved
 
 
+@pytest.mark.parametrize("state", ["switched on in the game", "unplugged, not yet reported"])
 @pytest.mark.parametrize("setting, own", [(26, 15), (14, 25)])
 def test_the_guard_in_a_game_autotune_does_not_govern_steps_back_up_to_the_limit_on_the_chip(plugin, tmp_path, setting,
-                                                                                             own):
-    """Autotune switched on during the game: no session. The guard gives the watts back up to the TDP setting on the
+                                                                                             own, state):
+    """No session: Autotune switched on during the game, or the game on the charger with "Autotune on the charger"
+    off and the charger pulled before Steam reports it. The guard gives the watts back up to the TDP setting on the
     chip, not to Autotune's maximum; the TDP slider is not greyed."""
     p = plugin
     t = tmp_path / "pkg_temp"
     p.guard = thermal.Guard(str(t), "x86_pkg_temp")
-    p.settings["autotune"] = False
-    p.autotune.enabled = False
-    assert p.run(p.set_tdp(setting))["ok"]
+    p.settings["autotune"] = state != "switched on in the game"
+    p.autotune.enabled = p.settings["autotune"]
+    p.settings["autotune_plugged"] = False
+    for plugged in (False, True):
+        p.ac["plugged"] = plugged
+        assert p.run(p.set_tdp(setting))["ok"]
+    p.ac["plugged"] = state != "switched on in the game"
     p.run(p.set_autotune_max(own))
     p.run(p.game_started("7"))
-    p.run(p.set_setting("autotune", True))
+    if state == "switched on in the game":
+        p.run(p.set_setting("autotune", True))
+    p.ac["plugged"] = False
     assert p.autotune.session is None and p.chip() == setting
     assert not p.run(p.get_power())["autotune_governs"]
     seen = []
