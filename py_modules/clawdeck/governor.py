@@ -50,7 +50,7 @@ DIP_MAX_S = 2.0
 PACE_FRAMES = 60
 TOL = 0.05              # target mode: this far under the target is still the target
 REACHED = 0.99          # the full limit gives this much of the target: the target is in reach
-SAME = 0.003            # out of reach, a lower limit holds where it gives the full limit's frames within this
+SAME = 0.005            # out of reach, a lower limit holds where it gives the full limit's frames within this
 SLOW = 1.10             # a frame this much longer than the pace is a slow one ...
 EDGE = 0.03             # ... and this much more of them than before a step is the edge of the limit (15 W in
                         # Midnight Club: Los Angeles: the median on pace, 6 % slow frames)

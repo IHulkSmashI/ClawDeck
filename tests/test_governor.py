@@ -648,11 +648,13 @@ def test_a_step_down_has_to_leave_the_wobble_over_the_goal():
     for under, held in ((57.6, 20), (59.0, 8)):              # 1 % over the goal of 57: not kept; 3.5 % over: kept
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=22), fps=lambda w: 60.0 if w >= 20 else under).run(200)
         assert g.limit == held, (under, g.limit, g.notes[-3:])
-    for under, held in ((47.8, 20), (47.9, 8)):              # your target out of reach: the goal is 0.3 % under the
+    goal = 48.0 * (1 - gov.SAME)                             # your target out of reach: the goal is SAME under the
+    for under, held in ((goal - 0.05, 20), (goal + 0.05, 8)):                           # 48 fps the full limit gives
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else under).run(200)
-        assert g.limit == held, (under, g.limit, g.notes[-3:])                          # 48 fps the full limit gives
-    # 0.2 % a watt, less than counts as a loss from one level to the next: what the full limit gives is the measure
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.998 ** (30 - w)).run(200)
+        assert g.limit == held, (under, g.limit, g.notes[-3:])
+    # 0.6 SAME a watt, less than counts as a loss from one level to the next: what the full limit gives is the measure
+    a_watt = 1 - 0.6 * gov.SAME
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * a_watt ** (30 - w)).run(200)
     assert g.limit == 29, (g.limit, g.notes[-3:])
 
 
