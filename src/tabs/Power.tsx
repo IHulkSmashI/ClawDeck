@@ -111,7 +111,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
     if (!appid || !at || at.game === appid || resynced.current === appid) return;
     resynced.current = appid;
     uiLog(`power: ${appid} runs but the backend has ${at.game ?? "no game"}: reporting it`);
-    gameStarted(appid).then(() => refreshRef.current()).catch(() => undefined);
+    gameStarted(appid, true).then(() => refreshRef.current()).catch(() => undefined);
   }, [appid, at?.game]);
   // while the panel is open in a game (Autotune on), or the temperature guard is acting, the live line follows along:
   // one cheap call every 3 s, only while visible. When Autotune starts, stops, gets a new limit or the power source

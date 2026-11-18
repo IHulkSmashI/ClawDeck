@@ -490,6 +490,27 @@ def own_pace_emulator(proc: str | None = None) -> str | None:
     return None
 
 
+def game_process(appid: str, proc: str | None = None) -> bool:
+    """Steam started this game's process: its reaper runs with AppId=<appid> (not the install script's, which also has
+    Install=1). One walk over /proc/*/cmdline."""
+    proc = proc or PROC
+    want = f"AppId={appid}".encode()
+    try:
+        pids = [d for d in os.listdir(proc) if d.isdigit()]
+    except OSError:
+        return False
+    for d in pids:
+        try:
+            with open(os.path.join(proc, d, "cmdline"), "rb") as f:
+                args = f.read().split(b"\0")
+        except OSError:
+            continue
+        head = args[:args.index(b"--")] if b"--" in args else args
+        if want in head and b"Install=1" not in head:
+            return True
+    return False
+
+
 @dataclass
 class Session:
     appid: str

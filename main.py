@@ -961,8 +961,12 @@ class Plugin:
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
         return learned
 
-    async def game_started(self, appid: str) -> dict:
+    async def game_started(self, appid: str, resync: bool = False) -> dict:
         appid = str(appid)
+        if resync and not autotune.game_process(appid):
+            # the panel saw Steam's running app before its process (a launch waiting on Steam's shader processing)
+            decky.logger.info("power: %s has no game process yet: not started", appid)
+            return {}
         async with self._power_lock:
             if self.running_appid and self.running_appid != appid:
                 # a second game (or a launcher) started while one runs: save what the first one learned first

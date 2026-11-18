@@ -1030,6 +1030,26 @@ def test_a_frontend_game_has_no_launch_file_of_its_own(plugin, monkeypatch):
     assert "42" in seen and "3119184808#ps3/Ratchet" not in seen
 
 
+@pytest.mark.parametrize("cmdline", [None, "reaper\0SteamLaunch\0AppId=7\0Install=1\0--\0iscriptevaluator",
+                                     "reaper\0SteamLaunch\0AppId=70\0--\0game",
+                                     "reaper\0SteamLaunch\0AppId=7\0--\0game"])
+@pytest.mark.parametrize("resync", [False, True])
+def test_a_game_the_panel_reports_starts_only_with_its_process(plugin, monkeypatch, tmp_path, resync, cmdline):
+    """The panel reports Steam's running app when it opens (Decky restarted in a game): that game starts once Steam
+    runs its process (AppId=7, not the install script's). Opened while a launch waited on Steam's shader processing,
+    Autotune governed Steam's dialog. Steam's app lifetime event starts the game as before."""
+    p = plugin
+    _w(str(tmp_path / "proc" / "1" / "cmdline"), "/usr/lib/systemd/systemd")
+    if cmdline:
+        _w(str(tmp_path / "proc" / "4242" / "cmdline"), cmdline)
+    monkeypatch.setattr(autotune, "PROC", str(tmp_path / "proc"))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7", True) if resync else p.game_started("7"))
+    started = not resync or cmdline == "reaper\0SteamLaunch\0AppId=7\0--\0game"
+    assert (p.running_appid == "7") == started and (p.autotune.session is not None) == started
+    assert started or p.chip() == 26, p.chip()
+
+
 def test_a_frontend_event_from_before_the_game_started_is_ignored(plugin):
     p = plugin
     esde = "3119184808"
