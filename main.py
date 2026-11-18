@@ -447,8 +447,6 @@ class Plugin:
                     plugged = bool(self.battery.plugged())
                     w = self._pick(self._game_key(), plugged)["tdp"]
                 self.autotune.pause("autotune switched off", limit=w)
-                if w is not None and not self.autotune.running():
-                    self.power.set_tdp(w, plugged)
         if key in ("autotune", "autotune_plugged") and self.running_appid is None and self.settings.get("autotune_max"):
             async with self._power_lock:
                 self._apply_idle_pick(bool(self.battery.plugged()))
@@ -551,7 +549,8 @@ class Plugin:
         pk = self._pick(self._game_key() if self.running_appid else None, plugged)
         own = self.settings.get("autotune_max")
         st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]
-        st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged)
+        st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged) and (
+            self.running_appid is None or self.autotune.session is not None)
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -923,7 +922,7 @@ class Plugin:
                                         set_clock=self._guard_clock)
             # your limit for this power source (the pick, or Autotune's maximum): where stepping back up stops
             pk = self._pick(self._game_key(), plugged)
-            limit = self._limit_overrides(pk, plugged).get("tdp", pk["tdp"])
+            limit = pk["tdp"] if self.running_appid else self._limit_overrides(pk, plugged).get("tdp", pk["tdp"])
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
                                     limit_w=limit, set_clock=self._guard_clock)
 

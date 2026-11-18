@@ -1664,6 +1664,51 @@ def test_switching_autotune_off_in_a_game_keeps_the_start_level_where_the_game_h
     saved = p.profiles.own("7", False).get("learned") or {}
     assert saved.get("ceiling") == 25 and saved.get("start") == held, saved
 
+
+@pytest.mark.parametrize("setting, own", [(26, 15), (14, 25)])
+def test_the_guard_in_a_game_autotune_does_not_govern_steps_back_up_to_the_limit_on_the_chip(plugin, tmp_path, setting,
+                                                                                             own):
+    """On the charger with "Autotune on the charger" off at the start, switched on in the game: no session. The guard
+    gives the watts back up to the TDP setting on the chip, not to Autotune's maximum; the TDP slider is not greyed."""
+    p = plugin
+    p.ac["plugged"] = True
+    p.settings["autotune_plugged"] = False
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(setting))["ok"]
+    p.run(p.set_autotune_max(own))
+    p.run(p.game_started("7"))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.autotune.session is None and p.chip() == setting
+    assert not p.run(p.get_power())["autotune_governs"]
+    seen = []
+    for c in [97] + [70] * 30:
+        _w(t, c * 1000)
+        p.run(p._guard_check())
+        seen.append(p.chip())
+    assert min(seen) < setting and max(seen) <= setting and seen[-1] == setting, seen
+
+
+def test_switching_autotune_off_in_a_hot_game_it_does_not_govern_keeps_the_guards_step(plugin, tmp_path):
+    """No session (on the charger, "Autotune on the charger" off): the TDP setting 26 W is the game's limit, and the
+    guard stepped it down. Autotune switched off: the limit stays under the guard's step."""
+    p = plugin
+    p.ac["plugged"] = True
+    p.settings["autotune_plugged"] = False
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.set_autotune_max(15))
+    p.run(p.game_started("7"))
+    _w(t, 97 * 1000)
+    p.run(p._guard_check())
+    stepped = p.chip()
+    assert p.autotune.session is None and stepped < 26
+    p.run(p.set_setting("autotune", False))
+    assert p.chip() == stepped
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
