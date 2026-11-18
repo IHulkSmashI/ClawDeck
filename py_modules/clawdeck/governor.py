@@ -732,6 +732,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.base_slow = max(st.lost_slow, share)  # as many at the full limit: the game's own in this place
         hold(AFTER_LOSS_S)
     elif (st.mode == "recover" and ((st.held_for or 0.0) >= HOME_S or dippy)
+          and (st.why != "free" or before is not None and abs(now - before) <= 2 * small * before)
           and t - st.retested.get(st.prev, -1e9) >= RETRY_S):
         # the frames are back at the full limit. But the level had held for a while, or this game dips by itself: a
         # dip of the game's own looks the same. The level once more, watched; a loss that comes back is the limit's
@@ -741,7 +742,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         st.typ = statistics.median(st.watch[len(st.watch) // 2:] if len(st.watch) >= 4 * N else st.watch)
         watch("probe", level, f"{was:.0f} fps at {level} W, {now:.0f} at {top} W: {level} W once more")
     else:
-        failed(st.prev, now, was >= want)
+        if st.why != "free":
+            failed(st.prev, now, was >= want)
         act.note = (f"{top} W has none of the slow frames of {st.prev} W: staying up" if was >= want
                     else f"{st.prev} W was too low ({was:.0f} fps, {now:.0f} at {top} W)" if st.mode == "recover"
                     else f"{top} W gives {now:.0f} fps, {st.prev} W gave {was:.0f}: staying up")
@@ -863,12 +865,15 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
 
     # the band was taken while the package drew 2 W under this limit (a video, a light place), and now the package
     # draws all of it: another scene, which the limit may hold back at the same frame rate. Nothing is known here, and
-    # a clear fall gets the full limit at once, as far too few frames do
+    # a clear fall gets the full limit at once (in a game that dips by itself, once it has lasted PATIENT_S, below). The
+    # limit held no game here: it is not booked as failed, and is tried once more only where the full limit gives the
+    # pace it gave before (a dip of the game's own)
     if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5:
         _unknown(st)
-        if cur < need * (1 - clear):
-            write(top, f"{cur:.0f} fps at {st.limit} W: the full {top} W")
-            hold()
+        need = _need(st, cfg)
+        if cur < need * (1 - clear) and st.limit < top and not dippy:
+            st.lost, st.held_for, st.loss_since = cur, t - st.changed_at, None
+            watch("recover", top, f"{cur:.1f} fps at {st.limit} W, under {need:.1f}: the full {top} W", "free")
         return act
 
     # a fall: the last frames are clearly under what this limit has to give, or the pace is a little under it and

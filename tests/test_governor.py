@@ -1494,6 +1494,52 @@ def test_a_clear_fall_at_a_band_taken_with_the_package_under_the_limit_books_not
     assert (8 in after or 8 in g.st.fail) == (drawn == 8.0), (after, sorted(g.st.fail), g.notes)
 
 
+@pytest.mark.parametrize("at_floor, drawn", [(27.0, 6.1), (27.0, 7.0), (30.0, 6.1), (30.0, 7.0), (27.0, 8.0)])
+def test_a_game_at_the_videos_frame_rate_under_your_target_books_nothing_for_the_videos_limit(at_floor, drawn):
+    """A 30 fps intro video: the steps end at the 8 W floor, with the package at 6.1 or 7 W (the band is free) or at
+    8 W. The game then gives 27 or 30 fps at 8 W and 60 at 16 W, target 60, with the package at the limit. Where the
+    band was free: the full limit at once, and 8 W is not tried again or booked as failed (at the video's 30 fps the
+    band saw no fall, and the fall rule judged 8 W as a limit that held the game). Where the package drew the limit,
+    the fall is judged as at any held limit."""
+    fps = lambda w, t: 30.0 if t < 60.0 else min(60.0, at_floor * w / 8.0)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
+    g.draw = lambda w, t: min(float(w), drawn) if t < 60.0 else float(w)
+    g.run(150)
+    after = [w for t, w in sorted(g.writes) if t >= 60.0]
+    assert [w for t, w in sorted(g.writes) if t < 60.0][-1] == 8 and after[0] == 30, g.writes
+    assert (8 in after or 8 in g.st.fail) == (drawn == 8.0), (after, sorted(g.st.fail), g.notes)
+
+
+@pytest.mark.parametrize("every", [40.0, 60.0, 90.0])
+@pytest.mark.parametrize("dip_s", [0.6, 1.0])
+def test_a_games_own_short_dips_at_a_free_band_get_one_look_and_are_learned(dip_s, every):
+    """A game on its 60 fps frame limit with the package at 6 W: the band at the 8 W floor is free. Every 40, 60 or 90 s
+    it dips by itself for 0.6 or 1 s to 40 fps at every limit, with the package at the limit. A dip gets the full limit
+    and its verdict: 8 W once more, which holds, and the dip is booked. Once the game counts as one that dips, a dip
+    gets no write (the full limit and 10 s held at it for each dip: 90 to 210 s over 8 W in 840 s)."""
+    dip = lambda t: t >= 60.0 and (t % every) < dip_s
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=lambda w, t: 40.0 if dip(t) else 60.0)
+    g.draw = lambda w, t: float(w) if dip(t) else min(float(w), 6.0)
+    g.run(900)
+    writes = sorted(g.writes) + [(g.t, None)]
+    over = sum(b - max(a, 60.0) for (a, w), (b, _) in zip(writes, writes[1:]) if w > 8 and b > 60.0)
+    assert len(g.st.dips) >= 2 and over <= 60.0, (over, g.st.dips, g.notes)
+
+
+def test_the_guards_cap_at_a_free_band_starts_no_look():
+    """Held at the 8 W floor with the band free (a 30 fps video, the package at 7 W). The guard caps at 7 W, and the
+    package draws all of it: the band is dropped, and 30 fps is a clear fall against your target. The cap is the full
+    limit there: no look starts and nothing is held."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=lambda w, t: 30.0)
+    g.draw = lambda w, t: min(float(w), 7.0)
+    g.run(80)
+    assert (g.st.limit, g.st.free_w) == (8, 8)
+    g.cap = 7
+    g.run(3.0)
+    said = [n for at, n in g.notes if at >= 80.0]
+    assert said == ["the temperature guard allows 7 W"] and g.st.quiet_until < 80.0, (said, g.st.quiet_until)
+
+
 def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws_the_limit():
     """Held at 20 W. A video (30 fps, the package at 8 W), a loading screen, a light place for 20 s (75 fps at 10 W),
     then a heavy one: 30 fps at 20 W with the package at the limit, 45 at the full 30 W. The frame rate is the one the
