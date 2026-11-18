@@ -1908,10 +1908,9 @@ def test_the_charger_switch_set_to_the_value_it_has_changes_nothing(plugin, paus
 
 @pytest.mark.parametrize("state", ["governed", "switched on in the game", "switched off in the game"])
 def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, state):
-    """The panel sends the Autotune switch again with the value it has (a second copy of the panel), then a new target
-    and a resume from sleep: a governed game takes the target and is governed again, a game Autotune was switched on
-    in stays at the TDP setting, one it was switched off in keeps the limit set since. A governed game got the mark of
-    Autotune switched on in it, ignored the target and stayed at the TDP setting after the resume."""
+    """The panel sends the Autotune switch again with the value it has, then a new target and a resume from sleep: a
+    governed game takes the target and is governed again, a game Autotune was switched on in stays at the TDP setting,
+    one it was switched off in keeps the limit set since."""
     p = plugin
     p.ac["plugged"] = False
     p.settings["autotune"] = p.autotune.enabled = state != "switched on in the game"
@@ -1939,11 +1938,9 @@ def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, sta
 @pytest.mark.parametrize("plugged", [False, True])
 def test_the_charger_switch_a_new_target_and_the_slider_follow_the_games_power_source_until_steam_reports_a_change(
         plugin, plugged):
-    """A governed game on battery (the charger goes in) or on the charger (it comes out). Before Steam reports it,
-    "Autotune on the charger" is switched off and a new target set: the game on the charger is paused and keeps the
-    TDP setting, the game on battery stays governed, takes the target and has the TDP slider greyed out. The battery
-    game was paused at its lowered limit and ignored the target, the game on the charger went on governed, and the
-    slider of a governed battery game was free."""
+    """A governed game; the charger goes in or comes out, and before Steam reports it "Autotune on the charger" is
+    switched off and a new target set: the game on the charger is paused at the TDP setting, the game on battery stays
+    governed, takes the target and has the TDP slider greyed out."""
     p = plugin
     p.ac["plugged"] = plugged
     p.run(p.set_setting("autotune", True))
