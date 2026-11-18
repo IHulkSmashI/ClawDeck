@@ -390,6 +390,23 @@ def test_a_scene_that_is_not_steady_gets_no_step_down():
     assert g.writes and g.limit < 30
 
 
+
+@pytest.mark.parametrize("target", [60, 70])
+def test_watts_the_guard_gives_back_get_no_second_try_of_the_level_its_cap_held(target):
+    """The game needs 20 W. The guard caps the limit at 14 W, then gives 2 W back every 30 s. A loss at the level
+    the cap held is the cap's, not a dip of the game's own: each rise gets one look at the new top, not a second try
+    of that level (3 writes and a failed step each)."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=target), fps=lambda w: 60.0 if w >= 20 else 60.0 - 3.0 * (20 - w))
+    g.draw = lambda w, t: float(w)
+    g.run(120)
+    t0 = g.t
+    for cap in (14, 16, 18, 20, 22, None):
+        g.cap = cap
+        g.run(30)
+        assert cap is None or max([g.limit] + [w for at, w in g.writes if at >= g.t - 30]) <= cap
+    assert not [n for t, n in g.notes if t >= t0 and "once more" in n], [n for n in g.notes if n[0] >= t0]
+    assert len([w for at, w in g.writes if t0 <= at < t0 + 90]) <= 6, g.since(t0)
+
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
     g.thermal = True
@@ -425,6 +442,22 @@ def test_a_step_down_has_to_leave_the_wobble_over_the_goal():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.992 ** (30 - w)).run(200)
     assert g.limit == 28, (g.limit, g.notes[-3:])
 
+
+
+@pytest.mark.parametrize("full", [40.0, 50.0])
+@pytest.mark.parametrize("share", [0.95, 0.96, 0.97])
+def test_the_way_back_after_a_look_has_to_leave_the_wobble_over_the_goal_as_a_step_has(full, share):
+    """No history: the game starts at 19 W of 8 to 30, which gives `share` of what the full limit gives (it needs 20
+    W); your target of 60 is out of reach. The first loss gets the full limit, and the level before is 3 to 5 % under
+    what that gives: gone back to on the goal line alone, it held 5 % of the frames lost for the whole game."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=lambda w: full if w >= 20 else full * share)
+    g.run(60)
+    line = full * (1 - gov.TOL) * (1 + gov.CLEAR)
+    under = 0
+    for _ in range(240):
+        g.run(1)
+        under += g.rate() < line
+    assert under <= 10, (under, g.limit, g.notes[:8])
 
 def test_failed_steps_are_approached_by_halving_and_wait_longer_each_time():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 21 else 50.0).run(200)
@@ -1156,6 +1189,17 @@ def test_a_scene_that_got_lighter_under_a_step_is_found_at_the_next_look_by_the_
     assert fps(g.limit) >= fps(30) * 0.95 and [n for t, n in g.notes if "min since the full" in n]
 
 
+
+def test_the_look_at_a_games_start_does_not_say_a_menu_came_before_it():
+    """No target (120 with Auto FPS) and a game on a frame limit of 60 that draws 9 W: the steps down need no look,
+    and at 8 W the package draws the limit. What the full limit gives was never measured, and it is asked once. No
+    menu came before."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120), fps=lambda w: 60.0)
+    g.draw = lambda w, t: min(float(w), 9.0)
+    g.run(60)
+    looks = [n for t, n in g.notes if "checking" in n]
+    assert looks and not [n for n in looks if "menu" in n], g.notes[:8]
+
 def test_a_pace_the_full_limit_did_not_beat_is_another_places_after_half_a_minute():
     """Held at 14 W in a place that gives 50 fps. A lighter place for 15 s (60 fps, the full limit gives no more),
     back for five minutes, then a place where 14 W gives 58 fps and the full limit 75: the 60 fps of minutes before
@@ -1319,7 +1363,8 @@ def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_
     """50 fps at the full 30 W, 2 % less for every watt under it. During the first step down the scene gets 10 %
     lighter: 28 W gives more frames than 30 W gave. A lower limit gives no more frames, so the step's frames say
     nothing of its cost: taken as "costs nothing", the next steps were judged against too few frames and the limit held
-    8 % under the full one. The full limit is looked at, and the limit ends where it costs under 5 %."""
+    8 % under the full one. The full limit is looked at, and the limit ends where it leaves the wobble over the goal
+    (29 W: 2 % under the full limit; 28 W, 4 % under it, is not gone back to)."""
     light = {"on": False}
 
     def fps(w):
@@ -1328,7 +1373,7 @@ def test_a_scene_that_gets_lighter_under_a_step_has_the_full_limit_say_what_the_
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=fps)
     g.draw = lambda w, t: float(w)
     g.run(120)
-    assert g.limit == 28 and [w for _, w in g.writes][:3] == [28, 30, 28], (g.limit, g.writes, g.notes[:6])
+    assert g.limit == 29 and [w for _, w in g.writes][:3] == [28, 30, 29], (g.limit, g.writes, g.notes[:6])
 
 
 def test_steps_down_end_without_a_look_at_the_full_limit():
