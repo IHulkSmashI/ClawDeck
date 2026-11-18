@@ -75,6 +75,11 @@ Check on the EX, Autotune on:
 - cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
 - on the charger, "Autotune when plugged in" switched in a running game: off, the TDP setting is the limit at once,
   under the guard's step, and a CPU boost set off stays off; on, the TDP goes down as in a game started on the charger.
+- unplug or plug in during a game that has no level on the other power source (also while the Claw sleeps): the TDP
+  starts where the game held, not mid-range; the firmware's own hold of 2 to 4 s at about 10 W after an unplug stays;
+- the charger in or out, and before Steam reports it the TDP slider, a profile or PL2 moved: the change goes to the
+  power source the panel shows;
+- open the panel at Steam's shader dialog, before the game's process: Autotune starts with the game process, not before.
 - a 30 fps cutscene or video in a 60 fps game, 20 s and a minute: the TDP does not go under what it was before the
   video, and the game is at its frame rate within a second of the video's end. A video of over 2 minutes: the TDP may
   go down in it; the game is at its frame rate within about 3 s of its end;
