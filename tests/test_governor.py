@@ -2567,13 +2567,16 @@ def test_a_level_that_fails_again_and_again_is_tried_again_after_ten_minutes_at_
     assert n == 4 and retry_at - at == pytest.approx(600), g.st.fail
 
 
-def test_after_many_failed_steps_in_a_row_the_next_step_waits_five_minutes_at_most():
-    """Steps wait 5 s after a failed one, twice that after each further one in a row: 10, 20, ... s, then 5 minutes."""
+@pytest.mark.parametrize("misses", [9, 1024])
+def test_after_many_failed_steps_in_a_row_the_next_step_waits_five_minutes_at_most(misses):
+    """Steps wait 5 s after a failed one, twice that after each further one in a row: 10, 20, ... s, then 5 minutes;
+    also after a thousand (5 s times 2 to the 1024th is past a float: the governor stopped, after 7 days)."""
     g, low = _at_14_w_with_a_level_that_failed()
-    g.st.fail[low][0], g.st.misses, g.st.miss_ref, g.st.quiet_until = g.t, 9, g.st.fail[low][2], g.t
+    g.st.fail[low][0], g.st.misses, g.st.miss_ref, g.st.quiet_until = g.t, misses, g.st.fail[low][2], g.t
     t0 = g.t
     g.run(30)
-    assert low in g.since(t0) and g.st.misses == 10 and 270 <= g.st.quiet_until - g.t <= 300, (g.since(t0), g.st.misses)
+    assert low in g.since(t0) and g.st.misses == misses + 1 and 270 <= g.st.quiet_until - g.t <= 300, (g.since(t0),
+                                                                                                     g.st.misses)
 
 
 @pytest.mark.parametrize("apart, waited", [(200, True), (400, False)])

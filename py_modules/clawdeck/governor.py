@@ -654,7 +654,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.lost, was, st.held_for, st.loss_since = _fps(tail), st.limit, None, None
             watch("recover", top, f"{st.lost:.1f} fps at {was} W, under {want:.1f}: the full {top} W", "fall")
         elif seen >= BACK_S and st.loss_since is None:
-            hold(min(AFTER_LOSS_MAX_S, AFTER_LOSS_S * 2 ** max(0, st.misses - 1)))
+            hold(min(AFTER_LOSS_MAX_S, AFTER_LOSS_S * 2 ** max(0, min(st.misses, 7) - 1)))
         return act
 
     # recover / check: the full limit, after a loss, for slow frames, or to measure what it gives (no target, nothing
