@@ -196,7 +196,7 @@ What it knows:
   taken while the package drew 2 W or more under the limit (also by a step watched at such a draw, and by a step down
   from such a limit while the package draws under the new one) is dropped when the package draws all of that limit,
   also when it was set aside and came back, or the governor went back to it (a video's band, and a place with the
-  video's frame rate).
+  video's frame rate); a clear fall there gets the full limit first.
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your

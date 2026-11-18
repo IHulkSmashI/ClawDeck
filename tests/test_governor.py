@@ -1455,6 +1455,25 @@ def test_a_game_after_an_intro_video_that_drew_under_the_limit_is_not_held_at_th
     assert under < 30.0, (round(under, 1), writes)
 
 
+
+@pytest.mark.parametrize("video_w", [6.5, 7.0])
+@pytest.mark.parametrize("game_fps", [10.0, 20.0])
+def test_a_clear_fall_at_a_band_taken_with_the_package_under_the_limit_gets_the_full_limit_as_soon_as_elsewhere(video_w,
+                                                                                                                  game_fps):
+    """A 30 fps intro video with the package under the limit: the steps end at the 8 W floor with the band free. The
+    game then gives 10 or 20 fps at 8 W with the package at the limit: a clear fall. The full limit comes no later
+    than after the same video with the package at 8 W (no free band). The drop of the free band ran first and the fall
+    waited for the frames after it (0.7 s, against 0.4 s without the mark: cloud fuzz seed 204)."""
+    def full_after(drawn):
+        fps = lambda w, t: 30.0 if t < 60.0 else min(60.0, game_fps * w / 8.0)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
+        g.draw = lambda w, t: min(float(w), drawn) if t < 60.0 else float(w)
+        g.run(90)
+        assert [w for t, w in sorted(g.writes) if t < 60.0][-1] == 8
+        return min(t for t, w in g.writes if t >= 60.0 and w == 30) - 60.0
+    assert full_after(video_w) <= full_after(8.0), (full_after(video_w), full_after(8.0))
+
+
 def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws_the_limit():
     """Held at 20 W. A video (30 fps, the package at 8 W), a loading screen, a light place for 20 s (75 fps at 10 W),
     then a heavy one: 30 fps at 20 W with the package at the limit, 45 at the full 30 W. The frame rate is the one the
