@@ -2772,6 +2772,35 @@ def test_frames_over_the_target_from_the_limits_own_steps_are_no_other_scene():
     assert next(t for t, w in g.writes if w == 15) < 45, g.writes
 
 
+@pytest.mark.parametrize("cost", [0.015, 0.025])
+def test_a_held_limit_that_comes_to_cost_frames_under_a_target_out_of_reach_gets_the_full_limit(cost):
+    """Target 60, the full limit 58.5 fps: out of reach, though within TOL of it. The place then makes the held 23 W
+    give 1.5 or 2.5 % less than the full limit: no watts are saved with fewer frames (590 of 590 s at 20 to 23 W)."""
+    heavy = {"on": False}
+    fps = lambda w: 58.5 if w >= 24 else 58.5 * (1 - (cost if heavy["on"] else 0.002 * (24 - w)))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(300)
+    heavy["on"], t0, held = True, g.t, g.limit
+    g.run(590)
+    writes = [(t0, held)] + [(t, w) for t, w in g.writes if t > t0]
+    low = sum(b - a for (a, w), (b, _) in zip(writes, writes[1:] + [(g.t, 0)]) if fps(w) < 58.5 * 0.99)
+    assert low <= 10.0, (low, g.since(t0)[:6])
+
+
+def test_a_pace_over_a_reference_out_of_reach_raises_it_to_that_pace_not_to_your_target():
+    """The full limit gave 56.5 of your 60, then the place gives 57.5 from 18 W up (under 3 % more: no look) and 57.1
+    at 14 to 17 W. The reference is 57.5, not your 60: 57.1 is 0.7 % fewer frames, and is not held."""
+    light = {"on": False}
+    fps = lambda w: (57.5 if w >= 18 else 57.1 if w >= 14 else 50.0) if light["on"] else 56.5 * min(1.0, w / 20)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(200)
+    light["on"] = True
+    g.run(400)
+    assert g.limit >= 18 and g.st.ref == pytest.approx(57.5, abs=0.3), (g.limit, g.st.ref, g.notes[-4:])
+
+
 def test_a_target_that_a_lowered_limit_nearly_gives_is_not_out_of_reach():
     """60 fps from 18 W, 58 at 16 and 17 W (within the margin of a target of 60): the target is reached, and what is
     shown and saved says so (58 was booked as what the full limit gives: "60 out of reach")."""

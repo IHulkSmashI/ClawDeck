@@ -184,8 +184,8 @@ is too low look the same in the frames.
 
 What it knows:
 - **The reference** is what the full limit gives: the pace there, or the pace while the package is 2 W or more under
-  the limit (the median of the last five looks, so one dip does not move it). A pace at your target at a lowered limit
-  says only that the full limit gives your target at least.
+  the limit (the median of the last five looks, so one dip does not move it). A pace within 5 % of your target at a
+  lowered limit says only that the full limit gives that pace at least (your target, while nothing is known).
 - **The band** is the pace at the held limit when the limit was last known to cost no more than the margin: by a look
   at the full limit, by the step that came here and held, or all the time while the limit can't hold the game back.
   Lowest and highest, at most 15 % apart. A band belongs to one reference: a pace further away, or a look at which

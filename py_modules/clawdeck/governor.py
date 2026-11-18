@@ -327,7 +327,7 @@ def _goal_at(ref: float | None, cfg: Cfg) -> float:
 def _need(st: State, cfg: Cfg) -> float:
     """The pace the held limit has to give: your target less TOL. When the band is under that (a target out of
     reach): the band's lower edge, which a step held against what the full limit gives less SAME."""
-    if st.lo is None or st.lo >= cfg.target * (1 - TOL):
+    if st.lo is None or (st.lo >= cfg.target * (1 - TOL) and not out_of_reach(st, cfg)):
         return cfg.target * (1 - TOL)
     return st.lo
 
@@ -505,9 +505,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
                 st.ref, st.ratio = level, 1.0
                 st.full_at = t if st.limit >= top else st.full_at
                 st.free_w = st.limit if st.limit < top else None
-            elif st.ref is None or cfg.target > st.ref:
-                st.ref = cfg.target                  # the full limit gives at least what this limit gives (of your
-                                                     # target: a menu's frames over it are not the game's)
+            elif st.ref is None or level > st.ref:
+                # the full limit gives at least what this limit gives (of your target: a menu's frames over it are not
+                # the game's). With nothing known, your target: a pace within TOL of it is no sign it is out of reach
+                st.ref = cfg.target if st.ref is None else min(level, cfg.target)
     else:
         st.free_fps.clear()
     rising = obs.draw_w is not None and st.draw_was is not None and obs.draw_w > st.draw_was + RISE_W
