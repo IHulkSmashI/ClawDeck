@@ -441,14 +441,16 @@ class Plugin:
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
             self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
-            if not value:
-                w = None
-                if self.running_appid and self.settings.get("autotune_max"):
-                    plugged = bool(self.battery.plugged())
-                    w = self._pick(self._game_key(), plugged)["tdp"]
-                self.autotune.pause("autotune switched off", limit=w)
-        if (key == "autotune_plugged" and self.settings.get("autotune") and self.running_appid is not None
-                and self.battery.plugged()):
+        charger = (key == "autotune_plugged" and self.settings.get("autotune")
+                   and self.running_appid is not None and bool(self.battery.plugged()))
+        if (key == "autotune" or charger) and not value:
+            w = None
+            if self.running_appid and self.settings.get("autotune_max"):
+                plugged = bool(self.battery.plugged())
+                w = self._pick(self._game_key(), plugged)["tdp"]
+            self.autotune.pause("autotune switched off" if key == "autotune" else "autotune on the charger switched off",
+                                limit=w)
+        if charger and value:
             async with self._power_lock:
                 self._save_learned(self._game_key(), bool(self.running_plugged))
                 self.running_plugged = True
@@ -1140,7 +1142,8 @@ class Plugin:
         t, auto_fps = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)), auto_fps)
         self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, auto_fps
         self._save_settings()
-        if not (self.running_appid is not None and self._game_key() in getattr(self, "_autotune_late", ())):
+        plugged = bool(self.battery.plugged())
+        if self.running_appid is None or self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
             self.autotune.set_target(t, auto_fps)
         words = f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
         return {"ok": True, "target": t, "auto_fps": auto_fps, "summary": words, "error": None}

@@ -1863,6 +1863,30 @@ def test_a_manual_lever_in_a_governed_game_keeps_the_paused_line(plugin):
     assert at.get("paused") and "why" not in at, at.get("why")
 
 
+@pytest.mark.parametrize("kept", ["the CPU boost", "the guard's step"])
+def test_the_charger_switch_off_in_a_governed_game_keeps_the_users_levers_and_the_guards_step(plugin, tmp_path, kept):
+    """On the charger, a governed game; "Autotune on the charger" switched off: the user's CPU boost (off) stays off,
+    and on a package at 97 °C the guard's step (13 W) stays, as for the Autotune switch. The switch restarted the
+    game's power: the boost came back on, and the TDP setting (26 W) went on the hot chip."""
+    p = plugin
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    p.ac["plugged"] = True
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    if kept == "the CPU boost":
+        p.run(p.set_cpu_turbo(False))
+    else:
+        _w(t, 97 * 1000)
+        p.run(p._guard_check())
+    step = p.chip()
+    p.run(p.set_setting("autotune_plugged", False))
+    assert (p.power.turbo() is False) if kept == "the CPU boost" else p.chip() <= step, (p.power.turbo(), step, p.chip())
+
+
 @pytest.mark.parametrize("own", [None, 15])
 def test_autotune_on_the_charger_switched_off_in_a_governed_game_gives_the_tdp_setting_back(plugin, own):
     """On the charger, the game governed (the limit lowered). "Autotune on the charger" switched off: the TDP setting
