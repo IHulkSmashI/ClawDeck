@@ -64,7 +64,7 @@ DWELL_S = 2.5           # a step down is watched this long
 BACK_S = 1.0            # a raise is judged on the frames of this long
 HOLD_S = 10.0           # no step down sooner after a change ...
 AFTER_LOSS_S = 5.0      # ... or after a loss was answered; doubled for each step down in a row that failed,
-AFTER_LOSS_MAX_S = 300.0  # up to this (a success, or another scene, starts it over)
+AFTER_LOSS_MAX_S = 300.0  # up to this (a success, another scene, or a level's second try starts it over)
 HOME_S = 20.0           # a limit held this long is where to go back to when the scene that drove it out is over
 STEP_W = 2
 CHAIN = 3               # steps down in a row; then the rules of holding run
@@ -757,7 +757,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         # answers at once is the limit's (a heavier second every 10 s)
         level = st.prev
         st.retested[level] = t
-        st.before, st.retest, st.loss_since, st.long = now, True, None, False
+        st.before, st.retest, st.loss_since, st.long, st.misses = now, True, None, False, 0
         st.typ = statistics.median(st.watch[len(st.watch) // 2:] if len(st.watch) >= 4 * N else st.watch)
         watch("probe", level, f"{was:.0f} fps at {level} W, {now:.0f} at {top} W: {level} W once more")
     else:

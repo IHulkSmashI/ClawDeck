@@ -417,6 +417,20 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
     assert g.limit >= 20, g.since(t1)
 
 
+
+@pytest.mark.parametrize("steady_s", [60, 900])
+def test_a_level_that_fails_its_second_try_leaves_the_full_limit_as_soon_as_a_failed_look_does(steady_s):
+    """Steps down that failed minutes before, while the level held, are not in a row with its second try: 15 minutes
+    of 13 W failing at its tries kept the full limit for 160 s after the place got a watt heavier."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=HOLDS_FROM_14).run(steady_s)
+    t0 = g.t
+    g.fps = lambda w: 60.0 if w >= 15 else 60.0 * w / 15          # a watt heavier: 56 fps at 14 W, under 57
+    g.run(30)
+    writes = [(at, w) for at, w in g.writes if at >= t0]
+    assert [w for _, w in writes[:3]] == [30, 14, 30], writes
+    assert writes[3][0] - writes[2][0] <= gov.BACK_S + gov.AFTER_LOSS_S + 1, writes
+    assert g.limit == 15, writes
+
 def test_frame_time_spread_widens_what_counts_as_a_loss():
     """9 % frame-time spread moves the rate of 10 frames by 3-4 % all the time: every such wobble was a clear loss."""
     g = Game(gov.Cfg(floor=8, ceiling=30, target=50, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
