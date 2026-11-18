@@ -170,6 +170,16 @@ def test_one_burst_of_the_games_own_slow_frames_does_not_fail_a_step(period, sec
     assert g.limit <= 11 and not [n for _, n in g.notes if "slow frames; back" in n], (g.limit, g.notes[-4:])
 
 
+def test_one_burst_of_slow_frames_apart_in_a_steps_watch_does_not_fail_it():
+    """A game on its 60 fps limit from 10 W, with every 5th frame 12 % long for half a second every 10 s at every
+    limit: none in a row, so each counts, and all in one burst (within a third of the watch): the game's own."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 60.0 if w >= 10 else 6.0 * w,
+             shape=lambda i, w, t: 1.12 if 1.0 <= t % 10 < 1.5 and i % 5 == 0 else 1.0)
+    g.draw = lambda w, t: float(min(w, 12))
+    g.run(600)
+    assert g.limit <= 11 and not [n for _, n in g.notes if "slow frames" in n], (g.limit, g.notes[-4:])
+
+
 @pytest.mark.parametrize("target", [60, None])
 @pytest.mark.parametrize("period", [300, 420, 600])
 @pytest.mark.parametrize("burst, stretch", [(3, 1.3), (6, 1.3), (10, 1.15)])
@@ -404,6 +414,8 @@ def test_the_edge_rule_counts_slow_frames_alone_and_in_pairs_not_three_in_a_row(
     assert gov._slow_frames(([33.3] * 14 + [40.0] * 2) * 5 + [33.3] * 10) == (10, 70)
     assert gov._slow_frames(([33.3] * 13 + [40.0] * 3) * 5 + [33.3] * 10) == (0, 70)
     assert gov._slow_frames([33.3] * 20 + [40.0] * 2 + [33.3] * 10) == (2, 12)       # (a pair at the end of the judged)
+    assert gov._edge(([33.3] * 43 + [40.0]) * 5 + [33.3] * 20, 0.0) == 0             # 2.3 %: under EDGE
+    assert gov._edge(([33.3] * 23 + [40.0]) * 9 + [33.3] * 24, 0.0) == 9             # 4.1 %
 
 
 def test_a_small_loss_that_stays_gets_the_full_limit_and_ends_just_over_the_need():
