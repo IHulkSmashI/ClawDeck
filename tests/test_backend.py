@@ -1963,8 +1963,8 @@ def test_the_panel_gets_the_screens_highest_refresh_rate_for_the_target_list(plu
 
 
 def test_an_esde_game_started_again_after_the_switch_is_governed(plugin):
-    """Autotune switched on while a game from ES-DE ran (that run has no frame log); the game ends and ES-DE starts it
-    again: the new run has its log and is governed. It stayed at the TDP setting for good."""
+    """Autotune switched on while a game from ES-DE ran; the game ends and ES-DE starts it again: the new run is
+    governed, as any game ES-DE starts after the switch. It stayed at the TDP setting for good."""
     p = plugin
     p.settings["autotune"] = False
     p.autotune.enabled = False
