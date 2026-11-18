@@ -442,7 +442,7 @@ class Plugin:
                                  and self.running_appid is not None and bool(self.battery.plugged())):
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
-            self._autotune_late = bool(value) and self.running_appid is not None
+            self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
             if not value:
                 w = None
                 if self.running_appid and self.settings.get("autotune_max"):
@@ -834,7 +834,7 @@ class Plugin:
         the limit."""
         return bool(self.settings.get("autotune") and prof.get("autotune", True)
                     and (not plugged or self.settings.get("autotune_plugged"))
-                    and not (self.running_appid is not None and getattr(self, "_autotune_late", False)))
+                    and not (self.running_appid is not None and self._game_key() in getattr(self, "_autotune_late", ())))
 
     def _limit_overrides(self, pk: dict, plugged: bool) -> dict:
         """What goes on the chip with a pick. Where Autotune sets the limit and has a maximum of its own, that is the
@@ -964,7 +964,7 @@ class Plugin:
             self.running_key, self.running_title = appid, None
             self._watch_frontend(True)
             self._holding_pick = False
-            self._autotune_late = False
+            self._autotune_late = set()
             self.power.revert_all(keep_thermald=True)   # the game starts from what was there before ClawDeck + its pick
             return self._start_game_power(appid, plugged)
 
@@ -1010,7 +1010,6 @@ class Plugin:
             self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged, self.running_key = plugged, key
             self.running_title = ev["name"] if ev["event"] == "start" else None
-            self._autotune_late = getattr(self, "_autotune_late", False) and ev["event"] != "start"
             decky.logger.info("frontend: %s %s (%s): power and Autotune as %s", "started" if ev["event"] == "start"
                               else "ended", ev["name"], ev["system"], key)
             return self._restart_game_power(key, plugged)
@@ -1135,7 +1134,7 @@ class Plugin:
         t, auto_fps = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)), auto_fps)
         self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, auto_fps
         self._save_settings()
-        if not (self.running_appid is not None and getattr(self, "_autotune_late", False)):
+        if not (self.running_appid is not None and self._game_key() in getattr(self, "_autotune_late", ())):
             self.autotune.set_target(t, auto_fps)
         words = f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
         return {"ok": True, "target": t, "auto_fps": auto_fps, "summary": words, "error": None}
@@ -1179,7 +1178,7 @@ class Plugin:
             return "off on the charger (Advanced → Autotune on the charger)"
         if self.profiles.get(self._game_key(), plugged).get("autotune") is False:
             return "off for this game"
-        if getattr(self, "_autotune_late", False):
+        if self._game_key() in getattr(self, "_autotune_late", ()):
             return "turned on during this game: restart the game and it starts"
         if not shutil.which("mangohud"):
             return "MangoHud isn't installed, and Autotune reads frame times through it"

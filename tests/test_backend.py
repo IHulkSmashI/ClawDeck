@@ -1795,6 +1795,27 @@ def test_autotune_on_the_charger_switched_in_a_game_on_battery_leaves_the_game_g
     assert not s.paused and p.chip() < 26 and p.run(p.get_power())["autotune_governs"], (s.paused, p.chip())
 
 
+@pytest.mark.parametrize("during", ["menus", "game"])
+def test_esde_menus_after_its_game_are_not_governed_when_autotune_came_on_in_esde(plugin, during):
+    """ES-DE launched with Autotune off (its menus keep the TDP setting, 26 W); Autotune switched on in ES-DE's menus
+    or in one of its games, Autotune's maximum 15 W. After that game ends ES-DE's menus are as before: not governed,
+    the TDP setting on the chip. They were governed under 15 W."""
+    p = plugin
+    p.settings["autotune"] = False
+    p.autotune.enabled = False
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("100"))
+    if during == "menus":
+        p.run(p.set_setting("autotune", True))
+    _frontend_event(p, "start", "ps2", "/roms/ps2/a.iso", "Game A")
+    if during == "game":
+        p.run(p.set_setting("autotune", True))
+    p.run(p.set_autotune_max(15))
+    _frontend_event(p, "end", "ps2", "/roms/ps2/a.iso", "Game A")
+    assert p.running_key == "100"
+    assert p.autotune.session is None and p.chip() == 26, (p.autotune.session is not None, p.chip())
+
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
