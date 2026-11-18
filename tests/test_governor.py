@@ -181,7 +181,7 @@ def test_one_burst_of_slow_frames_apart_in_a_steps_watch_does_not_fail_it():
 
 
 @pytest.mark.parametrize("target", [60, None])
-@pytest.mark.parametrize("period", [300, 420, 600])
+@pytest.mark.parametrize("period", [150, 300, 420, 600])
 @pytest.mark.parametrize("burst, stretch", [(3, 1.3), (6, 1.3), (10, 1.15)])
 def test_the_games_own_bursts_of_slow_frames_at_random_times_do_not_walk_the_limit_up(burst, stretch, period, target):
     """As above with the bursts at random times, `period` frames apart on average: two of them often fall in one
