@@ -169,6 +169,7 @@ class State:
     held_for: float | None = None   # how long the limit had held when a loss sent it to the full limit
     said: tuple = (-1e9, 0.0)       # when the full limit last said of a loss "the scene, not the limit", and what
                                     # it gave then
+    climbed: bool = False           # the frame rate climbed at the full limit in this look: it lost the frames too
     retested: dict = field(default_factory=dict)    # watts -> when a level that lost frames was last tried once more
     retest: bool = False            # the step being watched is such a second try
     long: bool = False              # the step being watched is the next try of a level that failed: RETRY_DWELL_S
@@ -376,7 +377,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             back(note)
         else:
             st.kept = (st.lo, st.hi, st.ratio, st.was, st.seen_hi, st.free_w)
-        st.mode, st.prev, st.since, st.wrote_at, st.watch, st.why = mode, st.limit, t, t, [], why
+        st.mode, st.prev, st.since, st.wrote_at, st.watch, st.why, st.climbed = mode, st.limit, t, t, [], why, False
         st.free_fps.clear()
         st.free_run = 0
         if mode != "back":
@@ -668,6 +669,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         return act
     third = len(st.watch) // 3
     if third >= N and t - st.wrote_at < 2 * BIND_S and _fps(st.watch[-third:]) > _fps(st.watch[:third]) * (1 + CLEAR):
+        st.climbed = True
         return act                                   # the frame rate is still climbing: not judged yet
     if (st.mode == "recover" and st.tried is None and third >= N
             and _fps(st.watch[-third:]) < _fps(st.watch[:third]) * (1 - clear)):
@@ -736,11 +738,15 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         if st.why == "slow":
             st.base_slow = max(st.lost_slow, share)  # as many at the full limit: the game's own in this place
         hold(AFTER_LOSS_S)
-    elif (st.mode == "recover" and ((st.held_for or 0.0) >= HOME_S or dippy)
-          and (st.why != "free" or before is not None and abs(now - before) <= 2 * small * before)
-          and t - st.retested.get(st.prev, -1e9) >= RETRY_S):
+    elif ((st.mode == "recover" and ((st.held_for or 0.0) >= HOME_S or dippy)
+           and t - st.retested.get(st.prev, -1e9) >= RETRY_S
+           or st.climbed and obs.draw_w is not None and obs.draw_w <= st.prev - 0.5)
+          and (st.why != "free" or before is not None and abs(now - before) <= 2 * small * before)):
         # the frames are back at the full limit. But the level had held for a while, or this game dips by itself: a
-        # dip of the game's own looks the same. The level once more, watched; a loss that comes back is the limit's
+        # dip of the game's own looks the same. The level once more, watched; a loss that comes back is the limit's.
+        # Also at every loss that the full limit had too (its frame rate climbed) while the package now draws less
+        # than all of the level: a game that dips at every limit, every 20 to 30 s. A loss that the full limit
+        # answers at once is the limit's (a heavier second every 10 s)
         level = st.prev
         st.retested[level] = t
         st.before, st.retest, st.loss_since, st.long = now, True, None, False
