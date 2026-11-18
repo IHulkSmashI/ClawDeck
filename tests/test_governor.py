@@ -1426,6 +1426,35 @@ def test_a_pace_the_full_limit_did_not_beat_is_another_places_after_half_a_minut
     assert g.since(t0)[0] == 30 and places["3"](g.limit) >= 75 * 0.95, (g.since(t0), [n for n in g.notes if n[0] >= t0])
 
 
+
+@pytest.mark.parametrize("path, video_w, video_s", [
+    ("a step down", 6.1, 20.0), ("a step down", 7.4, 60.0), ("a look in the video", 6.1, 60.0),
+    ("a look in the video", 7.4, 60.0), ("a failed step in the video", 7.1, 60.0), ("a failed step in the video", 8.4, 60.0)])
+def test_a_game_after_an_intro_video_that_drew_under_the_limit_is_not_held_at_the_videos_frame_rate(path, video_w, video_s):
+    """A 30 fps intro video with the package under the limit: a step goes to a level where it draws 2 W under (the band
+    is free), and the governor ends at a lower one where it draws 0.6 to 1.9 W under: by a step down, back after a look
+    for a dip in the video, or back after a failed step. The game then gives 30 fps there and 60 fps at twice the
+    watts, with the package at the limit: a fall, at most 30 s at a limit under 57 fps. The free mark did not go with
+    the step, the way back or the band set aside after the look: the game stayed at the video's frame rate until the
+    full limit's 10-minute look (553 s under 57 fps)."""
+    held = 9 if path == "a failed step in the video" else 8
+
+    def fps(w, t):
+        if t >= video_s:
+            return min(60.0, 60.0 * w / (2 * held))
+        if path == "a look in the video" and 30.0 <= t < 33.0:
+            return 25.0
+        return 27.0 if path == "a failed step in the video" and w < held else 30.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
+    g.draw = lambda w, t: min(float(w), video_w) if t < video_s else float(w)
+    g.run(video_s + 300)
+    writes, under, t = sorted(g.writes), 0.0, video_s
+    while t < g.t:
+        under += 0.05 if fps([w for at, w in writes if at <= t][-1], t) < 57.0 else 0.0
+        t += 0.05
+    assert under < 30.0, (round(under, 1), writes)
+
+
 def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws_the_limit():
     """Held at 20 W. A video (30 fps, the package at 8 W), a loading screen, a light place for 20 s (75 fps at 10 W),
     then a heavy one: 30 fps at 20 W with the package at the limit, 45 at the full 30 W. The frame rate is the one the

@@ -133,8 +133,8 @@ class State:
     lo: float | None = None         # the band: the pace at the held limit at which it was last known to cost no more
     hi: float | None = None         # than the margin (None: not known at this limit)
     ratio: float | None = None      # what the held limit gave over what the full limit gave then
-    kept: tuple = (None, None, None, None, None)    # what was known at the limit before the write being watched: band,
-                                    # ratio, `was`, `seen_hi`
+    kept: tuple = (None, None, None, None, None, None)  # what was known at the limit before the write being watched:
+                                    # band, ratio, `was`, `seen_hi`, `free_w`
     band_at: float = -1e9           # since when the band is this one
     was: tuple | None = None        # band, ratio and reference this limit had before its pace moved to another band
                                     # (a menu, a map, a video), when that was, and since when it had been the band:
@@ -360,20 +360,21 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     def write(watts: int, note: str) -> None:
         watts = int(max(cfg.floor, min(top, watts)))
         if watts != st.limit:
+            st.free_w = watts if st.free_w == st.limit and watts < st.limit else None
             st.limit, st.changed_at, act.limit_w = watts, t, watts
-            st.free_w, st.bound, st.seen_hi = None, False, None
+            st.bound, st.seen_hi = False, None
             st.lo = st.hi = st.ratio = st.was = None             # nothing is known at this limit yet
         act.note = note
 
     def back(note: str) -> None:
         write(st.prev, note)                         # the limit before the write being watched, and what was known there
-        st.lo, st.hi, st.ratio, st.was, st.seen_hi = st.kept
+        st.lo, st.hi, st.ratio, st.was, st.seen_hi, st.free_w = st.kept
 
     def watch(mode: str, watts: int, note: str, why: str | None = None) -> None:
         if mode == "back":
             back(note)
         else:
-            st.kept = (st.lo, st.hi, st.ratio, st.was, st.seen_hi)
+            st.kept = (st.lo, st.hi, st.ratio, st.was, st.seen_hi, st.free_w)
         st.mode, st.prev, st.since, st.wrote_at, st.watch, st.why = mode, st.limit, t, t, [], why
         st.free_fps.clear()
         st.free_run = 0
@@ -722,7 +723,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             # game under a menu): a pace that falls into the band of a short visit to a slower place is a loss until
             # the full limit says otherwise (another place, where the last watts count for more, has that pace too)
             keep = now < before or t - st.band_at >= SCENE_S
-            st.was = (st.lo, st.hi, st.ratio, st.ref, t, st.band_at, None) if keep else None
+            st.was = (st.lo, st.hi, st.ratio, st.ref, t, st.band_at, st.free_w) if keep else None
             st.lo, st.hi, st.band_at = was, was, t
         else:
             _take(st, was)

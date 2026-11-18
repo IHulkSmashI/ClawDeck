@@ -193,9 +193,10 @@ What it knows:
   short visit to a slower place is not (another place, where the last watts count for more, has that pace too). Up
   to the pace at which the full limit last gave no more at this limit, more frames are no news, for 30 s after
   the pace was last there (then it may be another place's). A band
-  taken while the package drew 2 W or more under the limit (also by a step watched at such a draw) is dropped when
-  the package draws all of that limit, also when it was set aside and came back (a video's band, and a place with
-  the video's frame rate).
+  taken while the package drew 2 W or more under the limit (also by a step watched at such a draw, and by a step down
+  from such a limit while the package draws under the new one) is dropped when the package draws all of that limit,
+  also when it was set aside and came back, or the governor went back to it (a video's band, and a place with the
+  video's frame rate).
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your
