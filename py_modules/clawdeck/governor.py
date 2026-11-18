@@ -984,8 +984,9 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
         # more frames than the band has, under your target, at a limit that holds the chip: another place, or a lighter
         # one. What the band says of the full limit (no more frames than here, within the margin) says nothing there.
         # Seen as a loss is: far more on the last 2 N frames of this limit (the game back from a video at the limit
-        # the video needed); a little more on the pace
-        tail = _jumped(mine, st.hi, clear) if st.hi is not None else None
+        # the video needed; both halves within `small`: one frame of the scene before puts them 1.5 % under the new
+        # one); a little more on the pace
+        tail = _jumped(mine, st.hi, small) if st.hi is not None else None
         jump = tail is not None and tail < cfg.target * (1 - TOL)
         if st.seen_hi is not None and here >= st.seen_hi * (1 - ABOVE):
             st.seen_at = t
