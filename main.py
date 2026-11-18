@@ -448,7 +448,7 @@ class Plugin:
         if (key == "autotune" or charger) and not value:
             w = None
             if self.running_appid and self.settings.get("autotune_max"):
-                plugged = bool(self.battery.plugged())
+                plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
                 w = self._pick(self._game_key(), plugged)["tdp"]
             self.autotune.pause("autotune switched off" if key == "autotune" else "autotune on the charger switched off",
                                 limit=w)
@@ -654,7 +654,7 @@ class Plugin:
         limit that applies now on this power source (the game's own pick, else your last pick on it, else the default),
         which is what the profile list and the slider show. The game ClawDeck set up wins over the UI's guess."""
         gid = str((self._game_key() if self.running_appid else appid) or "")
-        plugged = bool(self.battery.plugged())
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         own = self.profiles.own(gid, plugged) if gid else {}
         pk = self._pick(gid or None, plugged)
         return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp"),
@@ -666,7 +666,7 @@ class Plugin:
         gid = str(self._game_key(appid) or "")
         if not gid:
             return {"ok": False, "error": "no game running"}
-        plugged = bool(self.battery.plugged())
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         self.profiles.set(gid, plugged, {"base": None, "tdp": None, "learned": None})
         r = {"ok": True}
         if self.running_appid and self._game_key() == gid:
@@ -1159,7 +1159,7 @@ class Plugin:
             w = max(lo, min(int(watts), hi)) if watts else None
             self.settings["autotune_max"] = w
             self._save_settings()
-            plugged = bool(self.battery.plugged())
+            plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
             if self.running_appid is None:
                 self._apply_idle_pick(plugged)
             elif self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):

@@ -1957,6 +1957,54 @@ def test_the_charger_switch_a_new_target_and_the_slider_follow_the_games_power_s
     assert paused == s.paused == plugged != governs and (s.user_target == 45) != plugged, (paused, s.paused, governs)
 
 
+@pytest.mark.parametrize("action", ["max", "reset", "slot"])
+def test_a_new_maximum_use_default_and_the_saved_line_read_the_games_power_source_until_steam_reports_a_change(
+        plugin, action):
+    """Governed on battery, "Autotune on the charger" off; the charger goes in and Steam has not reported it: a new
+    Autotune maximum goes on the chip, "Use default" restarts the game governed on battery, and the slot is battery's.
+    After Steam's report the slot is the charger's."""
+    p = plugin
+    p.ac["plugged"] = True
+    assert p.run(p.set_tdp(26))["ok"]
+    p.ac["plugged"] = False
+    p.settings["autotune_plugged"] = False
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(20))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.ac["plugged"] = True
+    if action == "max":
+        assert p.run(p.set_autotune_max(10))["ok"]
+        assert p.autotune.session.ceiling_tdp == 10 and p.chip() <= 10, (p.autotune.session.ceiling_tdp, p.chip())
+    elif action == "reset":
+        assert p.run(p.reset_power_slot())["ok"]
+        assert p.autotune.session is not None and p.run(p.get_power())["autotune_governs"] and p.running_plugged is False
+    else:
+        slot = p.run(p.power_slot())
+        assert slot["plugged"] is False and slot["pick"]["tdp"] == 20, slot
+        p.run(p.power_source_changed(True))
+        slot = p.run(p.power_slot())
+        assert slot["plugged"] is True and slot["pick"]["tdp"] == 26, slot
+
+
+def test_autotune_on_the_charger_switched_off_before_steam_reports_the_charger_out_pauses_at_the_chargers_setting(plugin):
+    """Governed on the charger with Autotune's own maximum; the charger comes out and before Steam reports it
+    "Autotune on the charger" is switched off: the game is paused at the charger's TDP setting, not battery's."""
+    p = plugin
+    p.ac["plugged"] = False
+    assert p.run(p.set_tdp(12))["ok"]
+    p.ac["plugged"] = True
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.set_autotune_max(20))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.ac["plugged"] = False
+    p.run(p.set_setting("autotune_plugged", False))
+    assert p.autotune.session.paused and p.chip() == 26, (p.autotune.session.paused, p.chip())
+
+
 def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):
     """Governed on battery and paused by the user's CPU boost; the charger goes in ("Autotune on the charger" off) and
     Steam has not reported it yet: the panel keeps the paused line. It got a reason for a game with no session."""
