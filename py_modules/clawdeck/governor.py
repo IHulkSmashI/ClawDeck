@@ -724,7 +724,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             # the full limit says otherwise (another place, where the last watts count for more, has that pace too)
             keep = now < before or t - st.band_at >= SCENE_S
             st.was = (st.lo, st.hi, st.ratio, st.ref, t, st.band_at, st.free_w) if keep else None
-            st.lo, st.hi, st.band_at, st.free_w = was, was, t, None
+            st.lo, st.hi, st.band_at = was, was, t
         else:
             _take(st, was)
         st.ratio, st.ref, st.seen_hi, st.seen_at = min(1.0, was / now), now, was, t

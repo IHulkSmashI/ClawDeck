@@ -1540,15 +1540,27 @@ def test_the_guards_cap_at_a_free_band_starts_no_look():
     assert said == ["the temperature guard allows 7 W"] and g.st.quiet_until < 80.0, (said, g.st.quiet_until)
 
 
-def test_a_looks_band_from_another_place_is_not_free():
-    """Held at the 8 W floor with the band free (a 30 fps video, the package at 7 W). At 60 s the game gives 40 fps:
-    one look, and its verdict takes the band of this place at 8 W. From 100 s on the package draws the limit (12 W
-    at most): that band is the look's, not the video's, and no second look starts."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=lambda w, t: 30.0 if t < 60.0 else 40.0)
-    g.draw = lambda w, t: min(float(w), 7.0) if t < 100.0 else min(float(w), 12.0)
-    g.run(160)
-    after = [(t, w) for t, w in sorted(g.writes) if t >= 60.0]
-    assert [w for _, w in after] == [30, 8], after
+@pytest.mark.parametrize("case, video_w", [("a light place", 7.0), ("the video slows", 6.5), ("the video slows", 7.0),
+                                           ("the video slows", 7.4)])
+def test_a_looks_band_taken_under_a_free_limit_says_nothing_of_a_place_that_draws_the_limit(case, video_w):
+    """Held at the 8 W floor with the band free (a 30 fps video, the package under the limit). Then a look whose verdict
+    takes the band of another place at 8 W, with the package still under the limit: a light place at 40 fps, or the
+    video at 25 fps. Then the game, which the limit holds back with the package at the limit: a fall, at most 30 s
+    under 57 fps (the look's band without the free mark held it until the 10-minute look: 561 s under)."""
+    start = 100.0 if case == "a light place" else 60.0
+
+    def fps(w, t):
+        if t >= start:
+            return min(60.0, (40.0 if case == "a light place" else 25.0) * w / 8.0)
+        return 30.0 if t < (60.0 if case == "a light place" else 40.0) else 40.0 if case == "a light place" else 25.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
+    g.draw = lambda w, t: min(float(w), video_w) if t < start else float(w)
+    g.run(start + 600)
+    writes, under, t = sorted(g.writes), 0.0, start
+    while t < g.t:
+        under += 0.05 if fps([w for at, w in writes if at <= t][-1], t) < 57.0 else 0.0
+        t += 0.05
+    assert under < 30.0, (round(under, 1), writes)
 
 
 def test_a_videos_band_says_nothing_of_a_place_that_has_its_frame_rate_and_draws_the_limit():
