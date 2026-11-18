@@ -225,7 +225,8 @@ The rules:
      under the limit, after which the band from before it is back): a scene that got lighter under a step, or
      another place with the same frame rate at this limit, shows in no frame at the held limit (0.2 changes a
      minute, and one look for each visit to a menu or a map).
-   Under the guard's clock cap only a fall starts one, and nothing known is dropped (a pause, watts back). None
+   Under the guard's clock cap only a clear fall (the last ten frames 3 % under the goal) starts one, and nothing
+   known is dropped (a pause, watts back). None
    starts because a step held or failed: on a Claw those looks were 9 of 30 changes in 3 minutes of Enshrouded and
    each found the frames it had, and the auto-TDP governors of other projects have none.
    One verdict. The limit gave the goal of what the full limit gives and has no more slow frames: back, and the
