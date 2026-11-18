@@ -1556,21 +1556,24 @@ def test_a_games_own_dips_every_20_or_30_s_at_a_free_band_keep_the_floor(dip_s, 
     assert over <= 90.0, (over, g.notes[-12:])
 
 
-@pytest.mark.parametrize("every, burst_s, need, base", [(10.0, 1.0, 12.0, 7.0), (20.0, 1.0, 12.0, 7.0),
-                                                       (10.0, 0.5, 11.0, 7.4), (20.0, 1.5, 14.0, 6.0)])
-def test_a_heavier_moment_that_the_full_limit_answers_at_once_is_the_limits(every, burst_s, need, base):
+@pytest.mark.parametrize("every, burst_s, need, base, own_dip", [
+    (10.0, 1.0, 12.0, 7.0, False), (20.0, 1.0, 12.0, 7.0, False), (10.0, 0.5, 11.0, 7.4, False),
+    (20.0, 1.5, 14.0, 6.0, False), (10.0, 1.0, 12.0, 7.0, True)])
+def test_a_heavier_moment_that_the_full_limit_answers_at_once_is_the_limits(every, burst_s, need, base, own_dip):
     """A game on its 60 fps frame limit at 6 to 7.4 W, and every 10 or 20 s a burst of 0.5 to 1.5 s that needs 11 to
     14 W (45 fps under it). The full limit gives 60 fps from its first frames, and the burst is over before the
-    verdict, the package under the level. Taken for a dip of the game's own, the level stayed: 40 to 82 s under 57 fps."""
+    verdict, the package under the level. Taken for a dip of the game's own, the level stayed: 40 to 82 s under 57 fps.
+    Also after a dip of the game's own at 30 s, which the full limit had too: that look's mark ends with it."""
     inb = lambda t: t >= 60.0 and (t % every) < burst_s
-    fps = lambda w, t: (60.0 if w >= need else 45.0) if inb(t) else 60.0
+    own = lambda t: own_dip and 30.0 <= t < 31.0
+    fps = lambda w, t: 40.0 if own(t) else ((60.0 if w >= need else 45.0) if inb(t) else 60.0)
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
-    g.draw = lambda w, t: min(float(w), need) if inb(t) else min(float(w), base)
+    g.draw = lambda w, t: float(w) if own(t) else (min(float(w), need) if inb(t) else min(float(w), base))
     g.run(900)
     writes = sorted(g.writes)
     at = lambda t: [w for a, w in writes if a <= t][-1]
     under = sum(0.05 for i in range(1200, 18000) if fps(at(i * 0.05), i * 0.05) < 57.0)
-    assert under <= 3.0 and len(g.st.dips) <= 1, (under, g.st.dips, g.notes[-6:])
+    assert under <= 3.0 and len(g.st.dips) <= 1 + own_dip, (under, g.st.dips, g.notes[-6:])
 
 
 def test_slow_frames_that_the_full_limit_does_not_have_fail_the_level_and_book_no_dip():
