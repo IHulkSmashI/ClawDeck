@@ -458,6 +458,69 @@ def test_the_end_of_the_clock_cap_during_a_step_down_forgets_what_the_step_would
         short += fps(g.limit) < 57.0
     assert short <= 10, (short, g.limit, g.notes[-6:])
 
+
+@pytest.mark.parametrize("back_to", [None, 24])
+def test_watts_the_guard_gives_back_during_a_step_down_end_its_watch(back_to):
+    """Target 120 out of reach: 50 fps at 30 W, 1 % less a watt under it. The guard's cap of 16 W is lifted (to 30 W,
+    or to 24 W) while a step under 16 W is watched. What the watch compared against was measured under the cap: its
+    end put that band and ratio back, and the limit stood under the goal for 99 s."""
+    def fps(w):
+        return 50.0 * 0.99 ** (30 - w)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.cap = 16
+    g.run(20)
+    while not (g.st.mode == "probe" and g.limit < 16 and g.t - g.st.wrote_at > 0.5):
+        g.run(0.1)
+    g.cap = back_to
+    line = fps(back_to or 30) * (1 - gov.TOL)
+    under = 0.0
+    for _ in range(3000):
+        under += 0.1 * (fps(g.limit) < line)
+        g.run(0.1)
+    assert under <= 5, (under, g.limit, g.notes[-6:])
+
+
+@pytest.mark.parametrize("nth", [1, 2, 3])
+def test_the_end_of_the_clock_cap_during_a_step_down_does_not_judge_the_step_against_the_target(nth):
+    """Target 120 out of reach: 50 fps from 16 W, 1.5 % less a watt under it; the guard's CPU clock cap changes no
+    frame. It ends while the `nth` step down is watched. The watch went on against the target (nothing known of the
+    full limit any more): a level that lost nothing failed, and the full limit was written twice, not once."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.985 ** max(0, 16 - w))
+    g.draw = lambda w, t: float(w)
+    g.thermal = True
+    g.run(30)
+    n = 0
+    while n < nth:
+        g.run(0.1)
+        n += g.st.mode == "probe" and g.t - g.st.wrote_at < 0.15
+    g.run(0.5)
+    t0 = g.t
+    g.thermal = False
+    gov.forget(g.st)                                         # autotune.thermal_clock(None)
+    g.run(60)
+    assert len([w for w in g.since(t0) if w == 30]) <= 1, [n for n in g.notes if n[0] >= t0]  # (one look: nothing known)
+
+
+@pytest.mark.parametrize("dip", [0.6, 1.0])
+def test_watts_the_guard_gives_back_over_a_level_it_did_not_hold_leave_its_second_try(dip):
+    """Target 60, the game needs 10 W (the floor), held at 10 W under a cap of 20 W that never held it. The guard
+    gives 2 W back; 20 s later the game dips by itself for `dip` s at every limit: the level gets its second try
+    and holds again, as without the guard (it was "10 W was too low" and 11 to 12 W for a need of 10)."""
+    low = {"on": False}
+    g = Game(gov.Cfg(floor=10, ceiling=30, target=60, start_w=10), fps=lambda w: 45.0 if low["on"] else 60.0)
+    g.draw = lambda w, t: float(w)
+    g.cap = 20
+    g.run(120)
+    g.cap = 22
+    g.run(20)
+    t0 = g.t
+    low["on"] = True
+    g.run(dip)
+    low["on"] = False
+    g.run(60)
+    assert g.limit == 10 and [n for t, n in g.notes if t >= t0 and "holds again" in n], [n for n in g.notes if n[0] >= t0]
+
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
     g.thermal = True

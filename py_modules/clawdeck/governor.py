@@ -211,7 +211,8 @@ def forget(st: State) -> None:
     frame-generation multiplier."""
     st.ref = None
     _unknown(st)
-    st.kept = (None,) * 5                            # (a watch in flight would put it back at its end)
+    if st.mode != "hold":
+        drop(st)                                     # (a watch in flight: what it is judged against is gone)
     st.fail.clear()
     st.misses, st.home = 0, None
     st.scene_fps = st.scene_since = None
@@ -401,7 +402,10 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     if st.top is not None and top > st.top and not obs.thermal:      # the guard gave watts back: what they give isn't
         st.ref = None                                # known, and nothing that was measured under the cap says it
         _unknown(st)                                 # (under its clock cap: when that goes, autotune.thermal_clock)
-        st.retested[st.limit] = t                    # (the cap held it there: a loss at it is no dip of the game's own)
+        if st.limit >= st.top:
+            st.retested[st.limit] = t                # (the cap held it there: a loss at it is no dip of the game's own)
+        if st.mode != "hold":
+            drop(st)
     st.top = top
     if st.limit < cfg.floor:                         # the floor was raised
         write(cfg.floor, f"the floor is {cfg.floor} W")
