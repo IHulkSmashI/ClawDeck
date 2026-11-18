@@ -62,9 +62,10 @@ written by hand and on games built from Claw 8 EX recordings.
 Check on the EX, Autotune on:
 - a light game on a frame limit (60 fps at about 9 W): the TDP is at the floor within half a minute, 60 fps throughout;
 - a heavy game with no target set (the screen's highest refresh rate, with Auto FPS): "using N W of your M W" settles
-  within a few watts and stops moving (after the first minutes: under one change a minute); frames stay within 5 % of
+  within a few watts and stops moving (after the first minutes: under one change a minute); frames stay within 1 % of
   what the full TDP gives;
-- a target the game can't reach at the full TDP: it does not sit at the full TDP ("Auto FPS: 60 out of reach");
+- a target the game can't reach at the full TDP ("Auto FPS: 60 out of reach"): the TDP stays at the full TDP, or a few
+  watts under it where those give the same frames;
 - walk from a light place into a heavy one: the full TDP is back within about a second;
 - **the Steam menu over a game:** open Quick Access for half a minute and close it. mangoapp follows the focused
   window; what Autotune reads meanwhile is not known. The TDP must not end up lower than before, or must be back within

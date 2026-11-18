@@ -265,7 +265,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
         {autotune && (
           <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
             onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
-            description={explain(`If the max TDP above can't reach ${st?.autotune_target} fps, Autotune holds what that maximum gives (within 5 %) with the fewest watts instead of running flat out, and holds ${st?.autotune_target} again when the game gets lighter.`,
+            description={explain(`If the max TDP above can't reach ${st?.autotune_target} fps, Autotune holds what that maximum gives, at a lower TDP only where that gives the same frames, and holds ${st?.autotune_target} again when the game gets lighter.`,
               undefined, "off: an out-of-reach target keeps the max TDP and says so.")} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />

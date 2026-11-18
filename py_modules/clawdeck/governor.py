@@ -23,8 +23,8 @@ It changes `state` in place and returns what to do.
 Words:
   pace       the frame time the game holds: the median of the last PACE_FRAMES frames;
   reference  what the full limit gives: measured there, or the pace with the package 2 W or more under the limit;
-  goal       what has to be delivered: your target (or the reference when that is lower and Auto FPS is on) less
-             TOL;
+  goal       what has to be delivered: your target less TOL (or the reference less SUSTAINED when that is lower
+             and Auto FPS is on);
   band       the pace at the held limit when the limit was last known to cost no more than that: by the full limit
              after a loss, by the step that came here and held, or all the time while the limit can't hold the game
              back (the full limit, the package 2 W under the limit, the pace at your target). Lowest and highest;
@@ -320,7 +320,9 @@ def goal(st: State, cfg: Cfg) -> float:
 
 def _goal_at(ref: float | None, cfg: Cfg) -> float:
     """... were `ref` what the full limit gives."""
-    return (ref if cfg.auto_fps and ref is not None and ref < cfg.target * REACHED else cfg.target) * (1 - TOL)
+    if cfg.auto_fps and ref is not None and ref < cfg.target * REACHED:
+        return ref * (1 - SUSTAINED)
+    return cfg.target * (1 - TOL)
 
 
 def _need(st: State, cfg: Cfg) -> float:
