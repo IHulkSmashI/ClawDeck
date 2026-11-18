@@ -195,7 +195,8 @@ What it knows:
   to the pace at which the full limit last gave no more at this limit, more frames are no news, for 30 s after
   the pace was last there (then it may be another place's). A band
   taken while the package drew 2 W or more under the limit (also by a step watched at such a draw, and by a step down
-  from such a limit while the package draws under the new one) is dropped when the package draws all of that limit,
+  from such a limit while the package draws under the new one, and by a look in another place while the package drew
+  less than all of that limit at the full one) is dropped when the package draws all of that limit,
   also when it was set aside and came back, or the governor went back to it (a video's band, and a place with the
   video's frame rate); a clear fall there gets the full limit at once (in a game that dips by itself, once it has
   lasted a second). The limit is not booked as failed, and is tried once more only where the full limit gives the pace

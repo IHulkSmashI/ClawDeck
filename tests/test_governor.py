@@ -1526,6 +1526,20 @@ def test_a_games_own_short_dips_at_a_free_band_get_one_look_and_are_learned(dip_
     assert len(g.st.dips) >= 2 and over <= 60.0, (over, g.st.dips, g.notes)
 
 
+def test_a_dip_that_the_full_limit_sees_gets_one_look():
+    """Held at the 8 W floor with the band free (60 fps, the package at 6 W). A dip of the game's own for 2 s to 40 fps
+    at every limit, with the package at the limit; the look that sees the loss reads 6.5 W (the mean of the last
+    half second, mostly before the dip). The full limit gives 40 fps: back to 8 W, the dip still on. The band taken
+    there kept the free mark, the package drew all of 8 W, and the dip got a second look in the same 2 s."""
+    dip = lambda t: 60.0 <= t < 62.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=lambda w, t: 40.0 if dip(t) else 60.0)
+    g.draw = lambda w, t: (6.5 if t < 60.5 else float(w)) if dip(t) else min(float(w), 6.0)
+    g.run(59)
+    assert (g.limit, g.st.free_w) == (8, 8)
+    g.run(7)
+    assert g.since(59.0) == [30, 8], (g.since(59.0), g.notes[-4:])
+
+
 def test_the_guards_cap_at_a_free_band_starts_no_look():
     """Held at the 8 W floor with the band free (a 30 fps video, the package at 7 W). The guard caps at 7 W, and the
     package draws all of it: the band is dropped, and 30 fps is a clear fall against your target. The cap is the full
