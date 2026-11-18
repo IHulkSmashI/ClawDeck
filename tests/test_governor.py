@@ -416,6 +416,9 @@ def test_the_edge_rule_counts_slow_frames_alone_and_in_pairs_not_three_in_a_row(
     assert gov._slow_frames([33.3] * 20 + [40.0] * 2 + [33.3] * 10) == (2, 12)       # (a pair at the end of the judged)
     assert gov._edge(([33.3] * 43 + [40.0]) * 5 + [33.3] * 20, 0.0) == 0             # 2.3 %: under EDGE
     assert gov._edge(([33.3] * 23 + [40.0]) * 9 + [33.3] * 24, 0.0) == 9             # 4.1 %
+    cluster = [40.0 if 400 <= i < 591 and i % 10 == 0 else 33.3 for i in range(600)]
+    far = [40.0 if 60 <= i < 63 else f for i, f in enumerate(cluster)]
+    assert gov._burst(cluster) and gov._burst(far)                  # (three in a row far from one burst: the game's too)
 
 
 def test_a_small_loss_that_stays_gets_the_full_limit_and_ends_just_over_the_need():
