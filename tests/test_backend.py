@@ -1872,6 +1872,22 @@ def test_the_panel_gets_the_screens_highest_refresh_rate_for_the_target_list(plu
     assert p.run(p.get_power())["autotune_screen_target"] == max(p.hw.model.get("panel_hz") or [60]) != 40
 
 
+def test_an_esde_game_started_again_after_the_switch_is_governed(plugin):
+    """Autotune switched on while a game from ES-DE ran (that run has no frame log); the game ends and ES-DE starts it
+    again: the new run has its log and is governed. It stayed at the TDP setting for good."""
+    p = plugin
+    p.settings["autotune"] = False
+    p.autotune.enabled = False
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("100"))
+    _frontend_event(p, "start", "ps2", "/roms/ps2/a.iso", "Game A")
+    p.run(p.set_setting("autotune", True))
+    assert p.autotune.session is None
+    _frontend_event(p, "end", "ps2", "/roms/ps2/a.iso", "Game A")
+    _frontend_event(p, "start", "ps2", "/roms/ps2/a.iso", "Game A")
+    assert p.autotune.session is not None and p.run(p.get_power())["autotune_governs"]
+
+
 @pytest.mark.parametrize("during", ["menus", "game"])
 def test_esde_menus_after_its_game_are_not_governed_when_autotune_came_on_in_esde(plugin, during):
     """ES-DE launched with Autotune off (its menus keep the TDP setting, 26 W); Autotune switched on in ES-DE's menus

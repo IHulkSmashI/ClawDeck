@@ -1014,6 +1014,8 @@ class Plugin:
             self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged, self.running_key = plugged, key
             self.running_title = ev["name"] if ev["event"] == "start" else None
+            if ev["event"] == "start":
+                self._autotune_late = set(getattr(self, "_autotune_late", ())) - {key}
             decky.logger.info("frontend: %s %s (%s): power and Autotune as %s", "started" if ev["event"] == "start"
                               else "ended", ev["name"], ev["system"], key)
             return self._restart_game_power(key, plugged)
