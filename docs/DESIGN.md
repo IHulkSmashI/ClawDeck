@@ -205,7 +205,7 @@ What it knows:
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your
-  target at the band's look), it is what the full limit gives less 1 %: no watts are saved with frames
+  target at the band's look), it is what the full limit gives less 0.3 %: no watts are saved with frames
   under a target out of reach, and a lower limit holds only where it gives the full limit's frames (the game's own
   frame limit, a scene the limit does not hold back). For a step down it is what the full limit gives now, and while
   a limit is held what it gave when the band was taken (the band's lower edge over the ratio). A pace that falls from

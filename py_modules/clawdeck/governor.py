@@ -23,7 +23,7 @@ It changes `state` in place and returns what to do.
 Words:
   pace       the frame time the game holds: the median of the last PACE_FRAMES frames;
   reference  what the full limit gives: measured there, or the pace with the package 2 W or more under the limit;
-  goal       what has to be delivered: your target less TOL (or the reference less SUSTAINED when that is lower);
+  goal       what has to be delivered: your target less TOL (or the reference less SAME when that is lower);
   band       the pace at the held limit when the limit was last known to cost no more than that: by the full limit
              after a loss, by the step that came here and held, or all the time while the limit can't hold the game
              back (the full limit, the package 2 W under the limit, the pace at your target). Lowest and highest;
@@ -50,6 +50,7 @@ DIP_MAX_S = 2.0
 PACE_FRAMES = 60
 TOL = 0.05              # target mode: this far under the target is still the target
 REACHED = 0.99          # the full limit gives this much of the target: the target is in reach
+SAME = 0.003            # out of reach, a lower limit holds where it gives the full limit's frames within this
 SLOW = 1.10             # a frame this much longer than the pace is a slow one ...
 EDGE = 0.03             # ... and this much more of them than before a step is the edge of the limit (15 W in
                         # Midnight Club: Los Angeles: the median on pace, 6 % slow frames)
@@ -319,21 +320,16 @@ def goal(st: State, cfg: Cfg) -> float:
 def _goal_at(ref: float | None, cfg: Cfg) -> float:
     """... were `ref` what the full limit gives."""
     if ref is not None and ref < cfg.target * REACHED:
-        return ref * (1 - SUSTAINED)
+        return ref * (1 - SAME)
     return cfg.target * (1 - TOL)
 
 
 def _need(st: State, cfg: Cfg) -> float:
     """The pace the held limit has to give: your target less TOL. When the band is under that (a target out of
-    reach): the goal of when the band was taken, from what the full limit gave then (the band's lower edge
-    over the ratio). A pace that falls from the band and stays over that goal is no loss, whatever
-    its cause: of 24 falls of under 5 % that got the full limit on the Claw (2026-11-16), 15 were the game's own, two
-    changes of the limit each; the 9 others were 2 to 7 % under what the full limit gave."""
+    reach): the band's lower edge, which a step held against what the full limit gives less SAME."""
     if st.lo is None or st.lo >= cfg.target * (1 - TOL):
         return cfg.target * (1 - TOL)
-    if not st.ratio:
-        return st.lo
-    return min(st.lo, _goal_at(st.lo / st.ratio, cfg) * (1 + SUSTAINED))     # (answered at that goal, not under it)
+    return st.lo
 
 
 def out_of_reach(st: State, cfg: Cfg) -> bool:

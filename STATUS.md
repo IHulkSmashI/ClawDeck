@@ -62,8 +62,8 @@ written by hand and on games built from Claw 8 EX recordings.
 Check on the EX, Autotune on:
 - a light game on a frame limit (60 fps at about 9 W): the TDP is at the floor within half a minute, 60 fps throughout;
 - a heavy game with no target set (the screen's highest refresh rate): "using N W of your M W" settles
-  within a few watts and stops moving (after the first minutes: under one change a minute); frames stay within 1 % of
-  what the full TDP gives;
+  within a few watts and stops moving (after the first minutes: under one change a minute); frames stay within 0.3 %
+  of what the full TDP gives;
 - a target the game can't reach at the full TDP ("60 out of reach"): the TDP stays at the full TDP, or a few
   watts under it where those give the same frames in a game with a steady frame rate;
 - walk from a light place into a heavy one: the full TDP is back within about a second;

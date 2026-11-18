@@ -82,7 +82,18 @@ def test_a_scene_that_is_heavy_at_every_limit_gets_its_limit_back():
     g.fps = lambda w: 45.0                               # 45 fps whatever the watts: the scene, not the limit
     g.run(4)
     assert [w for _, w in g.writes] == [30, 16] and 16 not in g.st.fail
-    assert gov.goal(g.st, g.cfg) == pytest.approx(45 * (1 - gov.SUSTAINED), abs=0.2)  # out of reach: what the full limit gives
+    assert gov.goal(g.st, g.cfg) == pytest.approx(45 * (1 - gov.SAME), abs=0.2)  # out of reach: what the full limit gives
+
+
+def test_a_target_out_of_reach_keeps_the_full_limit_where_one_watt_less_gives_fewer_frames():
+    """Your 60 out of reach: 48.5 fps at the full 30 W, a third of a frame less a watt under it (the simulator's heavy
+    place). 29 W gives 0.7 % less: no watts are saved with fewer frames (D11), so the full limit stays."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.5 - (30 - w) / 3)
+    g.draw = lambda w, t: float(w)
+    g.run(600)
+    writes = sorted(g.writes) + [(g.t, None)]
+    under = sum(b - a for (a, w), (b, _) in zip(writes, writes[1:]) if w < 30)
+    assert g.limit == 30 and under <= 15, (under, g.writes, g.notes[-4:])
 
 
 def test_a_target_out_of_reach_keeps_the_full_limit_or_a_lower_one_that_gives_its_frames():
@@ -637,11 +648,11 @@ def test_a_step_down_has_to_leave_the_wobble_over_the_goal():
     for under, held in ((57.6, 20), (59.0, 8)):              # 1 % over the goal of 57: not kept; 3.5 % over: kept
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=22), fps=lambda w: 60.0 if w >= 20 else under).run(200)
         assert g.limit == held, (under, g.limit, g.notes[-3:])
-    for under, held in ((47.2, 20), (47.8, 8)):              # your target out of reach: the goal is 1 % under the 48
+    for under, held in ((47.8, 20), (47.9, 8)):              # your target out of reach: the goal is 0.3 % under the
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else under).run(200)
-        assert g.limit == held, (under, g.limit, g.notes[-3:])                          # fps the full limit gives
-    # 0.8 % a watt, less than counts as a loss from one level to the next: what the full limit gives is the measure
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.992 ** (30 - w)).run(200)
+        assert g.limit == held, (under, g.limit, g.notes[-3:])                          # 48 fps the full limit gives
+    # 0.2 % a watt, less than counts as a loss from one level to the next: what the full limit gives is the measure
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.998 ** (30 - w)).run(200)
     assert g.limit == 29, (g.limit, g.notes[-3:])
 
 
@@ -1148,7 +1159,7 @@ def test_a_menu_at_a_limit_that_holds_the_chip_gets_one_look_and_the_game_its_li
 
 def test_one_watt_under_the_full_limit_gets_no_look_while_the_frames_say_nothing():
     """What one watt more gives is not worth a look: at one watt under the full limit there is none in twelve minutes."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30) ** 0.25).run(120)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 60.0 * min(1.0, w / 30) ** 0.08).run(120)
     t0 = g.t
     assert g.limit == 29, g.notes[-3:]
     g.run(720)
@@ -2014,7 +2025,7 @@ def test_in_a_game_that_dips_a_step_does_not_hold_while_a_loss_is_waited_out(beg
     g.fps = lambda w, t: 60.0 * (0.91 if w < 30 and t >= t1 + begins else 1.0)
     g.run(8)
     assert g.writes[1:] == [(pytest.approx(t1 + begins + gov.PATIENT_S, abs=0.4), 30)] and tried in g.st.fail, g.writes
-    under = {60: "57.0", 120: "59.4"}[target]
+    under = {60: "57.0", 120: f"{60 * (1 - gov.SAME):.1f}"}[target]
     assert next(n for _, n in g.notes if "back to 30 W" in n).startswith(f"{tried} W: 54.6 fps, under {under}"), g.notes
 
 
@@ -2885,9 +2896,9 @@ def test_the_share_of_slow_frames_before_a_look_is_counted_as_every_other_share(
 @pytest.mark.parametrize("target", [120, 60])
 @pytest.mark.parametrize("rise, looked", [(0.025, False), (0.035, True), (0.045, True), (0.06, True)])
 def test_a_few_percent_more_frames_at_a_held_limit_get_a_look_at_the_full_limit(target, rise, looked):
-    """A place where 17 W of 25 holds the frames (45 of 47 fps), then one where 17 W gives a little more than it did
+    """A place where 17 W of 25 gives the full limit's 47.4 fps, then one where 17 W gives a little more than it did
     and the full limit 60 fps. From 3 % more the full limit is looked at within 3 s; under that the pace is the band's."""
-    first = lambda w: 47.4 * (1 - 0.006 * (25 - w))
+    first = lambda w: 47.4 * min(1.0, 1 - 0.03 * (17 - w))
     g = Game(gov.Cfg(floor=8, ceiling=25, target=target, start_w=25), fps=first).run(240)
     held, t0 = g.limit, g.t
     at_held = first(held) * (1 + rise)
