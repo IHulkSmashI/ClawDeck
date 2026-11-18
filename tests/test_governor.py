@@ -542,6 +542,23 @@ def test_a_level_that_failed_in_a_heavy_place_does_not_hold_up_the_steps_in_a_li
             over += 0.1 * (g.limit - light)
     assert over / 300 <= 1.0, (over / 300, g.st.fail)
 
+
+@pytest.mark.parametrize("menu_s, menu_w, lock", [(5, 9.0, 60), (20, 9.0, 60), (20, 17.5, 60), (20, 9.0, 30)])
+def test_a_menu_at_the_games_own_frame_rate_takes_no_step_down_before_its_frames_are_counted_free(menu_s, menu_w, lock):
+    """A game on its frame limit (`lock` fps) that needs 20 W and draws its need; its menu at the same frame rate draws
+    `menu_w` W. The menu's first looks, before a pace of frames all drawn under the limit, took a step down: down to
+    the floor in the menu's first seconds, and the game came back at it."""
+    menu = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=lock, start_w=30),
+             fps=lambda w: float(lock) if menu["on"] or w >= 20 else lock - lock / 20 * (20 - w))
+    g.draw = lambda w, t: menu_w if menu["on"] else float(min(w, 20))
+    g.run(240)
+    held, t0 = g.limit, g.t
+    menu["on"] = True
+    g.run(menu_s)
+    menu["on"] = False
+    assert [w for at, w in g.writes if at >= t0 and w < held] == [], (held, [n for n in g.notes if n[0] >= t0][:6])
+
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
     g.thermal = True

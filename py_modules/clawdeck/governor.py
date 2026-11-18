@@ -978,7 +978,8 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait)
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
+            and abs(cur - here) <= clear * here and _steady(st, t, clear)
+            and not (st.bound and obs.draw_w is not None and obs.draw_w <= st.limit - 2)):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]
