@@ -1135,6 +1135,7 @@ def test_the_guard_in_the_menus_steps_back_up_to_autotunes_maximum_not_the_tdp_s
             seen.append(p.chip())
         assert min(seen) < top and max(seen) <= top and seen[-1] == top, (on, setting, own, seen)
 
+
 def test_a_game_with_autotune_off_for_it_keeps_the_tdp_setting_and_a_movable_slider(plugin):
     p = plugin
     p.run(p.set_tdp(26))
@@ -1792,6 +1793,7 @@ def test_autotune_on_the_charger_switched_in_a_game_on_battery_leaves_the_game_g
     p.run(p.set_setting("autotune_plugged", value))
     _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
     assert not s.paused and p.chip() < 26 and p.run(p.get_power())["autotune_governs"], (s.paused, p.chip())
+
 
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):

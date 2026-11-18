@@ -145,6 +145,7 @@ def test_a_second_fall_within_five_seconds_keeps_the_full_limit_also_while_the_d
     g.run(10)
     assert [w for _, w in g.writes] == [30, 16, 30], g.writes
 
+
 @pytest.mark.parametrize("at", [3.25, 3.35, 3.44])
 def test_a_video_that_begins_between_two_looks_gets_its_limit_back(at):
     """A 30 fps video at every limit begins a moment before a look: the last ten frames are part game, part video, the
@@ -1351,6 +1352,7 @@ def test_a_loss_right_after_the_clocks_look_is_answered_as_any_other():
     g.run(30)
     assert g.since(t0) == [30, 28], [n for n in g.notes if n[0] >= t0]       # (not 30, 29, 28)
 
+
 def test_a_pace_the_full_limit_did_not_beat_is_another_places_after_half_a_minute():
     """Held at 14 W in a place that gives 50 fps. A lighter place for 15 s (60 fps, the full limit gives no more),
     back for five minutes, then a place where 14 W gives 58 fps and the full limit 75: the 60 fps of minutes before
@@ -1431,6 +1433,7 @@ def test_one_look_under_the_limit_in_a_steps_watch_does_not_make_its_band_free(a
         g.run(60)
         return [w for _, w in g.writes]
     assert run(True) == run(False)
+
 
 @pytest.mark.parametrize("target, reach", [(30, False), (22, True)])
 def test_after_a_menu_the_full_limit_is_asked_once_when_the_target_is_out_of_reach(target, reach):
