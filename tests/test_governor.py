@@ -1347,6 +1347,26 @@ def test_the_full_limit_is_not_asked_where_the_package_does_not_draw_the_limit()
     assert first[1] == 25 and first[0] - t0 <= 3 and place["fps"](g.limit) >= 38, (g.since(t0), [n for n in g.notes if n[0] >= t0])
 
 
+
+@pytest.mark.parametrize("at", [18, 16])
+def test_one_look_under_the_limit_in_a_steps_watch_does_not_make_its_band_free(at):
+    """Target 60 out of reach: 48 fps from 14 W, 30 under it; the package draws the limit. One look of the watch of
+    the step to `at` W has the package 2.5 W under the limit: the step's band was marked free for good, and the full
+    limit was asked once more on the way down. The same steps as without that look."""
+    def run(dip):
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 14 else 30.0)
+        used = []
+
+        def draw(limit, t):
+            if dip and not used and g.st.mode == "probe" and limit == at and t - g.st.wrote_at > 1.0:
+                used.append(t)
+                return limit - 2.5
+            return float(limit)
+        g.draw = draw
+        g.run(60)
+        return [w for _, w in g.writes]
+    assert run(True) == run(False)
+
 @pytest.mark.parametrize("target, reach", [(30, False), (22, True)])
 def test_after_a_menu_the_full_limit_is_asked_once_when_the_target_is_out_of_reach(target, reach):
     """A place where the full limit gives 23.5 fps, held some watts under it. A menu for 5 s (72 fps, the package at

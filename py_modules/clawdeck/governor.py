@@ -598,6 +598,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             # limit gives at least as many, so the ratio is at most 1
             st.lo, st.hi, st.ratio = held, held, (min(1.0, ratio * held / st.before) if ratio and st.before else None)
             st.band_at = t
+            if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5:
+                st.free_w = None                     # (one look of the watch under it: the package draws the limit now)
             nxt = _next_down(st, obs, cfg, t, scene)
             rate = got if dippy and got is not None else held        # (a game that dips: on its typical frame)
             if st.before and rate > st.before * (1 + max(ABOVE, small)) and not obs.thermal:
