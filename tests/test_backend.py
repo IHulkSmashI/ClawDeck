@@ -1906,6 +1906,21 @@ def test_the_charger_switch_set_to_the_value_it_has_changes_nothing(plugin, paus
     assert p.autotune.session is s and s.paused == paused and (p.power.turbo() is False or not paused)
 
 
+def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):
+    """Governed on battery and paused by the user's CPU boost; the charger goes in ("Autotune on the charger" off) and
+    Steam has not reported it yet: the panel keeps the paused line. It got a reason for a game with no session."""
+    p = plugin
+    p.ac["plugged"] = False
+    p.settings["autotune_plugged"] = False
+    p.run(p.set_setting("autotune", True))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.run(p.set_cpu_turbo(False))
+    p.ac["plugged"] = True
+    at = p.run(p.get_autotune())
+    assert at.get("paused") and "why" not in at, at.get("why")
+
+
 @pytest.mark.parametrize("own", [None, 15])
 def test_autotune_on_the_charger_switched_off_in_a_governed_game_gives_the_tdp_setting_back(plugin, own):
     """On the charger, the game governed (the limit lowered). "Autotune on the charger" switched off: the TDP setting

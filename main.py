@@ -1172,7 +1172,7 @@ class Plugin:
               "title": self.running_title}
         # the running game's frame generation (ClawDeck's pick): the Power panel says what that does to Autotune
         st["game_fg"] = self._game_fg(self.running_appid)
-        plugged = bool(self.battery.plugged())
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         if not st.get("running") or (st.get("paused") and self.running_appid is not None
                                      and not self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged)):
             st["why"] = self._autotune_why()
