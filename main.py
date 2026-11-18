@@ -921,8 +921,10 @@ class Plugin:
                 return self.guard.check(self.autotune.held_w(), self._floor_w(), self.autotune.thermal_step,
                                         limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release,
                                         set_clock=self._guard_clock)
-            # your limit for this power source (the game's pick, or the last one): where stepping back up stops
-            limit = self._pick(self._game_key(), plugged)["tdp"]
+            # your limit for this power source (the game's pick, or the last one; in the menus with Autotune on, its
+            # maximum): where stepping back up stops
+            pk = self._pick(self._game_key(), plugged)
+            limit = self._limit_overrides(pk, plugged).get("tdp", pk["tdp"])
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
                                     limit_w=limit, set_clock=self._guard_clock)
 

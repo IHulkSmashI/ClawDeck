@@ -1116,6 +1116,25 @@ def test_autotunes_own_maximum_is_the_limit_where_autotune_governs_and_the_tdp_s
     p.run(p.game_stopped("7"))
 
 
+
+def test_the_guard_in_the_menus_steps_back_up_to_autotunes_maximum_not_the_tdp_setting(plugin, tmp_path):
+    """No game, Autotune on: its maximum is the limit in the menus. After a step down the temperature guard gives the
+    watts back up to that maximum, not up to the TDP setting; with Autotune off, up to the TDP setting."""
+    p = plugin
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    for on, setting, own, top in ((True, 26, 20, 20), (True, 18, 24, 24), (False, 26, 20, 26)):
+        p.run(p.set_setting("autotune", on))
+        assert p.run(p.set_tdp(setting))["ok"]
+        p.run(p.set_autotune_max(own))
+        assert p.chip() == top
+        seen = []
+        for c in [97] + [70] * 30:
+            _w(t, c * 1000)
+            p.run(p._guard_check())
+            seen.append(p.chip())
+        assert min(seen) < top and max(seen) <= top and seen[-1] == top, (on, setting, own, seen)
+
 def test_a_game_with_autotune_off_for_it_keeps_the_tdp_setting_and_a_movable_slider(plugin):
     p = plugin
     p.run(p.set_tdp(26))
