@@ -146,7 +146,8 @@ class State:
     free_w: int | None = None       # the lowered limit whose band was taken while the package drew 2 W under it
     bound: bool = False             # the package drew all of the held limit at the last look that could tell
     why: str | None = None          # why the full limit was written: fall (a loss) | slow (slow frames that a watt
-                                    # more did not end) | rise (more frames than the band has)
+                                    # more did not end) | rise (more frames than the band has) | free (a clear fall
+                                    # at a free band: not booked, tried again only at the same pace)
     lost_slow: float = 0.0          # the share of slow frames at the limit before it
     scene_fps: float | None = None  # the pace of the scene, since when the pace is SHIFT away from it, and when the
     scene_since: float | None = None  # scene last became another one
@@ -869,9 +870,9 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
 
     # the band was taken while the package drew 2 W under this limit (a video, a light place), and now the package
     # draws all of it: another scene, which the limit may hold back at the same frame rate. Nothing is known here, and
-    # a clear fall gets the full limit at once (in a game that dips by itself, once it has lasted PATIENT_S, below). The
-    # limit held no game here: it is not booked as failed, and is tried once more only where the full limit gives the
-    # pace it gave before (a dip of the game's own)
+    # a clear fall gets the full limit at once (in a game that dips by itself, once it has lasted PATIENT_S, below, as
+    # any other fall). Else the limit held no game here: it is not booked as failed, and is tried once more only where
+    # the full limit gives the pace it gave before (a dip of the game's own)
     if st.free_w == st.limit and obs.draw_w is not None and obs.draw_w > st.limit - 0.5:
         _unknown(st)
         need = _need(st, cfg)
