@@ -1744,6 +1744,38 @@ def test_an_esde_game_started_after_autotune_was_switched_on_is_governed(plugin)
     _frontend_event(p, "start", "ps2", "/roms/ps2/a.iso", "Game A")
     assert p.autotune.session is not None and p.run(p.get_power())["autotune_governs"]
 
+
+def test_a_tdp_pick_in_a_game_autotune_on_the_charger_was_switched_on_in_is_the_limit(plugin):
+    """On the charger, "Autotune on the charger" off at the start, switched on in the game: no session. A pick there
+    (28 W) is the limit, as in a game Autotune itself was switched on in; it was Autotune's maximum (15 W), governed."""
+    p = plugin
+    p.ac["plugged"] = True
+    p.settings["autotune_plugged"] = False
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.set_autotune_max(15))
+    p.run(p.game_started("7"))
+    p.run(p.set_setting("autotune_plugged", True))
+    p.run(p.set_tdp(28))
+    assert p.chip() == 28 and p.autotune.session is None, (p.chip(), p.autotune.session is not None)
+
+
+@pytest.mark.parametrize("own", [None, 15])
+def test_autotune_on_the_charger_switched_off_in_a_governed_game_gives_the_tdp_setting_back(plugin, own):
+    """On the charger, the game governed (the limit lowered). "Autotune on the charger" switched off: the TDP setting
+    is the limit at once, as for Autotune switched off; Autotune went on lowering it with the slider not greyed."""
+    p = plugin
+    p.ac["plugged"] = True
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.set_autotune_max(own))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.run(p.set_setting("autotune_plugged", False))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
+    assert p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"

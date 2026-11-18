@@ -438,6 +438,8 @@ class Plugin:
         if key == "autotune":
             self.autotune.enabled = bool(value)
             self._autotune_flag(bool(value))
+        if key == "autotune" or (key == "autotune_plugged" and self.settings.get("autotune")
+                                 and self.running_appid is not None and bool(self.battery.plugged())):
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
             self._autotune_late = bool(value) and self.running_appid is not None
