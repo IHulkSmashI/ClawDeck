@@ -144,6 +144,9 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [table, lo, hi, customW]);   // tdp only matters for Custom's label:
   // rebuilding the options on every pick (the slider follows each profile) made a quick second pick show the first
+  const targetOptions = useMemo(() => [...new Set([...TARGETS.map((o) => o.data), st?.autotune_screen_target, st?.autotune_target]
+    .filter((f): f is number => !!f))].sort((a, b) => a - b).map((f) => ({ data: f, label: `${f} fps` })),
+  [st?.autotune_screen_target, st?.autotune_target]);
   const custom = profile === "custom";
   const onLimit = (r: LimitResult) => {
     toast(r.summary); setErr(r.ok ? null : r.error);
@@ -246,8 +249,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
             quick ? undefined : "the frames you asked for with less power: longer play time.", quick ? undefined : "a step that fails is about half a second of slightly slower frames; it tries less often the longer a scene stays the same.")} />
         {autotune && (
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max"
-            rgOptions={!st?.autotune_target || TARGETS.some((o) => o.data === st.autotune_target) ? TARGETS
-              : [...TARGETS, { data: st.autotune_target, label: `${st.autotune_target} fps` }]}
+            rgOptions={targetOptions}
             selectedOption={st?.autotune_target}
             onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
             description={explain("A frame rate to hold with the fewest watts: the max TDP below is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",

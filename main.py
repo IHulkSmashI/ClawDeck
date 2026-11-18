@@ -551,6 +551,7 @@ class Plugin:
         st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]
         st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged) and (
             self.running_appid is None or self.autotune.session is not None)
+        st["autotune_screen_target"] = self.autotune.target_of(0)[0]
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))

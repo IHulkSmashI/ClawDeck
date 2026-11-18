@@ -13,7 +13,7 @@ export type PowerStatus = {
   limit_w?: number | null; autotune_w?: number | null;   // in a game with Autotune: your limit, and what it uses now
   limits: { min: number; battery_max: number; plugged_max: number; sppt_max: number };
   range?: { min: number; max: number };
-  custom_tdp?: number | null; autotune_floor?: number | null; autotune_target?: number; autotune_auto_fps?: boolean; autotune_max?: number | null; autotune_governs?: boolean; thermal?: Thermal;
+  custom_tdp?: number | null; autotune_floor?: number | null; autotune_target?: number; autotune_screen_target?: number; autotune_auto_fps?: boolean; autotune_max?: number | null; autotune_governs?: boolean; thermal?: Thermal;
 };
 /** The temperature guard while thermald is paused (§21): "thermal: stepped to N W" once it has acted. */
 export type Thermal = { sensor: string | null; temp_c: number | null; tripped: boolean; stepped_w: number | null; clock_pct?: number | null; draw_w?: number | null; line: string | null; stepped_s: number | null };
