@@ -1978,12 +1978,12 @@ def test_the_charger_switch_a_new_target_and_the_slider_follow_the_games_power_s
     assert paused == s.paused == plugged != governs and (s.user_target == 45) != plugged, (paused, s.paused, governs)
 
 
-@pytest.mark.parametrize("action", ["max", "reset", "slot"])
+@pytest.mark.parametrize("action", ["max", "reset", "slot", "stop"])
 def test_a_new_maximum_use_default_and_the_saved_line_read_the_games_power_source_until_steam_reports_a_change(
         plugin, action):
     """Governed on battery, "Autotune on the charger" off; the charger goes in and Steam has not reported it: a new
-    Autotune maximum goes on the chip, "Use default" restarts the game governed on battery, and the slot is battery's.
-    After Steam's report the slot is the charger's."""
+    Autotune maximum goes on the chip, "Use default" restarts the game governed on battery, and the slot is battery's,
+    also for what Autotune learned when the game stops. After Steam's report the slot is the charger's."""
     p = plugin
     p.ac["plugged"] = True
     assert p.run(p.set_tdp(26))["ok"]
@@ -2000,12 +2000,17 @@ def test_a_new_maximum_use_default_and_the_saved_line_read_the_games_power_sourc
     elif action == "reset":
         assert p.run(p.reset_power_slot())["ok"]
         assert p.autotune.session is not None and p.run(p.get_power())["autotune_governs"] and p.running_plugged is False
-    else:
+    elif action == "slot":
         slot = p.run(p.power_slot())
         assert slot["plugged"] is False and slot["pick"]["tdp"] == 20, slot
         p.run(p.power_source_changed(True))
         slot = p.run(p.power_slot())
         assert slot["plugged"] is True and slot["pick"]["tdp"] == 26, slot
+    else:
+        p.autotune.session.settled = True
+        p.run(p.game_stopped("7"))
+        own = {k: p.profiles.own("7", k).get("learned") for k in (False, True)}
+        assert own[False] and not own[True], own
 
 
 def test_autotune_on_the_charger_switched_off_before_steam_reports_the_charger_out_pauses_at_the_chargers_setting(plugin):
