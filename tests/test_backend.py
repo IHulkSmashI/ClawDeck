@@ -1887,6 +1887,25 @@ def test_the_charger_switch_off_in_a_governed_game_keeps_the_users_levers_and_th
     assert (p.power.turbo() is False) if kept == "the CPU boost" else p.chip() <= step, (p.power.turbo(), step, p.chip())
 
 
+@pytest.mark.parametrize("paused", [False, True])
+def test_the_charger_switch_set_to_the_value_it_has_changes_nothing(plugin, paused):
+    """On the charger, a governed game (paused by the user's CPU boost, or not): the panel sends "Autotune on the
+    charger" on again (a second copy of the panel). The session goes on as it was; it started over, with the boost
+    reverted."""
+    p = plugin
+    p.ac["plugged"] = True
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
+    if paused:
+        p.run(p.set_cpu_turbo(False))
+    s = p.autotune.session
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.autotune.session is s and s.paused == paused and (p.power.turbo() is False or not paused)
+
+
 @pytest.mark.parametrize("own", [None, 15])
 def test_autotune_on_the_charger_switched_off_in_a_governed_game_gives_the_tdp_setting_back(plugin, own):
     """On the charger, the game governed (the limit lowered). "Autotune on the charger" switched off: the TDP setting

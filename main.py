@@ -433,6 +433,7 @@ class Plugin:
         return self.settings.get(key)
 
     async def set_setting(self, key: str, value) -> bool:
+        was = self.settings.get(key)
         self.settings[key] = value
         self._save_settings()
         if key == "autotune":
@@ -441,7 +442,7 @@ class Plugin:
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
             self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
-        charger = (key == "autotune_plugged" and self.settings.get("autotune")
+        charger = (key == "autotune_plugged" and bool(value) != bool(was) and self.settings.get("autotune")
                    and self.running_appid is not None and bool(self.battery.plugged()))
         if (key == "autotune" or charger) and not value:
             w = None
