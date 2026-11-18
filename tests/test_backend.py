@@ -1936,6 +1936,27 @@ def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, sta
         assert s is None and p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
 
 
+@pytest.mark.parametrize("plugged", [False, True])
+def test_the_charger_switch_and_a_new_target_act_on_the_games_power_source_until_steam_reports_a_change(plugin, plugged):
+    """A governed game on battery (the charger goes in) or on the charger (it comes out). Before Steam reports it,
+    "Autotune on the charger" is switched off and a new target set: the game on the charger is paused and keeps the
+    TDP setting, the game on battery stays governed and takes the target. The battery game was paused at its lowered
+    limit and ignored the target, and the game on the charger went on governed."""
+    p = plugin
+    p.ac["plugged"] = plugged
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.ac["plugged"] = not plugged
+    p.run(p.set_setting("autotune_plugged", False))
+    s = p.autotune.session
+    paused = s.paused
+    p.run(p.set_autotune_target(45, True))
+    assert paused == s.paused == plugged and (s.user_target == 45) != plugged, (paused, s.paused, s.user_target)
+
+
 def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):
     """Governed on battery and paused by the user's CPU boost; the charger goes in ("Autotune on the charger" off) and
     Steam has not reported it yet: the panel keeps the paused line. It got a reason for a game with no session."""

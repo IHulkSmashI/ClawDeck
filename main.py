@@ -444,7 +444,7 @@ class Plugin:
             if bool(value) != bool(was):
                 self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
         charger = (key == "autotune_plugged" and bool(value) != bool(was) and self.settings.get("autotune")
-                   and self.running_appid is not None and bool(self.battery.plugged()))
+                   and self.running_appid is not None and bool(self.running_plugged))
         if (key == "autotune" or charger) and not value:
             w = None
             if self.running_appid and self.settings.get("autotune_max"):
@@ -1144,7 +1144,7 @@ class Plugin:
         t, auto_fps = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)), auto_fps)
         self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, auto_fps
         self._save_settings()
-        plugged = bool(self.battery.plugged())
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         if self.running_appid is None or self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
             self.autotune.set_target(t, auto_fps)
         words = f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
