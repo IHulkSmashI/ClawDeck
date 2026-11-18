@@ -438,8 +438,6 @@ class Plugin:
         if key == "autotune":
             self.autotune.enabled = bool(value)
             self._autotune_flag(bool(value))
-        if key == "autotune" or (key == "autotune_plugged" and self.settings.get("autotune")
-                                 and self.running_appid is not None and bool(self.battery.plugged())):
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
             self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
@@ -449,6 +447,12 @@ class Plugin:
                     plugged = bool(self.battery.plugged())
                     w = self._pick(self._game_key(), plugged)["tdp"]
                 self.autotune.pause("autotune switched off", limit=w)
+        if (key == "autotune_plugged" and self.settings.get("autotune") and self.running_appid is not None
+                and self.battery.plugged()):
+            async with self._power_lock:
+                self._save_learned(self._game_key(), bool(self.running_plugged))
+                self.running_plugged = True
+                self._restart_game_power(self._game_key(), True)
         if key in ("autotune", "autotune_plugged") and self.running_appid is None and self.settings.get("autotune_max"):
             async with self._power_lock:
                 self._apply_idle_pick(bool(self.battery.plugged()))

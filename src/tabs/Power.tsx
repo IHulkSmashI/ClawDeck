@@ -325,7 +325,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label="Autotune when plugged in" checked={atPlugged}
-              onChange={async (v) => { setAtPlugged(v); await setSetting("autotune_plugged", v); toast(v ? "Autotune also runs on the charger, from the next game" : "Autotune runs on battery only, from the next game"); }}
+              onChange={async (v) => { setAtPlugged(v); await setSetting("autotune_plugged", v); toast(v ? "Autotune also runs on the charger" : "Autotune runs on battery only"); }}
               description={explain("On by default: on the charger it still saves heat and fan noise for nearly the same frames.",
                 quick ? undefined : "a quieter, cooler Claw when docked.", "fewer frames than the plugged-in profile could give.")} />
           </PanelSectionRow>
