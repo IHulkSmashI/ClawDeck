@@ -2125,11 +2125,11 @@ def test_a_power_source_change_in_a_game_starts_the_new_slot_where_the_game_held
     assert s.paused == (case == "xemu")
 
 
-@pytest.mark.parametrize("case", ["step", "guard", "event then resume", "resume then event"])
+@pytest.mark.parametrize("case", ["step", "look", "guard", "event then resume", "resume then event"])
 def test_a_power_source_change_carries_the_level_held_not_a_step_nor_the_guards_cap_also_over_a_sleep(plugin, case):
     """The charger comes out in a game: battery's slot, with no level of its own, starts at the level before a step
-    down being watched, not the step's; mid-range under the guard's cap (the restart resets the guard); where the game
-    held when the charger came out during a sleep, in either order of the resume and Steam's report."""
+    down being watched, not the step's; at the full limit in the look after a loss; mid-range under the guard's cap;
+    where the game held when the charger came out in a sleep, in either order of the resume and Steam's report."""
     p = plugin
     p.ac["plugged"] = False
     assert p.run(p.set_tdp(30))["ok"]
@@ -2138,9 +2138,18 @@ def test_a_power_source_change_carries_the_level_held_not_a_step_nor_the_guards_
     p.run(p.set_setting("autotune", True))
     assert p.run(p.set_tdp(30))["ok"]
     p.run(p.game_started("7"))
-    fps = (lambda tdp, *_: min(60.0, 2.4 * tdp)) if "resume" in case else (lambda tdp, *_: min(60.0, 4.0 * tdp))
-    g = _Game(p.autotune, fps)
-    if case == "step":
+    need = {"w": 25.0 if "resume" in case else 15.0}
+    g = _Game(p.autotune, lambda tdp, *_: min(60.0, 60.0 * tdp / need["w"]))
+    if case == "look":
+        g.run(60)
+        need["w"] = 26.0
+        for _ in range(20):
+            if p.autotune.session.gov.mode == "recover":
+                break
+            g.run(0.5)
+        want = p.autotune.session.learned.tdp
+        assert want >= 26 > p.autotune.session.gov.prev, (want, p.autotune.session.gov.prev)
+    elif case == "step":
         for _ in range(4000):
             g.run(0.5)
             s = p.autotune.session
