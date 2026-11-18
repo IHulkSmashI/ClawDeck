@@ -2,6 +2,7 @@
 recording). Run: python3 -m pytest -q tests"""
 import math
 import os
+import random
 import sys
 
 import pytest
@@ -167,6 +168,30 @@ def test_one_burst_of_the_games_own_slow_frames_does_not_fail_a_step(period, sec
     g.draw = lambda w, t: float(min(w, 12))
     g.run(seconds)
     assert g.limit <= 11 and not [n for _, n in g.notes if "slow frames; back" in n], (g.limit, g.notes[-4:])
+
+
+@pytest.mark.parametrize("target", [60, None])
+@pytest.mark.parametrize("period", [300, 420, 600])
+@pytest.mark.parametrize("burst, stretch", [(3, 1.3), (6, 1.3), (10, 1.15)])
+def test_the_games_own_bursts_of_slow_frames_at_random_times_do_not_walk_the_limit_up(burst, stretch, period, target):
+    """As above with the bursts at random times, `period` frames apart on average: two of them often fall in one
+    watch or in the 240 frames of a held limit. They failed level after level for slow frames: 16.7 W on average for
+    a need of 10 W (Enshrouded at the Flame altar: 26 W for a need of 18 W, the installed Autotune 24.7 W)."""
+    rng, left = random.Random(period * burst), [0, -1, 1.0]
+
+    def shape(i, w, t):
+        if i != left[1]:
+            left[1] = i
+            if left[0] == 0 and rng.random() < 1.0 / period:
+                left[0] = burst
+            left[2] = stretch if left[0] else 1.0
+            left[0] = max(0, left[0] - 1)
+        return left[2]
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=float(target or 120), start_w=30),
+             fps=lambda w: 60.0 if w >= 10 else 6.0 * w, shape=shape)
+    g.draw = lambda w, t: float(min(w, 12))
+    g.run(300)
+    assert not [n for _, n in g.notes if "slow frames" in n] and not [w for w, f in g.st.fail.items() if f[3]], g.notes
 
 
 def test_auto_fps_off_a_target_out_of_reach_keeps_the_full_limit():
@@ -368,6 +393,17 @@ def test_the_edge_rule_counts_slow_frames_of_their_own_time():
     some = ([33.3] * 14 + [40.0]) * 5 + [33.3] * 10
     assert gov._edge(some, 0.0) == 5 and gov._edge(some, 0.06) == 0
     assert gov._edge([33.3] * 70 + [40.0] * 5, 0.0) == 0 and gov._edge([33.3] * 40 + [40.0] * 40, 0.0) == 0    # a slower stretch
+
+
+def test_the_edge_rule_counts_slow_frames_alone_and_in_pairs_not_three_in_a_row():
+    """The edge of the limit makes its slow frames one or two at a time (Midnight Club: Los Angeles driving at 14 W:
+    runs of 1 and 2); three or more in a row are a burst of the game's own."""
+    pairs = lambda i, w, t: 1.12 if (w < 16 and i % 36 in (0, 1)) else 1.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=20), fps=lambda w: 60.0, shape=pairs).run(60)
+    assert g.limit == 16 and 14 in g.st.fail and any("slow frames" in n for _, n in g.notes), (g.limit, g.notes)
+    assert gov._slow_frames(([33.3] * 14 + [40.0] * 2) * 5 + [33.3] * 10) == (10, 70)
+    assert gov._slow_frames(([33.3] * 13 + [40.0] * 3) * 5 + [33.3] * 10) == (0, 70)
+    assert gov._slow_frames([33.3] * 20 + [40.0] * 2 + [33.3] * 10) == (2, 12)       # (a pair at the end of the judged)
 
 
 def test_a_small_loss_that_stays_gets_the_full_limit_and_ends_just_over_the_need():

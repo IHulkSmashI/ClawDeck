@@ -213,7 +213,8 @@ The rules:
    - the pace is 3 % over the band at a limit the package draws all of, and under your target (the game back from a
      video, a lighter place);
    - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; not
-     when they all lie in one burst, within a third of the frames: those are the game's) at the third level in 2
+     three or more in a row, and not when they all lie in one burst, within a third of the frames: those are the
+     game's) at the third level in 2
      minutes: the first two get one watt more and no look (the edge of an emulator's limit is a watt wide). The look
      then lasts 240 frames, at most 10 s;
    - nothing is known at this limit (the start, after a loading screen, watts back from the guard), the pace is

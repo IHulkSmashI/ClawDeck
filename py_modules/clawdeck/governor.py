@@ -262,11 +262,16 @@ def _slow_frames(ms: list) -> tuple[int, int]:
     """How many of these frames are slow, and of how many: more than SLOW over the median of the frames around them
     (the N before and the N after). Frames of their own time: a slower stretch of the game has no slow frames by this,
     and at the edge between a menu and the game neither side's frames are slow; a long frame between others is one.
-    The first and the last N frames are not judged: a few long ones there can be the end of a slower stretch."""
-    slow = 0
+    The first and the last N frames are not judged: a few long ones there can be the end of a slower stretch. Three or
+    more slow frames in a row are a burst of the game's own: the edge of the limit makes them one or two at a time
+    (Midnight Club: Los Angeles at 15 W: 14 slow frames, none three in a row)."""
+    slow = run = 0
     for i in range(N, len(ms) - N):
-        slow += ms[i] > sorted(ms[i - N:i + N + 1])[N] * SLOW
-    return slow, max(0, len(ms) - 2 * N)
+        if ms[i] > sorted(ms[i - N:i + N + 1])[N] * SLOW:
+            run += 1
+        else:
+            slow, run = slow + (run if run < 3 else 0), 0
+    return slow + (run if run < 3 else 0), max(0, len(ms) - 2 * N)
 
 
 def _burst(ms: list) -> bool:
