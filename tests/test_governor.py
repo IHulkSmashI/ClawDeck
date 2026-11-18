@@ -471,8 +471,9 @@ def test_watts_the_guard_gives_back_during_a_step_down_end_its_watch(back_to):
     g.draw = lambda w, t: float(w)
     g.cap = 16
     g.run(20)
-    while not (g.st.mode == "probe" and g.limit < 16 and g.t - g.st.wrote_at > 0.5):
+    while not (g.st.mode == "probe" and g.limit < 16 and g.t - g.st.wrote_at > 0.5) and g.t < 300:
         g.run(0.1)
+    assert g.st.mode == "probe" and g.limit < 16, (g.limit, g.notes[-6:])
     g.cap = back_to
     line = fps(back_to or 30) * (1 - gov.TOL)
     under = 0.0
@@ -491,10 +492,12 @@ def test_the_end_of_the_clock_cap_during_a_step_down_does_not_judge_the_step_aga
     g.draw = lambda w, t: float(w)
     g.thermal = True
     g.run(30)
-    n = 0
-    while n < nth:
+    steps = set()
+    while len(steps) < nth and g.t < 300:
         g.run(0.1)
-        n += g.st.mode == "probe" and g.t - g.st.wrote_at < 0.15
+        if g.st.mode == "probe":
+            steps.add(g.st.wrote_at)
+    assert len(steps) == nth, (steps, g.notes[-6:])
     g.run(0.5)
     t0 = g.t
     g.thermal = False
