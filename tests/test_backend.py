@@ -1645,6 +1645,25 @@ def test_a_tdp_pick_in_a_game_autotune_was_switched_on_in_is_the_limit(plugin):
         assert p.autotune.session is not None and p.autotune.session.ceiling_tdp == 18
         p.run(p.game_stopped(appid))
 
+
+def test_switching_autotune_off_in_a_game_keeps_the_start_level_where_the_game_held(plugin):
+    """Autotune's maximum 25 W, TDP setting 12 W; the game holds at 20 W (60 fps from 20 W). Autotune switched off in
+    the game, then the game ends: the start level saved for its next start is 20 W, where it held. It was the TDP
+    setting the session was handed at the switch (12 W), and the next start lost frames from there."""
+    p = plugin
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(12))["ok"]
+    p.run(p.set_autotune_max(25))
+    p.run(p.game_started("7"))
+    s = p.autotune.session
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 3.0 * tdp)).run(240)
+    held = max(s.gov.held_s, key=s.gov.held_s.get)
+    assert held == 20, s.gov.held_s
+    p.run(p.set_setting("autotune", False))
+    p.run(p.game_stopped("7"))
+    saved = p.profiles.own("7", False).get("learned") or {}
+    assert saved.get("ceiling") == 25 and saved.get("start") == held, saved
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"

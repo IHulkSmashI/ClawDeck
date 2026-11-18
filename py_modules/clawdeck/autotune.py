@@ -750,7 +750,7 @@ class Autotune:
         """What the next start of this game needs: where it held (governor.start_level)."""
         if s.gov is None:
             return
-        level = governor.start_level(s.gov.held_s, s.floor_tdp, s.ceiling_tdp)
+        level = governor.start_level(s.gov.held_s, s.floor_tdp, s.learned.ceiling or s.ceiling_tdp)
         if level is not None:
             s.learned.start, s.settled = level, True
 
