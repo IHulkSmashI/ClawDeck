@@ -389,9 +389,7 @@ def test_autotune_starts_where_the_game_held_under_the_same_limit_and_target_els
     assert at.session.learned.tdp == 20
     at.start("1", None, 8, 30, False)
     assert at.session.learned.tdp == 19
-    assert (at.session.user_target, at.session.auto_fps) == (120, True)   # no target set: the screen's highest refresh rate
-    at.start("1", None, 8, 30, False, auto_fps=False)
-    assert at.session.auto_fps is True                          # ... which Auto FPS turns into the most frames the limit gives
+    assert at.session.user_target == 120                        # no target set: the screen's highest refresh rate
     at.session = None
 
 
@@ -1751,7 +1749,7 @@ def test_a_new_target_in_a_game_autotune_was_switched_back_on_in_does_not_govern
     _Game(p.autotune, lambda tdp, *_: min(60.0, 2.0 * tdp)).run(20)
     p.run(p.set_setting("autotune", False))
     p.run(p.set_setting("autotune", True))
-    p.run(p.set_autotune_target(60, True))
+    p.run(p.set_autotune_target(60))
     s = p.autotune.session
     seen = []
     for _ in range(100):
@@ -1840,7 +1838,7 @@ def test_a_new_target_after_the_charger_switch_off_does_not_govern_on_the_charge
     p.run(p.game_started("7"))
     _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
     p.run(p.set_setting("autotune_plugged", False))
-    p.run(p.set_autotune_target(45, True))
+    p.run(p.set_autotune_target(45))
     _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
     assert p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
 
@@ -1946,7 +1944,7 @@ def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, sta
     if state == "switched off in the game":
         assert p.chip() == 20, p.chip()
         return
-    p.run(p.set_autotune_target(45, True))
+    p.run(p.set_autotune_target(45))
     p.run(p.resumed())
     s = p.autotune.session
     if state == "governed":
@@ -1973,7 +1971,7 @@ def test_the_charger_switch_a_new_target_and_the_slider_follow_the_games_power_s
     p.run(p.set_setting("autotune_plugged", False))
     s = p.autotune.session
     paused = s.paused
-    p.run(p.set_autotune_target(45, True))
+    p.run(p.set_autotune_target(45))
     governs = p.run(p.get_power())["autotune_governs"]
     assert paused == s.paused == plugged != governs and (s.user_target == 45) != plugged, (paused, s.paused, governs)
 
@@ -2239,7 +2237,7 @@ def test_autotune_on_the_charger_switched_in_a_game_on_battery_leaves_the_game_g
 def test_the_panel_gets_the_screens_highest_refresh_rate_for_the_target_list(plugin):
     """Also after another target is picked: the target when none is set stays in the panel's list."""
     p = plugin
-    p.run(p.set_autotune_target(40, True))
+    p.run(p.set_autotune_target(40))
     assert p.run(p.get_power())["autotune_screen_target"] == max(p.hw.model.get("panel_hz") or [60]) != 40
 
 
@@ -2771,9 +2769,9 @@ def test_what_the_guard_and_the_panel_set_reaches_the_governor(fake_hw, monkeypa
     at.thermal_clock(80)
     g.run(1)
     assert seen[-1][0].thermal is True
-    at.set_target(45, False)
+    at.set_target(45)
     g.run(1)
-    assert (seen[-1][1].target, seen[-1][1].auto_fps) == (45.0, False)
+    assert seen[-1][1].target == 45.0
     s.gov.fail[11], s.gov.lo, s.gov.hi, s.gov.ratio = [1e12, 1, None, False, 0.0], 55.0, 56.0, 0.97
     s.fg = 2                                                                  # frame generation switched on in the game
     g.run(1)
@@ -3047,17 +3045,17 @@ def _target_tuner(fake_hw, monkeypatch, target, auto_fps=True, ceiling=25):
 def test_autotune_target_setting_is_saved_clamped_and_reaches_the_running_session(plugin, monkeypatch):
     p = plugin
     got = []
-    monkeypatch.setattr(p.autotune, "set_target", lambda t, a=True: got.append((t, a)))
-    r = p.run(p.set_autotune_target(60, True))
-    assert r["ok"] and r["target"] == 60 and p.settings["autotune_target"] == 60 and got[-1] == (60, True)
-    assert p.run(p.set_autotune_target(5, False))["target"] == 20 and got[-1] == (20, False)   # 20 fps minimum
-    r = p.run(p.set_autotune_target(0, False))                  # no target: the screen's highest refresh rate, Auto FPS on
-    assert r["target"] == 120 and r["auto_fps"] is True and p.settings["autotune_target"] == 120 and got[-1] == (120, True)
+    monkeypatch.setattr(p.autotune, "set_target", lambda t: got.append(t))
+    r = p.run(p.set_autotune_target(60))
+    assert r["ok"] and r["target"] == 60 and p.settings["autotune_target"] == 60 and got[-1] == 60
+    assert p.run(p.set_autotune_target(5))["target"] == 20 and got[-1] == 20   # 20 fps minimum
+    r = p.run(p.set_autotune_target(0))                         # no target: the screen's highest refresh rate
+    assert r["target"] == 120 and p.settings["autotune_target"] == 120 and got[-1] == 120
     started = {}
     monkeypatch.setattr(p.autotune, "start", lambda *a, **k: started.update(k))
-    p.settings.update(autotune=True, autotune_target=45, autotune_auto_fps=False, autotune_plugged=True)
+    p.settings.update(autotune=True, autotune_target=45, autotune_plugged=True)
     p._start_game_power("123", True)
-    assert started["target"] == 45 and started["auto_fps"] is False and started["fg"] == 0
+    assert started["target"] == 45 and started["fg"] == 0
 
 
 def test_debug_launch_arms_one_launch_and_never_touches_another_tools_optiscaler(plugin, tmp_path, monkeypatch):

@@ -553,15 +553,14 @@ class Plugin:
         st["limit_w"] = s.ceiling_tdp if s is not None else None
         st["autotune_w"] = s.learned.tdp if s is not None and not s.paused else None
         st["autotune_floor"] = self.settings.get("autotune_floor")
-        st["autotune_target"], st["autotune_auto_fps"] = self.autotune.target_of(
-            int(self.settings.get("autotune_target") or 0), self.settings.get("autotune_auto_fps", True) is not False)
+        st["autotune_target"] = self.autotune.target_of(int(self.settings.get("autotune_target") or 0))
         plugged = self._plugged()
         pk = self._pick(self._game_key() if self.running_appid else None, plugged)
         own = self.settings.get("autotune_max")
         st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]
         st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged) and (
             self.running_appid is None or self.autotune.session is not None)
-        st["autotune_screen_target"] = self.autotune.target_of(0)[0]
+        st["autotune_screen_target"] = self.autotune.target_of(0)
         st["thermal"] = self.guard.status()
         slot = "plugged" if plugged else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -834,7 +833,6 @@ class Plugin:
             self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
                                 xell_log=os.path.join(xess.prefix_dir(HOME, frontend.steam_appid(appid)), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
-                                auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
                                 fg=self._game_fg(frontend.steam_appid(appid)), at_limit=picked, held=held)
             result["autotune"] = "started"
             quiet.background(True)                       # autotune's loop: on the E-cores, low priority, away from the game
@@ -1147,19 +1145,19 @@ class Plugin:
         fg = launch.get("fg") or 0
         return int(fg) if fg >= 2 and launch.get("opti_fg") != "off" else 0
 
-    async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
-        """Autotune target: the fewest watts that hold that many rendered fps. Auto FPS: an out-of-reach target
-        becomes the closest fps it can hold. 0 / None: the screen's highest refresh rate with Auto FPS.
+    async def set_autotune_target(self, fps: int | None) -> dict:
+        """Autotune target: the fewest watts that hold that many rendered fps; out of reach, what the full limit
+        gives. 0 / None: the screen's highest refresh rate.
         Applies to the running game at once (from the limit in use), and to every game from its start."""
         t = int(fps or 0)
-        t, auto_fps = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)), auto_fps)
-        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, auto_fps
+        t = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)))
+        self.settings["autotune_target"] = t
         self._save_settings()
         plugged = self._plugged()
         if self.running_appid is None or self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
-            self.autotune.set_target(t, auto_fps)
-        words = f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
-        return {"ok": True, "target": t, "auto_fps": auto_fps, "summary": words, "error": None}
+            self.autotune.set_target(t)
+        words = f"Autotune holds {t} fps with the fewest watts"
+        return {"ok": True, "target": t, "summary": words, "error": None}
 
     async def set_autotune_max(self, watts: int | None) -> dict:
         """Autotune's own maximum TDP: the limit Autotune works under, in place of the TDP setting. None / 0: the TDP

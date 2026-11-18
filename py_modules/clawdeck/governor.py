@@ -23,8 +23,7 @@ It changes `state` in place and returns what to do.
 Words:
   pace       the frame time the game holds: the median of the last PACE_FRAMES frames;
   reference  what the full limit gives: measured there, or the pace with the package 2 W or more under the limit;
-  goal       what has to be delivered: your target less TOL (or the reference less SUSTAINED when that is lower
-             and Auto FPS is on);
+  goal       what has to be delivered: your target less TOL (or the reference less SUSTAINED when that is lower);
   band       the pace at the held limit when the limit was last known to cost no more than that: by the full limit
              after a loss, by the step that came here and held, or all the time while the limit can't hold the game
              back (the full limit, the package 2 W under the limit, the pace at your target). Lowest and highest;
@@ -94,7 +93,6 @@ class Cfg:
     floor: int
     ceiling: int                    # your limit
     target: float                   # fps
-    auto_fps: bool = True           # a target out of reach: hold what the full limit gives instead
     start_w: int | None = None      # where this game held last time; None: mid-range
 
 
@@ -320,18 +318,18 @@ def goal(st: State, cfg: Cfg) -> float:
 
 def _goal_at(ref: float | None, cfg: Cfg) -> float:
     """... were `ref` what the full limit gives."""
-    if cfg.auto_fps and ref is not None and ref < cfg.target * REACHED:
+    if ref is not None and ref < cfg.target * REACHED:
         return ref * (1 - SUSTAINED)
     return cfg.target * (1 - TOL)
 
 
 def _need(st: State, cfg: Cfg) -> float:
-    """The pace the held limit has to give: your target less TOL. When the band is under that (a target out of reach
-    with Auto FPS on): the goal of when the band was taken, from what the full limit gave then (the band's lower edge
+    """The pace the held limit has to give: your target less TOL. When the band is under that (a target out of
+    reach): the goal of when the band was taken, from what the full limit gave then (the band's lower edge
     over the ratio). A pace that falls from the band and stays over that goal is no loss, whatever
     its cause: of 24 falls of under 5 % that got the full limit on the Claw (2026-11-16), 15 were the game's own, two
     changes of the limit each; the 9 others were 2 to 7 % under what the full limit gave."""
-    if not cfg.auto_fps or st.lo is None or st.lo >= cfg.target * (1 - TOL):
+    if st.lo is None or st.lo >= cfg.target * (1 - TOL):
         return cfg.target * (1 - TOL)
     if not st.ratio:
         return st.lo
@@ -339,8 +337,8 @@ def _need(st: State, cfg: Cfg) -> float:
 
 
 def out_of_reach(st: State, cfg: Cfg) -> bool:
-    """Auto FPS: the full limit gives less than the target, so what it gives is held instead."""
-    return cfg.auto_fps and st.ref is not None and st.ref < cfg.target * REACHED
+    """The full limit gives less than the target, so what it gives is held instead."""
+    return st.ref is not None and st.ref < cfg.target * REACHED
 
 
 def _take(st: State, pace: float) -> None:
@@ -1018,7 +1016,7 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
             and abs(cur - here) <= clear * here and _steady(st, t, clear)
-            and (small <= SUSTAINED or not (cfg.auto_fps and ref < cfg.target * REACHED))):
+            and (small <= SUSTAINED or ref >= cfg.target * REACHED)):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]

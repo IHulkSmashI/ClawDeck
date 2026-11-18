@@ -21,7 +21,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Revertible sysfs | `sysfs.py` | every write | `last_error()` feeds the red rows |
 | Health check + one line | `health.py` | Fixes | fixes: install XeSS, face buttons, hardware survey |
 | Power profiles | `power.py` | Power | RAPL-MMIO on the EX (the MSI attributes are ignored there), HHD when it runs |
-| Autotune | `governor.py`, `autotune.py` | Power | one governor for a target fps (with Auto FPS, what the max TDP gives where the target is out of reach): a step down watched on every frame and taken back at the first loss, the full TDP at once when frames are lost; frames from mangoapp's log, rendered frames with XeLL; PL1, PL2 = PL1 + 2 W and an 8 s PL1 window while it governs, no CPU/GPU levers; battery only unless "Autotune when plugged in" |
+| Autotune | `governor.py`, `autotune.py` | Power | one governor for a target fps (what the max TDP gives where the target is out of reach): a step down watched on every frame and taken back at the first loss, the full TDP at once when frames are lost; frames from mangoapp's log, rendered frames with XeLL; PL1, PL2 = PL1 + 2 W and an 8 s PL1 window while it governs, no CPU/GPU levers; battery only unless "Autotune when plugged in" |
 | XeSS XMX | `xess.py`, `launchenv.py`, `tools/clawdeck-launch.sh` | Setup, Per-game | upstream release; `xmx` / `fg` / `low_latency` / `xess_latest` / `fsr` per game; shim log read per launch |
 | ClawDeck's OptiScaler | `optiscaler.py`, `launchenv.py` (`opti`, `opti_xefg`), `assets/versions.json` (`optiscaler`) | Setup, Per-game | pinned release + OptiPatcher, sha256 checked; patch / unpatch with a manifest and backups; never touches OptiScaler it didn't install (`owner()`) |
 | Decky Framegen compatibility | `framegen.py` (state), `optiscaler.owner()`, `steam.ts` (fgmod in launch options) | Setup, Per-game | detection only: a game Decky Framegen patched (fgmod in its launch options, or its files) shows a warning and "Stop using Decky Framegen here"; ClawDeck doesn't install or offer Decky Framegen |
@@ -61,10 +61,10 @@ it no longer touches the CPU/GPU levers. A game with no history starts mid-range
 written by hand and on games built from Claw 8 EX recordings.
 Check on the EX, Autotune on:
 - a light game on a frame limit (60 fps at about 9 W): the TDP is at the floor within half a minute, 60 fps throughout;
-- a heavy game with no target set (the screen's highest refresh rate, with Auto FPS): "using N W of your M W" settles
+- a heavy game with no target set (the screen's highest refresh rate): "using N W of your M W" settles
   within a few watts and stops moving (after the first minutes: under one change a minute); frames stay within 1 % of
   what the full TDP gives;
-- a target the game can't reach at the full TDP ("Auto FPS: 60 out of reach"): the TDP stays at the full TDP, or a few
+- a target the game can't reach at the full TDP ("60 out of reach"): the TDP stays at the full TDP, or a few
   watts under it where those give the same frames in a game with a steady frame rate;
 - walk from a light place into a heavy one: the full TDP is back within about a second;
 - **the Steam menu over a game:** open Quick Access for half a minute and close it. mangoapp follows the focused

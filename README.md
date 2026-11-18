@@ -37,8 +37,8 @@
   Uninstall puts every original file back.
 - 🔋 **Power that works:** profiles from 8 to 35 W (Steam's own TDP slider does nothing on the Claw 8 EX),
   **Autotune** with a **target frame rate**: pick 30, 40, 60 fps and it holds it with the fewest watts, settles in about
-  a minute, gives the watts back within seconds in a heavy scene, and **Auto FPS** holds the closest it can when your
-  target is out of reach. It stays out of emulators whose frame counter lies (xemu), and a temperature guard cools a
+  a minute, gives the watts back within seconds in a heavy scene, and holds what the full TDP gives when your target
+  is out of reach. It stays out of emulators whose frame counter lies (xemu), and a temperature guard cools a
   hot spot by capping the CPU clock instead of cutting watts for everything. Plus fan curves and a battery charge
   limit.
 - 🕹️ **ES-DE games too:** each game you start from ES-DE gets its own power pick and Autotune, not one limit for NES and
@@ -149,7 +149,7 @@ generation), **Fixes** and **Setup**. **Explain every control** (in Setup) says 
 |---|---|
 | **Profile** | Battery saver, Battery, Balanced, Performance, Plugged, Max: the most power the game may use. |
 | **TDP (W)** | The same limit, 8–35 W. Moving it makes a Custom profile. With Custom, **Set PL2 yourself** sets the short-boost limit, and the toast shows what the chip took. |
-| **Autotune** | Holds a **target** frame rate (30–120 fps) with the fewest watts, with watts back within seconds when a heavy scene drops below it; **Auto FPS** holds the closest frame rate it can when the target is out of reach. **Autotune max TDP** is the most watts it may use; while Autotune is on, that and the target take the place of the TDP slider, which is greyed out. At the screen's refresh rate, the target you start with, that is the most frames the max TDP gives in the running game, within 5 %. Counts rendered frames, so frame generation doesn't fool it. Games without their own MangoHud log get their frame rate from Steam's overlay; xemu, which always shows 60 fps, keeps your limit, even when you pick a new target. Switch it off (or change anything under Advanced) and your pick goes back on the chip at once. Its log (`autotune.csv`) has frame times and slow frames, so a limit that's just too low shows up even when the fps looks full. |
+| **Autotune** | Holds a **target** frame rate (30–120 fps) with the fewest watts, with watts back within seconds when a heavy scene drops below it; a target out of reach gets what the full TDP gives. **Autotune max TDP** is the most watts it may use; while Autotune is on, that and the target take the place of the TDP slider, which is greyed out. At the screen's refresh rate, the target you start with, that is the most frames the max TDP gives in the running game, within 5 %. Counts rendered frames, so frame generation doesn't fool it. Games without their own MangoHud log get their frame rate from Steam's overlay; xemu, which always shows 60 fps, keeps your limit, even when you pick a new target. Switch it off (or change anything under Advanced) and your pick goes back on the chip at once. Its log (`autotune.csv`) has frame times and slow frames, so a limit that's just too low shows up even when the fps looks full. |
 | **Temperature guard** | Over 95 °C it caps the CPU's top clock when a few busy cores make the heat, and steps the watts down from what the chip draws otherwise; both come back once it's cool, also while Autotune is switched off. |
 | **Fan** | Automatic (MSI), Quiet, Cooling, Extreme, Full speed, or your own curve; the panel shows the curve the fans follow now. |
 | **Battery** | Charge limit: Off, 80 %, 90 % or Custom. Keeps the battery healthier on the charger. |

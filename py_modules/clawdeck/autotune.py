@@ -1,7 +1,7 @@
 """Autotune: for the running game, the fewest watts that still give the frames it has to deliver.
 
-That is your target fps (Power -> Autotune target), or what the full limit gives when the target is out of reach
-(Auto FPS). The limit you picked (profile or slider) is the most it uses.
+That is your target fps (Power -> Autotune target), or what the full limit gives when the target is out of
+reach. The limit you picked (profile or slider) is the most it uses.
 
 The deciding is in governor.py: one question asked all the time (would more watts give frames that are owed?), a step
 down that is watched on every frame and taken back at the first loss, the full limit at once when frames are lost. It
@@ -442,7 +442,7 @@ class Learned:
     ceiling: int | None = None      # your limit this was found under (another limit: start over)
     samples: int = 0
     target: int | None = None       # target fps mode: your target this was found for
-    target_eff: float | None = None # ... the fps held when yours was out of reach (Auto FPS)
+    target_eff: float | None = None # ... the fps held when yours was out of reach
     start: int | None = None        # where to start next time: the level under which 80 % of the holding time lay
 
 
@@ -555,7 +555,6 @@ class Session:
     refused: bool = False               # the last TDP write was not applied ...
     refused_until: float = -1e9         # ... and until then no other is tried (the governor rests)
     user_target: int = 0
-    auto_fps: bool = True
 
     @property
     def target(self) -> float:
@@ -583,25 +582,25 @@ class Autotune:
         self.enabled = False
 
     # ---- lifecycle ---------------------------------------------------------------------------------------------------
-    def target_of(self, target: int | None, auto_fps: bool = True) -> tuple[int, bool]:
-        """The target and Auto FPS in force. No target set: the screen's highest refresh rate with Auto FPS, so the
-        most frames the limit gives are held."""
+    def target_of(self, target: int | None) -> int:
+        """The target in force. No target set: the screen's highest refresh rate, so the most frames the limit gives
+        are held."""
         if target:
-            return int(target), bool(auto_fps)
-        return max(self.hw.model.get("panel_hz") or [60]), True
+            return int(target)
+        return max(self.hw.model.get("panel_hz") or [60])
 
     def start(self, appid: str, learned: dict | None, floor_tdp: int, ceiling_tdp: int, plugged: bool | None = None,
               xell_log: str | None = None, target: int | None = None,
-              auto_fps: bool = True, fg: int = 0, at_limit: bool = False, held: int | None = None) -> None:
+              fg: int = 0, at_limit: bool = False, held: int | None = None) -> None:
         """Start for a game: where it held last time under this limit and target, else as held before a power change,
         else mid-range. at_limit: the limit was picked just now, in the game, and goes on the chip as picked."""
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
-        target, auto_fps = self.target_of(target, auto_fps)
-        same = known.get("ceiling") == ceiling_tdp and self.target_of(known.get("target"))[0] == target
+        target = self.target_of(target)
+        same = known.get("ceiling") == ceiling_tdp and self.target_of(known.get("target")) == target
         l = Learned(tdp=ceiling_tdp, ceiling=ceiling_tdp, target=target)
         s = Session(appid=appid, floor_tdp=floor_tdp, ceiling_tdp=ceiling_tdp, learned=l,
-                    user_target=target, auto_fps=auto_fps, fg=int(fg or 0))
+                    user_target=target, fg=int(fg or 0))
         s.started_at = s.own_checked_at = time.monotonic()
         self.session = s
         self.sampler.set_prefix(xell_log)
@@ -625,14 +624,14 @@ class Autotune:
     def _govern_from(self, s: Session, start_w: int | None) -> None:
         """A fresh governor for this session, from `start_w` (None: mid-range); the caller writes its limit."""
         s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target),
-                             auto_fps=s.auto_fps, start_w=start_w)
+                             start_w=start_w)
         s.gov, act = governor.start(s.cfg, time.monotonic())
         s.learned.tdp = min(act.limit_w, self._top(s))
         s.gov.limit = s.learned.tdp
         s.look_s, s.stepped_at = governor.LOOK_S, None
         s.last_action = act.note
 
-    def set_target(self, target: int | None, auto_fps: bool = True) -> None:
+    def set_target(self, target: int | None) -> None:
         """The target was changed while a game runs: the governor starts over from the limit in use, for the new goal.
         After a change by hand it hands control back, as a new pick does (not in a game Autotune stays out of, not
         without frames, not while it is switched off)."""
@@ -642,7 +641,7 @@ class Autotune:
         back = s.paused and self.enabled and not s.own_pace and s.no_fps_s < NO_FPS_S
         if back:
             s.paused, self.power.governed = False, True
-        s.user_target, s.auto_fps = self.target_of(target, auto_fps)
+        s.user_target = self.target_of(target)
         s.learned.target, s.learned.target_eff, s.learned.start = s.user_target, None, None
         s.settled = False
         on_chip = s.learned.tdp
@@ -1053,7 +1052,7 @@ class Autotune:
                 "pl1_window_s": None if self.power.pl1_window_us() is None else round(self.power.pl1_window_us() / 1e6, 1),
                 "last_action": s.last_action, "last_delta": s.last_delta,
                 "target": round(s.target), "user_target": s.user_target,
-                "auto_fps": s.auto_fps, "unreachable": s.unreachable, "best_fps": r(l.max_fps) if s.unreachable else None,
+                "unreachable": s.unreachable, "best_fps": r(l.max_fps) if s.unreachable else None,
                 "floor_learned": None, "fg": s.fg,
                 "last_change_s": None if s.last_change_at is None else round(time.monotonic() - s.last_change_at),
                 "last": None if last is None else last.__dict__}

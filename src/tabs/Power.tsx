@@ -183,7 +183,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
   const phase = step || (at?.target ? `holding ${at.target} fps` : "holding");
   // "25 W max → using 17 W · 58 fps (97 % of 60) · 3.4 fps/W": rendered frames; with frame generation, what is shown too
   const fpsText = at?.avg_fps != null
-    ? `${Math.round(at.avg_fps)} fps` + (at.target ? ` (target ${at.target}${at.unreachable && at.user_target && at.target < at.user_target ? `, Auto FPS: ${at.user_target} out of reach` : at.unreachable ? ", out of reach" : ""})` : "") +
+    ? `${Math.round(at.avg_fps)} fps` + (at.target ? ` (target ${at.target}${at.unreachable && at.user_target && at.target < at.user_target ? `, ${at.user_target} out of reach` : at.unreachable ? ", out of reach" : ""})` : "") +
       ((at.source === "rendered" || at.source === "frame-gen pick") && at.multiplier && at.multiplier >= 1.5 ? ` rendered, ${at.multiplier}x shown` : "") : "reading frames…";
   const atLine = !autotune ? "Autotune off"
     : !at?.running ? (!appid ? "Autotune on: starts with the next game"
@@ -252,21 +252,15 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
           <DropdownItem label="Autotune target" layout="below" childrenContainerWidth="max"
             rgOptions={targetOptions}
             selectedOption={st?.autotune_target}
-            onChange={async (o) => { const r = await setAutotuneTarget(o.data, st?.autotune_auto_fps ?? true); toast(r.summary); refresh(); }}
-            description={explain("A frame rate to hold with the fewest watts: the max TDP below is back within a second when a heavy scene drops below it, and Autotune works down again from there. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
-              quick ? undefined : "the screen's highest refresh rate with Auto FPS: nearly the most frames the max TDP below gives.", undefined)} />
+            onChange={async (o) => { const r = await setAutotuneTarget(o.data); toast(r.summary); refresh(); }}
+            description={explain("A frame rate to hold with the fewest watts: the max TDP below is back within a second when a heavy scene drops below it, and Autotune works down again from there. If the max TDP below can't reach it, Autotune holds what that maximum gives, at a lower TDP only where that gives the same frames. Counts rendered frames (with frame generation you see 2–4x as many). Set Steam's frame limit to the same number so the game doesn't render frames you don't need.",
+              quick ? undefined : "the screen's highest refresh rate: the most frames the max TDP below gives.", undefined)} />
         )}
         {autotune && (
           <SliderField label="Autotune max TDP (W)" value={atMax} min={lo} max={hi} step={1} showValue disabled={!st?.tdp_backend}
             onChange={(w) => { setAtMaxV(w); latest("atmax", () => setAutotuneMax(w), (r) => { toast(r.summary); refresh(); }); }}
             description={explain(`The most watts Autotune may use to hold ${st?.autotune_target} fps, ${lo}–${hi} W. Until moved, it is your TDP setting.`,
               undefined, quick ? undefined : "each watt more buys fps with play time and heat.")} />
-        )}
-        {autotune && (
-          <ToggleField label="Auto FPS" checked={st?.autotune_auto_fps ?? true}
-            onChange={async (v) => { const r = await setAutotuneTarget(st?.autotune_target ?? 0, v); toast(r.summary); refresh(); }}
-            description={explain(`If the max TDP above can't reach ${st?.autotune_target} fps, Autotune holds what that maximum gives, at a lower TDP only where that gives the same frames, and holds ${st?.autotune_target} again when the game gets lighter.`,
-              undefined, "off: an out-of-reach target keeps the max TDP and says so.")} />
         )}
         <Status ok={!autotune ? false : running ? true : null} label={atLine} detail={atDetail} />
         {autotune && !!at?.game_fg && (
