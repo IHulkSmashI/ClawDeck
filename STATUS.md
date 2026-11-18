@@ -475,7 +475,7 @@ beta 2.
   say "rendered, 2x shown" (or 3x) and the fps must be the rendered rate; check `drive_c/igdext_xell.log` in the
   game's prefix has `xellSleep stats` lines and stays small over 10 minutes (the shim also routes XeLL's own debug
   messages there). In a game without frame generation: steps down from where it starts, each taken back within a
-  second when frames are lost, holding within 5 % of what the set TDP gives. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
+  second when frames are lost, holding within 0.5 % (or the game's own wobble) of what the set TDP gives. Does OptiScaler's XeFG output call `xellSleep` too (then its frames count right)? Note what you see.
 - **Temperature guard (§21), on the Claw:** check the sensor: `cat /sys/class/thermal/thermal_zone*/type` should list
   `x86_pkg_temp` (the health check names the one ClawDeck uses). Then set Max 35 W, start a heavy game, cover the fan
   vents or block the airflow briefly, and watch the Power panel: past 95 °C the read-back line should say "thermal:
