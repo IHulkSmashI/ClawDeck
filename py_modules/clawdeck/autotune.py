@@ -706,11 +706,16 @@ class Autotune:
         """The most autotune may use: the set TDP, or less while the temperature guard holds it down."""
         return s.ceiling_tdp if s.thermal_cap is None else min(s.ceiling_tdp, s.thermal_cap)
 
-    def pause(self, reason: str = "manual change") -> None:
+    def pause(self, reason: str = "manual change", limit: int | None = None) -> None:
         """Never fight the user: a manual power change stops autotune for the rest of this session (values the user
-        set stay; what was found so far is still saved at game exit)."""
+        set stay; what was found so far is still saved at game exit). `limit`: the TDP given back from now on, in place
+        of Autotune's maximum (Autotune switched off: the TDP setting), under the temperature guard's step."""
         s = self.session
         if s:
+            if limit is not None:
+                s.ceiling_tdp = int(limit)
+                if s.paused:
+                    self._give_back(s)
             if not s.paused:
                 log.info("autotune paused: %s", reason)
                 self._note(s, f"paused: {reason}")

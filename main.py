@@ -442,12 +442,13 @@ class Plugin:
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
             self._autotune_late = bool(value) and self.running_appid is not None
             if not value:
-                self.autotune.pause("autotune switched off")
+                w = None
                 if self.running_appid and self.settings.get("autotune_max"):
                     plugged = bool(self.battery.plugged())
                     w = self._pick(self._game_key(), plugged)["tdp"]
-                    if w is not None:
-                        self.power.set_tdp(w, plugged)
+                self.autotune.pause("autotune switched off", limit=w)
+                if w is not None and not self.autotune.running():
+                    self.power.set_tdp(w, plugged)
         if key in ("autotune", "autotune_plugged") and self.running_appid is None and self.settings.get("autotune_max"):
             async with self._power_lock:
                 self._apply_idle_pick(bool(self.battery.plugged()))
@@ -550,8 +551,7 @@ class Plugin:
         pk = self._pick(self._game_key() if self.running_appid else None, plugged)
         own = self.settings.get("autotune_max")
         st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]
-        st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged) and not (
-            self.running_appid is not None and getattr(self, "_autotune_late", False))
+        st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged)
         st["thermal"] = self.guard.status()
         slot = "plugged" if self.battery.plugged() else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
@@ -831,7 +831,8 @@ class Plugin:
         battery) plugged in only when the user asked for that too (Advanced). Where it does not, the TDP setting is
         the limit."""
         return bool(self.settings.get("autotune") and prof.get("autotune", True)
-                    and (not plugged or self.settings.get("autotune_plugged")))
+                    and (not plugged or self.settings.get("autotune_plugged"))
+                    and not (self.running_appid is not None and getattr(self, "_autotune_late", False)))
 
     def _limit_overrides(self, pk: dict, plugged: bool) -> dict:
         """What goes on the chip with a pick. Where Autotune sets the limit and has a maximum of its own, that is the

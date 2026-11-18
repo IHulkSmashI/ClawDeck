@@ -1582,6 +1582,50 @@ def test_switching_autotune_off_in_a_game_puts_the_pick_back_on_the_chip(plugin)
     assert p.run(p.get_power())["autotune_w"] is None
 
 
+
+def test_switching_autotune_off_in_a_hot_game_keeps_the_guards_step_and_the_guard_gives_back_the_tdp_setting(plugin):
+    """Autotune off in a game: the TDP setting is the limit again, under the temperature guard's step, whatever
+    Autotune's own maximum was and also after a manual change paused Autotune; when the guard allows the whole limit
+    again, the TDP setting comes back, not Autotune's maximum."""
+    p = plugin
+    for appid, setting, own, step, paused in (("7", 26, None, 12, False), ("8", 26, 20, 12, False),
+                                              ("9", 26, 30, 12, False), ("10", 22, 30, 24, False),
+                                              ("11", 26, 20, 12, True)):
+        p.run(p.set_setting("autotune", True))
+        assert p.run(p.set_tdp(setting))["ok"]
+        p.run(p.set_autotune_max(own))
+        p.run(p.game_started(appid))
+        assert p.autotune.thermal_step(step) and p.chip() <= step
+        if paused:
+            p.autotune.pause("manual change")
+        assert p.run(p.set_setting("autotune", False))
+        assert p.chip() == min(setting, step) and p.autotune.held_w() == min(setting, step)
+        p.autotune.thermal_release(setting)
+        assert p.chip() == setting
+        p.run(p.game_stopped(appid))
+
+
+def test_a_tdp_pick_in_a_game_autotune_was_switched_on_in_is_the_limit(plugin):
+    """Autotune switched on while a game runs does not govern that game, and the panel shows the TDP slider as the
+    limit: a pick there is the limit at once, also with a maximum of Autotune's own. The next start is governed."""
+    p = plugin
+    for appid, own in (("7", None), ("8", 20), ("9", 30)):
+        p.run(p.set_setting("autotune", False))
+        assert p.run(p.set_tdp(26))["ok"]
+        p.run(p.set_autotune_max(own))
+        p.run(p.game_started(appid))
+        assert p.chip() == 26 and p.autotune.session is None
+        p.run(p.set_setting("autotune", True))
+        assert not p.run(p.get_power())["autotune_governs"] and p.chip() == 26
+        assert p.run(p.set_tdp(28))["ok"]
+        assert p.chip() == 28 and p.autotune.session is None and not p.run(p.get_power())["autotune_governs"]
+        p.run(p.set_autotune_max(18))                                  # not this game's limit: nothing starts over
+        assert p.chip() == 28 and p.autotune.session is None
+        p.run(p.game_stopped(appid))
+        p.run(p.game_started(appid))
+        assert p.autotune.session is not None and p.autotune.session.ceiling_tdp == 18
+        p.run(p.game_stopped(appid))
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
