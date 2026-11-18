@@ -1709,6 +1709,41 @@ def test_switching_autotune_off_in_a_hot_game_it_does_not_govern_keeps_the_guard
     p.run(p.set_setting("autotune", False))
     assert p.chip() == stepped
 
+
+def test_a_new_target_in_a_game_autotune_was_switched_back_on_in_does_not_govern_it(plugin):
+    """TDP setting 26 W, Autotune's maximum 15 W. In a game: Autotune switched off, then on again (the game is not
+    governed until its next start), then a new target. The session stays paused at the TDP setting; it governed
+    again, with 26 W as its ceiling."""
+    p = plugin
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.set_autotune_max(15))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 2.0 * tdp)).run(20)
+    p.run(p.set_setting("autotune", False))
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_autotune_target(60, True))
+    s = p.autotune.session
+    seen = []
+    for _ in range(100):
+        p.autotune._step()
+        seen.append(p.chip())
+    assert s.paused and set(seen) == {26}, (s.paused, sorted(set(seen)))
+
+
+def test_an_esde_game_started_after_autotune_was_switched_on_is_governed(plugin):
+    """ES-DE launched with Autotune off; Autotune switched on in ES-DE's menus (not governed: no frame log there);
+    then a game from ES-DE. It starts after the switch: governed. It never was, until ES-DE itself was started again."""
+    p = plugin
+    p.settings["autotune"] = False
+    p.autotune.enabled = False
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("100"))
+    p.run(p.set_setting("autotune", True))
+    assert p.autotune.session is None
+    _frontend_event(p, "start", "ps2", "/roms/ps2/a.iso", "Game A")
+    assert p.autotune.session is not None and p.run(p.get_power())["autotune_governs"]
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
