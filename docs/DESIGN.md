@@ -147,9 +147,9 @@ left 8 W settings on a Claw that its user had not made, and a frontend's 8 W men
 `test_what_a_frontends_menus_hold_is_never_the_limit_of_its_games`.)
 - **Game start, a pick in a game, Use default, unplugging, resume:** `revert_all(keep_thermald=True)` (back to boot
   values, thermald stays stopped because a TDP follows at once), then the pick, then a fresh Autotune session under that
-  limit: at the level the game held last time under it, else (unplugging, plugging in) where it held just before, else
-  mid-range. After a pick in the game the session starts at the pick itself, and what was learned at the old limit is
-  dropped.
+  limit: at the level the game held last time under it, else (unplugging, plugging in, also during a sleep) where it
+  held just before (in a step down the level before it; not under the temperature guard's cap), else mid-range. After
+  a pick in the game the session starts at the pick itself, and what was learned at the old limit is dropped.
 - **Game exit:** what Autotune learned is saved, everything is reverted, then the pick for the power source the Claw
   is on now goes back on the chip. With no pick on that power source the chip keeps the firmware's limits and thermald
   starts again. Unplugging with no game switches to the other power source's pick the same way.

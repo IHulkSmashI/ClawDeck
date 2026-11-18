@@ -1067,8 +1067,7 @@ class Plugin:
             return {"changed": False}
         appid = self._game_key()
         async with self._power_lock:
-            s = self.autotune.session
-            held = self.autotune.held_w() if s is not None and not s.paused else None
+            held = self.autotune.carry_w()
             self._save_learned(appid, bool(self.running_plugged))
             self.running_plugged = plugged
             return {"changed": True, **self._restart_game_power(appid, plugged, held=held)}
@@ -1136,9 +1135,10 @@ class Plugin:
                     return {"reapplied": False}
                 self.power.revert_all(keep_thermald=True)
                 return {"reapplied": True, "limit": self._apply_idle_pick(plugged)}
+            held = self.autotune.carry_w()
             self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged = plugged
-            return {"reapplied": True, **self._restart_game_power(self._game_key(), plugged)}
+            return {"reapplied": True, **self._restart_game_power(self._game_key(), plugged, held=held)}
 
     def _game_fg(self, appid: str | None) -> int:
         """ClawDeck's frame generation multiplier for the game (0: off): Autotune divides presented frames by it when
