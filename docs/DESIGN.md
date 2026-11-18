@@ -244,8 +244,8 @@ The rules:
    slower place says nothing of a loss in the place after it). Else the limit failed and the full limit stays; steps
    down follow. One exception: a level that had held for 20 s (or a game that dips by itself) is tried once more,
    watched, before it is given up; so is a level at every loss that the full limit had too (its frame rate climbed
-   there) while the package then draws less than all of the level (a game that dips at every limit, every 20 or
-   30 s); a loss that the full limit answers at once is the limit's. And no way back while the place still gets
+   there from frames as slow as the level's) while the package then draws less than all of the level (a game that
+   dips at every limit, every 20 or 30 s); a loss that the full limit answers at once, or in part, is the limit's. And no way back while the place still gets
    heavier: when the frame rate falls during the look, or the limit loses again within 5 s of a look that sent it
    back and the full limit gives less than at that look, the full limit stays (walking into a heavier place, the
    limit went back and forth 8 times in 7 s).

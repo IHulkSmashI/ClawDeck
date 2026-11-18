@@ -1601,6 +1601,21 @@ def test_a_heavier_moment_that_the_full_limit_answers_at_once_is_the_limits(ever
     assert under <= 3.0 and len(g.st.dips) <= 1 + own_dip, (under, g.st.dips, g.notes[-6:])
 
 
+@pytest.mark.parametrize("every", [10.0, 20.0])
+def test_a_heavier_moment_that_the_full_limit_answers_in_part_is_the_limits(every):
+    """As above, with 55 fps at the full limit in the burst: its frame rate climbs when the burst ends, but it lost
+    less than the level. Taken for a dip of the game's own, the level stayed: 56 to 123 s of the bursts at 45 fps."""
+    inb = lambda t: t >= 60.0 and (t % every) < 1.5
+    fps = lambda w, t: (55.0 if w >= 12 else 45.0) if inb(t) else 60.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60.0, start_w=None), fps=fps)
+    g.draw = lambda w, t: min(float(w), 12.0) if inb(t) else min(float(w), 7.0)
+    g.run(900)
+    writes = sorted(g.writes)
+    at = lambda t: [w for a, w in writes if a <= t][-1]
+    low = sum(0.05 for i in range(1200, 18000) if inb(i * 0.05) and fps(at(i * 0.05), i * 0.05) < 50.0)
+    assert low <= 10.0, (low, g.notes[-6:])
+
+
 def test_slow_frames_that_the_full_limit_does_not_have_fail_the_level_and_book_no_dip():
     """A 30 fps lock held at 29 W of 30 W. From 100 s the place is lighter (30 fps from 27 W, the package at 27.5 W at
     most) with slow frames at every limit under 30 W (every 17th frame 15 % long). The look for slow frames finds none

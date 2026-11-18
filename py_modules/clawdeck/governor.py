@@ -666,8 +666,11 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         return act
     third = len(st.watch) // 3
     if third >= N and t - st.wrote_at < 2 * BIND_S and _fps(st.watch[-third:]) > _fps(st.watch[:third]) * (1 + CLEAR):
-        st.climbed = True
-        return act                                   # the frame rate is still climbing: not judged yet
+        # the frame rate is still climbing: not judged yet. The full limit lost the frames too where two of its frames
+        # in a row were as slow as the level's (a moment that the full limit gives more frames in is the limit's)
+        st.climbed = st.climbed or (st.lost is not None and any(
+            _fps(st.watch[i:i + 2]) <= st.lost * (1 + CLEAR) for i in range(third)))
+        return act
     if (st.mode == "recover" and st.tried is None and third >= N
             and _fps(st.watch[-third:]) < _fps(st.watch[:third]) * (1 - clear)):
         # the frame rate falls at the full limit: the place gets heavier under the look, and what the limit before gave
