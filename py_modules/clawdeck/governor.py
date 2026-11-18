@@ -755,6 +755,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     else:
         if st.why != "free":
             failed(st.prev, now, was >= want)
+        elif st.home == st.prev:
+            st.home = None
         act.note = (f"{top} W has none of the slow frames of {st.prev} W: staying up" if was >= want
                     else f"{st.prev} W was too low ({was:.0f} fps, {now:.0f} at {top} W)" if st.mode == "recover"
                     else f"{top} W gives {now:.0f} fps, {st.prev} W gave {was:.0f}: staying up")

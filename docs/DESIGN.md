@@ -200,7 +200,8 @@ What it knows:
   also when it was set aside and came back, or the governor went back to it (a video's band, and a place with the
   video's frame rate); a clear fall there gets the full limit at once (in a game that dips by itself, once it has
   lasted a second, as any other fall). In a game that does not dip by itself, the limit is not booked as failed, and is
-  tried once more only where the full limit gives the pace it gave before (a dip of the game's own).
+  tried once more only where the full limit gives the pace it gave before (a dip of the game's own); it is no longer
+  the level to go back to.
   **The ratio** is what this limit gave over what the full limit gave when both were last measured. After that
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your

@@ -1494,6 +1494,20 @@ def test_a_clear_fall_at_a_band_taken_with_the_package_under_the_limit_books_not
     assert (8 in after or 8 in g.st.fail) == (drawn == 8.0), (after, sorted(g.st.fail), g.notes)
 
 
+def test_a_free_bands_level_that_the_game_after_a_video_failed_is_not_tried_again_at_once():
+    """Target 30: a 30 fps video (the package at 6 W at every limit) until 100 s: the steps end at the 8 W floor, the
+    band free. The game then gives 2 fps a watt up to 60 at 30 W, the package at the limit: 8 W was too low, not
+    booked. 8 W was the level held in this scene (the pace counts at your target): the step down 5 s later went
+    to 8 W again and lost again (1.5 s under 28.5 fps)."""
+    video = lambda t: t < 100.0
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=30.0, start_w=30),
+             fps=lambda w, t: 30.0 if video(t) else min(60.0, 2.0 * w))
+    g.draw = lambda w, t: min(float(w), 6.0) if video(t) else float(w)
+    g.run(160)
+    after = [w for t, w in sorted(g.writes) if t >= 100.0]
+    assert after[0] == 30 and 8 not in after, (after, [n for t, n in g.notes if 99.0 <= t <= 110.0])
+
+
 @pytest.mark.parametrize("at_floor, drawn", [(27.0, 6.1), (27.0, 7.0), (30.0, 6.1), (30.0, 7.0), (27.0, 8.0)])
 def test_a_game_at_the_videos_frame_rate_under_your_target_books_nothing_for_the_videos_limit(at_floor, drawn):
     """A 30 fps intro video: the steps end at the 8 W floor, with the package at 6.1 or 7 W (the band is free) or at
