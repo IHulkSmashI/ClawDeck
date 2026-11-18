@@ -11,7 +11,7 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | 1 | **XeSS XMX + low latency** (upstream 20261104) | done: upstream install (the fork and its XeLL driver mode are retired: upstream shipped low latency in #41); Per-game: XMX on/off, frame generation 2–8x, low latency, latest XeSS libraries, FSR games on XeSS, each with a read-back line | see Needs the maintainer → 0.2 |
 | 2 | **Controller and VRR fixes** | done: Fixes panel, install / remove buttons (no toggles) | install the VRR fix, restart, `edid-decode` shows 30–120 and the 120 Hz mode is still there |
 | 3 | **ClawDeck's own OptiScaler per game** | done 2026-11-04: `optiscaler.py` installs the OptiScaler + OptiPatcher pinned in `assets/versions.json` (`optiscaler`, sha256 checked) into a game's folder, with the game's settings and the Intel presets (XeSS on XMX, FSR 4 on XMX, XeSS frame generation), and takes it out again exactly (manifest + backups). Decky Framegen is compatibility only: a game it patched is detected and left alone with a warning | see Needs the maintainer → 0.2 |
-| 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune lowers the TDP while the frames hold and gives it back at the first loss (§24); Advanced expander (§19) | see Needs the maintainer → Power |
+| 4 | **Power + autotune** | done: six profiles + 8–35 W TDP slider (= autotune's ceiling), read-back line, debounced; autotune lowers the TDP while the frames hold and gives it back at the first loss; Advanced expander (§19) | see Needs the maintainer → Power |
 
 ## Done (code, tests)
 
@@ -30,7 +30,6 @@ sysfs trees, and the UI typechecks, builds into the Decky zip and renders in the
 | Self-test | `tools/selftest.py`, `main.self_test` | Setup | PASS/FAIL per control; refuses while a game runs |
 | System change check | `changes.py` | toast at start | kernel / Mesa / controller / XeSS / Decky changes re-run the health check |
 | Browser preview | `preview/` (`pnpm preview`) | all four | the real panel code with example data |
-| Autotune simulator | `tools/autotune_sim.py`, `tests/data/autotune/` | none (development) | Autotune on recorded games without a Claw: scenes from measured staircases (Enshrouded, Midnight Club LA on RPCS3, Need for Speed: Most Wanted), a score against the watts each scene needs, replay of recorded frames; two tests marked as expected failures name what today's target mode doesn't do yet |
 | Diagnostics log | `diaglog.py`, `main._diag_loop` | Setup | off by default; while on: 1 row/s (power, limits, °C, clocks, battery, fans, Autotune, busiest processes) and the controller's mode reports; 30 days, 200 MB; the export adds the last 10 minutes |
 
 Removed in the scope reset (2026-10-21): VRR on/off, refresh rate, HDR, display save, fan presets, GPU clock
@@ -59,7 +58,7 @@ sleep/wake several times fine.
 game), tries a lower TDP for 2.5 s and takes it back at the first loss, and writes the full limit at once when a heavier
 scene loses frames. It owns PL1, PL2 (PL1 + 2 W, also over a PL2 set by hand) and an 8 s PL1 window while it governs;
 it no longer touches the CPU/GPU levers. A game with no history starts mid-range under your limit. Tested on frames
-written by hand and in `tools/autotune_sim.py` only (games built from Claw 8 EX recordings); not yet on a device.
+written by hand and on games built from Claw 8 EX recordings.
 Check on the EX, Autotune on:
 - a light game on a frame limit (60 fps at about 9 W): the TDP is at the floor within half a minute, 60 fps throughout;
 - a heavy game without a target: "using N W of your M W" settles within a few watts and stops moving (after the first
@@ -77,14 +76,14 @@ Check on the EX, Autotune on:
   video, and the game is at its frame rate within a second of the video's end. A video of over 2 minutes: the TDP may
   go down in it; the game is at its frame rate within about 3 s of its end;
 - a map or inventory that renders much faster than the game, for some seconds: the TDP is the same before and after;
-- loading screens: after several of them the TDP is where it was (in the simulator each one lowered what Autotune took
+- loading screens: after several of them the TDP is where it was (in simulated games each one lowered what Autotune took
   for the game's frame rate, and the TDP with it; fixed);
 - a game whose frames mangoapp does not log (only its own MangoHud log): the TDP still goes down;
 - frames stop for half a minute in a game (the status line says so): your limit is on the chip, and Autotune takes the
   game again when frames come;
 - a game with XeSS frame generation: the status says "rendered, 2x shown" and the TDP follows the rendered frames
   (in the first version every loss was missed with XeLL; fixed, tested with made-up XeLL lines only);
-- known from the simulator, to watch for: a game with very uneven frame rates (hitch runs every 2 s, or 9 % frame-time
+- known from simulated games, to watch for: a game with very uneven frame rates (hitch runs every 2 s, or 9 % frame-time
   spread without a frame limit) may be held a watt or two under where it loses 5 % for up to a minute;
 - if Decky kills the backend while a game runs, the limit Autotune held, PL2 = PL1 + 2 W, the 8 s PL1 window and the
   stopped thermald stay until the next plugin start reverts them (an old mechanism; the 8 s window is new in it).

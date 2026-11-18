@@ -8,7 +8,7 @@ place); slow frames that a watt more did not end. By the clock every CHECK_MAX_S
 while the goal is what the full limit gives (a target out of reach). Never because a step held or failed: the governors of other projects
 have no such looks, and on the Claw they cost changes and gave nothing.
 
-Why this shape (Claw 8 EX, 2026-11-14/15, docs/HARDWARE-FINDINGS):
+Why this shape (measured on a Claw 8 EX, 2026-11-14/15):
   - frames answer a new limit within 0.15-0.35 s and are back 0.25 s after a raise, so a step down can be tried and
     undone before it is seen: 46 such steps during play cost about 0.6 s of at most 10 % slower frames each;
   - only that answer says why frames are slow. An emulator that spins (RPCS3) draws the whole limit at every limit and
@@ -17,8 +17,8 @@ Why this shape (Claw 8 EX, 2026-11-14/15, docs/HARDWARE-FINDINGS):
   - the watts a game needs move fast (under 14 W to over 30 W within 20 s), so what was found is where to start, never
     a result.
 
-step(state, obs, cfg) has no clock and no I/O: the same frames give the same limits, on a Claw, in a test and in
-tools/autotune_sim.py. It changes `state` in place and returns what to do.
+step(state, obs, cfg) has no clock and no I/O: the same frames give the same limits, on a Claw and in a test.
+It changes `state` in place and returns what to do.
 
 Words:
   pace       the frame time the game holds: the median of the last PACE_FRAMES frames;

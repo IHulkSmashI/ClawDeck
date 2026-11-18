@@ -5,7 +5,7 @@ That is your target fps (Power -> Autotune target), or what the full limit gives
 
 The deciding is in governor.py: one question asked all the time (would more watts give frames that are owed?), a step
 down that is watched on every frame and taken back at the first loss, the full limit at once when frames are lost. It
-has no clock and no I/O, so tools/autotune_sim.py and the tests run it on recorded and simulated games. This module is
+has no clock and no I/O, so the tests run it on frames written by hand. This module is
 the rest: the frames (Sampler), the session of a game, the loop, the writes, and what the panel and the log show.
 
 Frames. Every frame of every game comes from mangoapp's log (below). It counts presented frames; with XeSS frame

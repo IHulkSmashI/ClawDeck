@@ -35,7 +35,7 @@ py_modules/clawdeck/
    profiles.py  per-game JSON: base profile, what autotune found, launch settings
    thermal.py   temperature guard while thermald is paused: >95 °C → TDP −2 W / 10 s until <90 °C (§21)
    autotune.py  the frames (mangoapp's per-frame log, XeLL), RAPL, the session of a game, the loop, the writes
-   governor.py  the deciding: step(state, obs, cfg), no clock and no I/O (tests, tools/autotune_sim.py)
+   governor.py  the deciding: step(state, obs, cfg), no clock and no I/O
    xess.py      xess-xmx-linux: install (asset sha256 checked), state, per-game low latency from the shim's log,
                 OptiScaler-present detection (read-only)
    optiscaler.py ClawDeck's OptiScaler: pinned install (sha256), patch / unpatch a game with manifest + backups
@@ -171,10 +171,10 @@ gives back are not raised to: the governor climbs when the frames ask for them. 
 profile or moves the slider (both reset the guard) or the power is reverted. The status line reads "thermal: stepped to N W".
 The SoC's TCC limit and the EC fan control are untouched; the guard only keeps ClawDeck's TDP from leaning on them.
 
-## Autotune governor (HARDWARE-FINDINGS §24)
+## Autotune governor
 `governor.py` is one function, `step(state, obs, cfg)`: the frames since the last look, the package power, the guard's
 cap in; a limit to write (or none), when to look again and a line for the panel out. No clock, no I/O: the tests run it
-on frames written by hand, and `tools/autotune_sim.py` on games built from recordings. `autotune.py` is the rest: the
+on frames written by hand. `autotune.py` is the rest: the
 frames (`Sampler`), the session, the loop, the writes, the status and the log.
 
 It asks one question all the time: would more watts, up to your limit, give frames it has to deliver? Only the full
