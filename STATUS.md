@@ -73,6 +73,8 @@ Check on the EX, Autotune on:
 - `tools/soak.py` over two hours with a game: the backend under 0.5 % CPU (it looks twice a second, and ten times a
   second while it watches a change of its own: 1 to 3 s, up to 10 s in a look for slow frames);
 - cover the vents until the guard steps: the TDP never goes over the guard's step, and comes back when it lifts.
+- on the charger, "Autotune when plugged in" switched in a running game: off, the TDP setting is the limit at once,
+  under the guard's step, and a CPU boost set off stays off; on, the TDP goes down as in a game started on the charger.
 - a 30 fps cutscene or video in a 60 fps game, 20 s and a minute: the TDP does not go under what it was before the
   video, and the game is at its frame rate within a second of the video's end. A video of over 2 minutes: the TDP may
   go down in it; the game is at its frame rate within about 3 s of its end;
