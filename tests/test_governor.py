@@ -2819,7 +2819,7 @@ def test_bursts_of_the_games_own_slow_frames_are_not_the_limits():
 
 
 @pytest.mark.parametrize("target", [120, 60])
-@pytest.mark.parametrize("drop", [0.035, 0.045, 0.06, 0.12])
+@pytest.mark.parametrize("drop", [0.035, 0.04, 0.045, 0.06, 0.12])
 def test_a_fall_that_stays_at_the_full_limit_is_no_dip_of_the_games_own(drop, target):
     """At the full limit a place gets heavier for good. A dip of the game's own is over within 2 s: a frame rate that
     stays at the edge of a clear loss is not booked as a dip each time it crosses that edge (two or three were booked,
@@ -2834,7 +2834,7 @@ def test_a_fall_that_stays_at_the_full_limit_is_no_dip_of_the_games_own(drop, ta
         assert g.t < 2000, (g.limit, g.st.mode, g.writes[-6:])
     before, heavy["on"] = len(g.st.dips), True
     g.run(10)
-    assert len(g.st.dips) - before <= (0 if drop == 0.045 else 1), g.st.dips
+    assert len(g.st.dips) == before, g.st.dips
 
 
 def test_the_share_of_slow_frames_before_a_look_is_counted_as_every_other_share(monkeypatch):
