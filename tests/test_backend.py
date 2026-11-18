@@ -1906,6 +1906,36 @@ def test_the_charger_switch_set_to_the_value_it_has_changes_nothing(plugin, paus
     assert p.autotune.session is s and s.paused == paused and (p.power.turbo() is False or not paused)
 
 
+@pytest.mark.parametrize("state", ["governed", "switched on in the game", "switched off in the game"])
+def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, state):
+    """The panel sends the Autotune switch again with the value it has (a second copy of the panel), then a new target
+    and a resume from sleep: a governed game takes the target and is governed again, a game Autotune was switched on
+    in stays at the TDP setting, one it was switched off in keeps the limit set since. A governed game got the mark of
+    Autotune switched on in it, ignored the target and stayed at the TDP setting after the resume."""
+    p = plugin
+    p.ac["plugged"] = False
+    p.settings["autotune"] = p.autotune.enabled = state != "switched on in the game"
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
+    if state != "governed":
+        p.run(p.set_setting("autotune", state == "switched on in the game"))
+    if state == "switched off in the game":
+        assert p.run(p.set_tdp(20))["ok"]
+    p.run(p.set_setting("autotune", state != "switched off in the game"))
+    if state == "switched off in the game":
+        assert p.chip() == 20, p.chip()
+        return
+    p.run(p.set_autotune_target(45, True))
+    p.run(p.resumed())
+    s = p.autotune.session
+    if state == "governed":
+        _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
+        assert s is not None and not s.paused and s.user_target == 45 and p.chip() < 26, p.chip()
+    else:
+        assert s is None and p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
+
+
 def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):
     """Governed on battery and paused by the user's CPU boost; the charger goes in ("Autotune on the charger" off) and
     Steam has not reported it yet: the panel keeps the paused line. It got a reason for a game with no session."""
