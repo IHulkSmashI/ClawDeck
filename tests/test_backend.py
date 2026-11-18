@@ -1776,6 +1776,23 @@ def test_autotune_on_the_charger_switched_off_in_a_governed_game_gives_the_tdp_s
     _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
     assert p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
 
+
+@pytest.mark.parametrize("value", [False, True])
+def test_autotune_on_the_charger_switched_in_a_game_on_battery_leaves_the_game_governed(plugin, value):
+    """On battery the charger's switch is not Autotune's: switched either way in a governed game, Autotune goes on
+    governing it (not paused, the limit under the TDP setting) and the TDP slider stays greyed."""
+    p = plugin
+    p.ac["plugged"] = False
+    p.run(p.set_setting("autotune", True))
+    p.run(p.set_setting("autotune_plugged", not value))
+    assert p.run(p.set_tdp(26))["ok"]
+    p.run(p.game_started("7"))
+    s = p.autotune.session
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.run(p.set_setting("autotune_plugged", value))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(60)
+    assert not s.paused and p.chip() < 26 and p.run(p.get_power())["autotune_governs"], (s.paused, p.chip())
+
 def test_xemu_from_an_appimage_is_found_though_its_process_is_called_apprun(tmp_path):
     def running(comm, exe=None):
         root = tmp_path / f"proc{len(os.listdir(tmp_path))}"
