@@ -686,11 +686,9 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             act.note = f"another scene: {now:.0f} fps at {top} W"
         hold(AFTER_LOSS_S)
         return act
-    if was >= (want if was >= now * (1 - small) else want * (1 + CLEAR)) and not (st.why == "slow"
-                                                                             and share < st.lost_slow - EDGE):
+    if was >= want and not (st.why == "slow" and share < st.lost_slow - EDGE):
         # the limit before gives what the full one gives, within the margin (and has no more slow frames): the scene
-        # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is from now. Under
-        # what the full limit gives, it has to leave CLEAR over the goal, as a step down has to
+        # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is from now
         if st.mode == "recover" and st.wrote_at - st.said[0] < AFTER_LOSS_S and now < st.said[1] * (1 - clear):
             # ... unless this loss came within AFTER_LOSS_S of the last such answer and the full limit gives less than
             # it gave then: the place is still getting heavier (too slowly to show in one look), and each way back
