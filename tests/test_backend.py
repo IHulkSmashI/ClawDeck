@@ -1795,6 +1795,13 @@ def test_autotune_on_the_charger_switched_in_a_game_on_battery_leaves_the_game_g
     assert not s.paused and p.chip() < 26 and p.run(p.get_power())["autotune_governs"], (s.paused, p.chip())
 
 
+def test_the_panel_gets_the_screens_highest_refresh_rate_for_the_target_list(plugin):
+    """Also after another target is picked: the target when none is set stays in the panel's list."""
+    p = plugin
+    p.run(p.set_autotune_target(40, True))
+    assert p.run(p.get_power())["autotune_screen_target"] == max(p.hw.model.get("panel_hz") or [60]) != 40
+
+
 @pytest.mark.parametrize("during", ["menus", "game"])
 def test_esde_menus_after_its_game_are_not_governed_when_autotune_came_on_in_esde(plugin, during):
     """ES-DE launched with Autotune off (its menus keep the TDP setting, 26 W); Autotune switched on in ES-DE's menus
