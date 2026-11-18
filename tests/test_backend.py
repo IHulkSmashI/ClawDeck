@@ -1816,6 +1816,19 @@ def test_a_new_target_after_the_charger_switch_off_does_not_govern_on_the_charge
     assert p.chip() == 26 and not p.run(p.get_power())["autotune_governs"], p.chip()
 
 
+def test_a_game_autotune_was_switched_off_and_on_in_says_why_it_is_not_governed(plugin):
+    """Autotune switched off and on in a game: the session stays paused and the game is not governed until its next
+    start. The panel gets the reason; it showed "paused: pick a profile or a target", and neither hands it back."""
+    p = plugin
+    p.run(p.set_setting("autotune", True))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.run(p.set_setting("autotune", False))
+    p.run(p.set_setting("autotune", True))
+    at = p.run(p.get_autotune())
+    assert at.get("paused") and at.get("why") == "turned on during this game: restart the game and it starts", at.get("why")
+
+
 def test_the_charger_switch_on_keeps_a_game_autotune_was_switched_on_in_ungoverned(plugin):
     """On the charger, "Autotune on the charger" off; Autotune switched on during the game (no frame log), then the
     charger switch on: the game stays at the TDP setting."""
@@ -1829,6 +1842,17 @@ def test_the_charger_switch_on_keeps_a_game_autotune_was_switched_on_in_ungovern
     p.run(p.set_setting("autotune", True))
     p.run(p.set_setting("autotune_plugged", True))
     assert p.autotune.session is None and p.chip() == 26 and not p.run(p.get_power())["autotune_governs"]
+
+
+def test_a_manual_lever_in_a_governed_game_keeps_the_paused_line(plugin):
+    """A manual lever pauses Autotune in a game it governs: the panel shows the paused line (no reason given)."""
+    p = plugin
+    p.run(p.set_setting("autotune", True))
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+    p.run(p.set_cpu_turbo(False))
+    at = p.run(p.get_autotune())
+    assert at.get("paused") and "why" not in at, at.get("why")
 
 
 @pytest.mark.parametrize("own", [None, 15])
