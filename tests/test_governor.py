@@ -105,14 +105,37 @@ def test_a_target_out_of_reach_keeps_the_full_limit_or_a_lower_one_that_gives_it
     assert g.limit == 27, (g.limit, g.notes[-3:])
 
 
-@pytest.mark.parametrize("wobble, held", [(0.0, 20), (0.03, 30)])
-def test_a_target_out_of_reach_gets_no_step_down_while_the_game_wobbles_more_than_one_percent(wobble, held):
-    """48 fps from 20 W up, your 60 out of reach. A watch can't tell 1 % in a frame rate that moves 3 % by itself (an
-    emulator held 28 W for 20 s, 3 % under the full limit): the full limit stays. A steady game steps down."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else 40.0,
-             shape=lambda i, w, t: 1.0 + wobble * math.sin(i * 0.37))
+@pytest.mark.parametrize("wobble", [0.0, 0.03, 0.06])
+def test_a_target_out_of_reach_keeps_the_full_limits_frames_within_the_games_own_wobble(wobble):
+    """Your 60 out of reach: 48 fps from 20 W up, or 1 % less a watt under 30 W. A game that wobbles by itself steps
+    down where a watch can't tell its frames from the full limit's: the first to 20 W at every wobble (with 3 %, 0d5121b
+    kept 30 W), the second loses no more than its own wobble."""
+    shape = lambda i, w, t: 1.0 + wobble * math.sin(i * 0.37)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else 40.0, shape=shape)
     g.run(300)
-    assert g.limit == held, (g.limit, g.notes[-3:])
+    assert g.limit == 20, (g.limit, g.notes[-3:])
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 * (1 - 0.01 * (30 - w)),
+             shape=shape)
+    g.run(300)
+    writes = sorted(g.writes)
+    lost = sum((b - a) * 0.01 * (30 - w) for (a, w), (b, _) in zip([(0.0, 30)] + writes, writes + [(g.t, 0)])) / g.t
+    assert lost <= max(gov.SAME, g.st.noise), (lost, g.st.noise, g.notes[-3:])
+
+
+@pytest.mark.parametrize("jitter, floor_of_ten", [(0.02, 9), (0.03, 6), (0.04, 7)])
+def test_a_game_on_its_frame_limit_whose_frame_times_spread_gets_the_floor(jitter, floor_of_ten):
+    """60 fps at every limit, no target: the most frames, less 0.5 % or the game's own wobble. Frame times that spread
+    2 to 4 % by themselves (ten games each): a step judged against the high of that wobble failed and the limit stayed
+    at 10 to 30 W (362edc8: 7, 1 and 0 of the ten games at the floor)."""
+    ends = []
+    for seed in range(1, 11):
+        rng = random.Random(seed)
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=20), fps=lambda w: 60.0,
+                 shape=lambda i, w, t: math.exp(rng.gauss(0.0, jitter)))
+        g.draw = lambda w, t: min(float(w), 9.0)
+        g.run(120)
+        ends.append(g.limit)
+    assert ends.count(8) >= floor_of_ten, ends
 
 
 @pytest.mark.parametrize("fall_s, end, share", [(2, 26, 0.97), (4, 25, 0.97), (8, 18, 0.97), (8, 18, 0.90)])

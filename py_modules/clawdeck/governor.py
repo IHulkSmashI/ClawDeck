@@ -23,7 +23,8 @@ It changes `state` in place and returns what to do.
 Words:
   pace       the frame time the game holds: the median of the last PACE_FRAMES frames;
   reference  what the full limit gives: measured there, or the pace with the package 2 W or more under the limit;
-  goal       what has to be delivered: your target less TOL (or the reference less SAME when that is lower);
+  goal       what has to be delivered: your target less TOL (or the reference less SAME, or less the game's own
+             wobble where that is more, when that is lower);
   band       the pace at the held limit when the limit was last known to cost no more than that: by the full limit
              after a loss, by the step that came here and held, or all the time while the limit can't hold the game
              back (the full limit, the package 2 W under the limit, the pace at your target). Lowest and highest;
@@ -50,7 +51,8 @@ DIP_MAX_S = 2.0
 PACE_FRAMES = 60
 TOL = 0.05              # target mode: this far under the target is still the target
 REACHED = 0.99          # the full limit gives this much of the target: the target is in reach
-SAME = 0.005            # out of reach, a lower limit holds where it gives the full limit's frames within this
+SAME = 0.005            # out of reach, a lower limit holds where it gives the full limit's frames within this (or the
+                        # game's own wobble of N frames, where that is more)
 SLOW = 1.10             # a frame this much longer than the pace is a slow one ...
 EDGE = 0.03             # ... and this much more of them than before a step is the edge of the limit (15 W in
                         # Midnight Club: Los Angeles: the median on pace, 6 % slow frames)
@@ -314,22 +316,25 @@ def _jumped(ms: list, line: float, clear: float) -> float | None:
 
 def goal(st: State, cfg: Cfg) -> float:
     """The frame rate that has to be delivered now."""
-    return _goal_at(st.ref, cfg)
+    return _goal_at(st.ref, cfg, st.noise)
 
 
-def _goal_at(ref: float | None, cfg: Cfg) -> float:
-    """... were `ref` what the full limit gives."""
+def _goal_at(ref: float | None, cfg: Cfg, noise: float) -> float:
+    """... were `ref` what the full limit gives (a game that wobbles by itself: within its wobble, which a watch can't
+    tell from the limit's)."""
     if ref is not None and ref < cfg.target * REACHED:
-        return ref * (1 - SAME)
+        return ref * (1 - max(SAME, noise))
     return cfg.target * (1 - TOL)
 
 
 def _need(st: State, cfg: Cfg) -> float:
     """The pace the held limit has to give: your target less TOL. When the band is under that (a target out of
-    reach): the band's lower edge, which a step held against what the full limit gives less SAME."""
+    reach): the band's lower edge, which a step held against the goal of what the full limit gives, or that goal of
+    when the band was taken (the band's lower edge over the ratio) where it is lower: the edge has the watch's wobble
+    in it."""
     if st.lo is None or (st.lo >= cfg.target * (1 - TOL) and not out_of_reach(st, cfg)):
         return cfg.target * (1 - TOL)
-    return st.lo
+    return min(st.lo, _goal_at(st.lo / st.ratio, cfg, st.noise)) if st.ratio else st.lo
 
 
 def out_of_reach(st: State, cfg: Cfg) -> bool:
@@ -535,7 +540,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     full = st.before / ratio if st.before and ratio else None        # what the full limit gives, as far as is known
     scene = full or max(st.ref or 0.0, st.before or 0.0) or None     # ... or at least: the scene what fails belongs to
     scene = min(scene, cfg.target) if scene else scene               # (frames over your target are no other scene)
-    want = _goal_at(full, cfg)
+    want = _goal_at(full, cfg, st.noise)
     if st.mode == "probe" and obs.draw_w is not None and obs.draw_w > st.limit + BIND_W and t - st.wrote_at < BIND_S:
         st.since, st.watch = t, []                   # the package still draws more than the new limit: not yet in force
         if cur < want * (1 - SHIFT) and st.prev < top and not st.retest and not dippy:
@@ -574,13 +579,15 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         elif not quick:
             st.loss_since = None
         margin = small if seen < DWELL_S else 0.0
+        # (what the full limit gives, told within the game's own wobble over the frames of the watch so far)
+        wide = min(4 * SUSTAINED, max(small, NOISE * st.noise / (max(len(st.watch), N) / N) ** 0.5))
         # a step down has to leave CLEAR over the goal: a level with less has, in the game's own wobble, losses of
         # the size that counts (a walk at 45: seconds under the goal at the lowest level that held it; in the fuzz
         # three times the frames lost). Unless it gives what the full limit gives (the limit before, where that is
         # not known): nothing is lost to the limit then, whatever the rate (a game on its own frame limit with slow
         # frames of its own is under that line at every limit)
         most = full or st.before
-        line = want * (1 + CLEAR) if got is not None and most and got < most * (1 - small) else want
+        line = want * (1 + CLEAR) if got is not None and most and got < most * (1 - wide) else want
         lost = quick or (got is not None and got < line * (1 - margin))
         if lost and cur < want * (1 - SHIFT) and st.prev < top and not st.retest:
             # far more lost than a step of this size usually costs: the scene may have changed under the step. All
@@ -691,7 +698,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
     lo, hi = st.kept[:2]
     before = st.ref
     st.ref, st.lo, st.hi, st.ratio, st.base_slow, st.full_at = now, now, now, 1.0, share, t
-    want = _goal_at(now, cfg)
+    want = _goal_at(now, cfg, st.noise)
     if st.mode == "recover" and st.tried is not None:
         tried, st.tried = st.tried, None
         if st.before and now >= st.before * (1 - CLEAR) and st.before >= want:
@@ -1010,19 +1017,20 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             return act
 
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed
-    # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait). With your target
-    # out of reach, only in a game whose own wobble is within SUSTAINED: a step there has to give the full limit's
-    # frames, and a watch can't tell 1 % in more (an emulator held 28 W for 20 s at 3 % under the full limit)
+    # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait). It is judged
+    # against the pace of the last STEADY_S (a pace of PACE_FRAMES has the game's wobble in it: against its high,
+    # steps that cost nothing failed)
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and abs(cur - here) <= clear * here and _steady(st, t, clear)
-            and (small <= SUSTAINED or ref >= cfg.target * REACHED)):
+            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]
             share = _slow(ms)
             st.base_slow = share if st.limit >= top or st.base_slow is None else min(st.base_slow, share)
-            st.before, st.typ, st.chain, st.long = known, pace_ms, 0, _slow_before(st, nxt, ref, t)
+            last = [ms for end, ms in st.recent if end >= max(st.changed_at + SETTLE_S, t - STEADY_S)]
+            st.before = _fps(last) if len(last) >= PACE_FRAMES else known
+            st.typ, st.chain, st.long = pace_ms, 0, _slow_before(st, nxt, ref, t)
             was = st.limit
             watch("probe", nxt, f"{cur:.0f} fps holds at {was} W; trying {nxt} W")
     return act
