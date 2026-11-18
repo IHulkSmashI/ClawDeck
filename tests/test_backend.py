@@ -2026,6 +2026,67 @@ def test_autotune_on_the_charger_switched_off_before_steam_reports_the_charger_o
     assert p.autotune.session.paused and p.chip() == 26, (p.autotune.session.paused, p.chip())
 
 
+@pytest.mark.parametrize("action", ["tdp", "profile", "custom", "pl2"])
+def test_the_slider_a_profile_and_pl2_go_to_the_games_power_source_until_steam_reports_a_change(plugin, action):
+    """A game on battery with Autotune off; the charger goes in and Steam has not reported it. The TDP slider, a
+    profile pick and PL2 act on battery's slot, the one the panel shows, and the charger's stays as it was; after Steam's
+    report they act on the charger's. With no game they act on the charger's state."""
+    p = plugin
+    p.run(p.set_setting("autotune", False))
+    for plugged, w, pl2 in ((True, 26, 40), (False, 20, 24)):
+        p.ac["plugged"] = plugged
+        assert p.run(p.set_tdp(w))["ok"]
+        p.run(p.set_pl2(True, pl2))
+    p.run(p.game_started("7"))
+    for plugged in (False, True):
+        p.ac["plugged"] = True
+        assert p.run(p.power_slot())["plugged"] is plugged
+        if action == "tdp":
+            assert p.run(p.set_tdp(22 + plugged))["ok"]
+            got = {k: p.profiles.own("7", k).get("tdp") for k in (False, True)}
+            assert got == {False: 22, True: 23 if plugged else None} and p.chip() == 22 + plugged, got
+        elif action == "profile":
+            p.run(p.apply_profile("performance" if plugged else "balanced"))
+            got = {k: p.profiles.own("7", k).get("base") for k in (False, True)}
+            assert got == {False: "balanced", True: "performance" if plugged else None}, got
+        elif action == "custom":
+            p.settings["custom_tdp_battery"], p.settings["custom_tdp_plugged"] = 18, 28
+            p.run(p.apply_profile("custom"))
+            assert p.chip() == (28 if plugged else 18), p.chip()
+        else:
+            assert p.run(p.get_power())["pl2_set_w"] == (40 if plugged else 24)
+            p.run(p.set_pl2(True, 30 + plugged))
+            assert (p.settings["pl2_w_battery"], p.settings["pl2_w_plugged"]) == (30, 31 if plugged else 40)
+        p.run(p.power_source_changed(True))
+    p.run(p.game_stopped("7"))
+    p.ac["plugged"] = False
+    assert p.run(p.set_tdp(21))["ok"] and p.settings["custom_tdp_battery"] == 21
+
+
+@pytest.mark.parametrize("battery, charger", [(15, 26), (26, 15)])
+def test_the_guard_steps_back_up_to_the_games_power_source_until_steam_reports_a_change(plugin, tmp_path, battery,
+                                                                                         charger):
+    """The game on the charger at the charger's TDP setting, not governed there; the charger comes out and Steam has not
+    reported it. The guard trips and cools: it gives the watts back up to the charger's setting, the one on the
+    chip."""
+    p = plugin
+    t = tmp_path / "pkg_temp"
+    p.guard = thermal.Guard(str(t), "x86_pkg_temp")
+    p.settings["autotune_plugged"] = False
+    for plugged, w in ((False, battery), (True, charger)):
+        p.ac["plugged"] = plugged
+        assert p.run(p.set_tdp(w))["ok"]
+    p.run(p.game_started("7"))
+    p.ac["plugged"] = False
+    assert p.autotune.session is None and p.chip() == charger
+    seen = []
+    for c in [97] + [70] * 30:
+        _w(t, c * 1000)
+        p.run(p._guard_check())
+        seen.append(p.chip())
+    assert min(seen) < charger and max(seen) <= charger and seen[-1] == charger, seen
+
+
 @pytest.mark.parametrize("case", ["none", "over", "own", "paused", "ungoverned", "xemu"])
 def test_a_power_source_change_in_a_game_starts_the_new_slot_where_the_game_held(plugin, monkeypatch, case):
     """A game on the charger, the charger comes out: battery's slot with no level for its limit and target starts
