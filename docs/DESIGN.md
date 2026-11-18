@@ -250,7 +250,8 @@ The rules:
    back and the full limit gives less than at that look, the full limit stays (walking into a heavier place, the
    limit went back and forth 8 times in 7 s).
 2. **A step down** starts 5 s after the last write, from a pace that is in the band, that the last ten frames agree
-   with and that stood still for 3 s. It goes to the level that held for 20 s in this scene; else halfway to the
+   with and that stood still for 3 s; with your target out of reach, only where the game's own wobble is within 1 %
+   (a watch can't tell 1 % in more). It goes to the level that held for 20 s in this scene; else halfway to the
    highest level under it that failed; else 2 W down, or straight to just over what the package draws. It is watched
    for 2.5 s on every frame (10 s when the level failed for slow frames before), from when the package draws no more
    than 2.5 W over it. A step has to leave 3 % over the goal, unless it gives what the full limit gives: with

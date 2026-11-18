@@ -1012,10 +1012,13 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
             return act
 
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed
-    # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait)
+    # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait). With your target
+    # out of reach, only in a game whose own wobble is within SUSTAINED: a step there has to give the full limit's
+    # frames, and a watch can't tell 1 % in more (an emulator held 28 W for 20 s at 3 % under the full limit)
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
+            and abs(cur - here) <= clear * here and _steady(st, t, clear)
+            and (small <= SUSTAINED or not (cfg.auto_fps and ref < cfg.target * REACHED))):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]

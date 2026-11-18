@@ -96,6 +96,16 @@ def test_a_target_out_of_reach_keeps_the_full_limit_or_a_lower_one_that_gives_it
     assert g.limit == held, (g.limit, g.notes[-3:])
 
 
+@pytest.mark.parametrize("wobble, held", [(0.0, 20), (0.03, 30)])
+def test_a_target_out_of_reach_gets_no_step_down_while_the_game_wobbles_more_than_one_percent(wobble, held):
+    """48 fps from 20 W up, your 60 out of reach. A watch can't tell 1 % in a frame rate that moves 3 % by itself (an
+    emulator held 28 W for 20 s, 3 % under the full limit): the full limit stays. A steady game steps down."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=lambda w: 48.0 if w >= 20 else 40.0,
+             shape=lambda i, w, t: 1.0 + wobble * math.sin(i * 0.37))
+    g.run(300)
+    assert g.limit == held, (g.limit, g.notes[-3:])
+
+
 @pytest.mark.parametrize("fall_s, end, share", [(2, 26, 0.97), (4, 25, 0.97), (8, 18, 0.97), (8, 18, 0.90)])
 def test_a_place_that_gets_heavier_under_the_look_keeps_the_full_limit(fall_s, end, share):
     """Walking into a heavier place: the frame rate falls for some seconds at every limit. The look at the full limit
@@ -382,7 +392,7 @@ def test_a_level_that_held_for_a_while_is_tried_once_more_before_it_is_given_up(
 
 def test_frame_time_spread_widens_what_counts_as_a_loss():
     """9 % frame-time spread moves the rate of 10 frames by 3-4 % all the time: every such wobble was a clear loss."""
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=50, start_w=30), fps=lambda w: min(50.0, 2.5 * w),
              shape=lambda i, w, t: 1.06 if (i // 30) % 2 else 0.94).run(300)      # half a second 6 % slow, half 6 % fast
     assert g.st.noise > 0.03 and g.limit <= 24 and g.since(100).count(30) <= 1, g.writes[-10:]
     assert gov._spread([16.7] * 60) == 0 and gov._spread([11.7, 21.7] * 30) == pytest.approx(0, abs=1e-9)
