@@ -121,6 +121,30 @@ def test_a_second_fall_of_the_scene_gets_its_own_look_after_five_seconds(gap, wr
     assert [w for _, w in g.writes] == writes, g.writes
 
 
+
+@pytest.mark.parametrize("gap", [1.0, 2.5, 3.0, 4.0])
+def test_a_second_fall_within_five_seconds_keeps_the_full_limit_also_while_the_draw_climbs(gap):
+    """As above, with the package draw climbing to a raised limit over 2.5 s (the chip takes the watts in that time),
+    the second fall `gap` s after the way back: within AFTER_LOSS_S of the answer it keeps the full limit. The
+    climbing draw moved the start of the watch, and the window was 2.5 s."""
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0)
+
+    def draw(limit, t):
+        if not g.writes:
+            return float(limit)
+        at, w = g.writes[-1]
+        before = g.writes[-2][1] if len(g.writes) >= 2 else 16
+        return float(w) if w <= before else before + (w - before) * min(1.0, (t - at) / 2.5)
+    g.draw = draw
+    g.run(3)
+    g.fps = lambda w: 45.0
+    while not any("back to 16" in n for _, n in g.notes):
+        g.run(0.1)
+    g.run(gap)
+    g.fps = lambda w: 36.0
+    g.run(10)
+    assert [w for _, w in g.writes] == [30, 16, 30], g.writes
+
 @pytest.mark.parametrize("at", [3.25, 3.35, 3.44])
 def test_a_video_that_begins_between_two_looks_gets_its_limit_back(at):
     """A 30 fps video at every limit begins a moment before a look: the last ten frames are part game, part video, the
@@ -406,6 +430,33 @@ def test_watts_the_guard_gives_back_get_no_second_try_of_the_level_its_cap_held(
         assert cap is None or max([g.limit] + [w for at, w in g.writes if at >= g.t - 30]) <= cap
     assert not [n for t, n in g.notes if t >= t0 and "once more" in n], [n for n in g.notes if n[0] >= t0]
     assert len([w for at, w in g.writes if t0 <= at < t0 + 90]) <= 6, g.since(t0)
+
+
+@pytest.mark.parametrize("under", [16, 14, 12])
+def test_the_end_of_the_clock_cap_during_a_step_down_forgets_what_the_step_would_have_put_back(under):
+    """Under the guard's CPU clock cap the game gives 45 fps from 12 W; without it 60 fps from 16 W (target 60). The
+    cap ends while a step down under `under` W is watched, and Autotune forgets what was measured under it. The
+    watch's end put the band and the ratio from under the cap back: the limit stood under the need for up to 575 s."""
+    capped = {"on": True}
+
+    def fps(w):
+        return min(45.0 if capped["on"] else 60.0, 3.75 * w)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.thermal = True
+    g.run(30)
+    for _ in range(3000):
+        if g.st.mode == "probe" and g.limit < under:
+            break
+        g.run(0.1)
+    assert g.st.mode == "probe" and g.limit < under, (g.limit, g.notes[-3:])
+    capped["on"], g.thermal = False, False
+    gov.forget(g.st)                                         # autotune.thermal_clock(None)
+    short = 0
+    for _ in range(300):
+        g.run(1)
+        short += fps(g.limit) < 57.0
+    assert short <= 10, (short, g.limit, g.notes[-6:])
 
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))
@@ -1200,6 +1251,41 @@ def test_the_look_at_a_games_start_does_not_say_a_menu_came_before_it():
     looks = [n for t, n in g.notes if "checking" in n]
     assert looks and not [n for n in looks if "menu" in n], g.notes[:8]
 
+
+@pytest.mark.parametrize("early", [1.0, 0.5])
+def test_the_look_by_the_clock_waits_while_the_package_draws_less_than_the_limit(early):
+    """Out of reach (120), held at 28 W. `early` s before the ten minutes are up the package draws 3 W under the limit
+    (a lighter moment, a menu coming): the limit can't hold the game back there, so the clock's look waits."""
+    under = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: 50.0 * 0.99 ** (30 - w))
+    g.draw = lambda w, t: float(w) - (3.0 if under["on"] else 0.0)
+    g.run(300)
+    g.run(g.st.full_at + gov.CHECK_MAX_S - early - g.t)
+    assert g.limit == 28
+    under["on"] = True
+    t0 = g.t
+    g.run(60)
+    assert g.since(t0) == [], [n for n in g.notes if n[0] >= t0]
+
+
+def test_a_loss_right_after_the_clocks_look_is_answered_as_any_other():
+    """Out of reach (120), held at 28 W; the ten-minute look says 28 W costs what it did. Right after it the scene gets
+    10 % heavier at every limit: a loss at 28 W, the full limit, and back, since the full limit gives no more.
+    (Only an answer to a loss counts for the rule that keeps the full limit at a second loss within AFTER_LOSS_S.)"""
+    heavy = {"on": False}
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30),
+             fps=lambda w: 50.0 * 0.99 ** (30 - w) * (0.9 if heavy["on"] else 1.0))
+    g.draw = lambda w, t: float(w)
+    g.run(300)
+    g.run(g.st.full_at + gov.CHECK_MAX_S - g.t)
+    while not [n for t, n in g.notes if t >= 600 and "back to 28 W" in n]:
+        g.run(0.1)
+    assert [n for t, n in g.notes if "min since the full" in n] and g.limit == 28, g.notes[-3:]
+    heavy["on"] = True
+    t0 = g.t
+    g.run(30)
+    assert g.since(t0) == [30, 28], [n for n in g.notes if n[0] >= t0]       # (not 30, 29, 28)
+
 def test_a_pace_the_full_limit_did_not_beat_is_another_places_after_half_a_minute():
     """Held at 14 W in a place that gives 50 fps. A lighter place for 15 s (60 fps, the full limit gives no more),
     back for five minutes, then a place where 14 W gives 58 fps and the full limit 75: the 60 fps of minutes before
@@ -1348,8 +1434,8 @@ def test_a_game_that_goes_between_two_frame_rates_is_asked_once_what_the_faster_
     """56 fps, then 60 for a while, and so on for five minutes (no target set, the package at the limit). The first
     time at 60 fps the full limit says that it gives no more; after that 60 fps at this limit is no news for half a
     minute after the pace was last there (four looks in half a minute of Enshrouded: the band of the faster place was
-    dropped at each return to the slower one). The highest pace the full limit did not beat counts, not the last
-    one; away from it for longer, the pace may be another place's and is asked again. (With the knee on 20 W the
+    dropped at each return to the slower one). The last pace the full limit did not beat counts; away from it for
+    longer, the pace may be another place's and is asked again. (With the knee on 20 W the
     second try of 19 W is at 150 s: the first rise is 10 s after it.)"""
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30),
              fps=lambda w, t: (60.0 if t >= first and ((t - first) // period) % 2 == 0 else 56.0) * min(1.0, w / knee))

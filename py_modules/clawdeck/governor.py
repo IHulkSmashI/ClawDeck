@@ -211,6 +211,7 @@ def forget(st: State) -> None:
     frame-generation multiplier."""
     st.ref = None
     _unknown(st)
+    st.kept = (None,) * 5                            # (a watch in flight would put it back at its end)
     st.fail.clear()
     st.misses, st.home = 0, None
     st.scene_fps = st.scene_since = None
@@ -688,7 +689,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         # the limit before gives what the full one gives, within the margin (and has no more slow frames): the scene
         # or the game's own, not the limit. Back to it; its band takes that pace in, and its ratio is from now. Under
         # what the full limit gives, it has to leave CLEAR over the goal, as a step down has to
-        if st.mode == "recover" and st.since - st.said[0] < AFTER_LOSS_S and now < st.said[1] * (1 - clear):
+        if st.mode == "recover" and st.wrote_at - st.said[0] < AFTER_LOSS_S and now < st.said[1] * (1 - clear):
             # ... unless this loss came within AFTER_LOSS_S of the last such answer and the full limit gives less than
             # it gave then: the place is still getting heavier (too slowly to show in one look), and each way back
             # loses again. (The same frame rate as then is a place that has stayed: a video that began between two
