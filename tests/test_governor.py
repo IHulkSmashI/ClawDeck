@@ -522,27 +522,6 @@ def test_watts_the_guard_gives_back_over_a_level_it_did_not_hold_leave_its_secon
     assert g.limit == 10 and [n for t, n in g.notes if t >= t0 and "holds again" in n], [n for n in g.notes if n[0] >= t0]
 
 
-@pytest.mark.parametrize("heavy, light", [(25, 14), (22, 12)])
-def test_a_level_that_failed_in_a_heavy_place_does_not_hold_up_the_steps_in_a_light_one_on_a_frame_limit(heavy, light):
-    """A game on its 60 fps limit: 120 s in a heavy place (60 fps from `heavy` W), 300 s in a light one (from `light`
-    W), four times; the package draws 1 W over the need. The full limit gives 60 fps in both places, so a level that
-    failed in the heavy one counted in the light one too, until a try that waits longer at each failure: the fourth
-    light place 4 W over its need on the mean."""
-    place = {"need": heavy}
-    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30),
-             fps=lambda w: 60.0 if w >= place["need"] else 60.0 - 3.0 * (place["need"] - w))
-    g.draw = lambda w, t: float(min(w, place["need"] + 1))
-    for _ in range(4):
-        place["need"] = heavy
-        g.run(120)
-        place["need"] = light
-        over = 0.0
-        for _ in range(3000):
-            g.run(0.1)
-            over += 0.1 * (g.limit - light)
-    assert over / 300 <= 1.0, (over / 300, g.st.fail)
-
-
 @pytest.mark.parametrize("menu_s, menu_w, lock", [(5, 9.0, 60), (20, 9.0, 60), (20, 17.5, 60), (20, 9.0, 30)])
 def test_a_menu_at_the_games_own_frame_rate_takes_no_step_down_before_its_frames_are_counted_free(menu_s, menu_w, lock):
     """A game on its frame limit (`lock` fps) that needs 20 W and draws its need; its menu at the same frame rate draws
@@ -558,6 +537,7 @@ def test_a_menu_at_the_games_own_frame_rate_takes_no_step_down_before_its_frames
     g.run(menu_s)
     menu["on"] = False
     assert [w for at, w in g.writes if at >= t0 and w < held] == [], (held, [n for n in g.notes if n[0] >= t0][:6])
+
 
 def test_a_clock_cap_from_the_guard_stops_the_looks_at_the_full_limit_not_the_steps_down():
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=lambda w: min(50.0, 2.5 * w))

@@ -255,8 +255,7 @@ The rules:
    down is tried in it for 30 s (a menu, a map, a video), except back to the level that held in the scene the game
    returns to. What failed counts in the
    scene it failed in and where the full limit gives a little more; in a slower one (a video, a cutscene) for 10
-   minutes; not where the full limit gives 15 % more (a lighter place: it may hold there), nor where it gives as much
-   as then while the package draws 2 W under the failed level (a lighter place of a game on its frame limit).
+   minutes; not where the full limit gives 15 % more (a lighter place: it may hold there).
 4. **The game's own dips:** a loss at a limit that can't be its cause that is over within 2 s, and a second try that
    holds. Not booked in the 10 s after a write (the wobble is measured over those). After two of them in 5 minutes a
    loss counts only when it is still there a second later, and a step is judged at the end of its watch on its

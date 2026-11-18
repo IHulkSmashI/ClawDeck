@@ -790,8 +790,7 @@ def _next_down(st: State, obs: Obs, cfg: Cfg, t: float, ref: float | None) -> in
     level under this one that failed, and that level itself only when it is the next one down, its time is up, and
     this is the scene it failed in (a try in a video says nothing of the game); with none, STEP_W down or straight to
     just over what the package draws."""
-    under = [w for w in st.fail if w < st.limit and _counts(st.fail[w], ref, t)
-             and (obs.draw_w is None or obs.draw_w + 2 >= w or ref is None or ref < st.fail[w][2])]
+    under = [w for w in st.fail if w < st.limit and _counts(st.fail[w], ref, t)]
     if (st.home is not None and st.home < st.limit - STEP_W and st.home_ref is not None and ref is not None
             and _same(st.home_ref, ref) and all(w < st.home for w in under if _same(st.fail[w][2], ref))):
         nxt = st.home                                # (held in this scene: what failed over it failed in another)
@@ -978,8 +977,7 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait)
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and abs(cur - here) <= clear * here and _steady(st, t, clear)
-            and not (st.bound and obs.draw_w is not None and obs.draw_w <= st.limit - 2)):
+            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]
