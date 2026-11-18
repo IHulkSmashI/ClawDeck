@@ -1214,9 +1214,10 @@ def test_unplugging_during_and_after_a_game_follows_each_power_sources_pick(plug
     p.run(p.game_started("42"))
     _lower(p, 10)
     p.autotune.session.settled = True                              # it finished learning on battery
+    held = p.autotune.held_w()
     p.ac["plugged"] = True
     r = p.run(p.power_source_changed(True))
-    assert r["changed"] and p.chip() == 22 and p.autotune.session.ceiling_tdp == 35 and p.autotune.plugged
+    assert r["changed"] and p.chip() == held != 22 and p.autotune.session.ceiling_tdp == 35 and p.autotune.plugged
     assert p.profiles.own("42", False).get("learned")              # battery's learning kept in its own slot
     p.run(p.game_stopped("42"))
     assert p.chip() == 35                                          # exit on the charger: the plugged-in pick
@@ -2023,6 +2024,55 @@ def test_autotune_on_the_charger_switched_off_before_steam_reports_the_charger_o
     p.ac["plugged"] = False
     p.run(p.set_setting("autotune_plugged", False))
     assert p.autotune.session.paused and p.chip() == 26, (p.autotune.session.paused, p.chip())
+
+
+@pytest.mark.parametrize("case", ["none", "over", "own", "paused", "ungoverned", "xemu"])
+def test_a_power_source_change_in_a_game_starts_the_new_slot_where_the_game_held(plugin, monkeypatch, case):
+    """A game on the charger, the charger comes out: battery's slot with no level for its limit and target starts
+    where the game held just before, under battery's limit, and that is not battery's own level; with a level it
+    starts there; after a change by hand, or not governed on the charger, mid-range; xemu stays out."""
+    p = plugin
+    p.ac["plugged"] = False
+    assert p.run(p.set_tdp(12 if case == "over" else 30))["ok"]
+    p.ac["plugged"] = True
+    p.settings["autotune_plugged"] = case != "ungoverned"
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(30))["ok"]
+    p.run(p.game_started("7"))
+    held = None
+    if case != "ungoverned":
+        _Game(p.autotune, lambda tdp, *_: min(60.0, 4.0 * tdp)).run(30)
+        held = p.autotune.held_w()
+        p.profiles.set("7", False, {"learned": {"ceiling": 30, "target": p.autotune.session.user_target, "start": 10}
+                                    if case == "own" else {}})
+    if case == "paused":
+        p.autotune.pause()
+    if case == "xemu":
+        monkeypatch.setattr(autotune, "own_pace_emulator", lambda proc=None: "xemu")
+    p.ac["plugged"] = False
+    assert p.run(p.power_source_changed(False))["changed"]
+    s = p.autotune.session
+    mid = -(-(s.floor_tdp + s.ceiling_tdp) // 2)
+    want = {"none": held, "over": 12, "own": 10, "paused": mid, "ungoverned": mid, "xemu": 30}[case]
+    assert p.chip() == want and (case in ("paused", "ungoverned") or held not in (None, mid)), (p.chip(), held, mid)
+    assert s.learned.start == (10 if case == "own" else None)
+    assert s.paused == (case == "xemu")
+
+
+@pytest.mark.parametrize("action", ["max", "reset"])
+def test_a_new_maximum_and_use_default_in_a_game_put_their_limit_on_the_chip_not_where_the_game_held(plugin, action):
+    """Governed on battery: a new Autotune maximum and "Use default" restart the game at the new limit, as picked,
+    not where it held."""
+    p = plugin
+    p.ac["plugged"] = False
+    p.run(p.set_setting("autotune", True))
+    assert p.run(p.set_tdp(30))["ok"]
+    p.run(p.game_started("7"))
+    _Game(p.autotune, lambda tdp, *_: min(60.0, 3.0 * tdp)).run(30)
+    held = p.autotune.held_w()
+    assert p.run(p.set_autotune_max(26) if action == "max" else p.reset_power_slot("7"))["ok"]
+    s = p.autotune.session
+    assert p.chip() == s.ceiling_tdp != held and s.learned.start is None, (p.chip(), s.ceiling_tdp, held)
 
 
 def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):

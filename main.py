@@ -812,7 +812,7 @@ class Plugin:
             return key
         return frontend.steam_appid(key)
 
-    def _start_game_power(self, appid: str, plugged: bool, picked: bool = False) -> dict:
+    def _start_game_power(self, appid: str, plugged: bool, picked: bool = False, held: int | None = None) -> dict:
         pk = self._pick(appid, plugged)
         prof = pk["prof"]
         self._guard_reset()
@@ -830,7 +830,7 @@ class Plugin:
                                 xell_log=os.path.join(xess.prefix_dir(HOME, frontend.steam_appid(appid)), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
                                 auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
-                                fg=self._game_fg(frontend.steam_appid(appid)), at_limit=picked)
+                                fg=self._game_fg(frontend.steam_appid(appid)), at_limit=picked, held=held)
             result["autotune"] = "started"
             quiet.background(True)                       # autotune's loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
@@ -858,13 +858,13 @@ class Plugin:
             self.power.release_thermald()
         self._ensure_guard()
 
-    def _restart_game_power(self, appid: str, plugged: bool, picked: bool = False) -> dict:
+    def _restart_game_power(self, appid: str, plugged: bool, picked: bool = False, held: int | None = None) -> dict:
         """The running game from a clean start on this power source: autotune's levers and the guard's step back to
         what was there before ClawDeck (thermald stays stopped: the limit is set again at once), then the user's pick
         and a fresh autotune at that limit. Used after a pick in the game, Use default, unplugging and resume."""
         self.autotune.stop(revert=False)
         self.power.revert_all(keep_thermald=True)
-        return self._start_game_power(appid, plugged, picked)
+        return self._start_game_power(appid, plugged, picked, held)
 
     def _apply_idle_pick(self, plugged: bool) -> dict | None:
         """No game runs: the limit you picked for this power source goes (back) on the chip, as the menus show it. If
@@ -1062,9 +1062,11 @@ class Plugin:
             return {"changed": False}
         appid = self._game_key()
         async with self._power_lock:
+            s = self.autotune.session
+            held = self.autotune.held_w() if s is not None and not s.paused else None
             self._save_learned(appid, bool(self.running_plugged))
             self.running_plugged = plugged
-            return {"changed": True, **self._restart_game_power(appid, plugged)}
+            return {"changed": True, **self._restart_game_power(appid, plugged, held=held)}
 
     # ---- fan and charge limit (Power) ---------------------------------------------------------------------------------
     def _reapply_fan_charge(self, why: str) -> None:

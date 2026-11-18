@@ -592,9 +592,9 @@ class Autotune:
 
     def start(self, appid: str, learned: dict | None, floor_tdp: int, ceiling_tdp: int, plugged: bool | None = None,
               xell_log: str | None = None, target: int | None = None,
-              auto_fps: bool = True, fg: int = 0, at_limit: bool = False) -> None:
-        """Start for a game: where it held last time under the same limit and for the same target, else mid-range.
-        at_limit: the limit was picked just now, in the game, and goes on the chip as picked."""
+              auto_fps: bool = True, fg: int = 0, at_limit: bool = False, held: int | None = None) -> None:
+        """Start for a game: where it held last time under this limit and target, else as held before a power change,
+        else mid-range. at_limit: the limit was picked just now, in the game, and goes on the chip as picked."""
         self.plugged = plugged
         known = {k: v for k, v in (learned or {}).items() if k in Learned.__dataclass_fields__}
         target, auto_fps = self.target_of(target, auto_fps)
@@ -612,7 +612,7 @@ class Autotune:
         if isinstance(before, bool) or not isinstance(before, (int, float)) or not math.isfinite(before):
             before = None                                 # a record edited by hand
         emu = own_pace_emulator()                         # already running (a resume, a new power source)
-        self._govern_from(s, ceiling_tdp if at_limit or emu else None if before is None else int(before))
+        self._govern_from(s, ceiling_tdp if at_limit or emu else held if before is None else int(before))
         l.start = None if at_limit or before is None else int(before)
         if emu:
             self._stay_out(s, emu)
