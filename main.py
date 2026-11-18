@@ -555,7 +555,7 @@ class Plugin:
         st["autotune_floor"] = self.settings.get("autotune_floor")
         st["autotune_target"], st["autotune_auto_fps"] = self.autotune.target_of(
             int(self.settings.get("autotune_target") or 0), self.settings.get("autotune_auto_fps", True) is not False)
-        plugged = bool(self.battery.plugged())
+        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
         pk = self._pick(self._game_key() if self.running_appid else None, plugged)
         own = self.settings.get("autotune_max")
         st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]

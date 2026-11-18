@@ -1937,11 +1937,13 @@ def test_the_autotune_switch_set_to_the_value_it_has_changes_nothing(plugin, sta
 
 
 @pytest.mark.parametrize("plugged", [False, True])
-def test_the_charger_switch_and_a_new_target_act_on_the_games_power_source_until_steam_reports_a_change(plugin, plugged):
+def test_the_charger_switch_a_new_target_and_the_slider_follow_the_games_power_source_until_steam_reports_a_change(
+        plugin, plugged):
     """A governed game on battery (the charger goes in) or on the charger (it comes out). Before Steam reports it,
     "Autotune on the charger" is switched off and a new target set: the game on the charger is paused and keeps the
-    TDP setting, the game on battery stays governed and takes the target. The battery game was paused at its lowered
-    limit and ignored the target, and the game on the charger went on governed."""
+    TDP setting, the game on battery stays governed, takes the target and has the TDP slider greyed out. The battery
+    game was paused at its lowered limit and ignored the target, the game on the charger went on governed, and the
+    slider of a governed battery game was free."""
     p = plugin
     p.ac["plugged"] = plugged
     p.run(p.set_setting("autotune", True))
@@ -1954,7 +1956,8 @@ def test_the_charger_switch_and_a_new_target_act_on_the_games_power_source_until
     s = p.autotune.session
     paused = s.paused
     p.run(p.set_autotune_target(45, True))
-    assert paused == s.paused == plugged and (s.user_target == 45) != plugged, (paused, s.paused, s.user_target)
+    governs = p.run(p.get_power())["autotune_governs"]
+    assert paused == s.paused == plugged != governs and (s.user_target == 45) != plugged, (paused, s.paused, governs)
 
 
 def test_a_paused_game_plugged_in_before_steam_reports_it_keeps_the_paused_line(plugin):
