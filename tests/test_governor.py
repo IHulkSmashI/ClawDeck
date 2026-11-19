@@ -679,7 +679,7 @@ def test_the_end_of_the_clock_cap_during_a_step_down_forgets_what_the_step_would
 def test_watts_the_guard_gives_back_during_a_step_down_end_its_watch(back_to):
     """Target 120 out of reach: 50 fps at 30 W, 1 % less a watt under it. The guard's cap of 16 W is lifted (to 30 W,
     or to 24 W) while a step under 16 W is watched. What the watch compared against was measured under the cap: its
-    end put that band and ratio back, and the limit stood under the goal for 99 s."""
+    end put that band and ratio back, and the limit stood under the goal for 99 s (3.4 to 3.7 s after a look)."""
     def fps(w):
         return 50.0 * 0.99 ** (30 - w)
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30), fps=fps)
@@ -695,7 +695,7 @@ def test_watts_the_guard_gives_back_during_a_step_down_end_its_watch(back_to):
     for _ in range(3000):
         under += 0.1 * (fps(g.limit) < line)
         g.run(0.1)
-    assert under <= 5, (under, g.limit, g.notes[-6:])
+    assert under <= 1.5, (under, g.limit, g.notes[-6:])
 
 
 @pytest.mark.parametrize("nth", [1, 2, 3])
@@ -2919,7 +2919,7 @@ def test_frames_over_the_target_from_the_limits_own_steps_are_no_other_scene():
 def test_a_held_limit_that_comes_to_cost_frames_under_a_target_out_of_reach_gets_the_full_limit(cost, first):
     """Target 60, the full limit 58.5 fps: out of reach, though within TOL of it. The place then makes the held limit
     give 1.5 or 2.5 % less than the full limit: no watts are saved with fewer frames (590 of 590 s at 20 to 23 W; a
-    limit held in a place at your target before it: 590 s, down to 8 W)."""
+    limit held in a place at your target before it: 590 s, down to 8 W), and no look every 3.5 s (169 looks)."""
     heavy = {"on": False}
     if first == "out of reach":
         fps = lambda w: 58.5 if w >= 24 else 58.5 * (1 - (cost if heavy["on"] else 0.002 * (24 - w)))
@@ -2933,20 +2933,22 @@ def test_a_held_limit_that_comes_to_cost_frames_under_a_target_out_of_reach_gets
     g.run(590)
     writes = [(t0, held)] + [(t, w) for t, w in g.writes if t > t0]
     low = sum(b - a for (a, w), (b, _) in zip(writes, writes[1:] + [(g.t, 0)]) if fps(w) < 58.5 * 0.99)
-    assert low <= 10.0, (low, g.since(t0)[:6])
+    assert low <= 10.0 and len(writes) <= 30, (low, len(writes), g.since(t0)[:6])
 
 
 def test_a_pace_over_a_reference_out_of_reach_raises_it_to_that_pace_not_to_your_target():
     """The full limit gave 56.5 of your 60, then the place gives 57.5 from 18 W up (under 3 % more: no look) and 57.1
-    at 14 to 17 W. The reference is 57.5, not your 60: 57.1 is 0.7 % fewer frames, and is not held."""
+    at 14 to 17 W. The reference is 57.5, not your 60: 57.1 is 0.7 % fewer frames, and is not held (and no look is
+    needed to find that out)."""
     light = {"on": False}
     fps = lambda w: (57.5 if w >= 18 else 57.1 if w >= 14 else 50.0) if light["on"] else 56.5 * min(1.0, w / 20)
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
     g.draw = lambda w, t: float(w)
     g.run(200)
-    light["on"] = True
+    light["on"], t0 = True, g.t
     g.run(400)
-    assert g.limit >= 18 and g.st.ref == pytest.approx(57.5, abs=0.3), (g.limit, g.st.ref, g.notes[-4:])
+    looks = [n for t, n in g.notes if t > t0 and "checking what the full" in n]
+    assert g.limit >= 18 and g.st.ref == pytest.approx(57.5, abs=0.3) and not looks, (g.limit, g.st.ref, looks)
 
 
 def test_a_target_that_a_lowered_limit_nearly_gives_is_not_out_of_reach():
