@@ -238,7 +238,9 @@ The rules:
      one, and the full limit was last measured 10 minutes ago, or before a menu (a stretch with the package 2 W
      under the limit, after which the band from before it is back): a scene that got lighter under a step, or
      another place with the same frame rate at this limit, shows in no frame at the held limit (0.2 changes a
-     minute, and one look for each visit to a menu or a map).
+     minute, and one look for each visit to a menu or a map); or the full limit was never measured and the pace is
+     1 % under your target (a game with no history held mid-range at your target less 5 %, 1.4 to 3 % of the frames
+     under what the full limit gave).
    Under the guard's clock cap only a clear fall (the last ten frames 3 % under the goal) starts one at a held
    limit, and nothing known is dropped (a pause, watts back); the limit a failed step went back to still gets one
    for a small fall on all frames of its watch. None starts because a step held or failed: on a Claw those looks

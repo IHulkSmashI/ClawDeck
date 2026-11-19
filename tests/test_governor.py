@@ -130,15 +130,15 @@ def test_a_game_with_no_history_whose_full_limit_gives_just_under_your_target_ge
 
 
 @pytest.mark.parametrize("full", [119.0, 121.0, 125.0, 130.0])
-@pytest.mark.parametrize("start_w", [30, None])
-def test_with_no_target_set_a_game_keeps_the_frames_the_screen_shows(full, start_w):
+@pytest.mark.parametrize("start_w, before_s", [(30, 0.0), (None, 0.0), (None, 1.0)])
+def test_with_no_target_set_a_game_keeps_the_frames_the_screen_shows(full, start_w, before_s):
     """No target set: the screen's 120 Hz, as many frames as the limit gives up to that, less SAME (1 % less a watt
-    under 30 W), at the fewest watts. Where the full limit gave 119 fps or more, your target less 5 % was held: up to
-    5 % of the frames; where it gave over 120, 3 W more were held than gave the 120 shown."""
-    fps = lambda w: full * (1 - 0.01 * (30 - w))
-    shown = lambda w: min(120.0, fps(w))
+    under 30 W), at the fewest watts. Where the full limit gave 119 fps or more (or its frames came first, from before
+    the start), your target less 5 % was held: up to 5 %; where it gave over 120, 3 W more than the 120 shown need."""
+    fps = lambda w, t: full * (1 - 0.01 * (30 - (30 if t < before_s else w)))
+    shown = lambda w: min(120.0, fps(w, 1e9))
     g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=start_w, most=True), fps=fps)
-    g.draw = lambda w, t: float(w)
+    g.draw = lambda w, t: 30.0 if t < before_s else float(w)
     g.run(600)
     low, lost = _short(g, shown, shown(30), 120)
     need = min(w for w in range(8, 31) if shown(w) >= shown(30) * (1 - gov.SAME))
