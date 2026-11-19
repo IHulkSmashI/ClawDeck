@@ -507,7 +507,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
             st.free_fps.append(here)
         if len(st.free_fps) >= FREE_LOOKS:
             level = statistics.median(st.free_fps)
-            _take(st, level)
+            if free or st.lo is None or level >= st.lo or not out_of_reach(st, cfg):
+                _take(st, level)
             if free:
                 st.ref, st.ratio = level, 1.0
                 st.full_at = t if st.limit >= top else st.full_at

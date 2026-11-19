@@ -129,6 +129,21 @@ def test_a_game_with_no_history_whose_full_limit_gives_just_under_your_target_ge
     assert 30 in g.since(0) and lost <= gov.SAME and low <= 60, (low, lost, g.writes[:8], g.notes[-3:])
 
 
+@pytest.mark.parametrize("cost, ramp", [(0.02, 60), (0.04, 200), (0.03, 10)])
+def test_a_target_just_out_of_reach_gets_a_watt_back_when_the_held_limit_costs_more_and_more(cost, ramp):
+    """Your 60, the full limit 58.5 fps from 24 W. From 300 s on the held limit costs more frames, a little more each
+    second: its band followed the pace down, so no loss was seen (580 s at 2 % under the full limit's frames)."""
+    t0 = 300.0
+    fps = lambda w, t: 58.5 if w >= 24 else 58.5 * (1 - 0.002 * (24 - w) - cost * min(1.0, max(0.0, (t - t0) / ramp)))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(900)
+    seq = sorted(g.writes) + [(g.t, None)]
+    low = sum(0.05 for (a, w), (b, _) in zip(seq, seq[1:]) for k in range(int((b - a) / 0.05))
+              if a + k * 0.05 >= t0 and fps(w, a + k * 0.05) < 58.5 * 0.99)
+    assert low <= 60, (low, g.writes[-6:], g.notes[-4:])
+
+
 @pytest.mark.parametrize("full", [119.0, 121.0, 125.0, 130.0])
 @pytest.mark.parametrize("start_w, before_s", [(30, 0.0), (None, 0.0), (None, 1.0)])
 def test_with_no_target_set_a_game_keeps_the_frames_the_screen_shows(full, start_w, before_s):
