@@ -384,12 +384,14 @@ def test_autotune_starts_where_the_game_held_under_the_same_limit_and_target_els
     at.start("1", {**saved, "start": 16}, 8, 26, False)         # another limit: nothing known, mid-range
     assert at.session.learned.tdp == 17 and at.session.learned.ceiling == 26
     at.start("1", {**saved, "start": 16}, 8, 20, False, target=60)   # another goal: the same
-    assert at.session.learned.tdp == 14 and at.session.user_target == 60
+    assert at.session.learned.tdp == 14 and at.session.user_target == 60 and not at.session.cfg.most
     at.start("1", {**saved, "start": 16}, 8, 20, False, at_limit=True)   # picked in the game just now: as picked
     assert at.session.learned.tdp == 20
     at.start("1", None, 8, 30, False)
     assert at.session.learned.tdp == 19
-    assert at.session.user_target == 120                        # no target set: the screen's highest refresh rate
+    assert at.session.user_target == 120 and at.session.cfg.most   # no target set: the screen's highest refresh rate
+    at.start("1", None, 8, 30, False, target=120)
+    assert at.session.cfg.most                                  # (that rate set as the target: the same)
     at.session = None
 
 

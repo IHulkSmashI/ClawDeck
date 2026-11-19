@@ -97,6 +97,7 @@ class Cfg:
     ceiling: int                    # your limit
     target: float                   # fps
     start_w: int | None = None      # where this game held last time; None: mid-range
+    most: bool = False              # no target set: the target is the screen's highest refresh rate
 
 
 @dataclass
@@ -322,8 +323,8 @@ def goal(st: State, cfg: Cfg) -> float:
 def _goal_at(ref: float | None, cfg: Cfg, noise: float) -> float:
     """... were `ref` what the full limit gives (a game that wobbles by itself: within its wobble, which a watch can't
     tell from the limit's)."""
-    if ref is not None and ref < cfg.target * REACHED:
-        return ref * (1 - max(SAME, noise))
+    if ref is not None and (ref < cfg.target * REACHED or cfg.most):
+        return min(ref, cfg.target) * (1 - max(SAME, noise))
     return cfg.target * (1 - TOL)
 
 
@@ -338,8 +339,9 @@ def _need(st: State, cfg: Cfg) -> float:
 
 
 def out_of_reach(st: State, cfg: Cfg) -> bool:
-    """The full limit gives less than the target, so what it gives is held instead."""
-    return st.ref is not None and st.ref < cfg.target * REACHED
+    """The full limit gives less than the target, so what it gives is held instead (with no target set, also
+    where it gives the target: up to that)."""
+    return st.ref is not None and (cfg.most or st.ref < cfg.target * REACHED)
 
 
 def _take(st: State, pace: float) -> None:
@@ -586,7 +588,7 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
         # three times the frames lost). Unless it gives what the full limit gives (the limit before, where that is
         # not known): nothing is lost to the limit then, whatever the rate (a game on its own frame limit with slow
         # frames of its own is under that line at every limit)
-        most = full or st.before
+        most = min(full or st.before or 0.0, cfg.target) if cfg.most else full or st.before
         line = want * (1 + CLEAR) if got is not None and most and got < most * (1 - wide) else want
         lost = quick or (got is not None and got < line * (1 - margin))
         if lost and cur < want * (1 - SHIFT) and st.prev < top and not st.retest:

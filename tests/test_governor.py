@@ -129,6 +129,39 @@ def test_a_game_with_no_history_whose_full_limit_gives_just_under_your_target_ge
     assert 30 in g.since(0) and lost <= gov.SAME and low <= 60, (low, lost, g.writes[:8], g.notes[-3:])
 
 
+@pytest.mark.parametrize("full", [119.0, 121.0, 125.0, 130.0])
+@pytest.mark.parametrize("start_w", [30, None])
+def test_with_no_target_set_a_game_keeps_the_frames_the_screen_shows(full, start_w):
+    """No target set: the screen's 120 Hz, as many frames as the limit gives up to that, less SAME (1 % less a watt
+    under 30 W), at the fewest watts. Where the full limit gave 119 fps or more, your target less 5 % was held: up to
+    5 % of the frames; where it gave over 120, 3 W more were held than gave the 120 shown."""
+    fps = lambda w: full * (1 - 0.01 * (30 - w))
+    shown = lambda w: min(120.0, fps(w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=start_w, most=True), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(600)
+    low, lost = _short(g, shown, shown(30), 120)
+    need = min(w for w in range(8, 31) if shown(w) >= shown(30) * (1 - gov.SAME))
+    assert lost <= gov.SAME and need - 1 <= g.limit <= need, (lost, g.limit, need, g.writes[-4:])
+
+
+@pytest.mark.parametrize("cost", [0.015, 0.025])
+def test_with_no_target_set_a_held_limit_that_comes_to_cost_frames_gets_the_full_limit(cost):
+    """No target set, the full limit 125 fps: 120 shown from 26 W. A heavier place: 120 from 29 W, 1.5 or 2.5 % less
+    under it. Held to your target less 5 %, 1.5 % fewer frames were held for the whole 590 s, down to 8 W."""
+    heavy = {"on": False}
+    light = lambda w: min(120.0, 125.0 * (1 - 0.01 * (30 - w)))
+    fps = lambda w: (120.0 if w >= 29 else 120.0 * (1 - cost)) if heavy["on"] else light(w)
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=120, start_w=30, most=True), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(300)
+    heavy["on"], t0, held = True, g.t, g.limit
+    g.run(590)
+    writes = [(t0, held)] + [(t, w) for t, w in g.writes if t > t0]
+    low = sum(b - a for (a, w), (b, _) in zip(writes, writes[1:] + [(g.t, 0)]) if fps(w) < 120.0 * 0.99)
+    assert low <= 10.0, (low, g.since(t0)[:6])
+
+
 @pytest.mark.parametrize("wobble", [0.0, 0.03, 0.06])
 def test_a_target_out_of_reach_keeps_the_full_limits_frames_within_the_games_own_wobble(wobble):
     """Your 60 out of reach: 48 fps from 20 W up, or 1 % less a watt under 30 W. A game that wobbles by itself steps

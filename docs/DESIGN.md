@@ -212,7 +212,8 @@ What it knows:
   gives the full limit's frames (the game's own frame limit, a scene the limit does not hold back). For a step down
   it is what the full limit gives now, and while a limit is held what it gave when the band was taken (the band's
   lower edge over the ratio). A pace that falls from the band and stays over that goal is no loss. There is always a
-  target: none set is the screen's highest refresh rate, so the most frames the limit gives, less the same margin.
+  target: none set is the screen's highest refresh rate, so the most frames the limit gives up to it, less the same
+  margin.
 - **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
   Frame rates are frames over their time, without frames over 2.5 times the median.
 

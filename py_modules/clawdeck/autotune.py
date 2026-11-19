@@ -558,9 +558,9 @@ class Session:
 
     @property
     def target(self) -> float:
-        if self.gov is None or self.cfg is None:
+        if self.gov is None or self.cfg is None or not governor.out_of_reach(self.gov, self.cfg):
             return float(self.user_target)
-        return self.gov.ref if governor.out_of_reach(self.gov, self.cfg) else float(self.user_target)
+        return min(self.gov.ref, float(self.user_target))
 
     @property
     def unreachable(self) -> bool:
@@ -624,7 +624,7 @@ class Autotune:
     def _govern_from(self, s: Session, start_w: int | None) -> None:
         """A fresh governor for this session, from `start_w` (None: mid-range); the caller writes its limit."""
         s.cfg = governor.Cfg(floor=s.floor_tdp, ceiling=s.ceiling_tdp, target=float(s.user_target),
-                             start_w=start_w)
+                             start_w=start_w, most=s.user_target >= self.target_of(0))
         s.gov, act = governor.start(s.cfg, time.monotonic())
         s.learned.tdp = min(act.limit_w, self._top(s))
         s.gov.limit = s.learned.tdp
