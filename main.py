@@ -97,8 +97,8 @@ class Plugin:
     async def _main(self):
         self.settings = self._load_settings()
         selfupdate.update_pending(RUNTIME_DIR, clear=True)   # an update's marker never outlives the update
-        if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
-            self._save_settings()
+        if [self.settings.pop(k) for k in ("dry_run", "autotune_auto_fps") if k in self.settings]:
+            self._save_settings()                            # Dry run and Auto FPS were removed: drop the old settings
         self.hw = hw.detect()
         self.power = power.Power(self.hw)
         self.battery = battery.Battery(self.hw)

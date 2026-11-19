@@ -3031,19 +3031,6 @@ def m_runtime(p):
     return p._vrr_live_again.__func__.__globals__["RUNTIME_DIR"]
 
 
-def _target_tuner(fake_hw, monkeypatch, target, auto_fps=True, ceiling=25):
-    at, s = _tuner(fake_hw, monkeypatch, ceiling=ceiling)
-    clock = {"t": 1000.0}
-    monkeypatch.setattr(autotune.time, "monotonic", lambda: clock["t"])
-    at._start_target(s, {}, target, auto_fps)
-
-    def run(n):
-        for _ in range(n):
-            clock["t"] += 1
-            at._step()
-    return at, s, run
-
-
 def test_autotune_target_setting_is_saved_clamped_and_reaches_the_running_session(plugin, monkeypatch):
     p = plugin
     got = []
