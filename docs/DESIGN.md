@@ -222,6 +222,9 @@ The rules:
    - the last ten frames are 3 % under the goal, or the pace is 1 % under it and stays (a fall: at once);
    - the pace is 3 % over the band at a limit the package draws all of, and under your target (the game back from a
      video, a lighter place);
+   - your target was in reach, and the pace over the ratio is 1 % under it (at least) at a limit the package draws all
+     of: a heavier place where the full limit may give 95 to 99 % of your target (a limit held in a place at your
+     target then gave 1.5 to 2.5 % fewer frames than the full limit for 590 s);
    - the limit has 3 % more slow frames than the game's own (frames 10 % over the median of their neighbours; not
      three or more in a row, and not when they all lie in one burst, within a third of the frames: those are the
      game's) at the third level in 2

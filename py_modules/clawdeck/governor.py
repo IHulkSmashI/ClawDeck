@@ -1005,6 +1005,12 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
                 st.lost, st.lost_slow = pace, 0.0
                 watch("check", top, f"checking what the full {top} W gives", "rise")
                 return act
+        if (settled and binds and st.free_w != st.limit and st.limit < top and not out_of_reach(st, cfg)
+                and (here / st.ratio if st.ratio else here) < cfg.target * REACHED * (1 - small)):
+            st.lost, st.lost_slow = here, 0.0
+            watch("check", top,
+                  f"{here:.1f} fps at {st.limit} W, under your target: checking what the full {top} W gives", "rise")
+            return act
         # the goal hangs on what the full limit gave (your target is out of reach), and that is CHECK_MAX_S old or
         # from before a menu: a scene that got lighter under a step, or another place that has this pace at this
         # limit, shows in no frame here

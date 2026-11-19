@@ -105,6 +105,30 @@ def test_a_target_out_of_reach_keeps_the_full_limit_or_a_lower_one_that_gives_it
     assert g.limit == 27, (g.limit, g.notes[-3:])
 
 
+def _short(g, fps, line, after):
+    """Seconds from `after` on at limits under which fps(watts) < line, and the frames lost against `line`, from the
+    writes."""
+    seq = [(0.0, g.cfg.start_w or (g.cfg.floor + g.cfg.ceiling + 1) // 2)] + sorted(g.writes) + [(g.t, None)]
+    low = lost = 0.0
+    for (a, w), (b, _) in zip(seq, seq[1:]):
+        span = max(0.0, b - max(a, after))
+        low += span if fps(w) < line else 0.0
+        lost += span * max(0.0, 1 - fps(w) / line)
+    return low, lost / (g.t - after)
+
+
+@pytest.mark.parametrize("full", [57.9, 58.5, 58.9])
+def test_a_game_with_no_history_whose_full_limit_gives_just_under_your_target_gets_its_frames(full):
+    """Your 60, and the full limit gives 96.5 to 98 % of it, 0.2 % less a watt under 24 W. Mid-range gave your target
+    less 5 %, taken for your target: 9 to 17 W held for the whole game with 1.4 to 3 % of the frames lost."""
+    fps = lambda w: full if w >= 24 else full * (1 - 0.002 * (24 - w))
+    g = Game(gov.Cfg(floor=8, ceiling=30, target=60), fps=fps)
+    g.draw = lambda w, t: float(w)
+    g.run(900)
+    low, lost = _short(g, fps, full * (1 - gov.SAME), 120)
+    assert 30 in g.since(0) and lost <= gov.SAME and low <= 60, (low, lost, g.writes[:8], g.notes[-3:])
+
+
 @pytest.mark.parametrize("wobble", [0.0, 0.03, 0.06])
 def test_a_target_out_of_reach_keeps_the_full_limits_frames_within_the_games_own_wobble(wobble):
     """Your 60 out of reach: 48 fps from 20 W up, or 1 % less a watt under 30 W. A game that wobbles by itself steps
@@ -714,7 +738,8 @@ def test_a_step_that_fails_while_the_scene_changes_ends_at_the_full_limit():
 def test_a_watt_that_changes_nothing_has_the_full_limit_say_whose_slow_frames_they_are():
     """Slow frames at a held limit, and as many a watt higher, twice. The limit's (none at the full limit; the edge is
     some watts up): the limit ends over the edge. The game's own in this place (as many at the full limit): one short
-    look, then the limit stays (a watt more every ten seconds went up to your limit)."""
+    look for them and one for the pace they put under your target, then the limit stays (a watt more every ten seconds
+    went up to your limit)."""
     for edge_w, share in ((20, 8), (18, 17), (23, 12)):
         edge = lambda i, w, t: 1.3 if (w < edge_w and i % share == 0 and t > 20) else 1.0
         g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=16), fps=lambda w: 60.0, shape=edge)
@@ -728,7 +753,7 @@ def test_a_watt_that_changes_nothing_has_the_full_limit_say_whose_slow_frames_th
         g.run(150)
         late = [(at, w) for at, w in g.writes if at > 20]
         looks = [at for at, w in late if w == 30]
-        assert len(looks) <= 1 and g.limit <= held_w + gov.STEP_W, (held_w, share, late)
+        assert len(looks) <= 2 and g.limit <= held_w + gov.STEP_W, (held_w, share, late)
         assert all(w <= held_w + gov.STEP_W for _, w in late if w != 30), late
 
 
@@ -2106,13 +2131,14 @@ def test_the_thresholds_follow_the_games_wobble_up_to_four_times_and_no_further(
         g.st.noises.extend([0.2] * g.st.noises.maxlen)               # as learned from a wild game
         g.fps = lambda w: 60.0 if w >= 20 else fps
         g.run(6)
-        return held, [(round(t - t0, 2), w) for t, w in g.writes if t >= t0]
-    held, writes = after(48.0)                                       # 16 % under the 57 fps goal
+        notes = [n for t, n in g.notes if t0 <= t <= t0 + 3]
+        return held, [(round(t - t0, 2), w) for t, w in g.writes if t >= t0], notes
+    held, writes, _ = after(48.0)                                    # 16 % under the 57 fps goal
     assert writes[0][1] == 30 and writes[0][0] <= 0.6, writes
-    held, writes = after(54.0)                                       # 5 % under it
+    held, writes, _ = after(54.0)                                    # 5 % under it
     assert writes and writes[0][1] == 30 and writes[0][0] <= gov.DWELL_S + 1.5, writes
-    held, writes = after(55.6)                                       # 2.5 % under it: inside this game's wobble
-    assert not [w for t, w in writes if t <= 3.0], writes
+    held, writes, notes = after(55.6)                                # 2.5 % under it: inside this game's wobble
+    assert not [n for n in notes if n.endswith(": the full 30 W")], notes     # (a look at what the full limit gives)
 
 
 def _raise_then(kind):
@@ -2531,9 +2557,9 @@ def test_long_frames_in_a_sessions_first_moments_are_not_the_start_levels_rate(l
 
 
 def test_slow_frames_that_are_the_limits_get_a_watt_over_the_edge_twice_and_then_the_limit_stays_up():
-    """Slow frames that start at a held limit, at every limit under 17 W and at none above: the answer is a watt more,
-    with no look at the full limit. Twice in RETRY_S; a third level with them means the edge is not near, or they are
-    the game's own: the full limit says which. The limit's: it stays up, and the way down from there finds the edge."""
+    """Slow frames from a held limit on, at every limit under 17 W, none above (one look for the pace under your
+    target): a watt more, no look, twice in RETRY_S; a third level with them: the edge is not near, or they are the
+    game's own, as the full limit says. The limit's: it stays up, and the way down from there finds the edge."""
     rough = {"on": False}
     g = Game(gov.Cfg(floor=8, ceiling=30, target=30, start_w=16), fps=lambda w: 30.0 if w >= 14 else 2.1 * w,
              shape=lambda i, w, t: 1.3 if rough["on"] and w < 17 and i % 12 == 0 else 1.0)
@@ -2543,7 +2569,7 @@ def test_slow_frames_that_are_the_limits_get_a_watt_over_the_edge_twice_and_then
     assert g.limit == 14
     g.run(34)
     notes = [n for at, n in g.notes if at >= t0]
-    assert g.since(t0) == [15, 16, 30], (g.since(t0), notes)
+    assert g.since(t0) == [30, 14, 15, 16, 30], (g.since(t0), notes)
     assert "staying up" in notes[-1], notes
     g.run(60)
     t1 = g.t
@@ -2811,12 +2837,18 @@ def test_frames_over_the_target_from_the_limits_own_steps_are_no_other_scene():
     assert next(t for t, w in g.writes if w == 15) < 45, g.writes
 
 
+@pytest.mark.parametrize("first", ["out of reach", "at your target"])
 @pytest.mark.parametrize("cost", [0.015, 0.025])
-def test_a_held_limit_that_comes_to_cost_frames_under_a_target_out_of_reach_gets_the_full_limit(cost):
-    """Target 60, the full limit 58.5 fps: out of reach, though within TOL of it. The place then makes the held 23 W
-    give 1.5 or 2.5 % less than the full limit: no watts are saved with fewer frames (590 of 590 s at 20 to 23 W)."""
+def test_a_held_limit_that_comes_to_cost_frames_under_a_target_out_of_reach_gets_the_full_limit(cost, first):
+    """Target 60, the full limit 58.5 fps: out of reach, though within TOL of it. The place then makes the held limit
+    give 1.5 or 2.5 % less than the full limit: no watts are saved with fewer frames (590 of 590 s at 20 to 23 W; a
+    limit held in a place at your target before it: 590 s, down to 8 W)."""
     heavy = {"on": False}
-    fps = lambda w: 58.5 if w >= 24 else 58.5 * (1 - (cost if heavy["on"] else 0.002 * (24 - w)))
+    if first == "out of reach":
+        fps = lambda w: 58.5 if w >= 24 else 58.5 * (1 - (cost if heavy["on"] else 0.002 * (24 - w)))
+    else:
+        fps = lambda w: ((58.5 if w >= 24 else 58.5 * (1 - cost)) if heavy["on"]
+                         else 60.0 if w >= 20 else 60.0 * (1 - 0.05 * (20 - w)))
     g = Game(gov.Cfg(floor=8, ceiling=30, target=60, start_w=30), fps=fps)
     g.draw = lambda w, t: float(w)
     g.run(300)
