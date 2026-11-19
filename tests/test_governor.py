@@ -195,6 +195,17 @@ def test_out_of_reach_a_game_that_moves_by_itself_loses_at_most_a_percent_to_a_l
         assert lost <= (gov.SAME if kind == "rhythm" else gov.SUSTAINED), (seed, lost, g.writes[-4:])
 
 
+@pytest.mark.parametrize("failures, home", [(1, True), (2, False), (3, False)])
+def test_a_level_that_failed_twice_in_a_heavier_moment_is_not_the_level_to_go_back_to(failures, home):
+    """8 W held in this place (60 fps) and failed in a heavier moment (55 fps at the full limit). Once: the level to go
+    back to (it failed in another place). Twice: not (in the simulator, a moment every 10 s failed 8 W 16 times in 3
+    minutes, with 104 of the 126 s of the moments under the 22 W they need)."""
+    st = gov.State(limit=30, home=8, home_ref=60.0)
+    st.fail[8] = [235.0, failures, 55.0, False, 95.0]
+    nxt = gov._next_down(st, gov.Obs(t=100.0, draw_w=7.0), gov.Cfg(floor=8, ceiling=30, target=60), 100.0, 60.0)
+    assert nxt == (8 if home else 19), nxt
+
+
 @pytest.mark.parametrize("wobble", [0.0, 0.03, 0.06])
 def test_a_target_out_of_reach_keeps_the_full_limits_frames_within_the_games_own_wobble(wobble):
     """Your 60 out of reach: 48 fps from 20 W up, or 1 % less a watt under 30 W. A game that wobbles by itself steps

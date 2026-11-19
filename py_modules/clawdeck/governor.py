@@ -830,7 +830,8 @@ def _next_down(st: State, obs: Obs, cfg: Cfg, t: float, ref: float | None) -> in
     just over what the package draws."""
     under = [w for w in st.fail if w < st.limit and _counts(st.fail[w], ref, t)]
     if (st.home is not None and st.home < st.limit - STEP_W and st.home_ref is not None and ref is not None
-            and _same(st.home_ref, ref) and all(w < st.home for w in under if _same(st.fail[w][2], ref))):
+            and _same(st.home_ref, ref)
+            and all(w < st.home for w in under if _same(st.fail[w][2], ref) or st.fail[w][1] >= 2)):
         nxt = st.home                                # (held in this scene: what failed over it failed in another)
     elif under:
         nxt = (st.limit + max(under) + 1) // 2
