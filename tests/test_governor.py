@@ -177,6 +177,24 @@ def test_with_no_target_set_a_held_limit_that_comes_to_cost_frames_gets_the_full
     assert low <= 10.0, (low, g.since(t0)[:6])
 
 
+@pytest.mark.parametrize("most", [False, True])
+@pytest.mark.parametrize("kind, size", [("rhythm", 1.0), ("rhythm", 0.5), ("spread", 0.03), ("spread", 0.09)])
+def test_out_of_reach_a_game_that_moves_by_itself_loses_at_most_a_percent_to_a_lower_limit(kind, size, most):
+    """48.5 fps at 30 W, 0.69 % less a watt under it; your 60, or none set. Its frame rate 10 % lower every other 1 or
+    0.5 s, or frame times that spread 3 or 9 %: the goal less the game's 4.5 % wobble lost 5 to 6 % of the frames."""
+    base = lambda w: 48.5 * (1 - 0.0069 * (30 - w))
+    for seed in (1, 2, 3):
+        rng = random.Random(seed)
+        fps = (lambda w, t: base(w) * (0.9 if int(t / size) % 2 else 1.0)) if kind == "rhythm" else lambda w, t: base(w)
+        spread = 0.011 if kind == "rhythm" else size
+        g = Game(gov.Cfg(floor=8, ceiling=30, target=120 if most else 60, start_w=30, most=most), fps=fps,
+                 shape=lambda i, w, t: math.exp(rng.gauss(0.0, spread)))
+        g.draw = lambda w, t: float(w)
+        g.run(600)
+        low, lost = _short(g, base, base(30), 120)
+        assert lost <= (gov.SAME if kind == "rhythm" else gov.SUSTAINED), (seed, lost, g.writes[-4:])
+
+
 @pytest.mark.parametrize("wobble", [0.0, 0.03, 0.06])
 def test_a_target_out_of_reach_keeps_the_full_limits_frames_within_the_games_own_wobble(wobble):
     """Your 60 out of reach: 48 fps from 20 W up, or 1 % less a watt under 30 W. A game that wobbles by itself steps

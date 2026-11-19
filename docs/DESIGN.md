@@ -206,14 +206,13 @@ What it knows:
   the reference is the pace over the ratio: it moves with the game's own frame rate.
 - **The goal** is your target less 5 %. When the band's lower edge is under that (the full limit gave less than your
   target at the band's look), it is what the full limit gives less 0.5 %, or less the game's own wobble (of the rate
-  of ten frames) where that is more: a watch can't tell less from the limit's (at 0.3 %, steps that cost no frames
-  failed at a 60 fps frame limit; a game whose frame times spread 3 % by itself kept 22 to 30 W where 20 W gave the
-  same frames): no watts are saved with frames under a target out of reach, and a lower limit holds only where it
-  gives the full limit's frames (the game's own frame limit, a scene the limit does not hold back). For a step down
-  it is what the full limit gives now, and while a limit is held what it gave when the band was taken (the band's
-  lower edge over the ratio). A pace that falls from the band and stays over that goal is no loss. There is always a
-  target: none set is the screen's highest refresh rate, so the most frames the limit gives up to it, less the same
-  margin.
+  of ten frames) where that is more, up to 1 %: a watch can't tell less from the limit's (at 0.3 %, steps that cost no
+  frames failed at a 60 fps frame limit; a game whose frame times spread 3 % by itself kept 22 to 30 W where 20 W gave
+  the same frames): no watts are saved with frames under a target out of reach, and a lower limit holds only where it
+  gives the full limit's frames (the game's own frame limit, a scene the limit does not hold back). For a step down it
+  is what the full limit gives now, and while a limit is held what it gave when the band was taken (the band's lower
+  edge over the ratio). A pace that falls from the band and stays over that goal is no loss. There is always a target:
+  none set is the screen's highest refresh rate, so the most frames the limit gives up to it, less the same margin.
 - **The game's wobble** widens what counts as a loss: 2.5 times what its frame rate does by itself, at most fourfold.
   Frame rates are frames over their time, without frames over 2.5 times the median.
 
@@ -258,19 +257,21 @@ The rules:
    back and the full limit gives less than at that look, the full limit stays (walking into a heavier place, the
    limit went back and forth 8 times in 7 s).
 2. **A step down** starts 5 s after the last write, from a pace that is in the band, that the last ten frames agree
-   with and that stood still for 3 s, and it is judged against the pace of those 3 s. It goes to the level that held
-   for 20 s in this scene; else halfway to the highest level under it that failed; else 2 W down, or straight to
-   just over what the package draws. It is watched for 2.5 s on every frame (10 s when the level failed for slow
-   frames before), from when the package draws no more than 2.5 W over it. A step has to leave 3 % over the goal,
-   unless it gives what the full limit gives: with less, the game's own wobble crosses the goal. A clear loss on the
-   last ten frames, a small one on all frames of the watch, or more slow frames than before (not in one burst) takes
-   it back at once; the level failed and is not tried again for 2 minutes, twice that after each further failure (up
-   to 10 minutes), and steps wait 5 s, twice that after each failure in a row (up to 5 minutes; a level's second try
-   after a look starts the count over). A step that loses 15 % gets the full limit at once: when that gives what the
-   limit before gave, the level failed; when it gives fewer frames, or so many more that the limit before is under
-   their goal, the scene changed under the step and nothing is booked. A step that held with 3 % more frames than
-   before it gets a look at once: a lower limit gives no more frames, so the scene changed under the step and its
-   frames say nothing of its cost. After three steps in a row the rules of holding run.
+   with and that stood still for 3 s (within 2 % at a limit the package draws all of, your target out of reach: a game
+   whose frame rate moves in a rhythm of its own lost 4.5 to 8.7 % of its frames to steps), and it is judged against
+   the pace of those 3 s. It goes to the level that held for 20 s in this scene; else halfway to the highest level
+   under it that failed; else 2 W down, or straight to just over what the package draws. It is watched for 2.5 s on
+   every frame (10 s when the level failed for slow frames before), from when the package draws no more than 2.5 W
+   over it. A step has to leave 3 % over the goal, unless it gives what the full limit gives: with less, the game's
+   own wobble crosses the goal. A clear loss on the last ten frames, a small one on all frames of the watch, or more
+   slow frames than before (not in one burst) takes it back at once; the level failed and is not tried again for 2
+   minutes, twice that after each further failure (up to 10 minutes), and steps wait 5 s, twice that after each
+   failure in a row (up to 5 minutes; a level's second try after a look starts the count over). A step that loses 15 %
+   gets the full limit at once: when that gives what the limit before gave, the level failed; when it gives fewer
+   frames, or so many more that the limit before is under their goal, the scene changed under the step and nothing is
+   booked. A step that held with 3 % more frames than before it gets a look at once: a lower limit gives no more
+   frames, so the scene changed under the step and its frames say nothing of its cost. After three steps in a row the
+   rules of holding run.
 3. **A scene has to stay.** The pace 15 % away for 5 s is another scene (frames over your target are not), and so is
    a package draw that falls 2 W under a limit it filled before (a menu at nearly the game's frame rate); no step
    down is tried in it for 30 s (a menu, a map, a video), except back to the level that held in the scene the game

@@ -324,7 +324,7 @@ def _goal_at(ref: float | None, cfg: Cfg, noise: float) -> float:
     """... were `ref` what the full limit gives (a game that wobbles by itself: within its wobble, which a watch can't
     tell from the limit's)."""
     if ref is not None and (ref < cfg.target * REACHED or cfg.most):
-        return min(ref, cfg.target) * (1 - max(SAME, noise))
+        return min(ref, cfg.target) * (1 - max(SAME, min(noise, SUSTAINED)))
     return cfg.target * (1 - TOL)
 
 
@@ -638,7 +638,8 @@ def step(st: State, obs: Obs, cfg: Cfg) -> Action:
                 st.chain = 0
                 act.note = f"holding at {st.limit} W"
                 hold(AFTER_LOSS_S)
-            elif nxt is not None and _steady(st, t, clear):
+            elif nxt is not None and _steady(st, t, clear if want >= cfg.target * (1 - TOL) or (
+                    obs.draw_w is not None and obs.draw_w <= st.limit - 2) else min(clear, 2 * SUSTAINED)):
                 was, st.before, st.long = st.limit, held, _slow_before(st, nxt, scene, t)
                 st.typ = statistics.median(st.watch)
                 watch("probe", nxt, f"{was} W holds; trying {nxt} W")
@@ -1029,10 +1030,12 @@ def _hold(st, obs, cfg, act, top, cur, pace_ms, here, clear, small, dippy, free,
     # a step down: from a pace that is in the band, that the last frames agree with, in a scene that has stayed
     # (the scene a level held in for HOME_S is no new one: back in it, that level without the wait). It is judged
     # against the pace of the last STEADY_S (a pace of PACE_FRAMES has the game's wobble in it: against its high,
-    # steps that cost nothing failed)
+    # steps that cost nothing failed). Out of reach, at a limit the package draws all of, that pace is steady within
+    # 2 %: a game whose frame rate moves in a rhythm of its own lost 4.5 to 8.7 % of its frames to steps
     if (t >= st.quiet_until and t - st.changed_at >= AFTER_LOSS_S
             and st.scene_since is None and st.loss_since is None and st.lo is not None and not over
-            and abs(cur - here) <= clear * here and _steady(st, t, clear)):
+            and abs(cur - here) <= clear * here
+            and _steady(st, t, clear if ref >= cfg.target * REACHED or not binds else min(clear, 2 * SUSTAINED))):
         nxt = _next_down(st, obs, cfg, t, ref)
         if nxt is not None and (t - st.scene_at >= SCENE_S or (nxt == st.home and _same(st.home_ref, ref))):
             ms = [x for _, x in st.recent]
