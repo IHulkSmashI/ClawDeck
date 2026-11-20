@@ -61,6 +61,9 @@ OPTI_PRESETS = {
     # original, kept as fsr-original.dll) first. The FFX Upscaler list with nitec's file (CONTROL, Claw 8 EX, 2026-11-04):
     # 0-5 FSR 4.0.2X (+ Skip, QSkip, Hybrid...), 6 FSR 4.1.2X, 7/8 its Skip/QSkip, 9 FSR 4.1.2X Lite, 10 Lite Skip,
     # 11+ DLSS-EX/FX/EFX/KX/MX/LX (DLSS presets on XMX from the game's nvngx_dlss.dll). Lite is its own entry.
+    # These 6 / 9 are OptiScaler 0.9.4's (Decky Framegen's OptiScaler). The list comes from the FFX libraries next to
+    # the game, so it moves with every OptiScaler: ClawDeck's own OptiScaler takes its positions from its pinned entry
+    # in versions.json ("fsr4_xmx_index", opti_ini), measured from OptiScaler's log ("FFX upscaler [n]: name").
     "fsr4_xmx": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "6", "FSR_Fsr4Update": "true",
                  "CLAWDECK_FSR4_XMX": "regular", "FSR4_XMX_NO_DIALOG": "1"},
     "fsr4_xmx_lite": {"Dx12Upscaler": "fsr31", "FSR_UpscalerIndex": "9", "FSR_Fsr4Update": "true",
@@ -80,7 +83,7 @@ KEYS = {"xmx", "fg", "fsr", "xess_latest", "low_latency", "opti", "opti_xefg", "
 # OptiScaler's own FPS overlay (OptiScaler.ini [Menu] FpsOverlayType): shows the upscaler and "(XeFG)" when frame
 # generation runs, which Steam's overlay can't tell. Top right, clear of Steam's performance overlay at the top left.
 OVERLAYS = {0: "FPS", 1: "Simple", 2: "Detailed", 3: "Detailed + graph", 4: "Full", 5: "Full + graph"}
-# OptiScaler.ini sections (0.9.4, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
+# OptiScaler.ini sections (0.9.4 and 0.9.5, plus v10's DLSSG and NvngxFG), for turning a preset into ini lines for ClawDeck's own OptiScaler (optiscaler.py)
 INI_SECTIONS = {"Upscalers", "FrameGen", "FSRFG", "XeFG", "DLSSG", "NvngxFG", "OptiFG", "Inputs", "FSRFGInputs", "Framerate", "XeSS", "FSR",
                 "DLSS", "DLSSD", "Nukems", "Libraries", "Menu", "Spoofing", "Plugins", "NvApi", "Dx11withDx12", "Hooks",
                 "fakenvapi", "Sharpness", "OutputScaling", "CAS", "Log", "InitFlags", "UpscaleRatio", "QualityOverrides", "DRS", "HDR",
@@ -110,7 +113,7 @@ CAPCOM_FG_COUNT = "2"
 
 
 def v10(launch: dict) -> bool:
-    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.4: only for the Capcom setup, which was
+    """OptiScaler v10 (the OptiScaler/ subfolder layout) instead of 0.9.5: only for the Capcom setup, which was
     tested with it. 3x / 4x in other games come from XESS_FG (xess-xmx-linux's ControlLib.dll answers XeSS frame
     generation's override query, as Intel Graphics Software does on Windows), with any OptiScaler."""
     return capcom(launch)
@@ -253,12 +256,17 @@ def write(runtime_dir: str, appid: str, launch: dict, per_game: bool = True) -> 
     return {"path": p, "env": env}
 
 
-def opti_ini(launch: dict) -> dict[str, str]:
+def opti_ini(launch: dict, fsr4_index: dict | None = None) -> dict[str, str]:
     """The OptiScaler.ini lines for ClawDeck's own OptiScaler: the preset, XeSS frame generation, the game's settings.
-    Variables that aren't ini settings (FSR 4 XMX's own switches, ClawDeck's) stay in the launch environment."""
+    Variables that aren't ini settings (FSR 4 XMX's own switches, ClawDeck's) stay in the launch environment.
+    fsr4_index: the pinned OptiScaler's positions of FSR 4.1.2X and its Lite in OptiScaler's FFX upscaler list
+    (versions.json "fsr4_xmx_index", {"regular": n, "lite": n}); without it the presets' 0.9.4 positions."""
     o = "fsr4_xmx" if launch.get("opti") == "fsr4" else launch.get("opti") or "off"
     env = {**OPTI_PRESETS.get(o, {}), **(OPTI_XEFG if launch.get("opti_xefg") else {}),
            **OPTI_FG.get(launch.get("opti_fg") or "", {}), **(launch.get("opti_ini") or {})}
+    i = (fsr4_index or {}).get("lite" if o == "fsr4_xmx_lite" else "regular") if o in FSR4_XMX else None
+    if isinstance(i, int) and not isinstance(i, bool):
+        env["FSR_UpscalerIndex"] = str(i)
     fg = launch.get("fg") or 0                     # XeSS-FG's multiplier: 2x-4x through OptiScaler (1-3 extra frames)
     if fg and (launch.get("opti_fg") not in (None, "off") or launch.get("opti_xefg")):
         env["XeFG_InterpolationCount"] = str(min(max(fg - 1, 1), 3))

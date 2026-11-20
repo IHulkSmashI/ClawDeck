@@ -14,15 +14,13 @@ export WINEPREFIX="$work/prefix" WINEDEBUG=-all WINEDLLOVERRIDES="cabinet=n,b;ms
 wine=$(command -v wine || command -v wine64 || ls /usr/lib/wine/wine64 2>/dev/null) || { echo "wine not found"; exit 1; }
 wineserver=${WINESERVER:-$(command -v wineserver || true)}      # WINESERVER: the variable Wine itself reads
 cc -O2 -Wall -o "$work/mkvector" "$here/test/mkvector.c" -lwim
-# the DLL as ClawDeck places it: ours as cabinet.dll, Wine's builtin next to it as cabinet_wine.dll
+# the DLL as ClawDeck places it: ours as cabinet.dll, Wine's builtin next to it as cabinet_wine.dll (below)
 mkdir -p "$work/game"
 cp "$here/out/cabinet.dll" "$here/out/test_cabinet.exe" "$here/out/test_forward.exe" "$work/game/"
-# wherever the distribution keeps Wine's DLLs (Ubuntu: lib/x86_64-linux-gnu/wine or lib/wine, Fedora: lib64/wine)
-wcab=$(find /usr /opt -path '*/wine/x86_64-windows/cabinet.dll' 2>/dev/null | head -1)
-[ -n "$wcab" ] || { echo "Wine's x86_64 cabinet.dll not found"; exit 1; }
-cp "$wcab" "$work/game/cabinet_wine.dll"
-# a fresh prefix first (its first start runs wineboot; a test program as that first start can abort)
-"$wine" cmd /c echo Wine prefix ready 2>/dev/null || true
+# a fresh prefix first (its first start runs wineboot; a test program as that first start can abort), with a time
+# limit: an incomplete Wine (Fedora's wine-core without wine-common) makes wineboot retry a missing file forever
+first_start_s=120
+timeout "$first_start_s" "$wine" cmd /c echo Wine prefix ready 2>/dev/null || true
 # not on PATH everywhere (Ubuntu 26.04's wine): then the server this wine started for the prefix, which Wine finds
 # next to its own loader, wherever the distribution keeps it
 if [ -z "$wineserver" ]; then
@@ -33,7 +31,17 @@ if [ -z "$wineserver" ]; then
   done
 fi
 echo "wineserver: ${wineserver:-not found, so no wait for the first start of the prefix}"
-[ -z "$wineserver" ] || "$wineserver" -w || true
+status=0; [ -z "$wineserver" ] || timeout "$first_start_s" "$wineserver" -w || status=$?
+if [ "$status" = 124 ]; then
+  echo "Wine's first start of the prefix did not end within $first_start_s s (an incomplete Wine install?). Wine processes:"
+  ps -eo pid,etimes,stat,args | grep -i -E '[w]ine|[.]exe' || true
+  exit 1
+fi
+# Wine's own cabinet.dll: wineboot copies Wine's builtin into the new prefix, wherever the distribution keeps Wine's
+# DLLs (a search of /usr and /opt for it took up to 3.5 minutes on GitHub's runners)
+wcab="$WINEPREFIX/drive_c/windows/system32/cabinet.dll"
+[ -s "$wcab" ] || { echo "Wine's cabinet.dll is not in the new prefix"; exit 1; }
+cp "$wcab" "$work/game/cabinet_wine.dll"
 # inputs: text-like (compresses well), random (blocks stored as is), the two mixed, one odd size
 v="$work/game"                                  # vectors next to the exe: plain relative names for Wine
 for f in "$here"/wimlib/*.c "$here"/wimlib/wimlib.h; do cat "$f"; done > "$v/text"

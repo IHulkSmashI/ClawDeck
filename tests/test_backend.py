@@ -512,12 +512,30 @@ def test_thermal_guard_gives_the_clock_back_first_then_the_watts(tmp_path, monke
     assert g.clock_pct == 80
     check(75, 12, tdp, set_w, cap, limit=30)                            # under 90 °C: the trip ends, the cap stays
     assert not g.tripped and g.clock_pct == 80
-    for _ in range(3):
-        check(75, 12, tdp, set_w, cap, limit=30)
+    check(85, 12, tdp, set_w, cap, limit=30)                            # 80-90 °C: not cool, no step back
+    assert g.clock_pct == 80
+    check(75, 12, tdp, set_w, cap, limit=30)                            # cool: a step back at each check
     assert g.clock_pct == 90 and caps[-1] == 90
-    for _ in range(3):
-        check(75, 12, tdp, set_w, cap, limit=30)
+    check(75, 12, tdp, set_w, cap, limit=30)
     assert g.clock_pct is None and caps[-1] is None and g.status()["line"] is None
+
+
+def test_thermal_guard_takes_no_clock_step_while_the_last_one_shows_and_gives_the_clock_back_at_once(tmp_path, monkeypatch):
+    """Project Gotham Racing 2 in xemu, 2026-11-16, the guard's own readings 10 s apart: 97, 97, 91, 79, 72, 69 °C. The
+    cap went 90, 80, 70 % (the last one at 91 °C, 6 °C down in 10 s), and came back a step per 30 s under 80 °C: 160 s
+    from the trip to no cap, at 68-77 °C for 140 s of it."""
+    g, check = _hot_guard(tmp_path, monkeypatch)
+    tdp, caps = {"w": 30}, []
+    set_w = lambda w: tdp.update(w=w) or True
+    cap = lambda pct: caps.append(pct) or True
+    check(94, 19, tdp, set_w, cap, limit=30)
+    for c in (97, 97, 91, 79, 72, 69):
+        check(c, 15, tdp, set_w, cap, limit=30)
+    assert caps == [90, 80, 90, None] and g.clock_pct is None and tdp["w"] == 30    # no cap 50 s after the trip
+    # between 90 and 95 °C and not cooler than at the check before: the last step did not do it
+    for c in (97, 93, 93):
+        check(c, 19, tdp, set_w, cap, limit=30)
+    assert caps[4:] == [90, 80]
 
 
 def test_cpu_clock_cap_holds_under_every_other_write_and_lets_it_back(fake_hw):
@@ -1081,6 +1099,19 @@ def test_never_picked_on_this_power_source_leaves_the_firmware_and_thermald(plug
     assert p.chip() == 10 and not p.thermald["active"]
     _lower(p, 5)
     p.run(p.game_stopped("42"))
+    assert sysfs.read_int(p.hw.paths.rapl_pl1) == FW_PL1 and p.thermald["active"]
+
+
+def test_tdp_setting_is_applied_when_the_plugin_starts(plugin):
+    p = plugin
+    p.run(p.set_tdp(20))                                           # the slider in the menus, no game
+    p.run(p._unload())                                             # a Decky restart reverts the limits
+    assert sysfs.read_int(p.hw.paths.rapl_pl1) == FW_PL1 and p.thermald["active"]
+    p._holding_pick = False
+    p._apply_idle_pick(False)                                      # the last step of _main
+    assert p.chip() == 20 and not p.thermald["active"] and p._holding_pick
+    p.ac["plugged"] = True
+    p.run(p.power_source_changed(True))                            # no setting on the charger: firmware limits and thermald
     assert sysfs.read_int(p.hw.paths.rapl_pl1) == FW_PL1 and p.thermald["active"]
 
 
@@ -2918,6 +2949,40 @@ def test_no_xmx_chip_gets_no_xmx_driver_and_no_fsr4(plugin):
     p.caps = {"device": "ONEXPLAYER 3", "xmx": True, "hdr_brightness": False}
     assert not p._no_xmx()
     assert p.run(p.get_brightness()) == {"supported": False}
+
+
+def test_changing_a_setting_keeps_the_games_optiscaler_only_update_moves_it(plugin, tmp_path, monkeypatch):
+    """The Blood of Dawnwalker on 0.9.4 (Claw 8 EX AI+, 2026-11-17): frame generation None -> 2x and Apply changes
+    updated it to 0.9.5 as well. A setting keeps the game's earlier pinned OptiScaler (versions.json "previous", with
+    that version's FSR 4.1.2 position); only Update OptiScaler (update=True) and a first install take the pinned one."""
+    import asyncio
+    from clawdeck import optiscaler
+    p = plugin
+    p._install_lock = asyncio.Lock()
+    v = p._versions()
+    pinned, old = v["optiscaler"], v["optiscaler"]["previous"][0]
+    assert old["version"] == "0.9.4" and old["fsr4_xmx_index"] == {"regular": 6, "lite": 9}
+    game = tmp_path / "Dawnwalker"
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.4", "layout": "flat", "dll": "dxgi.dll"}))
+    e = p._opti_entry({"opti": "xess"}, str(game), update=False)
+    assert e["version"] == "0.9.4" and e["url"] == old["url"] and e["sha256"] == old["sha256"]
+    assert e["extras"] == pinned["extras"] and "previous" not in e                # OptiPatcher as pinned
+    assert p._opti_entry({"opti": "xess"}, str(game), update=True)["version"] == pinned["version"]
+    assert p._opti_entry({"opti": "xess"})["version"] == pinned["version"]         # Per-game's "newest" line
+    assert p._opti_entry({"opti": "xess"}, str(tmp_path / "fresh"), update=False)["version"] == pinned["version"]
+    # a version ClawDeck never pinned (or a layout change) can't be kept: the pinned one
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.1", "layout": "flat"}))
+    assert p._opti_entry({"opti": "xess"}, str(game), update=False)["version"] == pinned["version"]
+    _w(game / ".clawdeck-optiscaler" / "manifest.json", json.dumps({"version": "0.9.4", "layout": "flat", "dll": "dxgi.dll"}))
+    # through _opti_into: which package goes in, with which FSR 4.1.2 position
+    got = []
+    monkeypatch.setattr(optiscaler, "installed", lambda h, ver: True)
+    monkeypatch.setattr(optiscaler, "extras_ready", lambda h, ent: True)
+    monkeypatch.setattr(p, "_wiki_for", lambda appid: (None, None))
+    monkeypatch.setattr(optiscaler, "patch", lambda home, folder, ver, ini, *a: got.append((ver, ini.get("FSR_UpscalerIndex"))) or {"ok": True, "dll_override": "dxgi"})
+    assert p.run(p._opti_into("1", str(game), {"opti": "fsr4_xmx", "fg": 2, "opti_fg": "dlssg"}))["ok"]
+    assert p.run(p._opti_into("1", str(game), {"opti": "fsr4_xmx"}, update=True))["ok"]
+    assert got == [("0.9.4", "6"), (pinned["version"], str(pinned["fsr4_xmx_index"]["regular"]))]
 
 
 def test_fsr4_refused_after_a_launch_without_xmx(plugin, tmp_path, monkeypatch):

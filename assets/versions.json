@@ -25,9 +25,18 @@
   "note": "Capcom RE Engine games: dinput8.dll (23252480 bytes, REFramework 0.1.0.69) next to the game's exe. onehoon's fork (the fork's author), release 15 built 2026-10-22, whose notes say to use it with OptiScaler in Capcom games: a working Windows Onimusha install runs exactly this file, and it booted and played with optiscaler_v10 on a Claw 8 EX on Bazzite (2026-11-04). Replaces praydog's nightly 01433: ClawDeck installs REFramework only together with the Capcom OptiScaler setup, and the fork is the build that setup was tested with. Release 18 (2026-11-05) since 2026-11-09: three upstream syncs over release 15 (Lua JSON and LooseFileLoader fixes, HookManager error paths and thread safety, ARM64EC hooks skipped), dinput8.dll 23262720 bytes; release 15's dll stays recognised (previous_dll_sha256) so Remove still takes it out. Release 19 (2026-11-13) since 2026-11-14: one upstream sync over release 18 (pending script state deletions cleared on reset), dinput8.dll 23262208 bytes, REFramework 0.1.0.73; releases 18 and 15 stay recognised."
  },
  "optiscaler": {
-  "version": "0.9.4",
-  "url": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z",
-  "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+  "version": "0.9.5",
+  "url": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.5/Optiscaler_0.9.5-final.20261116.7z",
+  "sha256": "77e3ed76bed04e1fb32bacb5a72799ff172f3da22ed5231c0cf3e84fe6761662",
+  "fsr4_xmx_index": {"regular": 7, "lite": 10},
+  "previous": [
+   {
+    "version": "0.9.4",
+    "url": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z",
+    "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+    "fsr4_xmx_index": {"regular": 6, "lite": 9}
+   }
+  ],
   "extras": [
    {
     "name": "OptiPatcher",
@@ -36,7 +45,7 @@
     "dest": "plugins/OptiPatcher.asi"
    }
   ],
-  "note": "ClawDeck's own OptiScaler (optiscaler.py): the same release and OptiPatcher build Decky Framegen v0.17 pins, with the same sha256."
+  "note": "ClawDeck's own OptiScaler (optiscaler.py). 0.9.5 (2026-11-16) since 2026-11-17: the last packed release of the 0.9 branch (upstream: maintenance mode, v10 is where work goes); FFX 2.4 SDK (FSR 4.1.2, FSR-FG 4.0.2), XeSS 3.0.2 SDK, fakenvapi 1.4.1 and nukem 0.130 bundled. Same flat layout as 0.9.4 plus amd_fidelityfx_upscaler_vk.dll and amd_fidelityfx_framegeneration_vk.dll; every OptiScaler.ini key ClawDeck writes is still there, [FSR] Fsr4ForceEnableInt8 is now 0-3 instead of true/false (ClawDeck doesn't write it: the retired fsr4 preset becomes fsr4_xmx), [FSRFG] DisableFlipMetering is new. sha256 is GitHub's asset digest, checked against the download. fsr4_xmx_index: where FSR 4.1.2X and its Lite sit in OptiScaler's FFX upscaler list with nitec's files ([FSR] UpscalerIndex; 0.9.5 selects by position only), read from OptiScaler's log in Stellar Blade on a Claw 8 EX AI+ 2026-11-17: [0] 4.1.1 * (FFX 2.4's own, new in 0.9.5), [1-6] 4.0.2X (Skip, QSkip, Hybrid, Hybrid Skip, Hybrid QSkip), [7] 4.1.2X, [8-9] its Skip / QSkip, [10] 4.1.2X Lite, [11] Lite Skip; one later than 0.9.4's 6 / 9, so 0.9.4's 6 picked 4.0.2X Hybrid QSkip. 0.9.4 before it: the same release and OptiPatcher build Decky Framegen v0.17 pins. previous: the earlier pins a game set up with an older ClawDeck may still have; changing a setting keeps that version (main._opti_entry), only Per-game's Update OptiScaler moves the game to this one."
  },
  "optiscaler_v10": {
   "version": "10.0.0-pre1-20261030",

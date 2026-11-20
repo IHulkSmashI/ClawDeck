@@ -245,7 +245,10 @@ But two busy threads at the top clock (xemu: cpu0-1 at 4.1-4.7 GHz) hold the pac
 of a 30 W limit: a TDP step above the draw does nothing, and PL1's averaging window (56 s) hides the steps that do,
 so 2 W per 10 s from 30 W reached 10 W in 90 s and the game ran at a third of its speed. The guard now caps the CPU's
 top clock for a hot spot under the limit (intel_pstate max_perf_pct, through Power's cap so Autotune's own writes stay
-under it), steps the TDP from the measured draw otherwise, and waits for each watts step to show.
+under it), steps the TDP from the measured draw otherwise, and waits for each watts step to show. The clock cap acts
+within a second: 68-77 °C within 20 s of a step to 70 % (Project Gotham Racing 2 in xemu, fans at 6000 rpm, 2026-11-16;
+with the fans at that speed the package was at 60-83 °C at 70, 80 and 90 % alike). Three cool checks per step back kept
+that game capped for 176 of 233 s after one hot half minute, so the clock comes back a step per cool check.
 
 ## 22. Autotune without a target: the most the set TDP gives, balanced, then the lowest TDP within 5 % (maintainer, 2026-10-22) — done in code
 

@@ -53,6 +53,23 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**OptiScaler 0.9.5 for every game but the Capcom setup, and Update OptiScaler per game (2026-11-17):** ClawDeck's own
+OptiScaler is 0.9.5 (sha256 = GitHub's asset digest). 0.9.5 lists FFX 2.4's own FSR 4.1.1 first in the FFX upscaler list,
+so FSR 4.1.2X and its Lite are one later than in 0.9.4: `versions.json` keeps the positions per pinned OptiScaler
+(`fsr4_xmx_index`, 7 / 10). Tested on a Claw 8 EX AI+ (CachyOS, Proton-CachyOS): Stellar Blade installed with 0.9.5
+(XeSS 2 + XeFG loaded in the game), then FSR 4.1.2 picked showed FSR 4.1.2X in OptiScaler's menu. The new **Update
+OptiScaler (old → new)** button under Uninstall, tested there too: The Blood of Dawnwalker on 0.9.4, frame generation
+2x → 3x with Apply changes kept 0.9.4 (a setting keeps the game's earlier pinned OptiScaler, `versions.json`
+`previous`), then Update moved it to 0.9.5 with 3x kept. FSR 4.1.2 Lite on 0.9.5 (Stellar Blade, position 10) and
+FSR 4.1.2 on a game kept on 0.9.4 (Dawnwalker, position 6) both showed the right model in OptiScaler's menu.
+Check before the release: the same on a Claw 8 AI+ (Xe2) and on Bazzite.
+
+**TDP setting applied at start (2026-11-16):** after a boot or a Decky restart, the firmware's limits applied with
+thermald running (30 W and PL2 37 W on the EX) until a game started, the setting changed or the power source
+changed, while the Power section showed the setting. Now the plugin applies the TDP setting for the current power
+source when it starts. Check on the EX: set 8 W with no game, then `sudo systemctl restart plugin_loader`:
+`constraint_0_power_limit_uw` reads 8 W, PL2 10 W, and `systemctl is-active thermald` says inactive.
+
 **Autotune runs on a new governor (2026-11-15):** `governor.py` replaces both old controllers (measure / balance / lower
 / hold, and the target-fps governor). It watches every frame (mangoapp's log is now the first frame source for every
 game), tries a lower TDP for 2.5 s and takes it back at the first loss, and writes the full limit at once when a heavier
@@ -133,6 +150,16 @@ Racing 2 at 16 W: 16-18 game fps, 60 shown), and under its own draw (~20 W) the 
 Autotune looks for an `xemu` process; if one runs, the pick goes back on the chip and Autotune stays out. Check on the
 EX: Autotune on, start an Xbox game from ES-DE: within 30 s the Power line says "Autotune stays out of xemu" and the
 TDP is the pick.
+
+**Temperature guard: the CPU clock comes back when the package is cool (2026-11-16):** Project Gotham Racing 2 in xemu,
+one hot half minute at the start of a race: the guard's readings 10 s apart were 97, 97, 91, 79, 72, 69 °C. The cap went
+to 90, 80 and 70 % (the last step at 91 °C, when the one before already showed), and came back one step per 30 s under
+80 °C, with the count started over by each warmer reading: 160 s from the trip to no cap, capped for 176 of 233 s, the
+race at 27.0 fps instead of 28.2. A clock cap acts within a second, and so does its release. Now there is no further
+clock step while the package is under 95 °C and cooler than at the check before, and the clock comes back one step per
+cool check (under 80 °C). The watts steps are as before (2 W every 30 s). Check on the EX: an xemu game with Autotune off
+until the Power line says "thermal: CPU clock 90 %"; when `pkg_c` in `~/homebrew/logs/ClawDeck/thermal.csv` is under 80,
+the line is gone within 10 s per step.
 
 **Temperature guard gives the TDP back while Autotune is out (2026-11-15):** a paused Autotune (xemu, no frame rate, a
 manual change, Autotune switched off in the game) never raises the TDP, and the guard's steps back up only moved

@@ -16,7 +16,7 @@ them). Priority, in order; nothing lower starts until the line above works on th
    exactly (manifest + backups). The version is ClawDeck's to choose and test. Decky Framegen is compatibility only:
    a game it patched (fgmod in the launch options, or its files) is detected and left alone with a warning.
    Capcom RE Engine games get the Capcom setup instead (`optiscaler_v10` in the `OptiScaler\` subfolder,
-   onehoon's REFramework, the game's DLSS-G turned into XeSS-FG; `launchenv.capcom`); every other game 0.9.4.
+   onehoon's REFramework, the game's DLSS-G turned into XeSS-FG; `launchenv.capcom`); every other game 0.9.5.
    Lossless Scaling stays decky-lsfg-vk's.
 4. **Power + autotune** — profiles through RAPL-MMIO, as a dropdown plus the Autotune switch.
 
@@ -39,7 +39,7 @@ py_modules/clawdeck/
    xess.py      xess-xmx-linux: install (asset sha256 checked), state, per-game low latency from the shim's log,
                 OptiScaler-present detection (read-only)
    optiscaler.py ClawDeck's OptiScaler: pinned install (sha256), patch / unpatch a game with manifest + backups
-                (flat 0.9.4, or v10's OptiScaler/ subfolder for Capcom games), owner() (ClawDeck's, Decky
+                (flat 0.9.5, or v10's OptiScaler/ subfolder for Capcom games), owner() (ClawDeck's, Decky
                 Framegen's or someone else's; only ClawDeck's is touched)
    reframework.py onehoon's REFramework fork next to a Capcom game's exe (never over a dinput8.dll not ours), its
                 menu key moved to Delete

@@ -30,8 +30,11 @@ let lastTab = "power";
 const tabClasses = findClassModule((m: any) => m.TabContentsScroll && m.TabRowTabs) as Record<string, string> | undefined;
 const ROOT_CLASS = "clawdeck-qam-tabs";
 // Tabs is laid out for a full page; in the narrow Quick Access panel its side padding and spacers clip the tabs.
-// Four equal tabs, little padding, content under the 46 px header. Empty if Steam renames the module: the panel then
-// keeps Steam's own (wider) spacing instead of breaking.
+// Four equal tabs, little padding, content under the 46 px header. Steam fades the row's first and last 24 px (a
+// mask for scrolling tabs) and sets text-align: start: in a row this tight that cut into Power and Setup and pushed
+// every title to the left of its pill, so the mask is off and the titles are centred; without the fade the end pills
+// met the L1 / R1 glyphs, so the row keeps a small gap beside them (Claw 8 EX, 2026-11-17).
+// Empty if Steam renames the module: the panel then keeps Steam's own (wider) spacing instead of breaking.
 const TABS_CSS = ((c) => {
   if (!c) return "";
   const s = `.${ROOT_CLASS}`;
@@ -40,9 +43,11 @@ const TABS_CSS = ((c) => {
     ${s} .${c.TabRowSpacer} { display: none !important; }
     ${s} .${c.TabRow}, ${s} .${c.TabRowTabs}, ${s} .${c.TabsRowScroll} { width: 100%; }
     ${s} .${c.FixCenterAlignScroll} { display: flex; gap: 4px; width: 100%; padding: 0 !important; }
-    ${s} .${c.Tab} { flex: 1; min-width: 0; padding: 10px 2px !important; justify-content: center; font-size: 0.85em;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    ${s} .${c.TabTitle} { flex: 1; min-width: 0; overflow: hidden; }
+    ${s} .${c.TabRow} { gap: 6px; }
+    ${s} .${c.TabsRowScroll} { mask-image: none !important; -webkit-mask-image: none !important; }
+    ${s} .${c.Tab} { flex: 1; min-width: 0; padding: 10px 4px !important; justify-content: center; text-align: center; font-size: 0.85em;
+      white-space: nowrap; overflow: hidden; }
+    ${s} .${c.TabTitle} { flex: 1; min-width: 0; overflow: hidden; text-align: center; white-space: nowrap; text-overflow: ellipsis; }
     ${s} .${c.TabContentsScroll} { padding: 54px 0 40px !important; }
   `;
 })(tabClasses);
@@ -54,7 +59,9 @@ const TABS_CSS = ((c) => {
  * definite height, and Decky's per-plugin wrapper sizes to its content, so the height comes from Decky's Quick
  * Access content slot, measured at run time. */
 export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
-  const [cur, setCur] = useState<string>(() => (tabs.some((t) => t.id === lastTab) ? lastTab : tabs[0].id));
+  // the remembered tab is kept even while it isn't in the list yet (Game waits for the setup check after a re-mount):
+  // Power shows meanwhile, and the tab comes back as soon as it is listed, instead of the panel settling on Power
+  const [cur, setCur] = useState<string>(lastTab);
   const active = tabs.some((t) => t.id === cur) ? cur : tabs[0].id;
   const rootRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
@@ -77,6 +84,10 @@ export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
   );
 };
 
+// the last setup check, kept while the plugin is loaded: a Quick Access re-mount (a dropdown's menu closing) lists the
+// Game tab from the first render instead of after the check, so a pick in the Game tab stays in the Game tab
+let lastSetupDone: boolean | null = null;
+
 /**
  * The Quick Access panel holds the four panels (Power, Game, Fixes, Setup) in their short form, one tab each: short
  * labels, the read-back line after every change, nothing that needs a settings page. The full-screen page below has
@@ -84,7 +95,8 @@ export const QuickTabs: FC<{ tabs: QuickTab[] }> = ({ tabs }) => {
  */
 export const QuickPanel: FC = () => {
   const [help, setHelp] = useState(false);
-  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  const [setupDone, setSetupDoneState] = useState<boolean | null>(lastSetupDone);
+  const setSetupDone = (v: boolean) => { lastSetupDone = v; setSetupDoneState(v); };
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
   // the steps show on the first start and stay until Done or Skip; without the XMX driver they come back (nothing on
   // the XMX cores works without it). A driver left over from an earlier install no longer skips the VRR step.

@@ -16,7 +16,7 @@ version is ClawDeck's to choose:
   unpatch()  removes what the manifest lists and puts the backups back; a file someone changed since is kept.
 
 Two package layouts (versions.json "layout"):
-  flat       OptiScaler 0.9.4 (every game but Capcom's): its libraries, D3D12_Optiscaler/ and plugins/ next to the exe.
+  flat       OptiScaler 0.9.5 (every game but Capcom's): its libraries, D3D12_Optiscaler/ and plugins/ next to the exe.
   subfolder  OptiScaler v10 (Capcom RE Engine games): only the proxy DLL
              and OptiScaler.ini next to the exe; the libraries, D3D12_OptiScaler/ and plugins/ in OptiScaler/
              (OptiDllPath=.\\OptiScaler). nitec's FSR 4.1.2 files go into OptiScaler/ too; ClawDeck's cabinet.dll
@@ -446,7 +446,7 @@ def patch(home: str, folder: str, version: str, ini: dict[str, str], preset: str
                          + "; remove that first (ClawDeck never overwrites it)"}
     m = _manifest(folder)
     if m and (m.get("version") != version or (m.get("layout") or "flat") != layout):
-        r = unpatch(folder)                   # 0.9.4 (flat) -> v10 (subfolder) and back: nothing of the old one stays
+        r = unpatch(folder)                   # 0.9.x (flat) -> v10 (subfolder) and back: nothing of the old one stays
         if not r.get("ok"):
             return {"ok": False, "error": f"taking out OptiScaler {m.get('version')} first: {r.get('error')}"}
         m = None

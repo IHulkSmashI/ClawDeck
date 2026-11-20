@@ -18,6 +18,11 @@ const FSR_OPTIONS: { data: FsrRoute; label: string }[] = [
   { data: "inject", label: "Add XeSS frame gen to FSR upscaling" },
 ];
 const picks = new Map<string, { up?: string; fg?: number; ov?: number }>();   // unapplied picks per game, across re-mounts
+// the last status, launch options and recommendation per game: Steam's dropdowns re-mount Quick Access when their
+// menu closes, and the panel drew empty until the backend answered again (a flash after every pick). A re-mount draws
+// the last copy at once and reads the game again behind it.
+const seen = new Map<string, { gs?: GameStatus; opts?: string | null; rec?: Recommendation | null }>();
+const remember = (appid: string, v: { gs?: GameStatus; opts?: string | null; rec?: Recommendation | null }) => seen.set(appid, { ...(seen.get(appid) ?? {}), ...v });
 
 const UPSCALERS = [
   { data: "xess", label: "XeSS 2" },
@@ -48,10 +53,15 @@ const FRAMEGENS = [
 export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: string } | null; embedded?: boolean }> = ({ quick, pick, embedded }) => {
   useExplanations();
   const app = pick ?? runningApp();
-  const [gs, setGs] = useState<GameStatus | null>(null);
+  const was = app ? seen.get(app.appid) : undefined;
+  const [gs, setGs] = useState<GameStatus | null>(was?.gs ?? null);
   const [err, setErr] = useState<string | null>(null);
-  const [opts, setOpts] = useState<string | null>(null);    // the game's Steam launch options; null = unreadable
-  const load = async () => { if (app) { setGs(await gameStatus(app.appid)); setOpts(await getLaunchOptions(app.appid)); } };
+  const [opts, setOpts] = useState<string | null>(was?.opts ?? null);    // the game's Steam launch options; null = unreadable
+  const load = async () => {
+    if (!app) return;
+    const g = await gameStatus(app.appid); remember(app.appid, { gs: g }); setGs(g);
+    const o = await getLaunchOptions(app.appid); remember(app.appid, { opts: o }); setOpts(o);
+  };
   useEffect(() => { load(); }, [app?.appid]);
 
   if (!app) {
@@ -86,8 +96,8 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     }
     load();
   };
-  const [rec, setRec] = useState<Recommendation | null>(null);
-  useEffect(() => { gameRecommend(app.appid).then(setRec).catch(() => setRec(null)); }, [app.appid, gs]);
+  const [rec, setRec] = useState<Recommendation | null>(was?.rec ?? null);
+  useEffect(() => { gameRecommend(app.appid).then((r) => { remember(app.appid, { rec: r }); setRec(r); }).catch(() => setRec(null)); }, [app.appid, gs]);
 
 
   const ours = gs?.opti_owner === "clawdeck";
@@ -132,11 +142,18 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
     setBusy(true);
     try { await choose(wantUp, wantFg); setPickUp(null); setPickFg(null); setPickOv(null); } finally { setBusy(false); }
   };
-  const choose = async (upscaler: string, fg: number, allow = false) => {
-    const size = rec?.capcom ? "about 85 MB with REFramework" : "about 55 MB";
-    if (upscaler !== "own" && !ours) notify(`${app.name}: setting up OptiScaler (the first time downloads it, ${size})…`, { title: `${app.name}: installing…`, body: `OptiScaler (first time: ${size} download)` });
-    const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || wantOv < 0 ? null : wantOv);
-    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true)); return; }
+  // the newer pinned OptiScaler with what the game has now (upscaler, frame generation, overlay); picks not applied
+  // yet stay picks
+  const update = async () => {
+    setBusy(true);
+    try { await choose(nowUp, nowFg, false, nowOv, true); } finally { setBusy(false); }
+  };
+  // a game with an older ClawDeck OptiScaler keeps it when a setting changes; only update (the Update button) moves it
+  const choose = async (upscaler: string, fg: number, allow = false, ov = wantOv, update = false) => {
+    const size = rec?.capcom ? "about 85 MB with REFramework" : "about 70 MB";
+    if (upscaler !== "own" && (!ours || update)) notify(`${app.name}: setting up OptiScaler ${optiVer ?? ""} (the first time downloads it, ${size})…`, { title: `${app.name}: installing…`, body: `OptiScaler ${optiVer ?? ""} (first time: ${size} download)` });
+    const r = await gameChoose(app.appid, upscaler, fg, allow, upscaler === "own" || ov < 0 ? null : ov, update);
+    if (!r.ok && r.error?.includes("no tested version")) { confirmUntested("REFramework", () => choose(upscaler, fg, true, ov, update)); return; }
     setErr(r.ok ? null : (r.error ?? "not saved"));
     const needsWrapper = Object.keys(r.env ?? {}).length > 0;
     if (r.ok && needsWrapper && opts !== null && !hasWrapper(opts) && gs?.wrapper) {
@@ -220,13 +237,21 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
           {!installed && <Status ok={false} label="Install the XeSS XMX driver first" detail="Setup → Install XeSS XMX (one time). Without it nothing runs on the XMX cores." />}
           {rec?.pd_upscaler && !ours && <Status ok={false} label="Not set up by ClawDeck yet: no DLSS in this game"
             detail={rec.reasons[0]} />}
-          <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed && !outdated) || (!!rec?.pd_upscaler && !ours)} onClick={() => apply()}
+          <ButtonItem layout="below" disabled={busy || !installed || (ours && !changed) || (!!rec?.pd_upscaler && !ours)} onClick={() => apply()}
             description={!ours && rec ? explain(rec.reasons.join(" · ")) : undefined}>
-            {busy ? "Working…" : !ours ? "Install OptiScaler in this game" : outdated && !changed ? `Update OptiScaler to ${optiVer}` : changed ? "Apply changes" : "Installed"}
+            {busy ? "Working…" : !ours ? "Install OptiScaler in this game" : changed ? "Apply changes" : "Installed"}
           </ButtonItem>
           {ours && (
             <ButtonItem layout="below" disabled={busy} onClick={async () => { setBusy(true); try { await choose("own", 0); } finally { setBusy(false); } }}>
               Uninstall OptiScaler from this game
+            </ButtonItem>
+          )}
+          {ours && outdated && (
+            <ButtonItem layout="below" disabled={busy || !installed} onClick={() => update()}
+              description={explain(`This game has OptiScaler ${gs?.files?.version}; ClawDeck now installs ${optiVer}.`,
+                "fixes and newer FSR / XeSS libraries from OptiScaler's release; the game keeps its upscaler, frame generation and overlay.",
+                "one download the first time (shared by every game); restart the game if it's running.")}>
+              {busy ? "Working…" : `Update OptiScaler (${gs?.files?.version} → ${optiVer})`}
             </ButtonItem>
           )}
         </PanelSectionRow>
@@ -234,7 +259,7 @@ export const PerGameTab: FC<{ quick?: boolean; pick?: { appid: string; name: str
       <PanelSectionRow>
         <Group title="In this game now" />
         <div style={{ fontSize: 12, lineHeight: "18px", color: "#b8bcbf", padding: "0 0 4px" }}>
-          <div>{ours ? "✓" : "–"} OptiScaler: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
+          <div>{ours ? "✓" : "–"} OptiScaler{ours && gs?.files?.version ? ` ${gs.files.version}` : ""}: {ours ? `ClawDeck's, as ${gs?.files?.dll ?? "?"} (${UPSCALERS.find((u) => u.data === (gs?.files?.preset === "fsr4" ? "fsr4_xmx" : gs?.files?.preset))?.label ?? gs?.files?.preset ?? "XeSS 2 on XMX"})`
             : fgmodHere || gs?.opti_owner === "decky-framegen" ? "Decky Framegen's (ClawDeck leaves it alone)" : gs?.opti_owner === "other" ? "put there by another tool or by hand" : "not in the game"}</div>
           {gs?.files?.reframework && <div>✓ REFramework (dinput8.dll)</div>}
           <div>{wrapped ? "✓" : "–"} Launch options: {wrapped ? "ClawDeck is in them" : "ClawDeck not added yet (added when you pick below)"}</div>
