@@ -1,7 +1,7 @@
 """ClawDeck - Decky Loader backend. Thin: every call maps to one module in py_modules/clawdeck.
 
 Runs as root (plugin.json flag root) because sysfs, InputPlumber's config, /etc/firmware and the Steam library
-need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (1 Hz, one asyncio
+need it. Battery rule: nothing here runs on a timer unless autotune is on for a running game (twice a second, one asyncio
 task) or thermald is paused while ClawDeck holds a TDP (the temperature guard: one file read every 10 s, §21).
 Power-source changes and resume arrive as events from Steam (frontend listeners).
 
@@ -97,8 +97,8 @@ class Plugin:
     async def _main(self):
         self.settings = self._load_settings()
         selfupdate.update_pending(RUNTIME_DIR, clear=True)   # an update's marker never outlives the update
-        if self.settings.pop("dry_run", None) is not None:   # Dry run was removed: drop the old setting
-            self._save_settings()
+        if [self.settings.pop(k) for k in ("dry_run", "autotune_auto_fps") if k in self.settings]:
+            self._save_settings()                            # Dry run and Auto FPS were removed: drop the old settings
         self.hw = hw.detect()
         self.power = power.Power(self.hw)
         self.battery = battery.Battery(self.hw)
@@ -436,6 +436,7 @@ class Plugin:
         return self.settings.get(key)
 
     async def set_setting(self, key: str, value) -> bool:
+        was = self.settings.get(key)
         self.settings[key] = value
         self._save_settings()
         if key == "autotune":
@@ -443,9 +444,25 @@ class Plugin:
             self._autotune_flag(bool(value))
             # switched on while a game runs: MangoHud's frame-time log, which Autotune reads, is only put in at a
             # game's launch, so this game has none (it showed "starting…" for good, maintainer 2026-11-05)
-            self._autotune_late = bool(value) and self.running_appid is not None
-            if not value:
-                self.autotune.pause("autotune switched off")
+            if bool(value) != bool(was):
+                self._autotune_late = {self.running_appid, self._game_key()} if value and self.running_appid else set()
+        charger = (key == "autotune_plugged" and bool(value) != bool(was) and self.settings.get("autotune")
+                   and self.running_appid is not None and bool(self.running_plugged))
+        if (key == "autotune" or charger) and not value:
+            w = None
+            if self.running_appid and self.settings.get("autotune_max"):
+                plugged = self._plugged()
+                w = self._pick(self._game_key(), plugged)["tdp"]
+            self.autotune.pause("autotune switched off" if key == "autotune" else "autotune on the charger switched off",
+                                limit=w)
+        if charger and value:
+            async with self._power_lock:
+                self._save_learned(self._game_key(), bool(self.running_plugged))
+                self.running_plugged = True
+                self._restart_game_power(self._game_key(), True)
+        if key in ("autotune", "autotune_plugged") and self.running_appid is None and self.settings.get("autotune_max"):
+            async with self._power_lock:
+                self._apply_idle_pick(bool(self.battery.plugged()))
         if key == "diag_log":
             self._ensure_diag()          # off: the loop sees the setting and ends within a second
         return True
@@ -539,11 +556,16 @@ class Plugin:
         st["limit_w"] = s.ceiling_tdp if s is not None else None
         st["autotune_w"] = s.learned.tdp if s is not None and not s.paused else None
         st["autotune_floor"] = self.settings.get("autotune_floor")
-        st["autotune_keep"] = self.settings.get("autotune_keep") or autotune.KEEP_PCT
-        st["autotune_target"] = int(self.settings.get("autotune_target") or 0)
-        st["autotune_auto_fps"] = self.settings.get("autotune_auto_fps", True) is not False
+        st["autotune_target"] = self.autotune.target_of(int(self.settings.get("autotune_target") or 0))
+        plugged = self._plugged()
+        pk = self._pick(self._game_key() if self.running_appid else None, plugged)
+        own = self.settings.get("autotune_max")
+        st["autotune_max"] = self.power.clamp_tdp(int(own), plugged) if own else pk["tdp"]
+        st["autotune_governs"] = self._autotune_governs(pk["prof"], plugged) and (
+            self.running_appid is None or self.autotune.session is not None)
+        st["autotune_screen_target"] = self.autotune.target_of(0)
         st["thermal"] = self.guard.status()
-        slot = "plugged" if self.battery.plugged() else "battery"
+        slot = "plugged" if plugged else "battery"
         st["pl2_manual"] = bool(self.settings.get("pl2_manual"))
         st["pl2_set_w"] = self.settings.get(f"pl2_w_{slot}")
         st["pl2_max"] = self.hw.model["tdp"].get("sppt_max", 45)
@@ -576,7 +598,7 @@ class Plugin:
         """The TDP slider (§17): a custom limit anywhere in the model's range, kept as the "custom" profile and used as
         autotune's ceiling."""
         async with self._power_lock:
-            plugged = self.battery.plugged()
+            plugged = self._plugged()
             want = self.power.clamp_tdp(int(watts), plugged)
             self.settings["last_profile"], self.settings["custom_tdp"] = "custom", want
             slot = "plugged" if plugged else "battery"
@@ -599,7 +621,7 @@ class Plugin:
         """Power → Custom: "Set PL2 yourself" on (with its watts, for this power source) or off (PL2 = PL1 + 2 W, as
         Handheld Daemon / PowerControl / PowerStation do). Applied at once to the current pick."""
         async with self._power_lock:
-            plugged = bool(self.battery.plugged())
+            plugged = self._plugged()
             slot = "plugged" if plugged else "battery"
             self.settings["pl2_manual"] = bool(manual)
             if watts is not None:
@@ -607,7 +629,11 @@ class Plugin:
                 self.settings[f"pl2_w_{slot}"] = max(self.hw.model["tdp"]["min"], min(int(watts), hi))
             self._save_settings()
             sysfs.clear_error()
-            r = self._apply_pick_now(plugged)
+            if self.power.governed:                       # the chip keeps Autotune's PL2: the session goes on as it is
+                self._pl2_for(self._pick(self._game_key(), plugged), plugged)
+                r = {"applied": {"tdp": self.power.read_tdp()}}
+            else:
+                r = self._apply_pick_now(plugged)
             st = self.power.status()
             # RAPL's PL2 as the chip has it now (status() keeps it under "rapl"; the top-level key read here before
             # never existed, so the check below always passed and the line said "PL2 set")
@@ -615,9 +641,13 @@ class Plugin:
             want = self.power.pl2_w
             tdp = r.get("applied", {}).get("tdp")
             pl1 = st["rapl"]["pl1_w"] or 0                # never below PL1: under Autotune's TDP that is PL1 as read
-            ok = tdp is not None and (want is None or got is None or
+            ok = tdp is not None and (want is None or got is None or self.power.governed or   # governed: PL1 + 2 W
                                       round(got) in (want, max(tdp, want), max(round(pl1), want)))
-            line = (f"PL2 {round(got)} W" if got is not None else "PL2 set") + (" (yours)" if want is not None else " (PL1 + 2 W)")
+            read = f"PL2 {round(got)} W" if got is not None else "PL2 set"
+            if want is not None and self.power.governed:    # yours is saved; the chip has Autotune's while it governs
+                line = f"{read} (PL1 + 2 W while Autotune governs this game; your {want} W applies when it doesn't)"
+            else:
+                line = read + (" (yours)" if want is not None else " (PL1 + 2 W)")
             return {"ok": ok, "manual": bool(manual), "pl2_w": want, "read_w": got, "summary": line,
                     "error": None if ok else (sysfs.last_error() or "the chip didn't take that PL2")}
 
@@ -626,7 +656,7 @@ class Plugin:
         limit that applies now on this power source (the game's own pick, else your last pick on it, else the default),
         which is what the profile list and the slider show. The game ClawDeck set up wins over the UI's guess."""
         gid = str((self._game_key() if self.running_appid else appid) or "")
-        plugged = bool(self.battery.plugged())
+        plugged = self._plugged()
         own = self.profiles.own(gid, plugged) if gid else {}
         pk = self._pick(gid or None, plugged)
         return {"appid": gid or None, "plugged": plugged, "base": own.get("base"), "tdp": own.get("tdp"),
@@ -638,12 +668,12 @@ class Plugin:
         gid = str(self._game_key(appid) or "")
         if not gid:
             return {"ok": False, "error": "no game running"}
-        plugged = bool(self.battery.plugged())
+        plugged = self._plugged()
         self.profiles.set(gid, plugged, {"base": None, "tdp": None, "learned": None})
         r = {"ok": True}
         if self.running_appid and self._game_key() == gid:
             async with self._power_lock:
-                r = {"ok": True, **self._restart_game_power(gid, plugged)}
+                r = {"ok": True, **self._restart_game_power(gid, plugged, picked=True)}
         return r
 
     async def apply_profile(self, name: str, appid: str | None = None) -> dict:
@@ -651,11 +681,11 @@ class Plugin:
         and `error` in red; `read` is what the hardware reports after the write."""
         name = hw.profile_name(name)
         if name == "custom":
-            slot = "plugged" if self.battery.plugged() else "battery"
+            slot = "plugged" if self._plugged() else "battery"
             return await self.set_tdp(int(self.settings.get(f"custom_tdp_{slot}") or self.settings.get("custom_tdp")
                                           or self.power.read_tdp() or 17))
         async with self._power_lock:
-            plugged = self.battery.plugged()
+            plugged = self._plugged()
             self.settings["last_profile"] = name
             self.settings[f"last_profile_{'plugged' if plugged else 'battery'}"] = name
             self._save_settings()
@@ -750,8 +780,10 @@ class Plugin:
         src = self._profile_source(appid, plugged) if appid else appid
         own = self.profiles.own(src, plugged) if src else {}
         prof = self.profiles.get(src or "", plugged)
-        if src != appid:          # a frontend's game without a slot yet starts at the frontend's pick,
+        if src != appid:          # a frontend's game without a pick yet starts at the frontend's pick,
             prof = {k: v for k, v in prof.items() if k != "learned"}       # never with another game's learning
+            if self.profiles.own(appid, plugged).get("learned"):
+                prof["learned"] = self.profiles.own(appid, plugged)["learned"]
         if own.get("base"):
             base, src = own["base"], "game"
         elif self.settings.get(f"last_profile_{slot}"):
@@ -776,36 +808,55 @@ class Plugin:
             return getattr(self, "running_key", None) or self.running_appid
         return str(appid)
 
+    def _plugged(self) -> bool:
+        """The running game's power source until Steam reports a change (`running_plugged`), else the charger's state."""
+        p = getattr(self, "running_plugged", None)
+        return bool(self.battery.plugged() if p is None else p)
+
     def _profile_source(self, key: str, plugged: bool) -> str:
-        """Whose slot a game starts from: its own; a frontend's game without one, the frontend's own pick."""
-        if "#" not in key or self.profiles.own(key, plugged):
+        """Whose pick a game starts from: its own; a frontend's game without one, the frontend's."""
+        if "#" not in key or any(v is not None for k, v in self.profiles.own(key, plugged).items() if k != "learned"):
             return key
         return frontend.steam_appid(key)
 
-    def _start_game_power(self, appid: str, plugged: bool) -> dict:
+    def _start_game_power(self, appid: str, plugged: bool, picked: bool = False, held: int | None = None) -> dict:
         pk = self._pick(appid, plugged)
         prof = pk["prof"]
         self._guard_reset()
         self._pl2_for(pk, plugged)
-        result = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
+        governs = self._autotune_governs(prof, plugged)
+        result = self.power.apply_profile(pk["apply"], self._limit_overrides(pk, plugged), plugged)
         result["limit_w"] = result["applied"].get("tdp")
-        # autotune is for battery: plugged in it only runs when the user asked for that too (Advanced)
-        if self.settings.get("autotune") and prof.get("autotune", True) and (not plugged or self.settings.get("autotune_plugged")):
-            # the picked limit (profile or slider) is the set TDP autotune measures at and works under; its floor is
-            # the model minimum or the user's
+        if governs:
+            # that limit is the set TDP autotune measures at and works under; its floor is the model minimum or the
+            # user's
             lo, hi = hw.tdp_range(self.hw.model, plugged)
             ceiling = result["applied"].get("tdp") or hi
             floor = max(lo, min(int(self.settings.get("autotune_floor") or lo), int(ceiling)))
             self.autotune.start(appid, prof.get("learned"), floor, int(ceiling), plugged,
-                                keep_pct=self.settings.get("autotune_keep"),
                                 xell_log=os.path.join(xess.prefix_dir(HOME, frontend.steam_appid(appid)), "igdext_xell.log"),
                                 target=int(self.settings.get("autotune_target") or 0) or None,
-                                auto_fps=self.settings.get("autotune_auto_fps", True) is not False,
-                                fg=self._game_fg(frontend.steam_appid(appid)))
+                                fg=self._game_fg(frontend.steam_appid(appid)), at_limit=picked, held=held)
             result["autotune"] = "started"
-            quiet.background(True)                       # the 1 Hz loop: on the E-cores, low priority, away from the game
+            quiet.background(True)                       # autotune's loop: on the E-cores, low priority, away from the game
         self._held_or_release(result)
         return result
+
+    def _autotune_governs(self, prof: dict, plugged: bool) -> bool:
+        """Autotune sets this game's limit on this power source: switched on, not off for the game, and (it is for
+        battery) plugged in only when the user asked for that too (Advanced). Where it does not, the TDP setting is
+        the limit."""
+        return bool(self.settings.get("autotune") and prof.get("autotune", True)
+                    and (not plugged or self.settings.get("autotune_plugged"))
+                    and not (self.running_appid is not None and self._game_key() in getattr(self, "_autotune_late", ())))
+
+    def _limit_overrides(self, pk: dict, plugged: bool) -> dict:
+        """What goes on the chip with a pick. Where Autotune sets the limit and has a maximum of its own, that is the
+        limit in place of the TDP setting: in a game from its start (so PL2 and the temperature guard follow it, also
+        where Autotune then stays out), and in the menus."""
+        if self._autotune_governs(pk["prof"], plugged) and self.settings.get("autotune_max"):
+            return {**pk["overrides"], "tdp": self.power.clamp_tdp(int(self.settings["autotune_max"]), plugged)}
+        return pk["overrides"]
 
     def _held_or_release(self, result: dict) -> None:
         """A TDP is held: the temperature guard watches it. None could be set: thermald back in charge."""
@@ -813,13 +864,13 @@ class Plugin:
             self.power.release_thermald()
         self._ensure_guard()
 
-    def _restart_game_power(self, appid: str, plugged: bool) -> dict:
+    def _restart_game_power(self, appid: str, plugged: bool, picked: bool = False, held: int | None = None) -> dict:
         """The running game from a clean start on this power source: autotune's levers and the guard's step back to
         what was there before ClawDeck (thermald stays stopped: the limit is set again at once), then the user's pick
         and a fresh autotune at that limit. Used after a pick in the game, Use default, unplugging and resume."""
         self.autotune.stop(revert=False)
         self.power.revert_all(keep_thermald=True)
-        return self._start_game_power(appid, plugged)
+        return self._start_game_power(appid, plugged, picked, held)
 
     def _apply_idle_pick(self, plugged: bool) -> dict | None:
         """No game runs: the limit you picked for this power source goes (back) on the chip, as the menus show it. If
@@ -833,7 +884,7 @@ class Plugin:
         pk = self._pick(None, plugged)
         self._guard_reset()
         self._pl2_for(pk, plugged)
-        r = self.power.apply_profile(pk["apply"], pk["overrides"], plugged)
+        r = self.power.apply_profile(pk["apply"], self._limit_overrides(pk, plugged), plugged)
         self._holding_pick = True
         self._held_or_release(r)
         return {**r, "limit_w": r["applied"].get("tdp"), "pick": {"profile": pk["profile"], "tdp": pk["tdp"]}}
@@ -843,7 +894,7 @@ class Plugin:
         chip as it is."""
         if self.running_appid:
             self.running_plugged = plugged
-            return self._restart_game_power(self._game_key(), plugged)
+            return self._restart_game_power(self._game_key(), plugged, picked=True)   # your new limit, at once
         return self._apply_idle_pick(plugged) or {"applied": {}, "failed": ["tdp"]}
 
     # ---- temperature guard (findings §21): only while thermald is paused --------------------------------------------
@@ -880,14 +931,15 @@ class Plugin:
         async with self._power_lock:
             if not self.power.thermald_paused():
                 return None
-            plugged = bool(self.battery.plugged())
+            plugged = self._plugged()
             if self.autotune.session is not None:
                 sess = self.autotune.session
-                return self.guard.check(sess.learned.tdp, self._floor_w(), self.autotune.thermal_step,
+                return self.guard.check(self.autotune.held_w(), self._floor_w(), self.autotune.thermal_step,
                                         limit_w=sess.ceiling_tdp, raise_tdp=self.autotune.thermal_release,
                                         set_clock=self._guard_clock)
-            # your limit for this power source (the game's pick, or the last one): where stepping back up stops
-            limit = self._pick(self._game_key(), plugged)["tdp"]
+            # your limit for this power source (the pick, or Autotune's maximum): where stepping back up stops
+            pk = self._pick(self._game_key(), plugged)
+            limit = pk["tdp"] if self.running_appid else self._limit_overrides(pk, plugged).get("tdp", pk["tdp"])
             return self.guard.check(self.power.read_tdp(), self._floor_w(), lambda w: self.power.set_tdp(w, plugged),
                                     limit_w=limit, set_clock=self._guard_clock)
 
@@ -915,8 +967,12 @@ class Plugin:
             self.profiles.set(appid, plugged, {"learned": learned["learned"]})
         return learned
 
-    async def game_started(self, appid: str) -> dict:
+    async def game_started(self, appid: str, resync: bool = False) -> dict:
         appid = str(appid)
+        if resync and not autotune.game_process(appid):
+            # the panel saw Steam's running app before its process (a launch waiting on Steam's shader processing)
+            decky.logger.info("power: %s has no game process yet: not started", appid)
+            return {}
         async with self._power_lock:
             if self.running_appid and self.running_appid != appid:
                 # a second game (or a launcher) started while one runs: save what the first one learned first
@@ -926,7 +982,7 @@ class Plugin:
             self.running_key, self.running_title = appid, None
             self._watch_frontend(True)
             self._holding_pick = False
-            self._autotune_late = False
+            self._autotune_late = set()
             self.power.revert_all(keep_thermald=True)   # the game starts from what was there before ClawDeck + its pick
             return self._start_game_power(appid, plugged)
 
@@ -972,6 +1028,8 @@ class Plugin:
             self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged, self.running_key = plugged, key
             self.running_title = ev["name"] if ev["event"] == "start" else None
+            if ev["event"] == "start":
+                self._autotune_late = set(getattr(self, "_autotune_late", ())) - {key}
             decky.logger.info("frontend: %s %s (%s): power and Autotune as %s", "started" if ev["event"] == "start"
                               else "ended", ev["name"], ev["system"], key)
             return self._restart_game_power(key, plugged)
@@ -982,7 +1040,7 @@ class Plugin:
             # Steam reports every app that stops (launchers): only the game ClawDeck set up counts
             return {"ignored": True}
         async with self._power_lock:
-            plugged = self.running_plugged if self.running_plugged is not None else bool(self.battery.plugged())
+            plugged = self._plugged()
             learned = self._save_learned(self._game_key(), plugged)
             self.autotune.release_frames()
             self.running_appid, self.running_plugged = None, None
@@ -1010,9 +1068,10 @@ class Plugin:
             return {"changed": False}
         appid = self._game_key()
         async with self._power_lock:
+            held = self.autotune.carry_w()
             self._save_learned(appid, bool(self.running_plugged))
             self.running_plugged = plugged
-            return {"changed": True, **self._restart_game_power(appid, plugged)}
+            return {"changed": True, **self._restart_game_power(appid, plugged, held=held)}
 
     # ---- fan and charge limit (Power) ---------------------------------------------------------------------------------
     def _reapply_fan_charge(self, why: str) -> None:
@@ -1077,9 +1136,10 @@ class Plugin:
                     return {"reapplied": False}
                 self.power.revert_all(keep_thermald=True)
                 return {"reapplied": True, "limit": self._apply_idle_pick(plugged)}
+            held = self.autotune.carry_w()
             self._save_learned(self._game_key(), bool(self.running_plugged))
             self.running_plugged = plugged
-            return {"reapplied": True, **self._restart_game_power(self._game_key(), plugged)}
+            return {"reapplied": True, **self._restart_game_power(self._game_key(), plugged, held=held)}
 
     def _game_fg(self, appid: str | None) -> int:
         """ClawDeck's frame generation multiplier for the game (0: off): Autotune divides presented frames by it when
@@ -1088,25 +1148,45 @@ class Plugin:
         fg = launch.get("fg") or 0
         return int(fg) if fg >= 2 and launch.get("opti_fg") != "off" else 0
 
-    async def set_autotune_target(self, fps: int | None, auto_fps: bool = True) -> dict:
-        """Autotune target: 0 / None = nearly the most frames for the watts (as before); a number = the fewest watts
-        that hold that many rendered fps. Auto FPS: an out-of-reach target becomes the closest fps it can hold.
-        Applies to the running game at once (from the full TDP), and to every game from its start."""
+    async def set_autotune_target(self, fps: int | None) -> dict:
+        """Autotune target: the fewest watts that hold that many rendered fps; out of reach, what the full limit
+        gives. 0 / None: the screen's highest refresh rate.
+        Applies to the running game at once (from the limit in use), and to every game from its start."""
         t = int(fps or 0)
-        t = 0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240))
-        self.settings["autotune_target"], self.settings["autotune_auto_fps"] = t, bool(auto_fps)
+        t = self.autotune.target_of(0 if t <= 0 else max(autotune.MIN_TARGET, min(t, 240)))
+        self.settings["autotune_target"] = t
         self._save_settings()
-        self.autotune.set_target(t or None, bool(auto_fps))
-        words = (f"Autotune holds {t} fps with the fewest watts" + (" (Auto FPS: the closest it can reach)" if auto_fps else "")
-                 if t else "Autotune: nearly the most frames for the watts")
-        return {"ok": True, "target": t, "auto_fps": bool(auto_fps), "summary": words, "error": None}
+        plugged = self._plugged()
+        if self.running_appid is None or self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
+            self.autotune.set_target(t)
+        words = f"Autotune holds {t} fps with the fewest watts"
+        return {"ok": True, "target": t, "summary": words, "error": None}
+
+    async def set_autotune_max(self, watts: int | None) -> dict:
+        """Autotune's own maximum TDP: the limit Autotune works under, in place of the TDP setting. None / 0: the TDP
+        setting. One value for both power sources, clamped to each one's range where it is used. The running game
+        starts over under it at once, as after a new pick."""
+        async with self._power_lock:
+            lo, hi = hw.tdp_range(self.hw.model, True)
+            w = max(lo, min(int(watts), hi)) if watts else None
+            self.settings["autotune_max"] = w
+            self._save_settings()
+            plugged = self._plugged()
+            if self.running_appid is None:
+                self._apply_idle_pick(plugged)
+            elif self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged):
+                self._restart_game_power(self._game_key(), plugged, picked=True)
+            words = f"Autotune uses up to {self.power.clamp_tdp(w, plugged)} W" if w else "Autotune uses up to the TDP setting"
+            return {"ok": True, "max_w": w, "summary": words, "error": None}
 
     async def get_autotune(self) -> dict:
         st = {**self.autotune.status(), "thermal": self.guard.status(), "game": self.running_appid,
               "title": self.running_title}
         # the running game's frame generation (ClawDeck's pick): the Power panel says what that does to Autotune
         st["game_fg"] = self._game_fg(self.running_appid)
-        if not st.get("running"):
+        plugged = self._plugged()
+        if not st.get("running") or (st.get("paused") and self.running_appid is not None
+                                     and not self._autotune_governs(self._pick(self._game_key(), plugged)["prof"], plugged)):
             st["why"] = self._autotune_why()
         return st
 
@@ -1117,25 +1197,16 @@ class Plugin:
             return "off"
         if self.running_appid is None:
             return "no game reported to ClawDeck yet"
-        plugged = bool(self.running_plugged if self.running_plugged is not None else self.battery.plugged())
+        plugged = self._plugged()
         if plugged and not self.settings.get("autotune_plugged"):
             return "off on the charger (Advanced → Autotune on the charger)"
         if self.profiles.get(self._game_key(), plugged).get("autotune") is False:
             return "off for this game"
-        if getattr(self, "_autotune_late", False):
-            return "turned on during this game: restart the game and it starts (it reads frame times from the launch)"
+        if self._game_key() in getattr(self, "_autotune_late", ()):
+            return "turned on during this game: restart the game and it starts"
         if not shutil.which("mangohud"):
             return "MangoHud isn't installed, and Autotune reads frame times through it"
         return "waiting for the game's first frame times (start a level, not a menu)"
-
-    async def set_autotune_keep(self, pct: float) -> dict:
-        """How close to the most the set TDP gives autotune must stay (2-15 %, default 5): smaller = more frames,
-        larger = more battery."""
-        pct = max(2.0, min(float(pct), 15.0))
-        self.settings["autotune_keep"] = pct
-        self._save_settings()
-        self.autotune.set_keep(pct)
-        return {"ok": True, "keep_pct": pct, "summary": f"Autotune keeps within {pct:g} % of the most the TDP gives", "error": None}
 
     # ---- per-game launch environment (XeSS XMX, XeLL) --------------------------------------------------------------
     def _write_launch(self, appid: str) -> dict:
