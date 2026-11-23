@@ -110,8 +110,8 @@ ClawDeck isn't in Decky's plugin store, so it won't show up there.
 
 <p align="center"><img src="docs/img/first-run.png" alt="First run: install the XeSS XMX driver, then the VRR fix" width="40%"></p>
 
-1. **Install the XeSS XMX driver** (about 260 MB, a minute or two).
-2. **Install the VRR fix**, then **restart the Claw** once.
+1. **Install the XeSS XMX driver** (about 260 MB, a minute or two), if the step is shown. Claw A1M and A8 have no XMX cores, so they skip it.
+2. **Install the VRR fix**, then **restart the Claw** once if the step is shown.
 3. Tap **Done: show the panel**.
 
 The face-button fix and the log fix apply on their own.
