@@ -1,7 +1,7 @@
 import { ButtonItem, Navigation, PanelSection, PanelSectionRow, SidebarNavigation, Tabs, ToggleField, findClassModule } from "@decky/ui";
 import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { getSetting, setSetting, uiLog, xessState } from "./api";
+import { getHardware, getSetting, setSetting, uiLog, xessState } from "./api";
 import { FirstRun } from "./components/FirstRun";
 import { LastMessage } from "./components/LastMessage";
 import { HelpContext } from "./components/Hint";
@@ -98,9 +98,13 @@ export const QuickPanel: FC = () => {
   const [setupDone, setSetupDoneState] = useState<boolean | null>(lastSetupDone);
   const setSetupDone = (v: boolean) => { lastSetupDone = v; setSetupDoneState(v); };
   useEffect(() => { getSetting("quick_help").then((v) => setHelp(!!v)); uiLog("ui: quick access panel mounted").catch(() => undefined); }, []);
-  // the steps show on the first start and stay until Done or Skip; without the XMX driver they come back (nothing on
-  // the XMX cores works without it). A driver left over from an earlier install no longer skips the VRR step.
-  useEffect(() => { Promise.all([getSetting("setup_done"), xessState()]).then(([d, x]) => setSetupDone(!!d && !!x?.installed)).catch(() => setSetupDone(true)); }, []);
+  // The XMX driver is required to finish setup only on devices that have XMX cores.
+  // A driver left over from an earlier install no longer skips the VRR step.
+  useEffect(() => {
+    Promise.all([getSetting("setup_done"), xessState(), getHardware()])
+      .then(([d, x, hw]) => setSetupDone(!!d && (!!x?.installed || hw.caps?.xmx === false)))
+      .catch(() => setSetupDone(true));
+  }, []);
   const tabs: QuickTab[] = [
     { id: "power", title: "Power", content: <PowerTab quick /> },
     ...(setupDone ? [{ id: "game", title: "Game", content: <GameSection quick /> }] : []),
