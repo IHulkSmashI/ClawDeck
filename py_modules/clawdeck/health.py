@@ -100,8 +100,10 @@ def checks(hardware: hw.Hardware, home: str) -> list[dict]:
                                  if p.rapl_pl1 and power.thermald_active() else ""), "fix": None})
     out.append({"id": "gpu_clocks", "title": "GPU clock control (autotune's GPU lever)", "ok": p.gpu_min_freq is not None,
                 "detail": "floor and ceiling can be set" if p.gpu_min_freq else "no xe/i915 frequency files", "fix": None})
-    out.append({"id": "cpu_pct", "title": "CPU ceiling control (autotune's CPU lever)", "ok": p.cpu_max_perf_pct is not None,
-                "detail": "available" if p.cpu_max_perf_pct else "intel_pstate not active", "fix": None})
+    cpu_ceiling = p.cpu_max_perf_pct is not None or bool(p.cpu_freq_policies)
+    out.append({"id": "cpu_pct", "title": "CPU ceiling control (autotune's CPU lever)", "ok": cpu_ceiling,
+                "optional": not cpu_ceiling,
+                "detail": "available" if cpu_ceiling else "not exposed by this kernel or CPU driver", "fix": None})
     xs = xess_state(home)
     out.append({"id": "xess", "title": "XeSS XMX driver (xess-xmx-linux)", "ok": xs["installed"] and xs["state"] == "ok",
                 "detail": (f"{xs['version'] or '?'}: " if xs["installed"] else "") + (xs["driver_status"] or ("not installed" if not xs["installed"] else "no session check yet: log out and in")),

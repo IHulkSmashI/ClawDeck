@@ -277,7 +277,7 @@ export const PowerTab: FC<{ quick?: boolean }> = ({ quick }) => {
                 quick ? undefined : "off is cooler and quieter on battery.", "off costs fps in CPU-heavy scenes.")} />
           </PanelSectionRow>
           <PanelSectionRow>
-            <SliderField label="CPU ceiling (%)" value={st.cpu.max_perf_pct ?? 100} min={10} max={100} step={5} showValue disabled={!st.cpu.available}
+            <SliderField label="CPU ceiling (%)" value={st.cpu.max_perf_pct ?? 100} min={st.cpu.min_perf_pct ?? 10} max={100} step={5} showValue disabled={!st.cpu.available}
               onChange={(v) => latest("cpu", () => setCpuMaxPct(v), onLever)}
               description={explain(`Caps the CPU's clock so graphics get more of the shared power. Reads ${st.cpu.max_perf_pct ?? "?"} %.`,
                 quick ? undefined : "graphics-heavy games; try 70–80 %.", "CPU-heavy scenes get slower.")} />

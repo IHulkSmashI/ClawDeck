@@ -53,6 +53,12 @@ sleep/wake several times fine.
 
 ## Needs the maintainer
 
+**MSI Claw A8 CPU ceiling (2026-11-23):** the device survey reports `amd-pstate-epp` and writable CPUFreq policy
+ceilings, with different hardware maxima across the 16 CPUs. ClawDeck now applies the percentage ceiling to each
+policy's own `cpuinfo_max_freq` and reverts each original `scaling_max_freq`. Test on the A8: apply an 80–85 % profile,
+confirm each policy reads the expected percentage, exercise the thermal cap, then restart/unload ClawDeck and confirm
+all original per-policy maxima return.
+
 **OptiScaler 0.9.5 for every game but the Capcom setup, and Update OptiScaler per game (2026-11-17):** ClawDeck's own
 OptiScaler is 0.9.5 (sha256 = GitHub's asset digest). 0.9.5 lists FFX 2.4's own FSR 4.1.1 first in the FFX upscaler list,
 so FSR 4.1.2X and its Lite are one later than in 0.9.4: `versions.json` keeps the positions per pinned OptiScaler

@@ -29,7 +29,7 @@ Decky backend (Python, root)                  main.py       thin dispatch, game 
 py_modules/clawdeck/
    hw.py        model table (one row per Claw) + sysfs path discovery
    sysfs.py     every write recorded → revert_all(); last_error() for the UI's red rows
-   power.py     levers (TDP via RAPL-MMIO on the EX, HHD / MSI firmware elsewhere; CPU max_perf_pct; GPU window)
+   power.py     levers (TDP via RAPL-MMIO on the EX, HHD / MSI firmware elsewhere; CPU max_perf_pct or cpufreq policy ceilings; GPU window)
                 + the four profiles (hw.PROFILES)
    battery.py   plugged detection only (profiles differ on battery / charger)
    profiles.py  per-game JSON: base profile, what autotune found, launch settings
