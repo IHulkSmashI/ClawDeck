@@ -195,6 +195,7 @@ problem. **Explain every control** and the **Full view** are here too.
 
 | Problem | What to do |
 |---|---|
+| **Profile reports `cpu_max_pct` failed** (MSI Claw A8) | Update ClawDeck. With a cpufreq driver such as `amd-pstate-epp`, ClawDeck applies the CPU ceiling per policy; if the driver exposes no writable ceiling, that optional control is skipped. |
 | **Black picture** (the HUD still shows) | Check **XMX cores used in the last launch**. Red: restart the game. FSR 4.1.2 needs the XMX cores; XeSS 2 still works without them. |
 | **Locked at 30 fps, or 60 with frame generation** | … → Performance → turn **Enable VRR** off and on, and check **Fixes → VRR fix** is installed. |
 | **3x/4x greyed out in the game's menu** | Normal: pick the multiplier in ClawDeck. OptiScaler's own menu offers up to what you picked. |

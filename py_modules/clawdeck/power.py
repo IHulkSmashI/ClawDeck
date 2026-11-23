@@ -74,9 +74,9 @@ class Power:
             "power_profiles": self.gpu_power_profile()[1],
         }
         cpu = {
-            "available": p.cpu_max_perf_pct is not None,
-            "max_perf_pct": sysfs.read_int(p.cpu_max_perf_pct) if p.cpu_max_perf_pct else None,
-            "min_perf_pct": sysfs.read_int(p.cpu_min_perf_pct) if p.cpu_min_perf_pct else None,
+            "available": self.cpu_max_available,
+            "max_perf_pct": self.cpu_max_pct(),
+            "min_perf_pct": self.cpu_min_perf_pct(),
             "no_turbo": sysfs.read_int(p.cpu_no_turbo) if p.cpu_no_turbo else None,
             "epp": self.epp(), "epp_available": bool(p.cpu_epp),
         }
@@ -212,20 +212,57 @@ class Power:
         v = sysfs.read_int(self.p.cpu_no_turbo) if self.p.cpu_no_turbo else None
         return None if v is None else v == 0
 
+    @property
+    def cpu_max_available(self) -> bool:
+        return bool(self.p.cpu_max_perf_pct or self.p.cpu_freq_policies)
+
+    def cpu_max_pct(self) -> int | None:
+        if self.p.cpu_max_perf_pct:
+            return sysfs.read_int(self.p.cpu_max_perf_pct)
+        if not self.p.cpu_freq_policies:
+            return None
+        limits = []
+        for policy in self.p.cpu_freq_policies:
+            maximum = sysfs.read_int(policy.cpuinfo_max_freq)
+            current = sysfs.read_int(policy.scaling_max_freq)
+            if maximum is None or maximum <= 0 or current is None:
+                return None
+            limits.append(clamp(round(current * 100 / maximum), 0, 100))
+        return min(limits) if limits else None
+
+    def cpu_min_perf_pct(self) -> int | None:
+        if self.p.cpu_min_perf_pct:
+            return sysfs.read_int(self.p.cpu_min_perf_pct)
+        if not self.p.cpu_freq_policies:
+            return None
+        floors = []
+        for policy in self.p.cpu_freq_policies:
+            minimum = sysfs.read_int(policy.scaling_min_freq)
+            maximum = sysfs.read_int(policy.cpuinfo_max_freq)
+            if minimum is None or maximum is None or maximum <= 0 or minimum > maximum:
+                return None
+            floors.append((minimum * 100 + maximum - 1) // maximum)
+        return max(floors) if floors else None
+
+    def normalize_cpu_max_pct(self, pct: int) -> int:
+        floor = self.cpu_min_perf_pct() or 10
+        return max(floor, clamp(int(pct), 10, 100))
+
     def set_cpu_max_pct(self, pct: int) -> bool:
         """The CPU's top clock in % of its maximum. Under the temperature guard's cap the chip gets the lower of the two,
-        and the asked value comes back when the cap goes (cap_cpu_max_pct)."""
-        if not self.p.cpu_max_perf_pct:
+        and the asked value comes back when the cap goes (cap_cpu_max_pct). CPUFreq policies express the same ceiling
+        in kHz, relative to each policy's own hardware maximum."""
+        if not self.cpu_max_available:
             return False
-        self._cpu_asked = clamp(int(pct), 10, 100)
+        self._cpu_asked = self.normalize_cpu_max_pct(pct)
         return self._write_cpu_max()
 
     def cap_cpu_max_pct(self, cap: int | None) -> bool:
         """The temperature guard's cap on the CPU's top clock (None: no cap, the asked value back on the chip)."""
-        if not self.p.cpu_max_perf_pct:
+        if not self.cpu_max_available:
             return False
         if self._cpu_asked is None:                    # nothing asked yet: what is on the chip now comes back after
-            self._cpu_asked = sysfs.read_int(self.p.cpu_max_perf_pct, 100)
+            self._cpu_asked = self.cpu_max_pct() or 100
         self.cpu_cap = None if cap is None else clamp(int(cap), 10, 100)
         return self._write_cpu_max()
 
@@ -233,8 +270,30 @@ class Power:
         pct = self._cpu_asked if self._cpu_asked is not None else 100
         if self.cpu_cap is not None:
             pct = min(pct, self.cpu_cap)
-        lo = sysfs.read_int(self.p.cpu_min_perf_pct, 0) if self.p.cpu_min_perf_pct else 0
-        return sysfs.write(self.p.cpu_max_perf_pct, max(pct, lo or 0))
+        pct = self.normalize_cpu_max_pct(pct)
+        if self.p.cpu_max_perf_pct:
+            lo = sysfs.read_int(self.p.cpu_min_perf_pct, 0) if self.p.cpu_min_perf_pct else 0
+            return sysfs.write(self.p.cpu_max_perf_pct, max(pct, lo or 0))
+        writes = []
+        for policy in self.p.cpu_freq_policies:
+            minimum = sysfs.read_int(policy.scaling_min_freq)
+            maximum = sysfs.read_int(policy.cpuinfo_max_freq)
+            if minimum is None or maximum is None or maximum <= 0 or minimum > maximum:
+                return False
+            writes.append((policy.scaling_max_freq, max(minimum, round(maximum * pct / 100))))
+        for path, value in writes:
+            if not sysfs.write(path, value) or sysfs.read_int(path) != value:
+                log.error("CPUFreq ceiling: asked %d kHz for %s, reads %s", value, path, sysfs.read_int(path))
+                for policy in self.p.cpu_freq_policies:
+                    sysfs.revert(policy.scaling_max_freq)
+                return False
+        return bool(writes)
+
+    def _revert_cpu_max(self) -> None:
+        if self.p.cpu_max_perf_pct:
+            sysfs.revert(self.p.cpu_max_perf_pct)
+        for policy in self.p.cpu_freq_policies:
+            sysfs.revert(policy.scaling_max_freq)
 
     EPP_CHOICES = ("performance", "balance_performance", "balance_power", "power")
 
@@ -338,13 +397,12 @@ class Power:
                 result["applied"]["boost"] = bool(prof["boost"])
             else:
                 result["failed"].append("boost")
-        if prof.get("cpu_max_pct") is not None:
+        if prof.get("cpu_max_pct") is not None and self.cpu_max_available:
             if self.set_cpu_max_pct(prof["cpu_max_pct"]):
                 result["applied"]["cpu_max_pct"] = prof["cpu_max_pct"]
             else:
                 result["failed"].append("cpu_max_pct")
-                if self.p.cpu_max_perf_pct:
-                    sysfs.revert(self.p.cpu_max_perf_pct)
+                self._revert_cpu_max()
         gp = prof.get("gpu_power_profile")
         if gp and self.p.gpu_power_profile and gp in self.gpu_power_profile()[1]:   # an older kernel may offer less
             if self.set_gpu_power_profile(gp):

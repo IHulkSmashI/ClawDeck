@@ -48,6 +48,18 @@ def test_model_table_has_ex():
     assert hw.MODELS["MS-1T91"]["tdp"]["sppt_max"] == 45
 
 
+def test_cpu_freq_policy_discovery(tmp_path):
+    root = tmp_path / "cpufreq"
+    for name in ("policy0", "policy1"):
+        policy = root / name
+        _w(str(policy / "scaling_max_freq"), 5_090_910)
+        _w(str(policy / "scaling_min_freq"), 623_377)
+        _w(str(policy / "cpuinfo_max_freq"), 5_090_910)
+    policies = hw.discover_cpu_freq_policies(str(root))
+    assert [p.scaling_max_freq for p in policies] == [
+        str(root / "policy0/scaling_max_freq"), str(root / "policy1/scaling_max_freq")]
+
+
 def test_gpu_window_clamps_and_orders(fake_hw):
     pw = power.Power(fake_hw)
     assert pw.set_gpu_window(9999, 9999)          # clamped to rp0
@@ -118,6 +130,66 @@ def test_balanced_profile_applies(fake_hw):
     r = power.Power(fake_hw).apply_profile("balanced")
     assert r["applied"]["cpu_max_pct"] == 85
     assert sysfs.read_int(fake_hw.paths.cpu_max_perf_pct) == 85
+
+
+def test_profile_skips_unavailable_cpu_ceiling(fake_hw):
+    fake_hw.paths.cpu_max_perf_pct = None
+    r = power.Power(fake_hw).apply_profile("", {"cpu_max_pct": 85})
+    assert r == {"profile": "", "applied": {}, "failed": []}
+
+
+def test_cpufreq_cpu_ceiling_applies_per_policy_and_reverts(fake_hw, tmp_path):
+    fake_hw.paths.cpu_max_perf_pct = None
+    fake_hw.paths.cpu_freq_policies = []
+    originals = []
+    for name, maximum in (("policy0", 5_090_910), ("policy1", 3_324_676)):
+        policy = tmp_path / name
+        scaling_max = policy / "scaling_max_freq"
+        scaling_min = policy / "scaling_min_freq"
+        cpuinfo_max = policy / "cpuinfo_max_freq"
+        _w(str(scaling_max), maximum)
+        _w(str(scaling_min), 623_377)
+        _w(str(cpuinfo_max), maximum)
+        originals.append((str(scaling_max), maximum))
+        fake_hw.paths.cpu_freq_policies.append(
+            hw.CpuFreqPolicy(str(scaling_max), str(scaling_min), str(cpuinfo_max)))
+
+    pw = power.Power(fake_hw)
+    assert pw.cpu_max_available and pw.cpu_max_pct() == 100
+    assert pw.cpu_min_perf_pct() == 19 and pw.normalize_cpu_max_pct(10) == 19
+    assert pw.set_cpu_max_pct(10) and pw.cpu_max_pct() == 19
+    assert pw.apply_profile("", {"cpu_max_pct": 85})["applied"]["cpu_max_pct"] == 85
+    assert pw.cpu_max_pct() == 85
+    assert [sysfs.read_int(path) for path, _ in originals] == [round(maximum * 0.85) for _, maximum in originals]
+    assert pw.cap_cpu_max_pct(70) and pw.cpu_max_pct() == 70
+    assert pw.set_cpu_max_pct(95) and pw.cpu_max_pct() == 70
+    assert pw.cap_cpu_max_pct(None) and pw.cpu_max_pct() == 95
+    pw.revert_all()
+    assert [sysfs.read_int(path) for path, _ in originals] == [maximum for _, maximum in originals]
+
+
+def test_cpufreq_partial_write_failure_reverts_prior_policies(fake_hw, tmp_path, monkeypatch):
+    fake_hw.paths.cpu_max_perf_pct = None
+    paths = []
+    for name in ("policy0", "policy1"):
+        policy = tmp_path / name
+        scaling_max = policy / "scaling_max_freq"
+        scaling_min = policy / "scaling_min_freq"
+        cpuinfo_max = policy / "cpuinfo_max_freq"
+        _w(str(scaling_max), 5_000_000)
+        _w(str(scaling_min), 600_000)
+        _w(str(cpuinfo_max), 5_000_000)
+        paths.append(str(scaling_max))
+        fake_hw.paths.cpu_freq_policies.append(
+            hw.CpuFreqPolicy(str(scaling_max), str(scaling_min), str(cpuinfo_max)))
+    write = sysfs.write
+
+    def fail_second_policy(path, value, *args, **kwargs):
+        return False if path == paths[1] else write(path, value, *args, **kwargs)
+
+    monkeypatch.setattr(sysfs, "write", fail_second_policy)
+    assert not power.Power(fake_hw).set_cpu_max_pct(80)
+    assert [sysfs.read_int(path) for path in paths] == [5_000_000, 5_000_000]
 
 
 def test_face_buttons_override(tmp_path, monkeypatch):

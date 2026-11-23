@@ -93,14 +93,16 @@ def main() -> int:
         check("TDP write", False, "no RAPL package domain found")
 
     # ---- CPU ceiling -------------------------------------------------------------------------------------------
-    if p.cpu_max_perf_pct:
-        orig = read_int(p.cpu_max_perf_pct)
+    if pw.cpu_max_available:
+        orig = pw.cpu_max_pct()
         ok = pw.set_cpu_max_pct(80)
-        check("CPU ceiling write", ok and read_int(p.cpu_max_perf_pct) == 80, f"asked 80 %, reads {read_int(p.cpu_max_perf_pct)} %")
+        got = pw.cpu_max_pct()
+        check("CPU ceiling write", ok and got == 80, f"asked 80 %, reads {got} %")
         pw.revert_all()
-        check("CPU ceiling revert", read_int(p.cpu_max_perf_pct) == orig, f"back to {orig} %")
+        got = pw.cpu_max_pct()
+        check("CPU ceiling revert", got == orig, f"back to {orig} %, reads {got} %")
     else:
-        check("CPU ceiling", False, "intel_pstate max_perf_pct not found")
+        check("CPU ceiling", False, "no writable Intel or CPUFreq ceiling found")
 
     # ---- GPU window --------------------------------------------------------------------------------------------
     if p.gpu_min_freq and p.gpu_max_freq:

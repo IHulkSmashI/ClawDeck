@@ -86,6 +86,13 @@ def profile_name(name: str | None) -> str | None:
 
 
 @dataclass
+class CpuFreqPolicy:
+    scaling_max_freq: str
+    scaling_min_freq: str
+    cpuinfo_max_freq: str
+
+
+@dataclass
 class Paths:
     """Control paths discovered on this machine. None = not available on this kernel/model."""
     # Intel xe / i915 GPU clocks (PowerControl's discovery, extended with cur/rp0/rpe/rpn)
@@ -102,6 +109,7 @@ class Paths:
     cpu_max_perf_pct: str | None = None
     cpu_min_perf_pct: str | None = None
     cpu_no_turbo: str | None = None
+    cpu_freq_policies: list[CpuFreqPolicy] = field(default_factory=list)
     cpu_boost: str | None = None         # cpufreq boost (AMD / acpi-cpufreq)
     cpu_governor: list[str] = field(default_factory=list)
     cpu_epp: list[str] = field(default_factory=list)   # intel_pstate energy_performance_preference, one per CPU
@@ -152,6 +160,16 @@ def _first(globpat: str) -> str | None:
     return hits[0] if hits else None
 
 
+def discover_cpu_freq_policies(root: str = "/sys/devices/system/cpu/cpufreq") -> list[CpuFreqPolicy]:
+    """Writable CPUFreq frequency ceilings, used where intel_pstate's percentage control is absent."""
+    policies = []
+    for policy in sorted(glob.glob(f"{root}/policy[0-9]*")):
+        paths = (f"{policy}/scaling_max_freq", f"{policy}/scaling_min_freq", f"{policy}/cpuinfo_max_freq")
+        if all(os.path.exists(path) for path in paths):
+            policies.append(CpuFreqPolicy(*paths))
+    return policies
+
+
 def discover_paths() -> Paths:
     p = Paths()
     # GPU: the first Intel card with xe-style clock files, else i915-style
@@ -182,6 +200,8 @@ def discover_paths() -> Paths:
         fp = f"/sys/devices/system/cpu/intel_pstate/{name}"
         if os.path.exists(fp):
             setattr(p, f"cpu_{name}", fp)
+    if not p.cpu_max_perf_pct:
+        p.cpu_freq_policies = discover_cpu_freq_policies()
     if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
         p.cpu_boost = "/sys/devices/system/cpu/cpufreq/boost"
     p.cpu_governor = sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor"))

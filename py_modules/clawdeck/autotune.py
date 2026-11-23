@@ -795,7 +795,7 @@ class Autotune:
         """The levers as the chip has them now: the user's pick, before autotune changes anything. A lever that can't
         be read keeps autotune's value, so giving back leaves it alone."""
         p = self.hw.paths
-        cpu = sysfs.read_int(p.cpu_max_perf_pct) if p.cpu_max_perf_pct else None
+        cpu = self.power.cpu_max_pct()
         turbo = self.power.turbo()
         return Learned(tdp=tdp, cpu_max_pct=l.cpu_max_pct if cpu is None else cpu,
                        gpu_min_mhz=sysfs.read_int(p.gpu_min_freq) if p.gpu_min_freq else None,
@@ -1144,7 +1144,7 @@ class Autotune:
         elif l.bound == "cpu":
             if p.cpu_no_turbo and not l.boost:
                 out.append(("boost_on", lambda: self._boost(l, True), lambda: self._boost(l, False), "turned CPU boost on", "CPU boost on"))
-            if p.cpu_max_perf_pct and l.cpu_max_pct < 100:
+            if self.power.cpu_max_available and l.cpu_max_pct < 100:
                 was = l.cpu_max_pct
                 out.append(("cpu_up", lambda: self._cpu(l, 100), lambda w=was: self._cpu(l, w), "raised CPU ceiling to 100 %", "CPU ceiling 100 %"))
             if l.gpu_min_mhz is not None:
@@ -1335,7 +1335,7 @@ class Autotune:
 
     def _cpu(self, l: Learned, pct: int) -> bool:
         pct = max(CPU_MIN_PCT, min(100, pct))
-        if pct == l.cpu_max_pct or not self.hw.paths.cpu_max_perf_pct:
+        if pct == l.cpu_max_pct or not self.power.cpu_max_available:
             return False
         if self.power.set_cpu_max_pct(pct):
             l.cpu_max_pct = pct

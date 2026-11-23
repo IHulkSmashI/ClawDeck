@@ -680,7 +680,8 @@ class Plugin:
         sysfs.clear_error()
         self.autotune.pause("manual CPU ceiling")
         ok = self.power.set_cpu_max_pct(int(pct))
-        return self._done(ok, "CPU ceiling", int(pct), self.power.status()["cpu"]["max_perf_pct"], "%")
+        wanted = self.power.normalize_cpu_max_pct(int(pct))
+        return self._done(ok, "CPU ceiling", wanted, self.power.status()["cpu"]["max_perf_pct"], "%")
 
     async def set_gpu_window(self, min_mhz, max_mhz) -> dict:
         sysfs.clear_error()
